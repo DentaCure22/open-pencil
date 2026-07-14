@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPencil Edit Versions"
+  short_description: "Create and manage safe live-app design versions"
+  default_prompt: "Use $openpencil-edit-versions to branch this live screen into safe drafts and compare alternatives."

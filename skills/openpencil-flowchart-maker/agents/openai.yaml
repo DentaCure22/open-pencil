@@ -1,0 +1,5 @@
+interface:
+  display_name: "OpenPencil Flowchart Maker"
+  short_description: "Create clean editable flowcharts from the Figma kit"
+  default_prompt: "Use $openpencil-flowchart-maker to import or reuse the Figma Flow Chart kit, compose a clean native OpenPencil flowchart, and revise it after screenshot review."
+

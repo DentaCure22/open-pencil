@@ -1,0 +1,24 @@
+erDiagram
+  WORKSPACE ||--o{ STATE : contains
+  STATE ||--o{ EDIT_VERSION : branches
+  STATE ||--o{ COMMENT : receives
+  EDIT_VERSION ||--o{ COMMENT : receives
+  EDIT_VERSION ||--o| PROMOTION : produces
+
+  STATE {
+    string id PK
+    string route
+  }
+  EDIT_VERSION {
+    string id PK
+    string status
+  }
+  COMMENT {
+    string id PK
+    string body
+  }
+  PROMOTION {
+    string id PK
+    datetime approved_at
+  }
+

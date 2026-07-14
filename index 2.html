@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Pencil — Container Header Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-bar">
+        <div>
+          <span class="eyebrow">Open Pencil</span>
+          <h1>Container state controls</h1>
+        </div>
+        <div class="state-picker" role="group" aria-label="Preview container state">
+          <button class="state-button active" data-state="production">Production</button>
+          <button class="state-button" data-state="draft">Draft</button>
+          <button class="state-button" data-state="variant">Variant</button>
+          <button class="state-button" data-state="review">Review</button>
+          <button class="state-button" data-state="approved">Approved</button>
+        </div>
+      </header>
+
+      <section class="canvas" aria-label="Live app workspace canvas">
+        <div class="zone-label">Production workspace</div>
+        <article class="container-frame">
+          <header class="container-header">
+            <div class="container-identity">
+              <button class="drag-handle" aria-label="Move container">⠿</button>
+              <div>
+                <div class="title-line">
+                  <h2>Patient Header</h2>
+                  <span id="statusBadge" class="status-badge production">Production</span>
+                </div>
+                <p id="sourceLabel">Pages / Dental Chart / Patient Header</p>
+              </div>
+            </div>
+            <div id="headerActions" class="header-actions"></div>
+          </header>
+
+          <div class="patient-card">
+            <div class="avatar">SJ</div>
+            <div class="patient-name">
+              <strong>Sarah Johnson</strong>
+              <span>34y · Female · #051621</span>
+            </div>
+            <span class="pill">INS</span>
+            <span class="pill accent">PAT</span>
+            <div class="patient-meta">
+              <span>Penicillin allergy</span>
+              <span>Next: May 20, 10:30 AM</span>
+            </div>
+          </div>
+        </article>
+
+        <aside class="event-panel">
+          <div class="event-heading">
+            <div>
+              <span class="eyebrow">Behavior trace</span>
+              <h3>Workspace events</h3>
+            </div>
+            <button id="clearLog" class="quiet-button">Clear</button>
+          </div>
+          <ol id="eventLog" aria-live="polite"></ol>
+        </aside>
+      </section>
+    </main>
+
+    <div id="menu" class="menu" hidden></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

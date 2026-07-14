@@ -1,0 +1,127 @@
+<main class="board" data-openpencil-width="1600" data-openpencil-height="1024">
+  <header class="header">
+    <div class="heading">
+      <div class="eyebrow">Smylr · Dental chart</div>
+      <h1 class="title">Review one change in context.</h1>
+      <p class="subtitle">Move through the real workflow, inspect the draft, then approve a source handoff.</p>
+    </div>
+    <div class="live-mark"><span class="status-dot"></span><span>Live HTML · interactive</span></div>
+  </header>
+
+  <section class="journey" aria-labelledby="flow-label">
+    <div id="flow-label" class="section-label">Flow state</div>
+    <div class="journey-row">
+      <button
+        class="state"
+        type="button"
+        data-title="Confirm the production state."
+        data-summary="Start with the real chart before considering a visual change."
+        aria-pressed="false"
+      >
+        <span class="state-index">01</span>
+        <span class="state-copy"><strong>Open chart</strong><small>Production</small></span>
+      </button>
+      <button
+        class="state active"
+        type="button"
+        data-title="Make the lower chart easier to scan."
+        data-summary="Reduce tray weight without changing chart data or navigation."
+        aria-pressed="true"
+      >
+        <span class="state-index">02</span>
+        <span class="state-copy"><strong>Review finding</strong><small>Draft selected</small></span>
+        <span class="state-branch">Edit A · Draft</span>
+      </button>
+      <button
+        class="state"
+        type="button"
+        data-title="Prepare an explicit source handoff."
+        data-summary="Approved visual changes become a traceable implementation request."
+        aria-pressed="false"
+      >
+        <span class="state-index">03</span>
+        <span class="state-copy"><strong>Apply to source</strong><small>After approval</small></span>
+      </button>
+    </div>
+  </section>
+
+  <section class="main">
+    <div class="evidence">
+      <div class="evidence-label">
+        <div class="kicker">Production capture · current state</div>
+        <div class="source-note"><span class="status-dot"></span><span>Source untouched</span></div>
+      </div>
+      <div class="capture-wrap">
+        <img class="capture" src="__REAL_PRODUCT_CAPTURE__" alt="Live Smylr dental chart production capture" />
+        <div class="compare-banner">Comparison overlay · Edit A</div>
+      </div>
+    </div>
+
+    <aside class="review" data-surface="true">
+      <div class="review-heading">
+        <div class="kicker">Edit version A</div>
+        <h2 class="review-title">Make the lower chart easier to scan.</h2>
+        <p class="review-summary">Reduce tray weight without changing chart data or navigation.</p>
+      </div>
+
+      <div class="change-list">
+        <div class="change">
+          <span class="meta-label">Changed</span>
+          <strong>Lower tray contrast −28%</strong>
+        </div>
+        <div class="change">
+          <span class="meta-label">Protected</span>
+          <strong>Labels · data · navigation</strong>
+        </div>
+      </div>
+
+      <div class="review-bottom">
+        <div class="review-status"><span class="status-dot"></span><span>Ready for visual review</span></div>
+        <p class="review-footnote">Approval records the decision before any source change.</p>
+        <div class="review-actions">
+          <button class="button secondary compare-button" type="button">Compare</button>
+          <button class="button primary approve-button" type="button">Approve direction</button>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="receipt" aria-label="Agent workflow receipt">
+    <span>Selection</span><span>→</span><strong>Edit version</strong><span>→</span><span>Visual review</span><span>→</span><span>Source patch</span>
+  </footer>
+</main>
+
+<script>
+  (() => {
+    const states = [...document.querySelectorAll('.state')]
+    const title = document.querySelector('.review-title')
+    const summary = document.querySelector('.review-summary')
+    const status = document.querySelector('.review-status span:last-child')
+    const approve = document.querySelector('.approve-button')
+    const compare = document.querySelector('.compare-button')
+
+    states.forEach((state) => {
+      state.addEventListener('click', () => {
+        states.forEach((item) => {
+          const selected = item === state
+          item.classList.toggle('active', selected)
+          item.setAttribute('aria-pressed', String(selected))
+        })
+        title.textContent = state.dataset.title
+        summary.textContent = state.dataset.summary
+        status.textContent = state === states[2] ? 'Ready for source handoff' : 'Ready for visual review'
+      })
+    })
+
+    compare.addEventListener('click', () => {
+      const active = document.body.classList.toggle('is-comparing')
+      compare.textContent = active ? 'Close compare' : 'Compare'
+    })
+
+    approve.addEventListener('click', () => {
+      status.textContent = 'Approved for source handoff'
+      approve.textContent = 'Approved'
+      approve.classList.add('approved')
+    })
+  })()
+</script>

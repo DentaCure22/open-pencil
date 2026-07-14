@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Pencil — Live App Workspaces</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark">P</span>
+          <div><strong>Open Pencil</strong><span>Live App Workspaces</span></div>
+        </div>
+        <div class="workspace-title">
+          <span class="crumb">Workspaces / Dental Chart Improvements</span>
+          <strong>Patient header exploration</strong>
+        </div>
+        <div class="top-actions">
+          <span id="saveState" class="saved-state">Saved locally</span>
+          <button class="button ghost" data-command="reset-demo">Reset demo</button>
+          <button class="button primary" data-command="new-draft">New draft</button>
+        </div>
+      </header>
+
+      <aside class="sidebar">
+        <label class="search"><span>⌕</span><input id="treeSearch" type="search" placeholder="Search project" /></label>
+        <nav id="projectTree" class="project-tree" aria-label="Project folders"></nav>
+        <footer class="sidebar-footer">
+          <div><span class="sync-dot"></span><span>Workspace persistence</span></div>
+          <strong>Local prototype</strong>
+        </footer>
+      </aside>
+
+      <section id="stage" class="stage"></section>
+
+      <aside class="inspector">
+        <div class="inspector-tabs"><button class="active">Design</button><button>Code</button><button>AI</button></div>
+        <div id="inspectorContent" class="inspector-content"></div>
+      </aside>
+    </main>
+
+    <div id="menu" class="menu" hidden></div>
+    <div id="dialogBackdrop" class="dialog-backdrop" hidden>
+      <form id="dialog" class="dialog">
+        <header><div><span id="dialogEyebrow">Create</span><h2 id="dialogTitle">Save state</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></header>
+        <div id="dialogFields"></div>
+        <footer><button type="button" class="button ghost" data-close-dialog>Cancel</button><button id="dialogSubmit" class="button primary" type="submit">Continue</button></footer>
+      </form>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

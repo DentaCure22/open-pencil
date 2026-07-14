@@ -1,0 +1,17 @@
+sequenceDiagram
+  actor U as User
+  participant A as Agent
+  participant O as OpenPencil
+
+  U->>A: Select state and say intent
+  A->>O: Create edit version
+  O-->>A: Isolated preview
+  A-->>U: Show source beside edit
+  alt Revise
+    U->>A: Refine the intent
+    A->>O: Update the same branch
+  else Keep
+    U->>A: Approve
+    A->>O: Mark ready for promotion
+  end
+

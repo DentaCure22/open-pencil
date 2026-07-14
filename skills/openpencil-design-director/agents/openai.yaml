@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPencil Design Director"
+  short_description: "Direct polished product-faithful OpenPencil compositions"
+  default_prompt: "Use $openpencil-design-director to choose the right view archetype, condition on real references, direct the composition, and reject weak visual output after screenshot review."

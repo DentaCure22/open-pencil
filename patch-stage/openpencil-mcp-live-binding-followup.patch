@@ -1,0 +1,93 @@
+diff --git a/src/app/automation/bridge/tool-handlers.ts b/src/app/automation/bridge/tool-handlers.ts
+--- a/src/app/automation/bridge/tool-handlers.ts
++++ b/src/app/automation/bridge/tool-handlers.ts
+@@ -2,7 +2,7 @@ import { renderTreeNode } from '@open-pencil/core/design-jsx'
+ import type { FigmaAPI } from '@open-pencil/core/figma-api'
+ import { computeAllLayouts } from '@open-pencil/core/layout'
+ import { ALL_TOOLS } from '@open-pencil/core/tools'
+-import type { JsonObject } from '@open-pencil/scene-graph/primitives'
++import type { JsonObject, Rect } from '@open-pencil/scene-graph/primitives'
+ 
+ import type { AutomationTarget } from '@/app/automation/bridge/target'
+ import { ensureGraphFonts } from '@/app/editor/fonts'
+@@ -10,17 +10,18 @@ import { ensureGraphFonts } from '@/app/editor/fonts'
+ type FigmaFactory = (store: AutomationTarget['store'], pageId?: string) => FigmaAPI
+ 
+-function readViewportBounds(result: unknown) {
++function readViewportBounds(result: unknown): Rect | null {
+   if (!result || typeof result !== 'object') return null
+   const bounds = (result as JsonObject).bounds
+   if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)) return null
+   const candidate = bounds as JsonObject
++  const { height, width, x, y } = candidate
+   if (
+-    typeof candidate.x !== 'number' ||
+-    typeof candidate.y !== 'number' ||
+-    typeof candidate.width !== 'number' ||
+-    typeof candidate.height !== 'number'
++    typeof x !== 'number' ||
++    typeof y !== 'number' ||
++    typeof width !== 'number' ||
++    typeof height !== 'number'
+   ) {
+     return null
+   }
+-  return candidate
++  return { height, width, x, y }
+ }
+diff --git a/tests/engine/app/automation-bridge.test.ts b/tests/engine/app/automation/bridge.test.ts
+similarity index 100%
+rename from tests/engine/app/automation-bridge.test.ts
+rename to tests/engine/app/automation/bridge.test.ts
+diff --git a/tests/engine/mcp/server.test.ts b/tests/engine/mcp/server.test.ts
+--- a/tests/engine/mcp/server.test.ts
++++ b/tests/engine/mcp/server.test.ts
+@@ -411,6 +411,7 @@ describe('MCP WebSocket stdio bridge routing', () => {
+     const wsPort = await waitForWsListening(wss)
+     const firstBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
+     const secondBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
++    const passiveBrowser = await connectMockBrowser(wsPort, new SceneGraph())
+     const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+ 
+     try {
+@@ -433,39 +434,11 @@ describe('MCP WebSocket stdio bridge routing', () => {
+       expect(response.ok).toBe(true)
+       expect(firstBrowser.requests).toHaveLength(0)
+       expect(secondBrowser.requests.at(-1)?.command).toBe('tool')
++      expect(passiveBrowser.requests).toHaveLength(0)
+     } finally {
+       clientWs.close()
+       firstBrowser.close()
+       secondBrowser.close()
+-      closeServer()
+-    }
+-  })
+-
+-  test('does not let a passive editor steal the active MCP connection', async () => {
+-    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+-    const wsPort = await waitForWsListening(wss)
+-    const activeBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
+-    const passiveBrowser = await connectMockBrowser(wsPort, new SceneGraph())
+-    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+-
+-    try {
+-      await readWsJson<{ type: string; token?: string }>(clientWs)
+-      clientWs.send(
+-        JSON.stringify({
+-          type: 'request',
+-          id: 'stdio-passive-editor',
+-          command: 'tool',
+-          args: { name: 'get_current_page', args: {} }
+-        })
+-      )
+-      const response = await readWsJson<{ type: string; id: string; ok?: boolean }>(clientWs)
+-
+-      expect(response.ok).toBe(true)
+-      expect(activeBrowser.requests.at(-1)?.command).toBe('tool')
+-      expect(passiveBrowser.requests).toHaveLength(0)
+-    } finally {
+-      clientWs.close()
+-      activeBrowser.close()
+       passiveBrowser.close()
+       closeServer()
+     }

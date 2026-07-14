@@ -1,0 +1,49 @@
+{
+  "theme": "base",
+  "securityLevel": "strict",
+  "deterministicIds": true,
+  "deterministicIDSeed": "openpencil-mermaid-gallery",
+  "fontFamily": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  "themeVariables": {
+    "fontFamily": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "fontSize": "15px",
+    "background": "#FFFFFF",
+    "primaryColor": "#F4F7FC",
+    "primaryTextColor": "#1B1D21",
+    "primaryBorderColor": "#A9B7D0",
+    "secondaryColor": "#E9F0FF",
+    "secondaryTextColor": "#1B1D21",
+    "secondaryBorderColor": "#7FA2EC",
+    "tertiaryColor": "#F7F7F4",
+    "tertiaryTextColor": "#4D535D",
+    "tertiaryBorderColor": "#D7D8D3",
+    "lineColor": "#667085",
+    "textColor": "#1B1D21",
+    "mainBkg": "#F4F7FC",
+    "nodeBorder": "#A9B7D0",
+    "clusterBkg": "#F7F7F4",
+    "clusterBorder": "#D7D8D3",
+    "edgeLabelBackground": "#FFFFFF",
+    "actorBkg": "#FFFFFF",
+    "actorBorder": "#A9B7D0",
+    "actorTextColor": "#1B1D21",
+    "actorLineColor": "#B9C1CE",
+    "signalColor": "#4D535D",
+    "signalTextColor": "#1B1D21",
+    "noteBkgColor": "#FFF8E6",
+    "noteBorderColor": "#E4BD6B",
+    "noteTextColor": "#4D535D"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "curve": "basis",
+    "nodeSpacing": 58,
+    "rankSpacing": 72
+  },
+  "sequence": {
+    "useMaxWidth": false,
+    "diagramMarginX": 30,
+    "diagramMarginY": 22
+  }
+}
+

@@ -1,0 +1,14 @@
+gantt
+  title Diagram capability rollout
+  dateFormat YYYY-MM-DD
+  axisFormat %b %d
+
+  section Setup
+  Install skill     :done, a1, 2026-07-13, 1d
+  Validate CLI      :done, a2, after a1, 1d
+
+  section Canvas
+  Render examples   :active, b1, after a2, 1d
+  Import board      :b2, after b1, 1d
+  Visual review     :b3, after b2, 1d
+

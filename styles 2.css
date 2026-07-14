@@ -1,0 +1,102 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0d1117;
+  color: #edf2f7;
+  --surface: #151b23;
+  --surface-raised: #1b2330;
+  --line: #2a3544;
+  --muted: #8d9aaa;
+  --blue: #5b8cff;
+  --purple: #a275ff;
+  --green: #45c486;
+  --orange: #f0a34a;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+button { font: inherit; }
+.app-shell { min-height: 100vh; }
+.app-bar {
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(13, 17, 23, .94);
+}
+.eyebrow { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+h1, h2, h3, p { margin: 0; }
+h1 { margin-top: 3px; font-size: 18px; font-weight: 650; }
+.state-picker { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #10151c; }
+.state-button, .quiet-button, .action-button, .menu button {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.state-button { padding: 7px 11px; border-radius: 7px; font-size: 12px; }
+.state-button:hover, .state-button.active { color: white; background: var(--surface-raised); }
+.canvas {
+  min-height: calc(100vh - 78px);
+  padding: 88px 8vw;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(580px, 1fr) 310px;
+  align-items: start;
+  gap: 28px;
+  background-color: #10151c;
+  background-image: radial-gradient(#273140 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.zone-label { position: absolute; top: 28px; left: 8vw; color: #648d78; text-transform: uppercase; font-size: 12px; letter-spacing: .1em; }
+.container-frame { border: 1px solid #365b49; border-radius: 12px; background: rgba(21, 27, 35, .96); box-shadow: 0 28px 80px rgba(0, 0, 0, .3); overflow: hidden; }
+.container-header { min-height: 66px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+.container-identity { display: flex; align-items: center; min-width: 0; gap: 10px; }
+.drag-handle { border: 0; background: transparent; color: #6f7b8b; cursor: grab; font-size: 20px; }
+.title-line { display: flex; align-items: center; gap: 9px; }
+h2 { font-size: 14px; }
+.container-identity p { margin-top: 4px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
+.status-badge { padding: 3px 7px; border-radius: 999px; font-size: 10px; background: #28313d; color: #b7c0cb; }
+.status-badge.draft { color: #c7adff; background: #2f2547; }
+.status-badge.variant { color: #a9c0ff; background: #253453; }
+.status-badge.review { color: #ffd09b; background: #493521; }
+.status-badge.approved { color: #9ce1bb; background: #203f31; }
+.header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.action-button { height: 32px; padding: 0 10px; border-radius: 7px; font-size: 12px; }
+.action-button:hover { color: white; background: #27313e; }
+.action-button.primary { color: white; background: #376de0; }
+.action-button.primary:hover { background: #477ced; }
+.action-button.danger { color: #ffb0b0; }
+.patient-card { margin: 30px; padding: 26px; min-height: 180px; display: flex; align-items: flex-start; gap: 16px; border: 1px solid var(--line); border-radius: 10px; background: #11171e; }
+.avatar { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: #283748; color: #dbe8f5; font-weight: 700; }
+.patient-name { display: flex; flex-direction: column; gap: 5px; min-width: 150px; }
+.patient-name span, .patient-meta { color: var(--muted); font-size: 12px; }
+.pill { padding: 4px 6px; border-radius: 5px; background: #29323d; color: #aeb8c5; font-size: 9px; }
+.pill.accent { background: #332857; color: #bda9ff; }
+.patient-meta { margin-left: auto; display: flex; flex-direction: column; gap: 8px; text-align: right; }
+.event-panel { border: 1px solid var(--line); border-radius: 12px; background: rgba(21, 27, 35, .96); overflow: hidden; }
+.event-heading { padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+.event-heading h3 { margin-top: 3px; font-size: 13px; }
+.quiet-button { padding: 6px; font-size: 11px; }
+#eventLog { min-height: 290px; max-height: 480px; overflow: auto; margin: 0; padding: 10px 10px 18px 34px; color: #b5bfca; font-size: 12px; }
+#eventLog li { padding: 8px 5px; border-bottom: 1px solid #202936; }
+#eventLog time { display: block; margin-top: 4px; color: #667487; font-size: 10px; }
+.menu { position: fixed; z-index: 20; width: 206px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; background: #1b2330; box-shadow: 0 18px 48px rgba(0,0,0,.42); }
+.menu button { width: 100%; padding: 9px 10px; text-align: left; border-radius: 6px; font-size: 12px; }
+.menu button:hover { color: white; background: #293443; }
+.menu .separator { height: 1px; margin: 5px 3px; background: var(--line); }
+.menu .danger { color: #ffaaa9; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 18px); padding: 9px 13px; border: 1px solid var(--line); border-radius: 8px; background: #1c2531; opacity: 0; pointer-events: none; transition: .18s ease; font-size: 12px; }
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 980px) {
+  .app-bar { height: auto; padding: 18px; align-items: flex-start; flex-direction: column; }
+  .state-picker { max-width: 100%; overflow-x: auto; }
+  .canvas { grid-template-columns: 1fr; padding: 76px 18px; }
+  .zone-label { left: 18px; }
+  .container-header { align-items: flex-start; flex-direction: column; }
+  .patient-card { flex-wrap: wrap; }
+  .patient-meta { width: 100%; margin-left: 68px; text-align: left; }
+}

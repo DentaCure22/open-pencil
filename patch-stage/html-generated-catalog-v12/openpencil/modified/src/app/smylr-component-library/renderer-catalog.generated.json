@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "8",
+  "generatedFrom": {
+    "fixtureSource": "docs/design-labs/open-pencil-component-fixtures.json",
+    "inventorySource": "docs/design-labs/component-inventory.json",
+    "inventoryComponentCount": 754
+  },
+  "fixtures": [
+    {
+      "fixtureId": "accordion",
+      "name": "Accordion",
+      "sourcePath": "src/components/ui/accordion.tsx",
+      "symbol": "Accordion",
+      "selector": "[data-openpencil-fixture=accordion]",
+      "frameWidth": 560,
+      "frameHeight": 320,
+      "overlayWidth": 420,
+      "overlayHeight": 144,
+      "interactionHeight": 180,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Navigation/Overlay Primitives",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "alert",
+      "name": "Alert",
+      "sourcePath": "src/components/ui/alert.tsx",
+      "symbol": "Alert",
+      "selector": "[data-slot=alert]",
+      "frameWidth": 560,
+      "frameHeight": 280,
+      "overlayWidth": 420,
+      "overlayHeight": 88,
+      "interactionHeight": 88,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Feedback/State Primitives",
+        "variantAxes": [
+          "variant"
+        ]
+      }
+    },
+    {
+      "fixtureId": "avatar",
+      "name": "Avatar",
+      "sourcePath": "src/components/ui/avatar.tsx",
+      "symbol": "Avatar",
+      "selector": "[data-slot=avatar]",
+      "frameWidth": 360,
+      "frameHeight": 220,
+      "overlayWidth": 48,
+      "overlayHeight": 48,
+      "interactionHeight": 48,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Navigation/Overlay Primitives",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "badge",
+      "name": "Badge",
+      "sourcePath": "src/components/ui/badge.tsx",
+      "symbol": "Badge",
+      "selector": "[data-slot=badge]",
+      "frameWidth": 360,
+      "frameHeight": 220,
+      "overlayWidth": 88,
+      "overlayHeight": 28,
+      "interactionHeight": 28,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Blocks/AI Elements/Context And Citations",
+        "variantAxes": [
+          "depth",
+          "variant"
+        ]
+      }
+    },
+    {
+      "fixtureId": "button",
+      "name": "Button",
+      "sourcePath": "src/components/ui/button.tsx",
+      "symbol": "Button",
+      "selector": "[data-slot=button]",
+      "frameWidth": 400,
+      "frameHeight": 240,
+      "overlayWidth": 132,
+      "overlayHeight": 44,
+      "interactionHeight": 44,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Blocks/AI Elements/Context And Citations",
+        "variantAxes": [
+          "size",
+          "variant"
+        ]
+      }
+    },
+    {
+      "fixtureId": "calendar",
+      "name": "Calendar",
+      "sourcePath": "src/components/ui/calendar.tsx",
+      "symbol": "Calendar",
+      "selector": "[data-slot=calendar]",
+      "frameWidth": 520,
+      "frameHeight": 520,
+      "overlayWidth": 280,
+      "overlayHeight": 300,
+      "interactionHeight": 300,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Inputs/Advanced Data Entry",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "card",
+      "name": "Card",
+      "sourcePath": "src/components/ui/card.tsx",
+      "symbol": "Card",
+      "selector": "[data-slot=card]",
+      "frameWidth": 620,
+      "frameHeight": 420,
+      "overlayWidth": 432,
+      "overlayHeight": 166,
+      "interactionHeight": 166,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Blocks/AI Elements/Context And Citations",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "checkbox",
+      "name": "Checkbox",
+      "sourcePath": "src/components/ui/checkbox.tsx",
+      "symbol": "Checkbox",
+      "selector": "[data-slot=checkbox]",
+      "frameWidth": 380,
+      "frameHeight": 220,
+      "overlayWidth": 24,
+      "overlayHeight": 24,
+      "interactionHeight": 24,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Forms/Selection Controls",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "dropdown-menu",
+      "name": "DropdownMenu",
+      "sourcePath": "src/components/ui/dropdown-menu.tsx",
+      "symbol": "DropdownMenu",
+      "selector": "[data-slot=dropdown-menu-trigger]",
+      "frameWidth": 480,
+      "frameHeight": 300,
+      "overlayWidth": 168,
+      "overlayHeight": 40,
+      "interactionHeight": 220,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Navigation/Action Overlays",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "input",
+      "name": "Input",
+      "sourcePath": "src/components/ui/input.tsx",
+      "symbol": "Input",
+      "selector": "[data-slot=input]",
+      "frameWidth": 520,
+      "frameHeight": 240,
+      "overlayWidth": 320,
+      "overlayHeight": 40,
+      "interactionHeight": 40,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Features/Accounting/Primitive State Sheets",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "progress",
+      "name": "Progress",
+      "sourcePath": "src/components/ui/progress.tsx",
+      "symbol": "Progress",
+      "selector": "[data-openpencil-fixture=progress]",
+      "frameWidth": 520,
+      "frameHeight": 220,
+      "overlayWidth": 320,
+      "overlayHeight": 8,
+      "interactionHeight": 8,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Feedback/State Primitives",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "radio-group",
+      "name": "RadioGroup",
+      "sourcePath": "src/components/ui/radio-group.tsx",
+      "symbol": "RadioGroup",
+      "selector": "[data-slot=radio-group]",
+      "frameWidth": 480,
+      "frameHeight": 260,
+      "overlayWidth": 280,
+      "overlayHeight": 80,
+      "interactionHeight": 80,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Forms/Selection Controls",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "select",
+      "name": "Select",
+      "sourcePath": "src/components/ui/select.tsx",
+      "symbol": "Select",
+      "selector": "[data-slot=select-trigger]",
+      "frameWidth": 520,
+      "frameHeight": 280,
+      "overlayWidth": 256,
+      "overlayHeight": 40,
+      "interactionHeight": 240,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Features/Dental Chart/Workflow States",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "separator",
+      "name": "Separator",
+      "sourcePath": "src/components/ui/separator.tsx",
+      "symbol": "Separator",
+      "selector": "[data-slot=separator]",
+      "frameWidth": 560,
+      "frameHeight": 220,
+      "overlayWidth": 320,
+      "overlayHeight": 8,
+      "interactionHeight": 8,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Features/Health Chart/Conditions Panel",
+        "variantAxes": [
+          "variant"
+        ]
+      }
+    },
+    {
+      "fixtureId": "slider",
+      "name": "Slider",
+      "sourcePath": "src/components/ui/slider.tsx",
+      "symbol": "Slider",
+      "selector": "input[type=range]",
+      "frameWidth": 520,
+      "frameHeight": 220,
+      "overlayWidth": 320,
+      "overlayHeight": 24,
+      "interactionHeight": 24,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Inputs/Advanced Data Entry",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "switch",
+      "name": "Switch",
+      "sourcePath": "src/components/ui/switch.tsx",
+      "symbol": "Switch",
+      "selector": "[data-slot=switch]",
+      "frameWidth": 380,
+      "frameHeight": 220,
+      "overlayWidth": 44,
+      "overlayHeight": 24,
+      "interactionHeight": 24,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Forms/Field Composition",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "table",
+      "name": "Table",
+      "sourcePath": "src/components/ui/table.tsx",
+      "symbol": "Table",
+      "selector": "[data-slot=table]",
+      "frameWidth": 960,
+      "frameHeight": 520,
+      "overlayWidth": 720,
+      "overlayHeight": 210,
+      "interactionHeight": 210,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Features/Accounting/Bookkeeping Ledger States",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "textarea",
+      "name": "Textarea",
+      "sourcePath": "src/components/ui/textarea.tsx",
+      "symbol": "Textarea",
+      "selector": "[data-slot=textarea]",
+      "frameWidth": 560,
+      "frameHeight": 280,
+      "overlayWidth": 360,
+      "overlayHeight": 96,
+      "interactionHeight": 96,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Forms/Field Composition",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "tabs",
+      "name": "Tabs",
+      "sourcePath": "src/components/ui/tabs.tsx",
+      "symbol": "Tabs",
+      "selector": "[data-slot=tabs]",
+      "frameWidth": 600,
+      "frameHeight": 320,
+      "overlayWidth": 360,
+      "overlayHeight": 92,
+      "interactionHeight": 92,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Blocks/Control Groups/Button Groups",
+        "variantAxes": []
+      }
+    },
+    {
+      "fixtureId": "tooltip",
+      "name": "Tooltip",
+      "sourcePath": "src/components/ui/tooltip.tsx",
+      "symbol": "Tooltip",
+      "selector": "[data-slot=tooltip-trigger]",
+      "frameWidth": 420,
+      "frameHeight": 260,
+      "overlayWidth": 128,
+      "overlayHeight": 40,
+      "interactionHeight": 120,
+      "repository": "Smylr-Elite",
+      "inventory": {
+        "layer": "primitive",
+        "storyStatus": "covered",
+        "storyTitle": "Primitives/Navigation/Overlay Primitives",
+        "variantAxes": []
+      }
+    }
+  ]
+}

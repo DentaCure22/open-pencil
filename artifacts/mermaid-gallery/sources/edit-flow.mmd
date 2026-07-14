@@ -1,0 +1,7 @@
+flowchart TD
+  S([Select live state]) --> I[Describe intent]
+  I --> P[Preview edit branch]
+  P --> D{Keep it?}
+  D -->|Revise| P
+  D -->|Keep| R[Review beside source]
+  R --> A([Promote])

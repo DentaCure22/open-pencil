@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPencil Flow States"
+  short_description: "Build guided flow boards with editable states"
+  default_prompt: "Use $openpencil-flow-states to organize this journey as guided flow states with edit branches."

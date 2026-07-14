@@ -1,0 +1,334 @@
+diff --git a/src/app/automation/bridge/server.ts b/src/app/automation/bridge/server.ts
+index 9a44876..b273cc3 100644
+--- a/src/app/automation/bridge/server.ts
++++ b/src/app/automation/bridge/server.ts
+@@ -11,6 +11,12 @@ import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
+ import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
+ import type { EditorStore } from '@/app/editor/active-store'
+ 
++function isAutomationClientActive(): boolean {
++  if (typeof document === 'undefined') return true
++  if (document.visibilityState === 'hidden') return false
++  return typeof document.hasFocus !== 'function' || document.hasFocus()
++}
++
+ export function connectAutomation(getStore: () => EditorStore, authToken: string | null = null) {
+   const token = authToken ?? randomHex(32)
+   let ws: WebSocket | null = null
+@@ -20,6 +26,21 @@ export function connectAutomation(getStore: () => EditorStore, authToken: string
+   const { handleRequest: handleAutomationRequest } =
+     createAutomationCommandHandlers(makeFigmaFromStore)
+ 
++  function sendPresence(type: 'presence' | 'register') {
++    if (ws?.readyState !== WebSocket.OPEN) return
++    ws.send(
++      JSON.stringify({
++        type,
++        token,
++        active: isAutomationClientActive()
++      })
++    )
++  }
++
++  function handlePresenceChange() {
++    sendPresence('presence')
++  }
++
+   async function handleRequest(_id: string, command: string, args: unknown): Promise<unknown> {
+     return handleAutomationRequest(getStore(), command, args)
+   }
+@@ -38,7 +59,7 @@ export function connectAutomation(getStore: () => EditorStore, authToken: string
+ 
+     ws.onopen = () => {
+       console.debug('[Automation] WebSocket connected to MCP server')
+-      ws?.send(JSON.stringify({ type: 'register', token }))
++      sendPresence('register')
+     }
+ 
+     ws.onmessage = async (event) => {
+@@ -86,9 +107,20 @@ export function connectAutomation(getStore: () => EditorStore, authToken: string
+     reconnectTimer = setTimeout(connect, 2000)
+   }
+ 
++  if (typeof document !== 'undefined') {
++    document.addEventListener('visibilitychange', handlePresenceChange)
++    window.addEventListener('focus', handlePresenceChange)
++    window.addEventListener('blur', handlePresenceChange)
++  }
++
+   function disconnect() {
+     intentionalDisconnect = true
+     clearTimeout(reconnectTimer)
++    if (typeof document !== 'undefined') {
++      document.removeEventListener('visibilitychange', handlePresenceChange)
++      window.removeEventListener('focus', handlePresenceChange)
++      window.removeEventListener('blur', handlePresenceChange)
++    }
+     ws?.close()
+     ws = null
+   }
+diff --git a/src/app/automation/bridge/tool-handlers.ts b/src/app/automation/bridge/tool-handlers.ts
+index 9a551db..399213e 100644
+--- a/src/app/automation/bridge/tool-handlers.ts
++++ b/src/app/automation/bridge/tool-handlers.ts
+@@ -9,6 +9,47 @@ import { ensureGraphFonts } from '@/app/editor/fonts'
+ 
+ type FigmaFactory = (store: AutomationTarget['store'], pageId?: string) => FigmaAPI
+ 
++function readViewportBounds(result: unknown) {
++  if (!result || typeof result !== 'object') return null
++  const bounds = (result as JsonObject).bounds
++  if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)) return null
++  const candidate = bounds as JsonObject
++  if (
++    typeof candidate.x !== 'number' ||
++    typeof candidate.y !== 'number' ||
++    typeof candidate.width !== 'number' ||
++    typeof candidate.height !== 'number'
++  ) {
++    return null
++  }
++  return candidate
++}
++
++export async function syncAutomationToolState(
++  store: AutomationTarget['store'],
++  figma: FigmaAPI,
++  toolName: string,
++  result: unknown
++) {
++  if (store.state.currentPageId !== figma.currentPageId) {
++    await store.switchPage(figma.currentPageId)
++  }
++
++  store.select(figma.currentPage.selection.map((node) => node.id))
++
++  if (toolName === 'viewport_zoom_to_fit') {
++    const bounds = readViewportBounds(result)
++    if (bounds) {
++      store.zoomToBounds(
++        bounds.x,
++        bounds.y,
++        bounds.x + bounds.width,
++        bounds.y + bounds.height
++      )
++    }
++  }
++}
++
+ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
+   async function handleToolRender(
+     target: AutomationTarget,
+@@ -47,9 +88,7 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
+     const result = await def.execute(figma, toolArgs)
+ 
+     if (def.mutates) {
+-      if (toolName === 'switch_page' && store.state.currentPageId !== figma.currentPageId) {
+-        await store.switchPage(figma.currentPageId)
+-      }
++      await syncAutomationToolState(store, figma, toolName, result)
+       const pageNode = store.graph.getNode(figma.currentPageId)
+       if (pageNode) await ensureGraphFonts(store.graph, pageNode.childIds)
+       computeAllLayouts(store.graph, figma.currentPageId)
+diff --git a/packages/mcp/src/browser-rpc.ts b/packages/mcp/src/browser-rpc.ts
+index 7adad1f..da642a5 100644
+--- a/packages/mcp/src/browser-rpc.ts
++++ b/packages/mcp/src/browser-rpc.ts
+@@ -23,5 +23,6 @@ type BrowserMessage = {
+   error?: string
+   ok?: boolean
++  active?: boolean
+ }
+ 
+ function stripEnvelope(msg: BrowserMessage): Record<string, unknown> {
+@@ -135,7 +136,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browser
+     }
+   }
+ 
+-  function registerBrowser(ws: WebSocket, token: string) {
++  function registerBrowser(ws: WebSocket, token: string, active: boolean) {
+     if (authToken && token !== authToken) {
+       ws.close()
+       return
+@@ -143,11 +144,10 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browser
+     const previousBrowserWs = browserWs
++    if (previousBrowserWs && previousBrowserWs !== ws && !active) return
+     browserWs = ws
+     browserToken = token
+     browserRegistered = true
+-    if (previousBrowserWs && previousBrowserWs !== ws && previousBrowserWs.readyState === ws.OPEN) {
+-      previousBrowserWs.close()
+-      rejectAllPending('Browser reconnected')
+-    }
+-    onConnectionChange()
++    const didChangeBrowser = previousBrowserWs !== ws
++    if (didChangeBrowser) rejectAllPending('Active OpenPencil client changed')
++    if (didChangeBrowser) onConnectionChange()
+     broadcastRegisterToken()
+   }
+@@ -172,7 +172,11 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browser
+     }
+ 
+     if (msg.type === 'register' && msg.token) {
+-      registerBrowser(ws, msg.token)
++      registerBrowser(ws, msg.token, msg.active === true)
++      return
++    }
++    if (msg.type === 'presence' && msg.token) {
++      registerBrowser(ws, msg.token, msg.active === true)
+       return
+     }
+     if (msg.type === 'request') {
+diff --git a/tests/engine/app/automation-bridge.test.ts b/tests/engine/app/automation-bridge.test.ts
+new file mode 100644
+index 0000000..2033343
+--- /dev/null
++++ b/tests/engine/app/automation-bridge.test.ts
+@@ -0,0 +1,59 @@
++import { afterEach, describe, expect, test } from 'bun:test'
++
++import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
++import { syncAutomationToolState } from '@/app/automation/bridge/tool-handlers'
++import { createEditorStore } from '@/app/editor/session'
++
++afterEach(() => {
++  Reflect.deleteProperty(globalThis, 'window')
++})
++
++function installWindowFixture() {
++  Object.defineProperty(globalThis, 'window', {
++    configurable: true,
++    value: { innerHeight: 800, innerWidth: 1200 }
++  })
++}
++
++describe('OpenPencil automation bridge state synchronization', () => {
++  test('commits FigmaAPI page and selection changes to the live editor store', async () => {
++    installWindowFixture()
++    const store = createEditorStore()
++    const figma = makeFigmaFromStore(store)
++    const page = figma.createPage()
++    page.name = 'Diagram Studio'
++    figma.currentPage = page
++    const frame = figma.createFrame()
++    frame.name = 'Flow Examples'
++    frame.resize(1800, 1100)
++    figma.currentPage.appendChild(frame)
++    figma.currentPage.selection = [frame]
++
++    await syncAutomationToolState(store, figma, 'select_nodes', { selected: [frame.id] })
++
++    expect(store.state.currentPageId).toBe(page.id)
++    expect([...store.state.selectedIds]).toEqual([frame.id])
++  })
++
++  test('commits viewport zoom-to-fit bounds to the live editor viewport', async () => {
++    installWindowFixture()
++    const store = createEditorStore()
++    const pageId = store.state.currentPageId
++    const frame = store.graph.createNode('FRAME', pageId, {
++      height: 1100,
++      name: 'Flow Examples',
++      width: 1800,
++      x: 1950,
++      y: 0
++    })
++    const figma = makeFigmaFromStore(store)
++
++    await syncAutomationToolState(store, figma, 'viewport_zoom_to_fit', {
++      bounds: { height: frame.height, width: frame.width, x: frame.x, y: frame.y }
++    })
++
++    expect(store.state.zoom).toBeLessThan(1)
++    expect(store.state.panX).toBeLessThan(0)
++    expect(store.state.panY).toBeGreaterThan(0)
++  })
++})
+diff --git a/tests/engine/mcp/server.test.ts b/tests/engine/mcp/server.test.ts
+index 65a3ee0..8a5d5f4 100644
+--- a/tests/engine/mcp/server.test.ts
++++ b/tests/engine/mcp/server.test.ts
+@@ -29,8 +29,14 @@ interface MockBrowser {
+   requests: MockBrowserRequest[]
+   close: () => void
+ }
++
++interface MockBrowserOptions { active?: boolean }
+ 
+ const TEST_MCP_ROOT = path.join(tmpdir(), 'open-pencil-mcp-root')
+ 
+-function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowser> {
++function connectMockBrowser(
++  port: number,
++  graph: SceneGraph,
++  options: MockBrowserOptions = {}
++): Promise<MockBrowser> {
+   return new Promise((resolve, reject) => {
+@@ -40,5 +46,5 @@ function connectMockBrowser(port: number, graph: SceneGraph): Promise<MockBrowser
+ 
+     ws.on('open', () => {
+-      ws.send(JSON.stringify({ type: 'register', token }))
++      ws.send(JSON.stringify({ type: 'register', token, active: options.active === true }))
+ 
+       ws.on('message', async (raw) => {
+@@ -401,10 +407,10 @@ describe('MCP WebSocket stdio bridge routing', () => {
+     }
+   })
+ 
+-  test('routes new requests to the latest registered desktop app after reconnect', async () => {
++  test('routes new requests to the latest active desktop app', async () => {
+     const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+     const wsPort = await waitForWsListening(wss)
+-    const firstBrowser = await connectMockBrowser(wsPort, new SceneGraph())
+-    const secondBrowser = await connectMockBrowser(wsPort, new SceneGraph())
++    const firstBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
++    const secondBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
+     const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
+ 
+@@ -433,3 +439,33 @@ describe('MCP WebSocket stdio bridge routing', () => {
+     }
+   })
++
++  test('does not let a passive editor steal the active MCP connection', async () => {
++    const { wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
++    const wsPort = await waitForWsListening(wss)
++    const activeBrowser = await connectMockBrowser(wsPort, new SceneGraph(), { active: true })
++    const passiveBrowser = await connectMockBrowser(wsPort, new SceneGraph())
++    const clientWs = await openWs(`ws://127.0.0.1:${wsPort}`)
++
++    try {
++      await readWsJson<{ type: string; token?: string }>(clientWs)
++      clientWs.send(
++        JSON.stringify({
++          type: 'request',
++          id: 'stdio-passive-editor',
++          command: 'tool',
++          args: { name: 'get_current_page', args: {} }
++        })
++      )
++      const response = await readWsJson<{ type: string; id: string; ok?: boolean }>(clientWs)
++
++      expect(response.ok).toBe(true)
++      expect(activeBrowser.requests.at(-1)?.command).toBe('tool')
++      expect(passiveBrowser.requests).toHaveLength(0)
++    } finally {
++      clientWs.close()
++      activeBrowser.close()
++      passiveBrowser.close()
++      closeServer()
++    }
++  })
+ })
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 6162410..085c2e4 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -21,6 +21,8 @@
+ 
+ ### Fixes
+ 
++- Keep live MCP automation bound to the active OpenPencil editor when multiple browser documents are open.
++- Apply MCP page, selection, and zoom-to-fit changes to the visible editor instead of only the temporary Figma API wrapper.
+ - Fit Smylr production frames into the canvas area left visible by the Layers panel, Inspector, and floating toolbar instead of centering them underneath editor chrome.
+ - Restore the same Smylr canvas page and pan/zoom view after refreshing OpenPencil in the browser.
+ - Fix live CLI and MCP automation drifting to the wrong open document or page when multiple files are open.
