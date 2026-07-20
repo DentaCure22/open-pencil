@@ -97,17 +97,17 @@ async function toggleHistory() {
     class="group/trace-header flex min-w-0 flex-1 items-center gap-2"
   >
     <div class="min-w-0 flex-1">
-      <input
-        v-if="narratedTraceSession && narratedTraceViewMode !== 'history'"
-        data-test-id="narrated-trace-title"
-        v-model="titleDraft"
-        class="-ml-1 block h-5 w-full cursor-text truncate rounded-[5px] border-0 bg-transparent px-1 py-0 text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface outline-none transition-colors hover:bg-white/[0.04] focus:bg-white/[0.065] focus:ring-1 focus:ring-white/[0.08]"
-        aria-label="Trace title"
-        title="Rename trace"
-        @focus="beginTitleEdit"
-        @blur="commitTraceTitle"
-        @keydown.enter.prevent="finishTitleEdit"
-      />
+      <Tip v-if="narratedTraceSession && narratedTraceViewMode !== 'history'" label="Rename trace">
+        <input
+          data-test-id="narrated-trace-title"
+          v-model="titleDraft"
+          class="-ml-1 block h-5 w-full cursor-text truncate rounded-[5px] border-0 bg-transparent px-1 py-0 text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface outline-none transition-colors hover:bg-white/[0.04] focus:bg-white/[0.065] focus:ring-1 focus:ring-white/[0.08]"
+          aria-label="Trace title"
+          @focus="beginTitleEdit"
+          @blur="commitTraceTitle"
+          @keydown.enter.prevent="finishTitleEdit"
+        />
+      </Tip>
       <div
         v-else
         class="truncate text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface"

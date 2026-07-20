@@ -25,6 +25,19 @@ function startLiveBoard() {
   requestAnimationFrame(() => store.zoomToSelection(htmlBoardViewportInsets()))
 }
 
+async function startThreeExperience() {
+  const { createThreeExperience, THREE_EXPERIENCE_FIXTURE_SOURCE } =
+    await import('@/app/spatial-media/three-experience')
+  createThreeExperience(store, {
+    sceneSource: THREE_EXPERIENCE_FIXTURE_SOURCE,
+    sourceId: 'starter-torus-knot',
+    sourceRevision: 1,
+    title: 'Three.js torus knot'
+  })
+  activeTab.value = 'code'
+  requestAnimationFrame(() => store.zoomToSelection(htmlBoardViewportInsets()))
+}
+
 function chooseSourceFormat() {
   choosingSourceFormat.value = !choosingSourceFormat.value
 }
@@ -67,6 +80,15 @@ function startSourceDocument(format: SourceDocumentFormat) {
       >
         <icon-lucide-plus class="size-3" />
         New live board
+      </button>
+      <button
+        type="button"
+        class="text-muted hover:bg-hover hover:text-surface mt-1.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-[8px] text-[10px] font-medium transition"
+        data-test-id="three-experience-start"
+        @click="startThreeExperience"
+      >
+        <icon-lucide-box class="size-3" />
+        New Three.js experience
       </button>
       <button
         type="button"

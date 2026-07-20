@@ -14,7 +14,7 @@ import IconUngroup from '~icons/lucide/ungroup'
 import type { useEditorCommands } from '@open-pencil/vue'
 
 import type { EditorStore } from '@/app/editor/active-store'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live-frame-deletion'
+import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
 
 type ToolbarActionOptions = {

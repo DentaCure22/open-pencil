@@ -39,9 +39,7 @@ const baseUrl = computed(() => smylrFrameBaseUrlFor(window.location.href))
 
 function worldPosition(index: number) {
   const frame = liveFrame.value
-  return frame
-    ? { x: frame.x + (index + 1) * (frame.width + GAP), y: frame.y }
-    : { x: 0, y: 0 }
+  return frame ? { x: frame.x + (index + 1) * (frame.width + GAP), y: frame.y } : { x: 0, y: 0 }
 }
 
 const liveStepIds = computed(() => {
@@ -136,11 +134,12 @@ useEventListener(window, 'smylr:dental-flow-focus', focusStep)
         @click.stop="activateStep(step.id)"
         @pointerdown.stop
       >
-        <span
-          class="ml-1 size-1.5 rounded-full"
-          :class="liveStepIds.has(step.id) ? 'bg-green-500' : 'bg-muted'"
-          :title="liveStepIds.has(step.id) ? 'Live production runtime' : 'Frozen preview'"
-        />
+        <Tip :label="liveStepIds.has(step.id) ? 'Live production runtime' : 'Frozen preview'">
+          <span
+            class="ml-1 size-1.5 rounded-full"
+            :class="liveStepIds.has(step.id) ? 'bg-green-500' : 'bg-muted'"
+          />
+        </Tip>
         <strong class="max-w-36 truncate px-1 text-[10px] font-medium">{{ step.label }}</strong>
         <span class="mx-0.5 h-3.5 w-px bg-border" />
         <Tip label="Select containers">
@@ -177,10 +176,18 @@ useEventListener(window, 'smylr:dental-flow-focus', focusStep)
         </Tip>
       </header>
       <template v-if="selectedDentalFlowFrameId === step.id">
-        <span class="pointer-events-none absolute -top-1 -left-1 size-2 rounded-full border border-violet-500 bg-white" />
-        <span class="pointer-events-none absolute -top-1 -right-1 size-2 rounded-full border border-violet-500 bg-white" />
-        <span class="pointer-events-none absolute -bottom-1 -left-1 size-2 rounded-full border border-violet-500 bg-white" />
-        <span class="pointer-events-none absolute -right-1 -bottom-1 size-2 rounded-full border border-violet-500 bg-white" />
+        <span
+          class="pointer-events-none absolute -top-1 -left-1 size-2 rounded-full border border-violet-500 bg-white"
+        />
+        <span
+          class="pointer-events-none absolute -top-1 -right-1 size-2 rounded-full border border-violet-500 bg-white"
+        />
+        <span
+          class="pointer-events-none absolute -bottom-1 -left-1 size-2 rounded-full border border-violet-500 bg-white"
+        />
+        <span
+          class="pointer-events-none absolute -right-1 -bottom-1 size-2 rounded-full border border-violet-500 bg-white"
+        />
       </template>
       <iframe
         v-if="liveStepIds.has(step.id)"
@@ -188,7 +195,10 @@ useEventListener(window, 'smylr:dental-flow-focus', focusStep)
         class="size-full rounded-lg border-0 bg-white"
         :title="`Dental Chart flow — ${step.label}`"
       />
-      <div v-else class="flex size-full items-center justify-center rounded-lg bg-white text-center text-slate-500">
+      <div
+        v-else
+        class="flex size-full items-center justify-center rounded-lg bg-white text-center text-slate-500"
+      >
         <div>
           <icon-lucide-pause class="mx-auto mb-2 size-6" />
           <p class="text-xs font-medium">Runtime paused</p>

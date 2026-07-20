@@ -1,3 +1,4 @@
+/** Inputs used to decide whether the shared live runtime stays mounted. */
 export interface LiveRuntimeVisibilityInput {
   currentPageId: string
   frameId: string

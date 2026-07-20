@@ -1,5 +1,12 @@
 import type { Editor, EditorState } from '@open-pencil/core/editor'
-import { readContentSource } from '@open-pencil/core/io'
+import {
+  applyStructuredDataReconciliation,
+  applySVGReconciliation,
+  readContentSource,
+  reconcileStructuredDataSource,
+  reconcileSVGSource,
+  type SourceReconciliationResult
+} from '@open-pencil/core/io'
 import { exportFigFile } from '@open-pencil/core/io/formats/fig'
 import { writeMarkdownDocument } from '@open-pencil/core/io/formats/markdown'
 import type { SceneNode } from '@open-pencil/scene-graph'
@@ -12,6 +19,7 @@ import {
 } from '@/app/document/io/names'
 import { createSaveActions } from '@/app/document/io/save'
 import { createDocumentSourceState } from '@/app/document/io/source-state'
+import { toast } from '@/app/shell/ui'
 import { IS_TAURI } from '@/constants'
 
 type DocumentSourceState = EditorState & {
@@ -19,7 +27,16 @@ type DocumentSourceState = EditorState & {
   autosaveEnabled: boolean
 }
 
-const SOURCE_WRITABLE_FORMATS = new Set(['fig', 'markdown', 'html', 'jsx', 'tsx'])
+const SOURCE_WRITABLE_FORMATS = new Set([
+  'fig',
+  'markdown',
+  'html',
+  'jsx',
+  'tsx',
+  'json',
+  'csv',
+  'svg'
+])
 
 export { createDocumentSourceState }
 
@@ -98,9 +115,52 @@ export function createDocumentSourceActions({
 
   function sourceDocumentNode(format: string): SceneNode | null {
     for (const node of editor.graph.getAllNodes()) {
-      if (readContentSource(node)?.format === format) return node
+      const sourceFormat = readContentSource(node)?.format
+      if (sourceFormat === format || (format === 'json' && sourceFormat === 'json-schema')) {
+        return node
+      }
     }
     return null
+  }
+
+  function captureReconciliationState(document: SceneNode) {
+    const text = editor.graph
+      .flattenTree(document.id)
+      .map(({ node }) => node)
+      .filter((node) => node.type === 'TEXT' && node.name === 'Source reconciliation status')
+      .map((node) => ({ id: node.id, text: node.text }))
+    return { pluginData: structuredClone(document.pluginData), text }
+  }
+
+  function restoreReconciliationState(
+    document: SceneNode,
+    snapshot: ReturnType<typeof captureReconciliationState>
+  ) {
+    editor.graph.updateNode(document.id, { pluginData: snapshot.pluginData })
+    for (const item of snapshot.text) editor.graph.updateNode(item.id, { text: item.text })
+  }
+
+  function sourceReconciliation(
+    format: string,
+    document: SceneNode
+  ): SourceReconciliationResult | null {
+    if (format === 'json' || format === 'csv') {
+      return reconcileStructuredDataSource(editor.graph, document)
+    }
+    if (format === 'svg') return reconcileSVGSource(editor.graph, document)
+    return null
+  }
+
+  function applySourceReconciliation(
+    format: string,
+    document: SceneNode,
+    result: SourceReconciliationResult
+  ) {
+    if (format === 'json' || format === 'csv') {
+      applyStructuredDataReconciliation(editor.graph, document, result)
+    } else if (format === 'svg') {
+      applySVGReconciliation(editor.graph, document, result)
+    }
   }
 
   async function writeCurrentSource(): Promise<void> {
@@ -125,16 +185,35 @@ export function createDocumentSourceActions({
     }
 
     const document = sourceDocumentNode(format)
-    const source = document ? readContentSource(document)?.source : null
-    if (source === null || source === undefined) {
+    if (!document) throw new Error(`${format.toUpperCase()} source document is missing`)
+    const snapshot = captureReconciliationState(document)
+    const reconciliation = sourceReconciliation(format, document)
+    if (reconciliation) {
+      applySourceReconciliation(format, document, reconciliation)
+      if (reconciliation.status === 'conflict' || reconciliation.status === 'unsupported') {
+        throw new Error(reconciliation.message)
+      }
+    }
+
+    const source = reconciliation?.source ?? readContentSource(document)?.source
+    if (source === undefined) {
       throw new Error(`${format.toUpperCase()} source document is missing`)
     }
-    await writeFile(new TextEncoder().encode(source))
+    try {
+      await writeFile(new TextEncoder().encode(source))
+    } catch (error) {
+      restoreReconciliationState(document, snapshot)
+      throw error
+    }
   }
 
   async function saveFigFile() {
     if (getSourceFormat() !== 'fig' && getWritableDocumentSource()) {
-      await writeCurrentSource()
+      try {
+        await writeCurrentSource()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+      }
       return
     }
     await saveNativeFigFile()

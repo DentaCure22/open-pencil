@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
 import { exportFigFile, initCodec, parseFigFile } from '@open-pencil/core'
-import { readContentSource } from '@open-pencil/core/io'
+import {
+  applySVGReconciliation,
+  readContentSource,
+  readSourceReconciliation,
+  reconcileSVGSource
+} from '@open-pencil/core/io'
 
 import { readSVGFile, svgToSceneGraph } from '#core/io/formats/svg/read'
 
@@ -57,6 +62,30 @@ describe('SVG source document import', () => {
       fileName: null,
       revision: 1,
       source: SOURCE
+    })
+  })
+
+  test('preserves exact SVG source and blocks lossy native regeneration', async () => {
+    const graph = await svgToSceneGraph(SOURCE, { fileName: 'status-flow.svg' })
+    const frame = getNodeOrThrow(graph, graph.getPages()[0]?.childIds[0] ?? '')
+    const child = graph.getChildren(frame.id)[0]
+    if (!child) throw new Error('Expected imported SVG child')
+
+    expect(reconcileSVGSource(graph, frame)).toMatchObject({
+      status: 'current',
+      source: SOURCE,
+      revision: 1
+    })
+
+    graph.updateNode(child.id, { x: child.x + 8 })
+    const result = reconcileSVGSource(graph, frame)
+    applySVGReconciliation(graph, frame, result)
+
+    expect(result).toMatchObject({ status: 'unsupported', source: SOURCE, revision: 1 })
+    expect(readContentSource(frame)?.source).toBe(SOURCE)
+    expect(readSourceReconciliation(frame)).toMatchObject({
+      status: 'unsupported',
+      revision: 1
     })
   })
 

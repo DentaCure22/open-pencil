@@ -4,13 +4,15 @@ import type { Page } from '@playwright/test'
 
 import type { DesignDocument } from '@open-pencil/dom-css'
 
-const BROWSER_RUNTIME_MODULE = `http://localhost:1420/@fs${process.cwd()}/packages/dom-css/src/runtime/browser.ts`
-const DOM_CSS_BROWSER_MODULE = 'http://localhost:1420/@id/@open-pencil/dom-css/browser'
+const BROWSER_RUNTIME_PATH = `/@fs${process.cwd()}/packages/dom-css/src/runtime/browser.ts`
+const DOM_CSS_BROWSER_PATH = '/@id/@open-pencil/dom-css/browser'
 
 async function ensureAppPage(page: Page) {
-  if (!page.url().startsWith('http://localhost:1420')) {
-    await page.goto('/')
-  }
+  if (!page.url().startsWith('http://') && !page.url().startsWith('https://')) await page.goto('/')
+}
+
+function appModuleUrl(page: Page, path: string): string {
+  return new URL(path, page.url()).href
 }
 
 export async function setStyledContent(page: Page, css: string, body: string) {
@@ -37,7 +39,7 @@ export async function browserRuntimeComputeStyles(
     {
       designDocument: document,
       css: cssText,
-      modulePath: BROWSER_RUNTIME_MODULE,
+      modulePath: appModuleUrl(page, BROWSER_RUNTIME_PATH),
       sandboxMode: sandbox
     }
   )
@@ -64,7 +66,7 @@ export async function publicBrowserHTMLSceneGraph(page: Page, html: string, cssT
           }
         : null
     },
-    { sourceHTML: html, css: cssText, modulePath: DOM_CSS_BROWSER_MODULE }
+    { sourceHTML: html, css: cssText, modulePath: appModuleUrl(page, DOM_CSS_BROWSER_PATH) }
   )
 }
 
@@ -95,7 +97,7 @@ export async function publicBrowserSceneGraph(page: Page, classes: string[], css
           }
         : null
     },
-    { candidates: classes, css: cssText, modulePath: DOM_CSS_BROWSER_MODULE }
+    { candidates: classes, css: cssText, modulePath: appModuleUrl(page, DOM_CSS_BROWSER_PATH) }
   )
 }
 
@@ -121,7 +123,7 @@ export async function publicBrowserImageNode(page: Page, html: string, cssText: 
           }
         : null
     },
-    { sourceHTML: html, css: cssText, modulePath: DOM_CSS_BROWSER_MODULE }
+    { sourceHTML: html, css: cssText, modulePath: appModuleUrl(page, DOM_CSS_BROWSER_PATH) }
   )
 }
 
@@ -135,7 +137,7 @@ export async function publicBrowserTextNode(page: Page, html: string, cssText: s
       const graph = await browserHTMLToSceneGraph(sourceHTML, { cssText: css })
       return graph.getAllNodes().find((node) => node.type === 'TEXT')
     },
-    { sourceHTML: html, css: cssText, modulePath: DOM_CSS_BROWSER_MODULE }
+    { sourceHTML: html, css: cssText, modulePath: appModuleUrl(page, DOM_CSS_BROWSER_PATH) }
   )
 }
 

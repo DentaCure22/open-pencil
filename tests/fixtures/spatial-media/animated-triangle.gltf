@@ -1,0 +1,124 @@
+{
+  "asset": {
+    "generator": "OpenPencil deterministic spatial-media fixture",
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Animated triangle"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Triangle",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "OpenPencil violet",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.486, 0.227, 0.929, 1],
+        "metallicFactor": 0.15,
+        "roughnessFactor": 0.38
+      }
+    }
+  ],
+  "animations": [
+    {
+      "name": "Turntable",
+      "samplers": [
+        {
+          "input": 2,
+          "interpolation": "LINEAR",
+          "output": 3
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 0,
+            "path": "rotation"
+          }
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 84,
+      "uri": "data:application/octet-stream;base64,zcxMv5qZGb8AAAAAzcxMP5qZGb8AAAAAAAAAAGZmZj8AAAAAAAABAAIAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 36,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6,
+      "byteOffset": 36,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 8,
+      "byteOffset": 44
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32,
+      "byteOffset": 52
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "max": [0.8, 0.9, 0],
+      "min": [-0.8, -0.6, 0],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 2,
+      "max": [2],
+      "min": [0],
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 2,
+      "type": "VEC4"
+    }
+  ]
+}

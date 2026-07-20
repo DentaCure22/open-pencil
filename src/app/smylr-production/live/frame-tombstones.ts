@@ -1,5 +1,5 @@
 /**
- * Durable record of live frames the user deleted.
+ * Durable record of live frames the user deleted from the production workspace.
  * Kept free of workspace.ts imports to avoid circular deps.
  */
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'

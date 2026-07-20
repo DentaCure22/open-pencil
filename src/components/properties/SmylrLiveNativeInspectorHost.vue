@@ -26,9 +26,10 @@ import {
   resetLiveInspectorPreview,
   setLiveInspectorClipboardHtml
 } from '@/app/smylr-live-inspector/session'
-import NativeSelectionInspector from '@/components/NativeSelectionInspector.vue'
 import SmylrLiveClassesField from '@/components/SmylrLiveClassesField.vue'
 import IconButton from '@/components/ui/IconButton.vue'
+import Tip from '@/components/ui/Tip.vue'
+import NativeSelectionInspector from './NativeSelectionInspector.vue'
 
 const { document, node } = defineProps<{
   document: SmylrLiveContainerDocument
@@ -775,12 +776,9 @@ function requestReset() {
     @pointercancel.capture="endLiveInspectorDraftTransaction(styleTransactionKey)"
   >
     <template #header-actions>
-      <span
-        v-if="hasChanges"
-        data-test-id="smylr-live-change-indicator"
-        class="size-1.5 rounded-full bg-accent"
-        title="This layer has live overrides"
-      />
+      <Tip v-if="hasChanges" label="This layer has live overrides">
+        <span data-test-id="smylr-live-change-indicator" class="size-1.5 rounded-full bg-accent" />
+      </Tip>
       <IconButton
         :label="resetLabel"
         :disabled="!hasChanges"

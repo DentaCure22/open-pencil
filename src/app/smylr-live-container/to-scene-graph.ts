@@ -1,9 +1,9 @@
+import { parseColor } from '@open-pencil/core/color'
+import { designDocumentToSceneGraph } from '@open-pencil/dom-css'
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { cloneNodeProps } from '@open-pencil/scene-graph/copy'
 import { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
-import { parseColor } from '@open-pencil/core/color'
 
-import { designDocumentToSceneGraph } from '../../../packages/dom-css/src/to-scene-graph'
 import { smylrLiveContainerToDesignDocuments } from './to-design-document'
 import type { SmylrLiveContainerDocument, SmylrLiveContainerNode } from './types'
 
@@ -33,7 +33,11 @@ function cloneIntoGraph(
   return clone
 }
 
-function scaleVectorNetwork(network: NonNullable<SceneNode['vectorNetwork']>, width: number, height: number) {
+function scaleVectorNetwork(
+  network: NonNullable<SceneNode['vectorNetwork']>,
+  width: number,
+  height: number
+) {
   if (network.vertices.length === 0) return
   const xs = network.vertices.map((vertex) => vertex.x)
   const ys = network.vertices.map((vertex) => vertex.y)
@@ -107,15 +111,18 @@ function restoreNativeSvgPaths(graph: SceneGraph, root: SmylrLiveContainerNode) 
           : []
         const strokeColor = nativeColor(liveNode.computedStyle?.stroke)
         const strokeWeight = Number.parseFloat(liveNode.computedStyle?.['stroke-width'] ?? '')
-        vector.strokes = strokeColor && strokeWeight > 0
-          ? [{
-              align: 'INSIDE',
-              color: strokeColor,
-              opacity: strokeColor.a,
-              visible: true,
-              weight: strokeWeight
-            }]
-          : []
+        vector.strokes =
+          strokeColor && strokeWeight > 0
+            ? [
+                {
+                  align: 'INSIDE',
+                  color: strokeColor,
+                  opacity: strokeColor.a,
+                  visible: true,
+                  weight: strokeWeight
+                }
+              ]
+            : []
         vector.strokeCap = nativeStrokeCap(liveNode.computedStyle?.['stroke-linecap'])
         vector.strokeJoin = nativeStrokeJoin(liveNode.computedStyle?.['stroke-linejoin'])
         graph.deleteNode(placeholder.id)

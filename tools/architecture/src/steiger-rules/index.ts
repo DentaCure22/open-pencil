@@ -368,16 +368,21 @@ const VUE_DIRECTIVE_NODE = 7
 type VueTemplateNode = {
   type?: number
   name?: string
+  tag?: string
   arg?: { content?: string }
   props?: VueTemplateNode[]
   children?: VueTemplateNode[]
   loc?: { start?: { line?: number; column?: number } }
 }
 
-function walkVueTemplateAst(node: VueTemplateNode, visitor: (node: VueTemplateNode) => void) {
-  visitor(node)
-  for (const prop of node.props ?? []) walkVueTemplateAst(prop, visitor)
-  for (const child of node.children ?? []) walkVueTemplateAst(child, visitor)
+function walkVueTemplateAst(
+  node: VueTemplateNode,
+  visitor: (node: VueTemplateNode, parent?: VueTemplateNode) => void,
+  parent?: VueTemplateNode
+) {
+  visitor(node, parent)
+  for (const prop of node.props ?? []) walkVueTemplateAst(prop, visitor, node)
+  for (const child of node.children ?? []) walkVueTemplateAst(child, visitor, node)
 }
 
 function vuePropName(prop: VueTemplateNode) {
@@ -400,8 +405,10 @@ const noNativeTitleAttributesInVue = createTextRule(
     if (!template) return []
 
     const diagnostics: Array<{ message: string; line?: number; column?: number }> = []
-    walkVueTemplateAst(template as VueTemplateNode, (node) => {
+    walkVueTemplateAst(template as VueTemplateNode, (node, parent) => {
       if (vuePropName(node) !== 'title') return
+      // An iframe title is its accessible name, not a native hover-help tooltip.
+      if (parent?.tag === 'iframe') return
       const loc = node.loc?.start
       diagnostics.push({
         message: 'Use Tip/Reka tooltip patterns instead of native title attributes.',

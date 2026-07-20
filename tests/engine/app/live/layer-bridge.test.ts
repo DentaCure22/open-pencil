@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+// Keep the virtual live-layer tree covered independently from rendered UI.
 
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import type { SmylrLiveContainerNode } from '@/app/smylr-live-container/types'
-import { buildLiveLayerChildrenForSceneNode } from '@/app/smylr-live-inspector/layer-bridge'
+import {
+  buildLiveLayerChildrenForSceneNode,
+  displayNameForLiveNode
+} from '@/app/smylr-live-inspector/layer-bridge'
 import {
   liveInspectorActiveFrameId,
   liveInspectorDocument
@@ -29,6 +33,17 @@ afterEach(() => {
 })
 
 describe('Smylr live layer bridge', () => {
+  test('uses the canonical live-layer display name for selected containers', () => {
+    const node = liveNode('button', 'button')
+    node.attrs = { 'data-slot': 'primary-action' }
+    node.source = { componentName: 'SavePatientButton' }
+
+    expect(displayNameForLiveNode(node)).toBe('SavePatientButton')
+
+    delete node.source
+    expect(displayNameForLiveNode(node)).toBe('primary-action')
+  })
+
   test('keeps the live root container and every descendant', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]

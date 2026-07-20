@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import PanelSection from '@/components/ui/PanelSection.vue'
+import Tip from '@/components/ui/Tip.vue'
 
 const { activeClasses, suggestions } = defineProps<{
   /** Classes currently on the selection (after draft add/remove). */
@@ -218,18 +219,18 @@ onUnmounted(() => {
         class="flex flex-wrap gap-1"
         data-test-id="smylr-live-classes-active"
       >
-        <button
-          v-for="cls in activeClasses"
-          :key="cls"
-          type="button"
-          data-test-id="smylr-live-class-chip"
-          class="group/chip border-border bg-hover/60 hover:border-accent/40 hover:bg-hover flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] text-surface transition-colors"
-          :title="`Remove ${cls}`"
-          @click="removeClass(cls)"
-        >
-          <span class="min-w-0 truncate font-mono">{{ cls }}</span>
-          <icon-lucide-x class="size-2.5 shrink-0 text-muted group-hover/chip:text-surface" />
-        </button>
+        <Tip v-for="cls in activeClasses" :key="cls" :label="`Remove ${cls}`">
+          <button
+            type="button"
+            data-test-id="smylr-live-class-chip"
+            class="group/chip border-border bg-hover/60 hover:border-accent/40 hover:bg-hover flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] text-surface transition-colors"
+            :aria-label="`Remove ${cls}`"
+            @click="removeClass(cls)"
+          >
+            <span class="min-w-0 truncate font-mono">{{ cls }}</span>
+            <icon-lucide-x class="size-2.5 shrink-0 text-muted group-hover/chip:text-surface" />
+          </button>
+        </Tip>
       </div>
       <p v-else class="text-[10px] leading-4 text-muted">
         No utility classes on this selection yet. Search above to add one.

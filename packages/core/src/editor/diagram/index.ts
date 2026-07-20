@@ -3,6 +3,14 @@ import { generateId, type SceneNode } from '@open-pencil/scene-graph'
 import { mermaidDiagramPluginData, type MermaidSceneSpec } from '#core/diagram'
 import type { EditorContext } from '#core/editor/types'
 
+import { initializeMermaidSourceReconciliation } from './reconcile'
+
+export {
+  initializeMermaidSourceReconciliation,
+  mermaidDiagramOwner,
+  reconcileMermaidDiagramSource
+} from './reconcile'
+
 export interface InsertMermaidDiagramPosition {
   x: number
   y: number
@@ -63,6 +71,8 @@ export function createDiagramActions(ctx: EditorContext) {
         pluginData
       }).id
     })
+
+    initializeMermaidSourceReconciliation(ctx.graph, owner.id)
 
     const childSnapshots = nodeIds.flatMap((id) => {
       const node = ctx.graph.getNode(id)

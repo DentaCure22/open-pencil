@@ -25,8 +25,15 @@ export {
   CONTENT_SOURCE_REVISION,
   contentSourcePluginData,
   mergeContentSourcePluginData,
+  mergeSourceReconciliationPluginData,
   readContentSource,
-  type ContentSourceMetadata
+  readSourceReconciliation,
+  sourceReconciliationPluginData,
+  sourceSceneSignature,
+  type ContentSourceMetadata,
+  type SourceReconciliationMetadata,
+  type SourceReconciliationResult,
+  type SourceReconciliationStatus
 } from './content-source'
 export { sceneNodeToJSX, selectionToJSX, type JSXFormat } from './formats/jsx'
 export {
@@ -68,12 +75,15 @@ export {
   type ExportFormat
 } from './formats/raster'
 export { renderNodesToSVG, geometryBlobToSVGPath, vectorNetworkToSVGPaths } from './formats/svg'
+export { applySVGReconciliation, reconcileSVGSource } from './formats/svg/reconcile'
 export { readSVGFile, svgToSceneGraph, type SVGReadOptions } from './formats/svg/read'
 export {
   createCSVFormat,
   csvToSceneGraph,
   jsonToSceneGraph,
   looksLikeJSONSchema,
+  applyStructuredDataReconciliation,
+  reconcileStructuredDataSource,
   readStructuredDataNode
 } from './formats/structured-data'
 export type {

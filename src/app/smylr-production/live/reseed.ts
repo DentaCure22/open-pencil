@@ -6,7 +6,7 @@
  */
 import type { EditorStore } from '@/app/editor/session'
 
-import { yieldAnimationFrames } from './yield-frames'
+import { yieldAnimationFrames } from '../yield-frames'
 
 type ReseedOptions = {
   selectedPageId?: string
@@ -44,7 +44,7 @@ async function runReseed(getStore: () => EditorStore, options: ReseedOptions): P
   if (!store?.graph) return
 
   const { hasSmylrProductionWorkspace, refreshSmylrFoundationsBoardsInPlace } =
-    await import('./workspace')
+    await import('../workspace')
 
   if (!hasSmylrProductionWorkspace(store)) {
     // Do not full-open from HMR (that replaceGraphs the whole doc).

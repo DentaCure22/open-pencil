@@ -1,14 +1,16 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
 import { initCodec } from '@open-pencil/core'
-import { readContentSource } from '@open-pencil/core/io'
+import { readContentSource, readSourceReconciliation } from '@open-pencil/core/io'
 import { exportFigFile, parseFigFile } from '@open-pencil/core/io/formats/fig'
 
 import {
   createCSVFormat,
   csvToSceneGraph,
+  applyStructuredDataReconciliation,
   jsonFormat,
   jsonToSceneGraph,
+  reconcileStructuredDataSource,
   readStructuredDataNode,
   type CSVRowsParser
 } from '#core/io/formats/structured-data'
@@ -20,6 +22,17 @@ function documentNode(graph: ReturnType<typeof jsonToSceneGraph>) {
 
 function nodeAtPath(graph: ReturnType<typeof jsonToSceneGraph>, path: string) {
   return [...graph.getAllNodes()].find((node) => readStructuredDataNode(node)?.path === path)
+}
+
+function textNodeAtPath(
+  graph: ReturnType<typeof jsonToSceneGraph>,
+  path: string,
+  field: 'header' | 'label' | 'type' | 'value'
+) {
+  return [...graph.getAllNodes()].find((node) => {
+    const metadata = readStructuredDataNode(node)
+    return node.type === 'TEXT' && metadata?.path === path && metadata.field === field
+  })
 }
 
 describe('structured data document import', () => {
@@ -166,7 +179,8 @@ describe('structured data document import', () => {
       valueType: null,
       rowIndex: 0,
       columnIndex: 1,
-      columnName: 'notes'
+      columnName: 'notes',
+      field: 'value'
     })
     expect(cell?.type).toBe('TEXT')
     expect(cell?.text).toBe('Line one\nLine two')
@@ -198,5 +212,89 @@ describe('structured data document import', () => {
       source
     })
     expect(nodeAtPath(reopened, '/items/0/id')).toBeDefined()
+  })
+
+  test('regenerates deterministic JSON source from native scalar edits', () => {
+    const source = '\uFEFF{\r\n  "name": "Ada",\r\n  "count": 2\r\n}\r\n'
+    const graph = jsonToSceneGraph(source, { fileName: 'profile.json' })
+    const document = documentNode(graph)
+    const name = textNodeAtPath(graph, '/name', 'value')
+    const count = textNodeAtPath(graph, '/count', 'value')
+    if (!name || !count) throw new Error('Expected editable JSON values')
+
+    graph.updateNode(name.id, { text: '"Omar"' })
+    graph.updateNode(count.id, { text: '3' })
+    const result = reconcileStructuredDataSource(graph, document)
+    applyStructuredDataReconciliation(graph, document, result)
+
+    expect(result).toMatchObject({ status: 'regenerated', revision: 2 })
+    expect(result.source).toBe('\uFEFF{\r\n  "name": "Omar",\r\n  "count": 3\r\n}\r\n')
+    expect(readContentSource(document)).toMatchObject({ revision: 2, source: result.source })
+    expect(readSourceReconciliation(document)).toMatchObject({
+      status: 'regenerated',
+      revision: 2
+    })
+    const reopened = jsonToSceneGraph(result.source, { fileName: 'profile.json' })
+    expect(textNodeAtPath(reopened, '/name', 'value')?.text).toBe('"Omar"')
+  })
+
+  test('preserves exact JSON bytes and surfaces invalid native edits as a conflict', () => {
+    const source = '{ "count" : 2 }'
+    const graph = jsonToSceneGraph(source, { fileName: 'count.json' })
+    const document = documentNode(graph)
+    const count = textNodeAtPath(graph, '/count', 'value')
+    if (!count) throw new Error('Expected editable JSON value')
+
+    expect(reconcileStructuredDataSource(graph, document)).toMatchObject({
+      status: 'current',
+      source
+    })
+    graph.updateNode(count.id, { text: 'not-a-number' })
+    const conflict = reconcileStructuredDataSource(graph, document)
+    applyStructuredDataReconciliation(graph, document, conflict)
+
+    expect(conflict).toMatchObject({ status: 'conflict', source, revision: 1 })
+    expect(readContentSource(document)?.source).toBe(source)
+    expect(
+      [...graph.getAllNodes()].find(
+        (node) => readStructuredDataNode(node)?.kind === 'source-status'
+      )?.text
+    ).toContain('CONFLICT · REVISION 1 · ORIGINAL PRESERVED')
+  })
+
+  test('regenerates CSV quoting while retaining untouched ragged cells', () => {
+    const source = '\uFEFFname,notes,optional\r\nAda,"Line one\nLine two"\r\nOmar,Ready,yes'
+    const graph = csvToSceneGraph(
+      source,
+      () => [
+        ['name', 'notes', 'optional'],
+        ['Ada', 'Line one\nLine two'],
+        ['Omar', 'Ready', 'yes']
+      ],
+      { fileName: 'people.csv' }
+    )
+    const document = documentNode(graph)
+    const cell = textNodeAtPath(graph, '/rows/0/1', 'value')
+    if (!cell) throw new Error('Expected editable CSV cell')
+
+    expect(reconcileStructuredDataSource(graph, document)).toMatchObject({
+      status: 'current',
+      source,
+      revision: 1
+    })
+    graph.updateNode(cell.id, { text: 'Line one, revised' })
+    const result = reconcileStructuredDataSource(graph, document)
+    applyStructuredDataReconciliation(graph, document, result)
+
+    expect(result).toMatchObject({ status: 'regenerated', revision: 2 })
+    expect(result.source).toBe(
+      '\uFEFFname,notes,optional\r\nAda,"Line one, revised"\r\nOmar,Ready,yes'
+    )
+    const reopened = csvToSceneGraph(result.source, () => [
+      ['name', 'notes', 'optional'],
+      ['Ada', 'Line one, revised'],
+      ['Omar', 'Ready', 'yes']
+    ])
+    expect(textNodeAtPath(reopened, '/rows/0/1', 'value')?.text).toBe('Line one, revised')
   })
 })

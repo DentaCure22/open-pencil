@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+// Live-container asset behavior belongs to the app live-runtime test domain.
 
 import { parseOpenPencilClipboard } from '@open-pencil/core/clipboard'
 

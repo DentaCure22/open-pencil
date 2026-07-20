@@ -708,29 +708,35 @@ watch(liveWorkspacePreviewRequest, (request) => {
         class="pointer-events-none absolute inset-0 z-[1] size-full bg-white object-fill"
         :style="frameIframeStyle"
       />
-      <div
+      <Tip
         v-if="shouldCaptureDisconnectedFrameGestures"
-        data-test-id="smylr-live-disconnected-navigation-surface"
-        class="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
-        title="Navigate the board while the live app reconnects"
-        @wheel="handleFrameSurfaceWheel"
-      />
-      <div
+        label="Navigate the board while the live app reconnects"
+      >
+        <div
+          data-test-id="smylr-live-disconnected-navigation-surface"
+          class="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
+          @wheel="handleFrameSurfaceWheel"
+        />
+      </Tip>
+      <Tip
         v-if="
           liveInspectorActiveFrameId === liveFrame.id &&
           !isLiveComponentRuntime &&
           liveInspectorInteractionMode === 'select' &&
           !hasNativeNonFrameSelection
         "
-        data-test-id="smylr-live-select-surface"
-        class="absolute inset-0 z-10 cursor-crosshair"
-        title="Select a live container"
-        @click.stop.prevent="postInspectorPointCommand('select-at-point', $event)"
-        @pointerenter="showCurrentFrameHeader"
-        @pointerleave="leaveInspectorSelectSurface"
-        @pointermove="postInspectorPointCommand('hover-at-point', $event)"
-        @wheel="handleFrameSurfaceWheel"
-      />
+        label="Select a live container"
+      >
+        <div
+          data-test-id="smylr-live-select-surface"
+          class="absolute inset-0 z-10 cursor-crosshair"
+          @click.stop.prevent="postInspectorPointCommand('select-at-point', $event)"
+          @pointerenter="showCurrentFrameHeader"
+          @pointerleave="leaveInspectorSelectSurface"
+          @pointermove="postInspectorPointCommand('hover-at-point', $event)"
+          @wheel="handleFrameSurfaceWheel"
+        />
+      </Tip>
       <div
         v-if="!isLiveComponentRuntime && liveInspectorStatus === 'loading'"
         data-test-id="smylr-live-app-loading"
@@ -768,111 +774,115 @@ watch(liveWorkspacePreviewRequest, (request) => {
       Body press → live app. Lives on the selection chrome (above pe-none frame shell)
       so the hit target actually receives pointer events in frame mode.
     -->
-    <div
+    <Tip
       v-if="
         !isCurrentRuntimeActive ||
         (liveInspectorInteractionMode !== 'interact' &&
           liveInspectorInteractionMode !== 'select' &&
           !hasNativeNonFrameSelection)
       "
-      data-test-id="smylr-live-frame-enter-interact"
-      class="pointer-events-auto absolute inset-0 z-[1] cursor-pointer"
-      title="Use live app"
-      @pointerenter="showCurrentFrameHeader"
-      @pointerleave="hideCurrentFrameHeaderSoon"
-      @pointerdown.stop.prevent="activateInteractMode"
-      @wheel="handleFrameSurfaceWheel"
-    />
-    <span
-      data-test-id="smylr-live-frame-header"
-      class="smylr-live-frame-header bg-panel border-border text-surface hover:bg-hover pointer-events-auto absolute left-1/2 z-[2] flex cursor-move items-center gap-0.5 rounded-md border px-1 py-0.5 whitespace-nowrap shadow-sm transition-colors hover:border-violet-500"
-      :class="liveInspectorInteractionMode === 'frame' ? 'bg-hover border-violet-500' : ''"
-      :style="frameSelectionLabelStyle"
-      title="Frame mode · double-click to center this frame"
-      @click.stop="activateFrameMode"
-      @dblclick.stop.prevent="focusCurrentFrame"
-      @pointerenter="showCurrentFrameHeader"
-      @pointerleave="hideCurrentFrameHeaderSoon"
-      @pointercancel.stop="endFrameHeaderMove"
-      @pointerdown.stop.prevent="beginFrameHeaderMove"
-      @pointermove.stop="moveFrameFromHeader"
-      @pointerup.stop="endFrameHeaderMove"
+      label="Use live app"
     >
-      <strong
-        class="smylr-live-frame-header__title max-w-36 cursor-move truncate px-1 text-[10px] font-medium"
-        >{{ frameHeaderTitle }}</strong
-      >
-      <span
-        class="smylr-live-frame-header__status rounded px-1 text-[8px] font-medium"
-        :class="
-          !isLiveComponentRuntime && currentDraftCount
-            ? 'bg-amber-500/15 text-amber-400'
-            : 'bg-green-500/15 text-green-400'
-        "
-      >
-        {{
-          isLiveComponentRuntime
-            ? 'Live'
-            : currentDraftCount
-              ? `${currentDraftCount} edit${currentDraftCount === 1 ? '' : 's'}`
-              : 'Prod'
-        }}
-      </span>
-      <span
-        class="smylr-live-frame-header__divider smylr-live-frame-header__title-divider bg-border mx-0.5 h-3.5 w-px"
+      <div
+        data-test-id="smylr-live-frame-enter-interact"
+        class="pointer-events-auto absolute inset-0 z-[1] cursor-pointer"
+        @pointerenter="showCurrentFrameHeader"
+        @pointerleave="hideCurrentFrameHeaderSoon"
+        @pointerdown.stop.prevent="activateInteractMode"
+        @wheel="handleFrameSurfaceWheel"
       />
-      <SmylrLiveFrameViewportControls
-        class="smylr-live-frame-header__viewport"
-        :frame-id="liveFrame.id"
-        :frame-label="frameHeaderTitle"
-        @change="activateFrameMode"
-      />
+    </Tip>
+    <Tip label="Frame mode · double-click to center this frame">
       <span
-        v-if="!isLiveComponentRuntime && selectedLiveInspectorNode"
-        class="smylr-live-frame-header__secondary border-border ml-0.5 flex items-center gap-0.5 border-l pl-1"
-        @click.stop
-        @pointerdown.stop
+        data-test-id="smylr-live-frame-header"
+        class="smylr-live-frame-header bg-panel border-border text-surface hover:bg-hover pointer-events-auto absolute left-1/2 z-[2] flex cursor-move items-center gap-0.5 rounded-md border px-1 py-0.5 whitespace-nowrap shadow-sm transition-colors hover:border-violet-500"
+        :class="liveInspectorInteractionMode === 'frame' ? 'bg-hover border-violet-500' : ''"
+        :style="frameSelectionLabelStyle"
+        @click.stop="activateFrameMode"
+        @dblclick.stop.prevent="focusCurrentFrame"
+        @pointerenter="showCurrentFrameHeader"
+        @pointerleave="hideCurrentFrameHeaderSoon"
+        @pointercancel.stop="endFrameHeaderMove"
+        @pointerdown.stop.prevent="beginFrameHeaderMove"
+        @pointermove.stop="moveFrameFromHeader"
+        @pointerup.stop="endFrameHeaderMove"
       >
-        <SmylrLiveWorkspaceActions
-          :draft="liveInspectorPatchDraft"
-          :node="selectedLiveInspectorNode"
+        <strong
+          class="smylr-live-frame-header__title max-w-36 cursor-move truncate px-1 text-[10px] font-medium"
+          >{{ frameHeaderTitle }}</strong
+        >
+        <span
+          class="smylr-live-frame-header__status rounded px-1 text-[8px] font-medium"
+          :class="
+            !isLiveComponentRuntime && currentDraftCount
+              ? 'bg-amber-500/15 text-amber-400'
+              : 'bg-green-500/15 text-green-400'
+          "
+        >
+          {{
+            isLiveComponentRuntime
+              ? 'Live'
+              : currentDraftCount
+                ? `${currentDraftCount} edit${currentDraftCount === 1 ? '' : 's'}`
+                : 'Prod'
+          }}
+        </span>
+        <span
+          class="smylr-live-frame-header__divider smylr-live-frame-header__title-divider bg-border mx-0.5 h-3.5 w-px"
         />
+        <SmylrLiveFrameViewportControls
+          class="smylr-live-frame-header__viewport"
+          :frame-id="liveFrame.id"
+          :frame-label="frameHeaderTitle"
+          @change="activateFrameMode"
+        />
+        <span
+          v-if="!isLiveComponentRuntime && selectedLiveInspectorNode"
+          class="smylr-live-frame-header__secondary border-border ml-0.5 flex items-center gap-0.5 border-l pl-1"
+          @click.stop
+          @pointerdown.stop
+        >
+          <SmylrLiveWorkspaceActions
+            :draft="liveInspectorPatchDraft"
+            :node="selectedLiveInspectorNode"
+          />
+        </span>
+        <span
+          v-if="!isLiveComponentRuntime"
+          class="smylr-live-frame-header__divider smylr-live-frame-header__secondary-divider bg-border mx-0.5 h-3.5 w-px"
+        />
+        <span
+          v-if="!isLiveComponentRuntime"
+          class="smylr-live-frame-header__optional flex items-center gap-0.5"
+        >
+          <Tip label="Snapshot as alternate">
+            <button
+              type="button"
+              aria-label="Snapshot current frame as an alternate"
+              data-test-id="smylr-live-frame-snapshot"
+              class="text-muted hover:bg-hover hover:text-surface flex size-7 items-center justify-center rounded"
+              @click.stop="snapshotCurrentFrame"
+              @pointerdown.stop
+            >
+              <icon-lucide-camera class="size-4" />
+            </button>
+          </Tip>
+          <Tip label="Reset Current to production">
+            <button
+              type="button"
+              aria-label="Reset Current to production"
+              data-test-id="smylr-live-frame-reset-production"
+              class="text-muted hover:bg-hover hover:text-surface flex size-7 items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
+              :disabled="currentDraftCount === 0"
+              @click.stop="resetCurrentFrameToProduction"
+              @pointerdown.stop
+            >
+              <icon-lucide-rotate-ccw class="size-4" />
+            </button>
+          </Tip>
+        </span>
       </span>
-      <span
-        v-if="!isLiveComponentRuntime"
-        class="smylr-live-frame-header__divider smylr-live-frame-header__secondary-divider bg-border mx-0.5 h-3.5 w-px"
-      />
-      <span
-        v-if="!isLiveComponentRuntime"
-        class="smylr-live-frame-header__optional flex items-center gap-0.5"
-      >
-        <Tip label="Snapshot as alternate">
-          <button
-            type="button"
-            aria-label="Snapshot current frame as an alternate"
-            data-test-id="smylr-live-frame-snapshot"
-            class="text-muted hover:bg-hover hover:text-surface flex size-7 items-center justify-center rounded"
-            @click.stop="snapshotCurrentFrame"
-            @pointerdown.stop
-          >
-            <icon-lucide-camera class="size-4" />
-          </button>
-        </Tip>
-        <Tip label="Reset Current to production">
-          <button
-            type="button"
-            aria-label="Reset Current to production"
-            data-test-id="smylr-live-frame-reset-production"
-            class="text-muted hover:bg-hover hover:text-surface flex size-7 items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
-            :disabled="currentDraftCount === 0"
-            @click.stop="resetCurrentFrameToProduction"
-            @pointerdown.stop
-          >
-            <icon-lucide-rotate-ccw class="size-4" />
-          </button>
-        </Tip>
-      </span>
-    </span>
+    </Tip>
     <span
       v-for="handle in frameSelectionHandles"
       v-show="isFrameSelected"

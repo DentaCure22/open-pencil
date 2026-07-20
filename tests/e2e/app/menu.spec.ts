@@ -1,6 +1,6 @@
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
 
-const editor = useEditorSetup()
+const editor = useEditorSetup('/?test')
 
 function assertNoMermaidErrors(): void {
   expect(
@@ -165,6 +165,8 @@ test('Insert menu creates separate editable Mermaid pieces', async () => {
   expect(inserted.selectedIds).toEqual([inserted.ownerId])
   expect(inserted.source).toContain('A[Capture]')
   expect(inserted.hasArrowhead).toBe(true)
+  await expect(editor.page.getByTestId('design-panel-single')).toBeVisible()
+  await expect(editor.page.getByTestId('sidebar-context-code')).toHaveCount(0)
 
   await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Edit' }).click()
   await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Undo' }).click()

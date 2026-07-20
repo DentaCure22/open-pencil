@@ -1,6 +1,11 @@
 import type { PluginDataEntry, SceneNode } from '@open-pencil/scene-graph'
 
-import type { JSONValueType, StructuredDataNodeKind, StructuredDataNodeMetadata } from './types'
+import type {
+  JSONValueType,
+  StructuredDataNodeField,
+  StructuredDataNodeKind,
+  StructuredDataNodeMetadata
+} from './types'
 
 const PLUGIN_ID = 'open-pencil'
 const KEY_PREFIX = 'structured-data/'
@@ -10,6 +15,7 @@ const VALUE_TYPE_KEY = `${KEY_PREFIX}value-type`
 const ROW_INDEX_KEY = `${KEY_PREFIX}row-index`
 const COLUMN_INDEX_KEY = `${KEY_PREFIX}column-index`
 const COLUMN_NAME_KEY = `${KEY_PREFIX}column-name`
+const FIELD_KEY = `${KEY_PREFIX}field`
 
 interface StructuredDataPluginDataInput {
   kind: StructuredDataNodeKind
@@ -18,6 +24,7 @@ interface StructuredDataPluginDataInput {
   rowIndex?: number
   columnIndex?: number
   columnName?: string
+  field?: StructuredDataNodeField
 }
 
 function entry(key: string, value: string): PluginDataEntry {
@@ -35,6 +42,7 @@ export function structuredDataPluginData(
     entries.push(entry(COLUMN_INDEX_KEY, String(metadata.columnIndex)))
   }
   if (metadata.columnName !== undefined) entries.push(entry(COLUMN_NAME_KEY, metadata.columnName))
+  if (metadata.field !== undefined) entries.push(entry(FIELD_KEY, metadata.field))
   return entries
 }
 
@@ -54,6 +62,7 @@ function indexFor(node: Pick<SceneNode, 'pluginData'>, key: string): number | nu
 function isNodeKind(value: string): value is StructuredDataNodeKind {
   return [
     'document',
+    'source-status',
     'tree-header',
     'tree-row',
     'table-header',
@@ -61,6 +70,10 @@ function isNodeKind(value: string): value is StructuredDataNodeKind {
     'table-cell',
     'truncation'
   ].includes(value)
+}
+
+function isNodeField(value: string | null): value is StructuredDataNodeField {
+  return value !== null && ['header', 'label', 'type', 'value'].includes(value)
 }
 
 function isValueType(value: string | null): value is JSONValueType {
@@ -76,12 +89,14 @@ export function readStructuredDataNode(
   if (!kind || !isNodeKind(kind)) return null
 
   const valueType = valueFor(node, VALUE_TYPE_KEY)
+  const field = valueFor(node, FIELD_KEY)
   return {
     kind,
     path: valueFor(node, PATH_KEY),
     valueType: isValueType(valueType) ? valueType : null,
     rowIndex: indexFor(node, ROW_INDEX_KEY),
     columnIndex: indexFor(node, COLUMN_INDEX_KEY),
-    columnName: valueFor(node, COLUMN_NAME_KEY)
+    columnName: valueFor(node, COLUMN_NAME_KEY),
+    field: isNodeField(field) ? field : null
   }
 }

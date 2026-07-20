@@ -9,7 +9,7 @@ import {
 import { readCacheJson, readCacheValue, writeCacheJson, writeCacheValue } from '../cache'
 import type { EditorStore } from '../editor/session'
 import { SMYLR_FOUNDATIONS_REVISION } from './foundations-revision'
-import { applyLiveFrameTombstones, loadLiveFrameTombstones } from './live-frame-tombstones'
+import { applyLiveFrameTombstones, loadLiveFrameTombstones } from './live/frame-tombstones'
 
 const CACHE_KEY = 'smylr-production/document-v3-scene-graph'
 const CACHE_JSON_KEY = 'smylr-production/document-v3-scene-graph-json'

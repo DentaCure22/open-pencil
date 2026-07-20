@@ -1,17 +1,10 @@
 import type { Editor } from '@open-pencil/core/editor'
-import {
-  CONTENT_SOURCE_REVISION,
-  contentSourcePluginData,
-  readContentSource
-} from '@open-pencil/core/io'
+import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
-import {
-  assetHashFromReference,
-  assetReference,
-  computeImageHash
-} from '@open-pencil/scene-graph/images'
+import { assetReference, computeImageHash } from '@open-pencil/scene-graph/images'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
+import { contentSourceAssetHash, hasAssetReference } from '@/app/media-evidence/assets'
 import {
   fileExtension,
   mediaEvidenceFrameSize,
@@ -32,19 +25,6 @@ type PreparedMediaEvidence = {
   hash: string
   kind: MediaEvidenceKind
   size: { height: number; width: number }
-}
-
-function sourceAssetHash(node: SceneNode): string | null {
-  const source = readContentSource(node)
-  return source ? assetHashFromReference(source.source) : null
-}
-
-function hasAssetReference(editor: Editor, hash: string): boolean {
-  for (const node of editor.graph.getAllNodes()) {
-    if (sourceAssetHash(node) === hash) return true
-    if (node.fills.some((fill) => fill.imageHash === hash)) return true
-  }
-  return false
 }
 
 function setSelection(editor: Editor, ids: Set<string>) {
@@ -69,7 +49,7 @@ function intersectionRatio(first: Rect, second: Rect): number {
 function cascadedMediaPlacement(editor: Editor, pageId: string, bounds: Rect): Rect {
   const occupied = editor.graph
     .getChildren(pageId)
-    .filter((node) => Boolean(sourceAssetHash(node)))
+    .filter((node) => Boolean(contentSourceAssetHash(node)))
     .map((node) => ({ height: node.height, width: node.width, x: node.x, y: node.y }))
   let candidate = bounds
   for (let attempt = 0; attempt < MEDIA_CASCADE_ATTEMPTS; attempt++) {

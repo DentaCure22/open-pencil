@@ -71,12 +71,12 @@ import {
   liveFrameRotationHandles,
   liveFrameScreenOverlayStyle
 } from '@/app/smylr-production/frame-transform'
-import { reindexLiveFrameWorkspaceItemLinks } from '@/app/smylr-production/live-frame-deletion'
+import { reindexLiveFrameWorkspaceItemLinks } from '@/app/smylr-production/live/frame-deletion'
 import {
   resolveSelectedLiveRuntimeFrameId,
   shouldShowLiveRuntime
-} from '@/app/smylr-production/live-runtime-retention'
-import { isWorkspaceItemTombstoned } from '@/app/smylr-production/live-frame-tombstones'
+} from '@/app/smylr-production/live/runtime-retention'
+import { isWorkspaceItemTombstoned } from '@/app/smylr-production/live/frame-tombstones'
 import {
   moveBetweenSmylrProductionViews,
   runSmylrProductionViewMovement
@@ -1208,16 +1208,19 @@ function showsSnapshot(frameId: string) {
       @pointerleave="hideAlternateFrameHeaderSoon(frame.id)"
     >
       <!-- Press the frame body → live app (header stays move/frame mode). -->
-      <div
+      <Tip
         v-if="!ownsRuntimeInteraction(frame.id) && previewStatus(frame.id) !== 'failed'"
-        data-test-id="smylr-live-frame-enter-interact"
-        class="pointer-events-auto absolute inset-0 z-[1] cursor-pointer"
-        :title="`Use live app in ${frame.name}`"
-        @pointerenter="revealAlternateFrameHeader(frame.id)"
-        @pointerleave="hideAlternateFrameHeaderSoon(frame.id)"
-        @pointerdown.stop.prevent="selectFrame(frame.id, 'interact')"
-        @wheel="handleFrameSurfaceWheel"
-      />
+        :label="`Use live app in ${frame.name}`"
+      >
+        <div
+          data-test-id="smylr-live-frame-enter-interact"
+          class="pointer-events-auto absolute inset-0 z-[1] cursor-pointer"
+          @pointerenter="revealAlternateFrameHeader(frame.id)"
+          @pointerleave="hideAlternateFrameHeaderSoon(frame.id)"
+          @pointerdown.stop.prevent="selectFrame(frame.id, 'interact')"
+          @wheel="handleFrameSurfaceWheel"
+        />
+      </Tip>
       <span
         data-test-id="smylr-live-alternate-frame-header"
         class="smylr-live-frame-header pointer-events-auto absolute left-1/2 z-[2] flex cursor-move items-center gap-0.5 whitespace-nowrap rounded-md border border-border bg-panel px-1 py-0.5 text-surface shadow-sm transition-colors hover:border-violet-500 hover:bg-hover"

@@ -1,5 +1,5 @@
 /**
- * Keep live frames deleted for real.
+ * Keep live frames deleted for real across every deletion path.
  *
  * Three resurrection paths this closes:
  * 1) ensureWorkspaceFrames() re-materializes frames from workspace items
@@ -16,7 +16,7 @@ import {
   isLiveAppFrameNode,
   loadLiveFrameTombstones,
   tombstoneForNode
-} from './live-frame-tombstones'
+} from './frame-tombstones'
 
 export {
   applyLiveFrameTombstones,
@@ -25,7 +25,7 @@ export {
   isWorkspaceItemTombstoned,
   loadLiveFrameTombstones,
   type LiveFrameTombstone
-} from './live-frame-tombstones'
+} from './frame-tombstones'
 
 type LiveFrameHost = {
   deleteSelected?: () => void

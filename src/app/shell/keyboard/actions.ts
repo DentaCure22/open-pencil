@@ -4,7 +4,7 @@ import type { useEditorCommands, useViewportKind } from '@open-pencil/vue'
 
 import type { EditorPanelTab } from '@/app/ai/chat/use'
 import type { EditorStore } from '@/app/editor/active-store'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live-frame-deletion'
+import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 
 type KeyboardActionsOptions = {
   store: EditorStore

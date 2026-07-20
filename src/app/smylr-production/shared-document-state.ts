@@ -8,7 +8,7 @@ import {
   saveSmylrProductionDocument,
   serializeSmylrProductionDocumentForSync
 } from './document-state'
-import { isWorkspaceItemTombstoned } from './live-frame-tombstones'
+import { isWorkspaceItemTombstoned } from './live/frame-tombstones'
 
 const API_URL = '/api/open-pencil/workspace?key=smylr-production'
 const WORKSPACE_KEY = 'smylr-production'

@@ -2,11 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { saveExportedFile } from '@/app/document/export/files'
 import { watchTauriFile } from '@/app/document/io/watch-targets'
-import {
-  chooseTauriOpenPath,
-  OPENPENCIL_DOCUMENT_EXTENSIONS,
-  readTauriDesignFile
-} from '@/app/shell/menu/files'
+import { chooseTauriOpenPath, readTauriDesignFile } from '@/app/shell/menu/files'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
@@ -21,12 +17,6 @@ describe('Tauri file actions', () => {
       expect(cmd).toBe('plugin:dialog|open')
       expect(args).toEqual({
         options: {
-          filters: [
-            {
-              name: 'OpenPencil-compatible file',
-              extensions: OPENPENCIL_DOCUMENT_EXTENSIONS
-            }
-          ],
           multiple: false
         }
       })

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   resolveSelectedLiveRuntimeFrameId,
   shouldShowLiveRuntime
-} from '@/app/smylr-production/live-runtime-retention'
+} from '@/app/smylr-production/live/runtime-retention'
 
 describe('Smylr live runtime retention', () => {
   test('selecting an alternate claims its runtime before interaction starts', () => {

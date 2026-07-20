@@ -20,7 +20,7 @@ const MAX_CELLS = 1000
 const CELL_GAP = 12
 const ROW_HORIZONTAL_PADDING = 24
 
-interface CSVProjection {
+export interface CSVProjection {
   headers: string[]
   rows: string[][]
   totalColumns: number
@@ -34,7 +34,7 @@ function fileBaseName(fileName: string | undefined): string {
   return base || 'CSV document'
 }
 
-function parseCSVSource(source: string, parseRows: CSVRowsParser): string[][] {
+export function parseCSVSource(source: string, parseRows: CSVRowsParser): string[][] {
   try {
     return parseRows(withoutByteOrderMark(source)).map((row: CSVRow) => [...row])
   } catch (error) {
@@ -42,7 +42,7 @@ function parseCSVSource(source: string, parseRows: CSVRowsParser): string[][] {
   }
 }
 
-function projectionFor(rows: string[][]): CSVProjection {
+export function csvProjectionFor(rows: string[][]): CSVProjection {
   const totalColumns = rows.reduce((count, row) => Math.max(count, row.length), 0)
   const visibleColumnCount = Math.min(totalColumns, MAX_COLUMNS)
   const sourceHeaders = rows[0] ?? []
@@ -93,7 +93,8 @@ function renderTableHeader(
       kind: 'table-cell',
       path: `/columns/${columnIndex}`,
       columnIndex,
-      columnName: header
+      columnName: header,
+      field: 'header'
     })
     createDataText(graph, row.id, header, {
       name: `CSV header: ${header}`,
@@ -130,7 +131,8 @@ function renderTableRow(
       path: `/rows/${rowIndex}/${columnIndex}`,
       rowIndex,
       columnIndex,
-      columnName
+      columnName,
+      field: 'value'
     })
     createDataText(graph, row.id, value, {
       name: `CSV cell: ${columnName}`,
@@ -153,7 +155,7 @@ export function csvToSceneGraph(
   parseRows: CSVRowsParser,
   options: StructuredDataImportOptions = {}
 ): SceneGraph {
-  const projection = projectionFor(parseCSVSource(source, parseRows))
+  const projection = csvProjectionFor(parseCSVSource(source, parseRows))
   const graph = new SceneGraph()
   const surface = createDataDocumentSurface(graph, {
     name: fileBaseName(options.fileName),

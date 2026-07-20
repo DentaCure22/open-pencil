@@ -5,7 +5,8 @@ import { yieldAnimationFrames } from '@/app/smylr-production/yield-frames'
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame
 
 afterEach(() => {
-  if (originalRequestAnimationFrame) globalThis.requestAnimationFrame = originalRequestAnimationFrame
+  if (originalRequestAnimationFrame)
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame
   else Reflect.deleteProperty(globalThis, 'requestAnimationFrame')
 })
 

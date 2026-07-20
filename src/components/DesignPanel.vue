@@ -4,15 +4,16 @@ import { computed, ref } from 'vue'
 import { useI18n, useSelectionState } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { isSmylrLiveAppFrameNode } from '@/app/smylr-production/workspace'
-import { useKnowledgeWorkspaceUi } from '@/app/workspace-ui/use'
 import {
   liveInspectorDocument,
   selectedLiveInspectorNode
 } from '@/app/smylr-live-inspector/session'
-import VariablesDialog from './variables/VariablesDialog.vue'
-import BooleanOperationsControl from './properties/BooleanOperationsControl.vue'
+import { isSmylrLiveAppFrameNode } from '@/app/smylr-production/workspace'
+import { useKnowledgeWorkspaceUi } from '@/app/workspace-ui/use'
+
+import MermaidSourceStatus from './diagram/MermaidSourceStatus.vue'
 import AppearanceSection from './properties/AppearanceSection.vue'
+import BooleanOperationsControl from './properties/BooleanOperationsControl.vue'
 import EffectsSection from './properties/EffectsSection.vue'
 import ExportSection from './properties/ExportSection.vue'
 import FillSection from './properties/FillSection.vue'
@@ -20,8 +21,9 @@ import PageSection from './properties/PageSection.vue'
 import PositionSection from './properties/PositionSection.vue'
 import StrokeSection from './properties/StrokeSection.vue'
 import VariablesSection from './properties/VariablesSection.vue'
-import NativeSelectionInspector from './NativeSelectionInspector.vue'
-import SmylrLiveNativeInspectorHost from './SmylrLiveNativeInspectorHost.vue'
+import NativeSelectionInspector from './properties/NativeSelectionInspector.vue'
+import SmylrLiveNativeInspectorHost from './properties/SmylrLiveNativeInspectorHost.vue'
+import VariablesDialog from './variables/VariablesDialog.vue'
 import WorkspaceObjectInspector from './workspace/WorkspaceObjectInspector.vue'
 
 const store = useEditorStore()
@@ -109,7 +111,11 @@ function updateWorkspaceLabel(value: string) {
   <NativeSelectionInspector
     v-if="multiCount <= 1 && node && !showLiveInspector && !showWorkspaceInspector"
     :compact-header="isSmylrLiveFrame"
-  />
+  >
+    <template #sections-footer>
+      <MermaidSourceStatus />
+    </template>
+  </NativeSelectionInspector>
 
   <div
     v-if="multiCount <= 1 && !node && !showLiveInspector && !showWorkspaceInspector"

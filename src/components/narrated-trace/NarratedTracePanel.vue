@@ -591,7 +591,7 @@ onMounted(() => {
           v-for="(row, rowIndex) in timelineRows"
           :key="row.event.id"
           :data-test-id="'narrated-trace-row-' + row.event.kind"
-          :title="rowMetadata(row) || undefined"
+          :aria-label="rowMetadata(row) || undefined"
           class="group relative grid gap-x-1.5 rounded-[7px] px-1.5 py-2.5 transition-all hover:bg-white/[0.055] focus-within:bg-white/[0.045]"
           :class="
             isActive

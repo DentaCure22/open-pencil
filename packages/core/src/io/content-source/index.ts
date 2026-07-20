@@ -69,3 +69,13 @@ export function readContentSource(
     source
   }
 }
+
+export {
+  mergeSourceReconciliationPluginData,
+  readSourceReconciliation,
+  sourceReconciliationPluginData,
+  sourceSceneSignature,
+  type SourceReconciliationMetadata,
+  type SourceReconciliationResult,
+  type SourceReconciliationStatus
+} from './reconciliation'

@@ -4,9 +4,10 @@ import process from 'node:process'
 import { automationPlugin } from '../src/app/automation/bridge/vite-plugin'
 
 const devAutomationAuthToken = process.env.OPENPENCIL_DEV_TOKEN ?? randomUUID()
+const localAutomationDisabled = process.env.OPENPENCIL_DISABLE_LOCAL_AUTOMATION === '1'
 
 export function localAutomationToken(command: string): string | null {
-  return command === 'serve' ? devAutomationAuthToken : null
+  return command === 'serve' && !localAutomationDisabled ? devAutomationAuthToken : null
 }
 
 export function automationCorsOrigin(host: string | undefined): string {
@@ -14,5 +15,6 @@ export function automationCorsOrigin(host: string | undefined): string {
 }
 
 export function openPencilAutomationPlugin(command: string, host: string | undefined) {
-  return automationPlugin(localAutomationToken(command), automationCorsOrigin(host))
+  const authToken = localAutomationToken(command)
+  return authToken ? automationPlugin(authToken, automationCorsOrigin(host)) : false
 }

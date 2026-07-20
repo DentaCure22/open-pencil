@@ -25,6 +25,7 @@ import {
   findCurrentSmylrLiveAppFrame,
   isSmylrLiveAppFrameNode
 } from '@/app/smylr-production/workspace'
+import Tip from '@/components/ui/Tip.vue'
 
 type CornerHandle = 'nw' | 'ne' | 'se' | 'sw'
 type ResizeDrag = {
@@ -579,7 +580,7 @@ onUnmounted(() => {
     data-test-id="smylr-live-container-overlay"
     class="pointer-events-auto absolute z-10 cursor-move active:cursor-grabbing"
     :style="overlayStyle"
-    title="Drag selected container to move · click to select a child"
+    aria-label="Drag selected container to move; click to select a child"
     @pointerdown.self="beginMove($event, true)"
   >
     <!-- The selected body is the primary move surface. A click without a drag
@@ -592,41 +593,42 @@ onUnmounted(() => {
       class="pointer-events-none absolute"
       :style="guide.style"
     />
-    <div
-      data-test-id="smylr-live-container-label"
-      class="pointer-events-auto absolute left-0 flex cursor-move items-center bg-accent font-medium text-white shadow-sm active:cursor-grabbing"
-      :class="labelBelow ? 'top-full mt-1' : 'bottom-full mb-1'"
-      :style="overlayLabelStyle"
-      title="Drag to move · drop above target · Shift-drop below"
-      @pointerdown="beginMove($event)"
-    >
-      <span class="max-w-36 truncate">{{ displayedNode.label }}</span>
-      <span
-        v-if="liveInspectorPatchDraft || liveInspectorCanRedoSelectedDraft"
-        class="ml-1 flex items-center gap-0.5 border-l border-white/25 pl-1"
+    <Tip label="Drag to move · drop above target · Shift-drop below">
+      <div
+        data-test-id="smylr-live-container-label"
+        class="pointer-events-auto absolute left-0 flex cursor-move items-center bg-accent font-medium text-white shadow-sm active:cursor-grabbing"
+        :class="labelBelow ? 'top-full mt-1' : 'bottom-full mb-1'"
+        :style="overlayLabelStyle"
+        @pointerdown="beginMove($event)"
       >
-        <button
-          type="button"
-          aria-label="Undo container edit"
-          class="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-white/20 disabled:cursor-default disabled:opacity-35"
-          :disabled="!liveInspectorCanUndoSelectedDraft"
-          @click.stop="undoSelectedEdit"
-          @pointerdown.stop
+        <span class="max-w-36 truncate">{{ displayedNode.label }}</span>
+        <span
+          v-if="liveInspectorPatchDraft || liveInspectorCanRedoSelectedDraft"
+          class="ml-1 flex items-center gap-0.5 border-l border-white/25 pl-1"
         >
-          <icon-lucide-undo-2 class="size-2.5" />
-        </button>
-        <button
-          type="button"
-          aria-label="Redo container edit"
-          class="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-white/20 disabled:cursor-default disabled:opacity-35"
-          :disabled="!liveInspectorCanRedoSelectedDraft"
-          @click.stop="redoSelectedEdit"
-          @pointerdown.stop
-        >
-          <icon-lucide-redo-2 class="size-2.5" />
-        </button>
-      </span>
-    </div>
+          <button
+            type="button"
+            aria-label="Undo container edit"
+            class="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-white/20 disabled:cursor-default disabled:opacity-35"
+            :disabled="!liveInspectorCanUndoSelectedDraft"
+            @click.stop="undoSelectedEdit"
+            @pointerdown.stop
+          >
+            <icon-lucide-undo-2 class="size-2.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Redo container edit"
+            class="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-white/20 disabled:cursor-default disabled:opacity-35"
+            :disabled="!liveInspectorCanRedoSelectedDraft"
+            @click.stop="redoSelectedEdit"
+            @pointerdown.stop
+          >
+            <icon-lucide-redo-2 class="size-2.5" />
+          </button>
+        </span>
+      </div>
+    </Tip>
 
     <template v-for="corner in CORNER_HANDLES" :key="corner">
       <button

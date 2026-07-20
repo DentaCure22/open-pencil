@@ -1,5 +1,6 @@
 import type { Editor, EditorState } from '@open-pencil/core/editor'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live-frame-deletion'
+
+import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 
 type MobileClipboardState = EditorState & { clipboardHtml: string }
 

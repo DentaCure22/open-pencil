@@ -11,6 +11,7 @@ import { parseMermaidInBrowser } from '@/app/diagram/mermaid/parse'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
 import type { EditorStore } from '@/app/editor/session'
+import { placeFileIntakeFiles } from '@/app/file-intake/intake'
 import { createSourceDocument, type SourceDocumentFormat } from '@/app/source-document/workspace'
 
 export interface Tab {
@@ -118,6 +119,42 @@ function sourceDocumentFormat(fileName: string): SourceDocumentFormat | null {
   return null
 }
 
+async function openSourceFile(
+  store: EditorStore,
+  file: File,
+  handle?: FileSystemFileHandle,
+  path?: string
+): Promise<boolean> {
+  const format = sourceDocumentFormat(file.name)
+  if (!format) return false
+
+  const sourceDocument = createSourceDocument(store, await file.text(), {
+    fileName: file.name,
+    format
+  })
+  store.undo.clear()
+  store.setDocumentSource(file.name, format, handle, path)
+  const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
+  await store.switchPage(pageId)
+  store.select([sourceDocument.id])
+  await store.fitCurrentPageToViewport()
+  return true
+}
+
+async function openFileAsSourceObject(store: EditorStore, file: File): Promise<boolean> {
+  if (file.name.toLowerCase().endsWith('.fig')) return false
+  if (io.findReader(file.name, file.type || undefined)) return false
+
+  const intake = await placeFileIntakeFiles(store, [file], 0, 0)
+  store.undo.clear()
+  store.setDocumentSource(file.name, 'intake')
+  const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
+  await store.switchPage(pageId)
+  store.select(intake.ids)
+  await store.fitCurrentPageToViewport()
+  return true
+}
+
 export async function openFileInNewTab(
   file: File,
   handle?: FileSystemFileHandle,
@@ -139,19 +176,8 @@ export async function openFileInNewTab(
   await yieldToUI()
 
   try {
-    const sourceFileFormat = sourceDocumentFormat(file.name)
-    if (sourceFileFormat) {
-      createSourceDocument(store, await file.text(), {
-        fileName: file.name,
-        format: sourceFileFormat
-      })
-      store.undo.clear()
-      store.setDocumentSource(file.name, sourceFileFormat, handle, path)
-      const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
-      await store.switchPage(pageId)
-      await store.fitCurrentPageToViewport()
-      return
-    }
+    if (await openSourceFile(store, file, handle, path)) return
+    if (await openFileAsSourceObject(store, file)) return
 
     const isFig = file.name.toLowerCase().endsWith('.fig')
     const { graph: imported, sourceFormat } = isFig

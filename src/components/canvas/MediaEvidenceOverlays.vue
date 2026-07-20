@@ -9,8 +9,11 @@ import {
   type MediaEvidenceKind,
   type MediaEvidenceSource
 } from '@/app/media-evidence/source'
+import PdfEvidenceViewer from '@/components/canvas/media-evidence/PdfEvidenceViewer.vue'
+import VideoEvidenceViewer from '@/components/canvas/media-evidence/VideoEvidenceViewer.vue'
 
 type MediaEvidenceItem = {
+  bytes: Uint8Array
   node: SceneNode
   source: MediaEvidenceSource
 }
@@ -38,8 +41,10 @@ const items = computed<MediaEvidenceItem[]>(() => {
   for (const node of store.graph.getAllNodes()) {
     if (!node.visible || !belongsToCurrentPage(node)) continue
     const source = mediaEvidenceSource(node)
-    if (!source || !store.graph.images.has(source.assetHash)) continue
-    result.push({ node, source })
+    if (!source) continue
+    const bytes = store.graph.images.get(source.assetHash)
+    if (!bytes) continue
+    result.push({ bytes, node, source })
   }
   return result
 })
@@ -144,39 +149,23 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
         class="relative h-[calc(100%-2rem)] w-full overflow-hidden bg-[#090a0c]"
         :class="isSelected(item.node.id) ? 'pointer-events-auto' : 'pointer-events-none'"
       >
-        <div v-if="item.source.kind === 'pdf'" class="relative size-full bg-white">
-          <iframe
-            :src="`${sourceUrl(item.source)}#view=FitH&toolbar=0`"
-            :aria-label="`PDF preview: ${item.source.fileName}`"
-            class="size-full border-0 bg-white"
-            data-test-id="media-evidence-pdf-viewer"
-            @error="setViewerState(item.node.id, 'error')"
-            @load="setViewerState(item.node.id, 'ready')"
-          />
-          <a
-            :href="sourceUrl(item.source)"
-            :aria-label="`Open source PDF: ${item.source.fileName}`"
-            class="absolute right-3 bottom-3 z-20 flex items-center gap-1.5 rounded-md border border-black/10 bg-[#17181d]/90 px-2.5 py-1.5 text-[10px] font-medium text-white shadow-sm backdrop-blur-sm hover:bg-[#23252b]"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <icon-lucide-external-link class="size-3" />
-            Open PDF
-          </a>
-        </div>
-        <div v-else-if="item.source.kind === 'video'" class="size-full bg-black">
-          <video
-            :src="sourceUrl(item.source)"
-            :aria-label="`Video preview: ${item.source.fileName}`"
-            class="size-full object-contain"
-            controls
-            playsinline
-            preload="metadata"
-            data-test-id="media-evidence-video-viewer"
-            @error="setViewerState(item.node.id, 'error')"
-            @loadedmetadata="setViewerState(item.node.id, 'ready')"
-          />
-        </div>
+        <PdfEvidenceViewer
+          v-if="item.source.kind === 'pdf'"
+          :asset-bytes="item.bytes"
+          :node="item.node"
+          :selected="isSelected(item.node.id)"
+          :source="item.source"
+          :source-url="sourceUrl(item.source)"
+        />
+        <VideoEvidenceViewer
+          v-else-if="item.source.kind === 'video'"
+          :node="item.node"
+          :selected="isSelected(item.node.id)"
+          :source="item.source"
+          :source-url="sourceUrl(item.source)"
+          @error="setViewerState(item.node.id, 'error')"
+          @ready="setViewerState(item.node.id, 'ready')"
+        />
         <div
           v-else
           class="flex size-full flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_50%_20%,rgba(145,122,226,0.18),transparent_55%)] px-8"
@@ -198,7 +187,7 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
         </div>
 
         <div
-          v-if="viewerState(item.node.id) !== 'ready'"
+          v-if="item.source.kind !== 'pdf' && viewerState(item.node.id) !== 'ready'"
           :data-test-id="`media-evidence-${item.source.kind}-status`"
           :role="viewerState(item.node.id) === 'error' ? 'alert' : 'status'"
           aria-live="polite"

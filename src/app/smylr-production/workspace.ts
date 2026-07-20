@@ -29,7 +29,7 @@ import {
   applyLiveFrameTombstones,
   isWorkspaceItemTombstoned,
   loadLiveFrameTombstones
-} from './live-frame-tombstones'
+} from './live/frame-tombstones'
 import { SMYLR_PRODUCTION_PAGES, smylrProductionPageById, type SmylrProductionPage } from './pages'
 import { yieldAnimationFrames } from './yield-frames'
 

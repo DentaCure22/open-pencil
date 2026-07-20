@@ -39,6 +39,7 @@ import {
 } from '@/app/html-board/workspace'
 import type { HtmlBoardSourceBindingKind } from '@/app/html-board/workspace'
 import AppTextButton from '@/components/ui/AppTextButton.vue'
+import Tip from '@/components/ui/Tip.vue'
 
 const store = useEditorStore()
 const { copy: copyWorkflowHandoff } = useClipboard({ copiedDuring: 2000 })
@@ -95,7 +96,9 @@ const signature = computed(() => {
 })
 
 const dirty = computed(() => {
-  return html.value !== savedHtml.value || css.value !== savedCss.value || js.value !== savedJs.value
+  return (
+    html.value !== savedHtml.value || css.value !== savedCss.value || js.value !== savedJs.value
+  )
 })
 
 const boardRevision = computed(() => {
@@ -147,7 +150,8 @@ const currentSourceBindings = computed(() => {
 const sourceTargetSummary = computed(() => {
   const first = currentSourceBindings.value[0]
   if (!first) return 'Unmapped'
-  const suffix = currentSourceBindings.value.length > 1 ? ` +${currentSourceBindings.value.length - 1}` : ''
+  const suffix =
+    currentSourceBindings.value.length > 1 ? ` +${currentSourceBindings.value.length - 1}` : ''
   return `${first.repository}/${first.filePath}${suffix}`
 })
 const hasRepositoryVerifiedSource = computed(() =>
@@ -181,9 +185,7 @@ const componentPropEntries = computed(() => {
 
 const slotComponents = computed(() => {
   const selection = elementSelection.value
-  return selection?.slotName
-    ? htmlBoardRegisteredComponentsForSlot(selection.slotAccepts)
-    : []
+  return selection?.slotName ? htmlBoardRegisteredComponentsForSlot(selection.slotAccepts) : []
 })
 const slotComponentChoice = computed(() =>
   slotComponents.value.find((component) => component.id === slotComponentChoiceId.value)
@@ -569,7 +571,6 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
         <span
           class="min-w-0 truncate rounded-full px-2 py-1 text-[10px] font-medium"
           :class="workflowStatusClass"
-          :title="workflowStatus"
         >
           {{ workflowStatus }}
         </span>
@@ -697,9 +698,11 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
                   Verified
                 </span>
               </div>
-              <div class="truncate text-[10px] text-surface/80" :title="sourceTargetSummary">
-                {{ sourceTargetSummary }}
-              </div>
+              <Tip :label="sourceTargetSummary">
+                <span class="block truncate text-[10px] text-surface/80">
+                  {{ sourceTargetSummary }}
+                </span>
+              </Tip>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <button
@@ -763,7 +766,9 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
                 Attach to r{{ boardRevision }}
               </button>
             </div>
-            <div class="text-[9px] text-muted">Declared only · repository verification happens with the diff.</div>
+            <div class="text-[9px] text-muted">
+              Declared only · repository verification happens with the diff.
+            </div>
           </div>
           <input
             v-model="acceptanceDraft"
@@ -804,7 +809,9 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
           </button>
         </div>
         <div v-if="canCopyImplementationRequest" class="flex items-center justify-between gap-3">
-          <span class="min-w-0 truncate text-[9px] text-muted">Ready for a visible source proposal</span>
+          <span class="min-w-0 truncate text-[9px] text-muted"
+            >Ready for a visible source proposal</span
+          >
           <button
             type="button"
             class="shrink-0 whitespace-nowrap font-medium text-emerald-300 transition hover:text-emerald-200"
@@ -840,7 +847,9 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
     >
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-medium text-surface">Design tokens</span>
-        <span class="text-[9px] text-muted">{{ dirty ? 'Save source first' : 'CSS variables' }}</span>
+        <span class="text-[9px] text-muted">{{
+          dirty ? 'Save source first' : 'CSS variables'
+        }}</span>
       </div>
       <div class="mt-2 space-y-1.5">
         <label v-for="token in visibleTokens" :key="token.name" class="flex items-center gap-2">
@@ -850,9 +859,11 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
             :style="{ background: tokenDrafts[token.name] ?? token.value }"
           />
           <span v-else class="size-3 shrink-0 rounded-sm border border-white/10 bg-white/5" />
-          <span class="w-24 shrink-0 truncate font-mono text-[9px] text-muted" :title="token.name">
-            {{ token.name.replace('--op-', '') }}
-          </span>
+          <Tip :label="token.name">
+            <span class="block w-24 shrink-0 truncate font-mono text-[9px] text-muted">
+              {{ token.name.replace('--op-', '') }}
+            </span>
+          </Tip>
           <input
             v-model="tokenDrafts[token.name]"
             class="h-6 min-w-0 flex-1 rounded border border-border bg-black/15 px-1.5 font-mono text-[10px] text-surface outline-none focus:border-accent disabled:opacity-40"
@@ -874,23 +885,36 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
       <div class="flex items-baseline justify-between gap-2">
         <div class="min-w-0 truncate font-mono text-[11px] font-semibold text-accent">
           &lt;{{ elementSelection.tagName }}&gt;
-          <span v-if="elementSelection.id" class="font-normal text-muted">#{{ elementSelection.id }}</span>
+          <span v-if="elementSelection.id" class="font-normal text-muted"
+            >#{{ elementSelection.id }}</span
+          >
         </div>
         <span class="shrink-0 text-[10px] text-muted">Selected element</span>
       </div>
-      <div v-if="elementSelection.componentName" class="mt-1.5 flex items-center gap-1.5 text-[10px]">
+      <div
+        v-if="elementSelection.componentName"
+        class="mt-1.5 flex items-center gap-1.5 text-[10px]"
+      >
         <span class="font-medium text-surface">{{ elementSelection.componentName }}</span>
         <span v-if="elementSelection.componentVariant" class="text-muted">
           · {{ elementSelection.componentVariant }}
         </span>
       </div>
-      <div class="mt-1 truncate font-mono text-[10px] text-muted" :title="elementSelection.selector">
-        {{ elementSelection.selector }}
+      <div class="mt-1 min-w-0">
+        <Tip :label="elementSelection.selector">
+          <span class="block truncate font-mono text-[10px] text-muted">
+            {{ elementSelection.selector }}
+          </span>
+        </Tip>
       </div>
       <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
         <div v-for="row in selectedStyleRows" :key="row.label" class="min-w-0">
           <dt class="text-[9px] uppercase tracking-wide text-muted/70">{{ row.label }}</dt>
-          <dd class="truncate text-[10px] text-surface" :title="row.value">{{ row.value }}</dd>
+          <dd class="min-w-0">
+            <Tip :label="row.value">
+              <span class="block truncate text-[10px] text-surface">{{ row.value }}</span>
+            </Tip>
+          </dd>
         </div>
       </dl>
       <div
@@ -902,9 +926,7 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
           <span class="text-[10px] font-medium text-surface">
             {{ elementSelection.slotLabel || elementSelection.slotName }}
           </span>
-          <span class="text-[9px] text-muted">
-            {{ elementSelection.slotChildCount }} in slot
-          </span>
+          <span class="text-[9px] text-muted"> {{ elementSelection.slotChildCount }} in slot </span>
         </div>
         <div
           v-if="slotComponents.length > 3"
@@ -968,7 +990,11 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
               :disabled="!canEditDesign"
               @change="applyComponentProp(entry.name, entry.value)"
             >
-              <option v-for="option in componentControlOptions(entry)" :key="option" :value="option">
+              <option
+                v-for="option in componentControlOptions(entry)"
+                :key="option"
+                :value="option"
+              >
                 {{ option }}
               </option>
             </select>
@@ -1154,14 +1180,21 @@ function isActiveViewport(preset: (typeof viewportPresets)[number]) {
 
       <div class="mt-3 flex items-center justify-between gap-2">
         <span class="text-[11px] text-muted">
-          {{ !canEditDesign ? 'Protected · branch to edit' : dirty ? 'Unsaved source changes' : 'Preview is current' }}
+          {{
+            !canEditDesign
+              ? 'Protected · branch to edit'
+              : dirty
+                ? 'Unsaved source changes'
+                : 'Preview is current'
+          }}
         </span>
         <AppTextButton
           data-test-id="html-board-update"
           :ui="{
-            base: dirty && canEditDesign
-              ? 'rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-black hover:bg-accent/90'
-              : 'cursor-not-allowed rounded-md px-2.5 py-1.5 text-[11px] opacity-40'
+            base:
+              dirty && canEditDesign
+                ? 'rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-black hover:bg-accent/90'
+                : 'cursor-not-allowed rounded-md px-2.5 py-1.5 text-[11px] opacity-40'
           }"
           :disabled="!dirty || !canEditDesign"
           @click="updateBoard"

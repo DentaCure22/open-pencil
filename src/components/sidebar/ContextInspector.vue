@@ -9,6 +9,7 @@ import { isMermaidDiagramNode } from '@/app/diagram/mermaid/selection'
 import { useEditorStore } from '@/app/editor/active-store'
 import { isHtmlBoardFrame } from '@/app/html-board/workspace'
 import { selectedSourceDocument } from '@/app/source-document/workspace'
+import { displayNameForLiveNode } from '@/app/smylr-live-inspector/layer-bridge'
 import {
   liveInspectorSelectionEpoch,
   selectedLiveInspectorNode
@@ -51,7 +52,7 @@ const codeTabLabel = computed(() => (sourceDocumentSelected.value ? 'Source' : '
 
 const selectionLabel = computed(() => {
   const liveNode = selectedLiveInspectorNode.value
-  if (liveNode) return liveNode.name || liveNode.type || 'Live container'
+  if (liveNode) return displayNameForLiveNode(liveNode)
   if (selectedCount.value > 1) return `${selectedCount.value} selected`
   return selectedNode.value?.name || selectedNode.value?.type || 'Design'
 })

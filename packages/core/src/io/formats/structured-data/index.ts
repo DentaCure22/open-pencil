@@ -80,6 +80,7 @@ export function createCSVFormat(parseRows: CSVRowsParser): IOFormatAdapter {
 export { csvToSceneGraph } from './csv'
 export { jsonToSceneGraph, looksLikeJSONSchema } from './json'
 export { readStructuredDataNode } from './metadata'
+export { applyStructuredDataReconciliation, reconcileStructuredDataSource } from './reconcile'
 export type {
   CSVRow,
   CSVRowsParser,
@@ -88,5 +89,6 @@ export type {
   JSONValueType,
   StructuredDataImportOptions,
   StructuredDataNodeKind,
+  StructuredDataNodeField,
   StructuredDataNodeMetadata
 } from './types'

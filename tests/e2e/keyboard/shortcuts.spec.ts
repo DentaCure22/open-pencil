@@ -1,7 +1,7 @@
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
 import { expectDefined } from '#tests/helpers/assert'
 
-const editor = useEditorSetup()
+const editor = useEditorSetup('/?test')
 
 function getActiveTool() {
   return editor.page.evaluate(() => {

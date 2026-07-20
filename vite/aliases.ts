@@ -6,6 +6,10 @@ export function createOpenPencilAliases(rootDir: string) {
   return [
     { find: /^fs$/, replacement: emptyNodeModule },
     { find: /^path$/, replacement: emptyNodeModule },
+    {
+      find: /^@acemir\/cssom$/,
+      replacement: resolve(rootDir, 'packages/dom-css/node_modules/@acemir/cssom/lib/index.js')
+    },
     { find: '@', replacement: resolve(rootDir, 'src') },
     { find: '#vue', replacement: resolve(rootDir, 'packages/vue/src') },
     { find: '#core', replacement: resolve(rootDir, 'packages/core/src') },

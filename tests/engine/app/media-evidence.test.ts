@@ -6,6 +6,7 @@ import { readContentSource } from '@open-pencil/core/io'
 import { exportFigFile, parseFigFile } from '@open-pencil/core/io/formats/fig'
 import { assetHashFromReference } from '@open-pencil/scene-graph/images'
 
+import { placeExtractedPdfPage } from '@/app/media-evidence/extraction'
 import { placeMediaEvidenceFiles } from '@/app/media-evidence/intake'
 import {
   mediaEvidenceMimeType,
@@ -176,5 +177,71 @@ describe('media evidence intake', () => {
       mimeType: 'application/pdf'
     })
     expect(reopenedHash ? reopened.images.get(reopenedHash) : undefined).toEqual(bytes)
+  })
+
+  test('restores the exact extracted page ID on redo and survives save and reopen', async () => {
+    const editor = createEditor()
+    const [sourceId] = await placeMediaEvidenceFiles(
+      editor,
+      [
+        new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52])], 'source.pdf', {
+          type: 'application/pdf'
+        })
+      ],
+      400,
+      300
+    )
+    const sourceNode = editor.graph.getNode(sourceId)
+    const source = sourceNode ? mediaEvidenceSource(sourceNode) : null
+    expect(sourceNode).toBeDefined()
+    expect(source).not.toBeNull()
+    if (!sourceNode || !source) return
+
+    const extractedBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    const extractedId = placeExtractedPdfPage(editor, sourceNode, source, 2, {
+      bytes: extractedBytes,
+      fileName: 'source - page 2.png',
+      height: 1200,
+      width: 900
+    })
+    const extractedNode = editor.graph.getNode(extractedId)
+    const extractedSource = extractedNode ? readContentSource(extractedNode) : null
+    const extractedHash = extractedSource ? assetHashFromReference(extractedSource.source) : null
+
+    expect(extractedNode?.pluginData).toContainEqual({
+      key: 'media-evidence/pdf-page',
+      pluginId: 'open-pencil',
+      value: '2'
+    })
+    expect(editor.state.selectedIds).toEqual(new Set([extractedId]))
+
+    editor.undo.undo()
+    expect(editor.graph.getNode(sourceId)).toBeDefined()
+    expect(editor.graph.getNode(extractedId)).toBeUndefined()
+    expect(editor.state.selectedIds).toEqual(new Set([sourceId]))
+    expect(extractedHash ? editor.graph.images.has(extractedHash) : false).toBe(false)
+
+    editor.undo.redo()
+    expect(editor.graph.getNode(extractedId)?.id).toBe(extractedId)
+    expect(editor.state.selectedIds).toEqual(new Set([extractedId]))
+    expect(extractedHash ? editor.graph.images.get(extractedHash) : undefined).toEqual(
+      extractedBytes
+    )
+
+    const reopened = await parseFigFile((await exportFigFile(editor.graph)).buffer as ArrayBuffer)
+    const reopenedExtract = [...reopened.getAllNodes()].find((candidate) =>
+      candidate.pluginData.some(
+        (entry) => entry.key === 'media-evidence/kind' && entry.value === 'pdf-page'
+      )
+    )
+    const reopenedSource = reopenedExtract ? readContentSource(reopenedExtract) : null
+    const reopenedHash = reopenedSource ? assetHashFromReference(reopenedSource.source) : null
+
+    expect(reopenedExtract?.pluginData).toContainEqual({
+      key: 'media-evidence/source-asset-hash',
+      pluginId: 'open-pencil',
+      value: source.assetHash
+    })
+    expect(reopenedHash ? reopened.images.get(reopenedHash) : undefined).toEqual(extractedBytes)
   })
 })

@@ -1,7 +1,12 @@
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { FigmaAPI } from '#core/figma-api'
-import { CONTENT_SOURCE_REVISION, mergeContentSourcePluginData } from '#core/io/content-source'
+import {
+  CONTENT_SOURCE_REVISION,
+  mergeContentSourcePluginData,
+  mergeSourceReconciliationPluginData,
+  sourceSceneSignature
+} from '#core/io/content-source'
 import { importSvg } from '#core/tools/create/svg'
 
 const SVG_MIME_TYPE = 'image/svg+xml'
@@ -48,13 +53,20 @@ export async function svgToSceneGraph(
   const frame = graph.getNode(frameId)
   if (!frame) throw new Error('SVG import returned an unknown artifact')
 
+  const sourceMetadata = mergeContentSourcePluginData(frame.pluginData, {
+    format: 'svg',
+    mimeType: options.mimeType ?? SVG_MIME_TYPE,
+    fileName: options.fileName ?? null,
+    revision: CONTENT_SOURCE_REVISION,
+    source
+  })
+  const baseline = sourceSceneSignature(graph, frame.id)
   graph.updateNode(frame.id, {
-    pluginData: mergeContentSourcePluginData(frame.pluginData, {
-      format: 'svg',
-      mimeType: options.mimeType ?? SVG_MIME_TYPE,
-      fileName: options.fileName ?? null,
-      revision: CONTENT_SOURCE_REVISION,
-      source
+    pluginData: mergeSourceReconciliationPluginData(sourceMetadata, {
+      status: 'current',
+      message: 'Source matches the imported SVG projection.',
+      baseline,
+      revision: CONTENT_SOURCE_REVISION
     })
   })
 

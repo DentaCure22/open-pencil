@@ -17,6 +17,7 @@ import {
   type LiveWorkspaceItem,
   type LiveWorkspaceItemKind
 } from '@/app/smylr-live-inspector/workspace'
+import Tip from '@/components/ui/Tip.vue'
 
 const groups: Array<{ kind: LiveWorkspaceItemKind; label: string }> = [
   { kind: 'draft', label: 'Drafts' },
@@ -89,14 +90,15 @@ onMounted(() => void restoreLiveWorkspace())
               >{{ liveWorkspaceLifecycleLabel(item) }} · {{ item.nodeId }}</span
             >
           </span>
-          <button
-            v-if="item.kind !== 'archived'"
-            class="hidden rounded p-1 text-muted hover:text-surface group-hover:block"
-            title="Archive"
-            @click.stop="archiveItem(item)"
-          >
-            <icon-lucide-archive class="size-3" />
-          </button>
+          <Tip v-if="item.kind !== 'archived'" label="Archive">
+            <button
+              class="hidden rounded p-1 text-muted hover:text-surface group-hover:block"
+              aria-label="Archive"
+              @click.stop="archiveItem(item)"
+            >
+              <icon-lucide-archive class="size-3" />
+            </button>
+          </Tip>
         </div>
       </section>
     </template>

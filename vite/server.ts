@@ -40,29 +40,33 @@ export function createDevServerOptions(options: OpenPencilDevServerOptions = {})
   const host = options.host
   const port = options.port ?? Number(process.env.OPENPENCIL_VITE_PORT || 1420)
   const smylrEmbed = options.smylrEmbed ?? false
+  let hmr: ServerOptions['hmr']
+  if (smylrEmbed) {
+    hmr = {
+      // Browser page is on :3000; WS goes straight to Vite :1420.
+      protocol: 'ws',
+      host: '127.0.0.1',
+      port,
+      clientPort: port
+    }
+  } else if (host) {
+    hmr = {
+      protocol: 'ws',
+      host,
+      port: port + 1
+    }
+  }
 
   return {
     port,
     strictPort: true,
     host: host || '127.0.0.1',
     cors: true,
+    warmup:
+      process.env.OPENPENCIL_E2E_PREFLIGHT === '1' ? { clientFiles: ['./src/main.ts'] } : undefined,
     // Allow Next (3000) to load Vite modules / HMR client
     origin: smylrEmbed ? `http://127.0.0.1:${port}` : undefined,
-    hmr: smylrEmbed
-      ? {
-          // Browser page is on :3000; WS goes straight to Vite :1420
-          protocol: 'ws',
-          host: '127.0.0.1',
-          port,
-          clientPort: port
-        }
-      : host
-        ? {
-            protocol: 'ws',
-            host,
-            port: port + 1
-          }
-        : undefined,
+    hmr,
     watch: {
       ignored: WATCH_IGNORED
     }

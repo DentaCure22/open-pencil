@@ -5,8 +5,7 @@ import {
   copySelectionToTauriClipboard,
   pasteFromTauriClipboard
 } from '@/app/editor/clipboard/system'
-import { extractMediaEvidenceFilesFromClipboard } from '@/app/media-evidence/drop'
-import { placeMediaEvidenceFiles } from '@/app/media-evidence/intake'
+import { extractFilesFromClipboard, placeFilesWithFallbackMessage } from '@/app/file-intake/drop'
 import { isEditing } from '@/app/shell/keyboard/focus'
 import { toast } from '@/app/shell/ui'
 import { parseSmylrLiveContainerClipboardText } from '@/app/smylr-live-container'
@@ -15,7 +14,7 @@ import {
   liveInspectorClipboardHtmlFor,
   selectedLiveInspectorNode
 } from '@/app/smylr-live-inspector/session'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live-frame-deletion'
+import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 import {
   findCurrentSmylrLiveAppFrame,
   isSmylrLiveAppFrameNode
@@ -133,11 +132,11 @@ export function bindEditorClipboard(store: EditorStore) {
       return
     }
 
-    const mediaFiles = extractMediaEvidenceFilesFromClipboard(e)
-    if (mediaFiles.length) {
+    const files = extractFilesFromClipboard(e)
+    if (files.length) {
       const cx = cursorPos?.x ?? (-store.state.panX + window.innerWidth / 2) / store.state.zoom
       const cy = cursorPos?.y ?? (-store.state.panY + window.innerHeight / 2) / store.state.zoom
-      void placeMediaEvidenceFiles(store, mediaFiles, cx, cy)
+      void placeFilesWithFallbackMessage(store, files, cx, cy)
       return
     }
 

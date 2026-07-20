@@ -26,8 +26,10 @@ import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaborati
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { isHtmlBoardFrame } from '@/app/html-board/workspace'
-import { useMediaEvidenceDrop } from '@/app/media-evidence/drop'
+import { useFileIntakeDrop } from '@/app/file-intake/drop'
 import { mediaEvidenceSource } from '@/app/media-evidence/source'
+import { sourceObjectSource } from '@/app/source-object/source'
+import { spatialMediaSource } from '@/app/spatial-media/source'
 import {
   clearLiveInspectorSelection,
   liveInspectorActiveFrameId,
@@ -48,8 +50,10 @@ import CanvasMenu from './canvas/CanvasMenu.vue'
 import HtmlBoardEmbeds from './canvas/HtmlBoardEmbeds.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
 import NarratedTraceAnnotationOverlay from './narrated-trace/NarratedTraceAnnotationOverlay.vue'
+import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
 import SmylrLiveAppEmbed from './canvas/SmylrLiveAppEmbed.vue'
 import SmylrPooledLiveAppEmbeds from './canvas/SmylrPooledLiveAppEmbeds.vue'
+import SourceObjectOverlays from './canvas/SourceObjectOverlays.vue'
 import ScrubInput from './inputs/ScrubInput.vue'
 
 type DitherPresentation = 'overlay' | 'surface'
@@ -94,7 +98,7 @@ const {
 )
 
 useTextEdit(canvasRef, store)
-const { isDraggingOver } = useMediaEvidenceDrop(canvasRef, store)
+const { isDraggingOver } = useFileIntakeDrop(canvasRef, store)
 
 const paddingSideIcons = {
   top: IconLucidePanelTop,
@@ -161,7 +165,9 @@ const prefersNativeHitTarget = computed(() =>
       node &&
       !isSmylrLiveAppFrameNode(node) &&
       !isHtmlBoardFrame(node) &&
-      !mediaEvidenceSource(node)
+      !mediaEvidenceSource(node) &&
+      !sourceObjectSource(node) &&
+      !spatialMediaSource(node)
     )
   })
 )
@@ -202,8 +208,10 @@ const interactionCanvasClass = computed(() =>
           @pointerdown="clearLiveContainerHighlight"
         />
         <MediaEvidenceOverlays />
+        <SourceObjectOverlays />
         <SmylrLiveAppEmbed />
         <SmylrPooledLiveAppEmbeds />
+        <SpatialMediaOverlays />
         <HtmlBoardEmbeds />
         <NarratedTraceAnnotationOverlay />
         <Transition

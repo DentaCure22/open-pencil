@@ -30,7 +30,7 @@ import {
   bindLiveFrameDeletionSync,
   clearLiveFrameTombstones,
   loadLiveFrameTombstones
-} from '@/app/smylr-production/live-frame-deletion'
+} from '@/app/smylr-production/live/frame-deletion'
 import {
   isApplyingSharedSmylrProductionDocument,
   refreshSharedSmylrProductionWorkspace,
@@ -325,7 +325,7 @@ watch(
 /** In-place board update (HMR event from board files + accept deps). */
 function bumpBoards(reason: string) {
   if (!isSmylrProductionWorkspace) return
-  void import('@/app/smylr-production/live-reseed').then(({ scheduleSmylrLiveReseed }) => {
+  void import('@/app/smylr-production/live/reseed').then(({ scheduleSmylrLiveReseed }) => {
     return scheduleSmylrLiveReseed(getActiveStore, {
       selectedPageId: typeof params['smylr-page'] === 'string' ? params['smylr-page'] : undefined,
       reason

@@ -16,13 +16,13 @@ import {
 import { withoutByteOrderMark } from './source'
 import type { JSONValue, JSONValueType, StructuredDataImportOptions } from './types'
 
-const MAX_TREE_ROWS = 500
+export const MAX_TREE_ROWS = 500
 const LABEL_WIDTH = 340
 const TYPE_WIDTH = 100
 const VALUE_WIDTH = CONTENT_WIDTH - LABEL_WIDTH - TYPE_WIDTH - 48
 const MAX_VALUE_LENGTH = 180
 
-interface JSONTreeRow {
+export interface JSONTreeRow {
   depth: number
   label: string
   path: string
@@ -30,7 +30,7 @@ interface JSONTreeRow {
   value: string
 }
 
-interface JSONTreeProjection {
+export interface JSONTreeProjection {
   rows: JSONTreeRow[]
   truncated: boolean
 }
@@ -74,7 +74,7 @@ function shortened(value: string): string {
   return `${value.slice(0, MAX_VALUE_LENGTH - 1)}…`
 }
 
-function displayValue(value: JSONValue): string {
+export function displayJSONValue(value: JSONValue): string {
   if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`
   if (isRecord(value)) {
     const count = Object.keys(value).length
@@ -84,7 +84,7 @@ function displayValue(value: JSONValue): string {
   return String(value)
 }
 
-function collectJSONRows(value: JSONValue): JSONTreeProjection {
+export function collectJSONRows(value: JSONValue): JSONTreeProjection {
   const rows: JSONTreeRow[] = []
   let truncated = false
 
@@ -99,7 +99,7 @@ function collectJSONRows(value: JSONValue): JSONTreeProjection {
       label,
       path,
       type: jsonValueType(current),
-      value: displayValue(current)
+      value: displayJSONValue(current)
     })
     if (Array.isArray(current)) {
       for (const [index, child] of current.entries()) {
@@ -135,7 +135,7 @@ function looksLikeJSONSchema(value: JSONValue, fileName?: string): boolean {
   )
 }
 
-function parseJSONSource(source: string): JSONValue {
+export function parseJSONSource(source: string): JSONValue {
   let parsed: unknown
   try {
     parsed = JSON.parse(withoutByteOrderMark(source))
@@ -185,35 +185,35 @@ function renderTreeHeader(graph: SceneGraph, parentId: string): void {
 }
 
 function renderTreeRow(graph: SceneGraph, parentId: string, row: JSONTreeRow): void {
-  const pluginData = structuredDataPluginData({
+  const metadata = {
     kind: 'tree-row',
     path: row.path,
     valueType: row.type
-  })
+  } as const
   const node = createDataRow(graph, parentId, {
     name: row.path || 'JSON root',
     width: CONTENT_WIDTH,
-    pluginData
+    pluginData: structuredDataPluginData(metadata)
   })
   createDataText(graph, node.id, `${'  '.repeat(row.depth)}${row.label}`, {
     name: 'JSON key',
     width: LABEL_WIDTH,
     fontWeight: row.depth === 0 ? 650 : 500,
     color: row.depth === 0 ? ACCENT_COLOR : TEXT_COLOR,
-    pluginData
+    pluginData: structuredDataPluginData({ ...metadata, field: 'label' })
   })
   createDataText(graph, node.id, row.type, {
     name: 'JSON value type',
     width: TYPE_WIDTH,
     fontSize: 12,
     color: MUTED_COLOR,
-    pluginData
+    pluginData: structuredDataPluginData({ ...metadata, field: 'type' })
   })
   createDataText(graph, node.id, row.value, {
     name: 'JSON value',
     width: VALUE_WIDTH,
     color: row.type === 'object' || row.type === 'array' ? MUTED_COLOR : TEXT_COLOR,
-    pluginData
+    pluginData: structuredDataPluginData({ ...metadata, field: 'value' })
   })
 }
 

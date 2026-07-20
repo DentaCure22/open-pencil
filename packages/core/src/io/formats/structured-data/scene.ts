@@ -1,7 +1,11 @@
 import type { PluginDataEntry, SceneGraph, SceneNode, Stroke } from '@open-pencil/scene-graph'
 
 import { colorToFill, parseColor } from '#core/color'
-import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '#core/io/content-source'
+import {
+  CONTENT_SOURCE_REVISION,
+  contentSourcePluginData,
+  sourceReconciliationPluginData
+} from '#core/io/content-source'
 
 import { structuredDataPluginData } from './metadata'
 
@@ -152,6 +156,12 @@ export function createDataDocumentSurface(
         revision: CONTENT_SOURCE_REVISION,
         source: options.source
       }),
+      ...sourceReconciliationPluginData({
+        status: 'current',
+        message: 'Source matches the native document',
+        baseline: null,
+        revision: CONTENT_SOURCE_REVISION
+      }),
       ...structuredDataPluginData({ kind: 'document', path: '' })
     ]
   })
@@ -179,6 +189,14 @@ export function createDataDocumentSurface(
     width: CONTENT_WIDTH,
     fontSize: 13,
     color: MUTED_COLOR
+  })
+  createDataText(graph, heading.id, 'SOURCE · CURRENT · REVISION 1', {
+    name: 'Source reconciliation status',
+    width: CONTENT_WIDTH,
+    fontSize: 11,
+    fontWeight: 650,
+    color: ACCENT_COLOR,
+    pluginData: structuredDataPluginData({ kind: 'source-status' })
   })
 
   const content = graph.createNode('FRAME', root.id, {

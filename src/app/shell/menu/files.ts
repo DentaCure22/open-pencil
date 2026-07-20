@@ -23,7 +23,7 @@ export const OPENPENCIL_DOCUMENT_EXTENSIONS = [
 ]
 
 const fileDialog = useFileDialog({
-  accept: OPENPENCIL_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`).join(','),
+  accept: '*/*',
   multiple: false,
   reset: true
 })
@@ -52,12 +52,6 @@ export async function readTauriDesignFile(path: string): Promise<File> {
 export async function chooseTauriOpenPath(): Promise<string | null> {
   const { open } = await import('@tauri-apps/plugin-dialog')
   const path = await open({
-    filters: [
-      {
-        name: 'OpenPencil-compatible file',
-        extensions: [...OPENPENCIL_DOCUMENT_EXTENSIONS]
-      }
-    ],
     multiple: false
   })
   return typeof path === 'string' ? path : null

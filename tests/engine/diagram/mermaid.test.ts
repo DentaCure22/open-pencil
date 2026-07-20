@@ -9,7 +9,7 @@ import {
   parseMermaidDiagram,
   type MermaidDiagram
 } from '@open-pencil/core/diagram'
-import { createEditor } from '@open-pencil/core/editor'
+import { createEditor, reconcileMermaidDiagramSource } from '@open-pencil/core/editor'
 
 import { getNodeOrThrow } from '#tests/helpers/assert'
 
@@ -306,6 +306,22 @@ describe('Mermaid diagram conversion', () => {
       )
     ).toBe(true)
     expect(editor.state.selectedIds).toEqual(new Set([owner.id]))
+
+    expect(reconcileMermaidDiagramSource(editor.graph, owner.id)).toMatchObject({
+      status: 'current',
+      source: scene.source,
+      revision: 1
+    })
+    const label = nodeIds
+      .map((id) => editor.graph.getNode(id))
+      .find((node) => node?.type === 'TEXT')
+    if (!label) throw new Error('Expected Mermaid label')
+    editor.graph.updateNode(label.id, { text: 'Changed natively' })
+    expect(reconcileMermaidDiagramSource(editor.graph, label.id)).toMatchObject({
+      status: 'unsupported',
+      source: scene.source,
+      revision: 1
+    })
 
     editor.undo.undo()
     expect(editor.graph.getNode(owner.id)).toBeUndefined()
