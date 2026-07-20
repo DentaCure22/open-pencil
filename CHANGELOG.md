@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Open DOCX, XLSX, and PPTX as bounded read-only board previews with extracted document text flow, spreadsheet grids and sheet tabs, and slide text layout/navigation while preserving the exact original file for download and native `.fig` reopen; corrupt, encrypted, oversized, and unsupported content falls back honestly without losing bytes.
 - Show component variants as visual thumbnails in Assets, open each variant on its source canvas, and drag linked native or source-backed variants onto the active Board with normal undo/redo.
 - Reconcile editable Mermaid, JSON, CSV, and SVG projections against their retained source so unchanged files save exact bytes and native edits surface an explicit current/conflict state.
 - Route PDF, video, audio, large raster, code, office, CAD, and other unsupported files through one source-backed intake boundary that preserves filename, MIME type, exact bytes, undo/redo, and native document reopen.

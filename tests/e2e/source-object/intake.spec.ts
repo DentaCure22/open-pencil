@@ -48,11 +48,17 @@ async function expectRetainedSource(fileName: string, mimeType: string) {
   ).toBeVisible()
 }
 
-test('drop preserves an unsupported XLSX as an openable and downloadable source object', async () => {
+test('corrupt XLSX preserves its exact source with an honest preview fallback', async () => {
   await transferFile('drop', 'forecast.xlsx', '', [80, 75, 3, 4, 9, 8, 7])
-  await expectRetainedSource(
-    'forecast.xlsx',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  const overlay = editor.page.getByTestId('source-object')
+  await expect(overlay).toBeVisible()
+  await expect(overlay).toContainText('forecast.xlsx')
+  await expect(overlay).toContainText('XLSX · READ ONLY')
+  await expect(editor.page.getByTestId('office-document-fallback')).toContainText(
+    'Office package is corrupt or unsupported'
+  )
+  await expect(editor.page.getByTestId('office-document-fallback')).toContainText(
+    'Original file remains preserved'
   )
 
   const downloadPromise = editor.page.waitForEvent('download')

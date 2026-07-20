@@ -27,10 +27,17 @@ const CASCADE_OVERLAP_THRESHOLD = 0.9
 
 type PreparedSourceObject = {
   bytes: Uint8Array
+  file: File
   fileName: string
   format: string
   hash: string
   mimeType: string
+}
+
+export type SourceObjectPlacementOptions = {
+  label?: string
+  pluginData?: (file: File) => SceneNode['pluginData']
+  size?: Pick<Rect, 'height' | 'width'>
 }
 
 function setSelection(editor: Editor, ids: string[]) {
@@ -86,6 +93,7 @@ async function prepareSourceObject(file: File): Promise<PreparedSourceObject> {
   const fileName = file.name.trim() || 'Untitled source'
   return {
     bytes,
+    file,
     fileName,
     format: sourceObjectFormat(fileName),
     hash: computeImageHash(bytes),
@@ -106,19 +114,20 @@ export async function placeSourceObjectFiles(
   editor: Editor,
   files: File[],
   cx: number,
-  cy: number
+  cy: number,
+  options: SourceObjectPlacementOptions = {}
 ): Promise<string[]> {
   if (files.length === 0) return []
   const prepared = await Promise.all(files.map(prepareSourceObject))
+  const size = options.size ?? SOURCE_OBJECT_SIZE
   const previousSelection = [...editor.state.selectedIds]
   const pageId = editor.state.currentPageId
-  const totalWidth =
-    SOURCE_OBJECT_SIZE.width * prepared.length + SOURCE_OBJECT_GAP * (prepared.length - 1)
+  const totalWidth = size.width * prepared.length + SOURCE_OBJECT_GAP * (prepared.length - 1)
   const placement = placementFor(editor, {
-    height: SOURCE_OBJECT_SIZE.height,
+    height: size.height,
     width: totalWidth,
     x: cx - totalWidth / 2,
-    y: cy - SOURCE_OBJECT_SIZE.height / 2
+    y: cy - size.height / 2
   })
   const snapshots: SceneNode[] = []
 
@@ -135,10 +144,11 @@ export async function placeSourceObjectFiles(
           visible: true
         }
       ],
-      height: SOURCE_OBJECT_SIZE.height,
+      height: size.height,
       name: item.fileName,
       pluginData: [
         ...sourceObjectPluginData(item.bytes.byteLength),
+        ...(options.pluginData?.(item.file) ?? []),
         ...contentSourcePluginData({
           fileName: item.fileName,
           format: item.format,
@@ -156,8 +166,8 @@ export async function placeSourceObjectFiles(
           weight: 1
         }
       ],
-      width: SOURCE_OBJECT_SIZE.width,
-      x: placement.x + index * (SOURCE_OBJECT_SIZE.width + SOURCE_OBJECT_GAP),
+      width: size.width,
+      x: placement.x + index * (size.width + SOURCE_OBJECT_GAP),
       y: placement.y
     })
     snapshots.push(structuredClone(node))
@@ -166,7 +176,7 @@ export async function placeSourceObjectFiles(
   const ids = snapshots.map((snapshot) => snapshot.id)
   setSelection(editor, ids)
   editor.undo.push({
-    label: files.length === 1 ? 'Place source file' : 'Place source files',
+    label: options.label ?? (files.length === 1 ? 'Place source file' : 'Place source files'),
     forward: () => {
       for (const item of prepared) editor.graph.images.set(item.hash, item.bytes)
       for (const snapshot of snapshots) restoreSnapshot(editor, snapshot)

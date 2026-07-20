@@ -4,10 +4,14 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { officeDocumentSource, type OfficeDocumentSource } from '@/app/office-document'
 import { sourceObjectSource, type SourceObjectSource } from '@/app/source-object/source'
+import OfficeDocumentPreview from '@/components/office-document/OfficeDocumentPreview.vue'
 
 type SourceObjectItem = {
+  bytes: Uint8Array | null
   node: SceneNode
+  officeSource: OfficeDocumentSource | null
   source: SourceObjectSource
 }
 
@@ -31,7 +35,14 @@ const items = computed<SourceObjectItem[]>(() => {
   for (const node of store.graph.getAllNodes()) {
     if (!node.visible || !belongsToCurrentPage(node)) continue
     const source = sourceObjectSource(node)
-    if (source) result.push({ node, source })
+    if (source) {
+      result.push({
+        bytes: store.graph.images.get(source.assetHash) ?? null,
+        node,
+        officeSource: officeDocumentSource(node),
+        source
+      })
+    }
   }
   return result
 })
@@ -113,11 +124,20 @@ function byteSize(source: SourceObjectSource): string {
           {{ item.source.fileName }}
         </span>
         <span class="shrink-0 text-[9px] font-semibold tracking-[0.08em] text-[#b3a4df]">
-          {{ item.source.metadata.format.toUpperCase() }} · SOURCE
+          {{ item.source.metadata.format.toUpperCase() }} ·
+          {{ item.officeSource ? 'READ ONLY' : 'SOURCE' }}
         </span>
       </header>
 
-      <div class="flex min-h-0 flex-1 items-center gap-4 px-4 py-3">
+      <div v-if="item.officeSource && item.bytes" class="min-h-0 flex-1">
+        <OfficeDocumentPreview
+          :asset-bytes="item.bytes"
+          :kind="item.officeSource.kind"
+          :selected="isSelected(item.node.id)"
+        />
+      </div>
+
+      <div v-else class="flex min-h-0 flex-1 items-center gap-4 px-4 py-3">
         <div
           class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#292535] text-[#b9a7ef]"
         >
@@ -136,7 +156,13 @@ function byteSize(source: SourceObjectSource): string {
       </div>
 
       <footer class="flex h-11 items-center justify-between border-t border-white/8 px-4">
-        <span class="text-[9px] font-medium text-[#8f8a99]">Unsupported board preview</span>
+        <span class="text-[9px] font-medium text-[#8f8a99]">
+          {{
+            item.officeSource
+              ? `Exact source preserved · ${byteSize(item.source)}`
+              : 'Unsupported board preview'
+          }}
+        </span>
         <div
           v-if="isSelected(item.node.id) && assetUrl(item.source)"
           class="pointer-events-auto flex gap-2"

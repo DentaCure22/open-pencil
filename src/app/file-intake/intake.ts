@@ -1,13 +1,23 @@
 import type { Editor } from '@open-pencil/core/editor'
 
 import { placeMediaEvidenceFiles } from '@/app/media-evidence/intake'
+import { officeDocumentFileIntakeAdapter } from '@/app/office-document/intake'
 import { placeSourceObjectFiles, SOURCE_OBJECT_SIZE } from '@/app/source-object/intake'
 
 import { classifyBoardFile } from './classify'
 import { boardFileIntakeRegistry, type BoardFileIntakeAdapter } from './registry'
 import { spatialMediaFileIntakeAdapter } from './spatial-media'
 
-boardFileIntakeRegistry.register(spatialMediaFileIntakeAdapter)
+const unregisterBuiltInAdapters = [
+  boardFileIntakeRegistry.register(spatialMediaFileIntakeAdapter),
+  boardFileIntakeRegistry.register(officeDocumentFileIntakeAdapter)
+]
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    for (const unregister of unregisterBuiltInAdapters) unregister()
+  })
+}
 
 export type FileIntakeResult = {
   ids: string[]

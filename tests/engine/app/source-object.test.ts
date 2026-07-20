@@ -31,11 +31,8 @@ describe('downloadable source object intake', () => {
     )
   })
 
-  test('keeps office, 3D, and CAD files on the generic boundary when no adapter is registered', () => {
+  test('keeps unsupported 3D and CAD files on the generic boundary', () => {
     const names = [
-      'forecast.xlsx',
-      'brief.docx',
-      'review.pptx',
       'mesh.obj',
       'mesh.stl',
       'assembly.step',
@@ -51,6 +48,12 @@ describe('downloadable source object intake', () => {
       expect(classifyBoardFile(new File([], name))).toEqual({
         kind: 'source-object',
         reason: 'no-board-adapter'
+      })
+    }
+    for (const name of ['forecast.xlsx', 'brief.docx', 'review.pptx']) {
+      expect(classifyBoardFile(new File([], name))).toEqual({
+        adapterId: 'office-document',
+        kind: 'specialized'
       })
     }
     for (const name of ['scene.gltf', 'scene.glb']) {
