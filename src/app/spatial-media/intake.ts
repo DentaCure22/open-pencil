@@ -5,11 +5,18 @@ import { assetReference, computeImageHash } from '@open-pencil/scene-graph/image
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import { classifySpatialFile } from './classify'
+import {
+  resolveSpatialResourceFiles,
+  spatialResourceMimeType,
+  type SpatialResolvedResourceFile,
+  validateSpatialBundleSize
+} from './resources'
 import { spatialMediaPluginData, spatialMediaSource } from './source'
 import type {
   SpatialCameraState,
   SpatialPlacementFallback,
   SpatialPlacementResult,
+  SpatialResourceReference,
   SpatialViewerClassification
 } from './types'
 
@@ -25,6 +32,12 @@ type PreparedSpatialAsset = {
   file: File
   fileName: string
   hash: string
+  resources: PreparedSpatialResource[]
+}
+
+type PreparedSpatialResource = {
+  bytes: Uint8Array
+  reference: SpatialResourceReference
 }
 
 function setSelection(editor: Editor, ids: string[]) {
@@ -65,6 +78,7 @@ function hasAssetReference(editor: Editor, hash: string): boolean {
   for (const node of editor.graph.getAllNodes()) {
     const source = spatialMediaSource(node)
     if (source?.assetHash === hash || source?.previewHash === hash) return true
+    if (source?.resources.some((resource) => resource.assetHash === hash)) return true
     if (node.fills.some((fill) => fill.imageHash === hash)) return true
   }
   return false
@@ -72,21 +86,41 @@ function hasAssetReference(editor: Editor, hash: string): boolean {
 
 async function prepareAsset(
   file: File,
-  classification: SpatialViewerClassification
+  classification: SpatialViewerClassification,
+  resolvedResources: SpatialResolvedResourceFile[]
 ): Promise<PreparedSpatialAsset> {
+  validateSpatialBundleSize(file, resolvedResources)
   const bytes = new Uint8Array(await file.arrayBuffer())
+  const resources = await Promise.all(
+    resolvedResources.map(async ({ file: resourceFile, uri }) => {
+      const resourceBytes = new Uint8Array(await resourceFile.arrayBuffer())
+      return {
+        bytes: resourceBytes,
+        reference: {
+          assetHash: computeImageHash(resourceBytes),
+          fileName: resourceFile.name,
+          mimeType: spatialResourceMimeType(uri),
+          uri
+        }
+      }
+    })
+  )
   return {
     bytes,
     classification,
     file,
     fileName: file.name.trim() || `Untitled.${classification.format}`,
-    hash: computeImageHash(bytes)
+    hash: computeImageHash(bytes),
+    resources
   }
 }
 
 function spatialMimeType(file: File, format: SpatialViewerClassification['format']): string {
   if (file.type) return file.type
-  return format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'
+  if (format === 'glb') return 'model/gltf-binary'
+  if (format === 'gltf') return 'model/gltf+json'
+  if (format === 'obj') return 'model/obj'
+  return 'model/stl'
 }
 
 export async function placeSpatialMediaFiles(
@@ -95,20 +129,34 @@ export async function placeSpatialMediaFiles(
   cx: number,
   cy: number
 ): Promise<SpatialPlacementResult> {
-  const fallbacks: SpatialPlacementFallback[] = []
   const viewerInputs: Array<{ classification: SpatialViewerClassification; file: File }> = []
   for (const file of files) {
     const classification = classifySpatialFile(file)
     if (classification.disposition === 'spatial-viewer') {
       viewerInputs.push({ classification, file })
-    } else {
-      fallbacks.push({ classification, file })
     }
+  }
+  const resourceCandidates = files.filter(
+    (file) => !viewerInputs.some((input) => input.file === file)
+  )
+  const resourceGroups = await Promise.all(
+    viewerInputs.map(({ file }) => resolveSpatialResourceFiles(file, resourceCandidates))
+  )
+  const resourceFiles = new Set(
+    resourceGroups.flatMap((resources) => resources.map(({ file }) => file))
+  )
+  const fallbacks: SpatialPlacementFallback[] = []
+  for (const file of files) {
+    if (resourceFiles.has(file) || viewerInputs.some((input) => input.file === file)) continue
+    const classification = classifySpatialFile(file)
+    if (classification.disposition !== 'spatial-viewer') fallbacks.push({ classification, file })
   }
   if (viewerInputs.length === 0) return { fallbacks, placedIds: [] }
 
   const prepared = await Promise.all(
-    viewerInputs.map(({ classification, file }) => prepareAsset(file, classification))
+    viewerInputs.map(({ classification, file }, index) =>
+      prepareAsset(file, classification, resourceGroups[index] ?? [])
+    )
   )
   const previousSelection = [...editor.state.selectedIds]
   const pageId = editor.state.currentPageId
@@ -117,6 +165,9 @@ export async function placeSpatialMediaFiles(
   let x = bounds.x
   for (const item of prepared) {
     editor.graph.images.set(item.hash, item.bytes)
+    for (const resource of item.resources) {
+      editor.graph.images.set(resource.reference.assetHash, resource.bytes)
+    }
     const sourceData = contentSourcePluginData({
       fileName: item.fileName,
       format: item.classification.format,
@@ -137,7 +188,10 @@ export async function placeSpatialMediaFiles(
       ],
       height: VIEWER_HEIGHT,
       name: item.fileName.replace(/\.[^.]+$/, '') || item.fileName,
-      pluginData: spatialMediaPluginData(sourceData, { format: item.classification.format }),
+      pluginData: spatialMediaPluginData(sourceData, {
+        format: item.classification.format,
+        resources: item.resources.map(({ reference }) => reference)
+      }),
       strokes: [
         {
           align: 'INSIDE',
@@ -161,6 +215,11 @@ export async function placeSpatialMediaFiles(
     label: 'Place 3D asset',
     forward: () => {
       for (const item of prepared) editor.graph.images.set(item.hash, item.bytes)
+      for (const item of prepared) {
+        for (const resource of item.resources) {
+          editor.graph.images.set(resource.reference.assetHash, resource.bytes)
+        }
+      }
       for (const snapshot of snapshots) {
         editor.graph.createNode(snapshot.type, pageId, structuredClone(snapshot))
       }
@@ -174,7 +233,11 @@ export async function placeSpatialMediaFiles(
         return previewHash ? [previewHash] : []
       })
       for (const id of placedIds) editor.graph.deleteNode(id)
-      for (const hash of [...prepared.map((item) => item.hash), ...previewHashes]) {
+      const retainedHashes = prepared.flatMap((item) => [
+        item.hash,
+        ...item.resources.map((resource) => resource.reference.assetHash)
+      ])
+      for (const hash of [...retainedHashes, ...previewHashes]) {
         if (!hasAssetReference(editor, hash)) editor.graph.images.delete(hash)
       }
       setSelection(editor, previousSelection)
@@ -203,7 +266,8 @@ function pluginDataWithCamera(
         camera,
         format: source.format,
         homeCamera,
-        previewHash: source.previewHash
+        previewHash: source.previewHash,
+        resources: source.resources
       })
     : node.pluginData
 }
@@ -221,7 +285,8 @@ export function initializeSpatialMediaCamera(
       camera: source.camera ?? camera,
       format: source.format,
       homeCamera: source.homeCamera ?? camera,
-      previewHash: source.previewHash
+      previewHash: source.previewHash,
+      resources: source.resources
     })
   })
   editor.requestRender()
@@ -266,7 +331,8 @@ export function storeSpatialMediaPreview(
       camera: source.camera,
       format: source.format,
       homeCamera: source.homeCamera,
-      previewHash: hash
+      previewHash: hash,
+      resources: source.resources
     })
   })
   editor.requestRender()

@@ -1,11 +1,12 @@
 import type {
   CadSourceFormat,
-  DeferredMeshFormat,
   SpatialFileClassification,
   SpatialViewerClassification
 } from './types'
 
 export const MAX_SPATIAL_SOURCE_BYTES = 64 * 1024 * 1024
+export const MAX_SPATIAL_BUNDLE_BYTES = 96 * 1024 * 1024
+export const MAX_SPATIAL_RESOURCE_FILES = 64
 
 const VIEWER_EXTENSIONS = new Map<string, SpatialViewerClassification>([
   [
@@ -23,7 +24,25 @@ const VIEWER_EXTENSIONS = new Map<string, SpatialViewerClassification>([
       disposition: 'spatial-viewer',
       format: 'gltf',
       kind: 'mesh-asset',
-      label: 'Self-contained glTF asset'
+      label: 'glTF asset or local bundle'
+    }
+  ],
+  [
+    'obj',
+    {
+      disposition: 'spatial-viewer',
+      format: 'obj',
+      kind: 'mesh-asset',
+      label: 'Wavefront OBJ mesh'
+    }
+  ],
+  [
+    'stl',
+    {
+      disposition: 'spatial-viewer',
+      format: 'stl',
+      kind: 'mesh-asset',
+      label: 'STL mesh'
     }
   ]
 ])
@@ -36,11 +55,6 @@ const CAD_EXTENSIONS = new Map<string, CadSourceFormat>([
   ['igs', 'iges'],
   ['step', 'step'],
   ['stp', 'step']
-])
-
-const DEFERRED_MESH_EXTENSIONS = new Map<string, DeferredMeshFormat>([
-  ['obj', 'obj'],
-  ['stl', 'stl']
 ])
 
 function extension(fileName: string): string {
@@ -93,18 +107,6 @@ export function classifySpatialFile(
       label: `${cadFormat.toUpperCase()} engineering CAD source`,
       reason:
         'Retain exact bytes and download access; preview and native CAD editing wait for topology and unit-fidelity proof.'
-    }
-  }
-
-  const meshFormat = DEFERRED_MESH_EXTENSIONS.get(fileExtension)
-  if (meshFormat) {
-    return {
-      disposition: 'generic-source',
-      format: meshFormat,
-      kind: 'mesh-source',
-      label: `${meshFormat.toUpperCase()} mesh source`,
-      reason:
-        'This first slice keeps the source but does not enable the older text mesh loader without a dedicated performance fixture.'
     }
   }
 

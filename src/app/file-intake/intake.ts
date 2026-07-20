@@ -36,7 +36,14 @@ export async function placeFileIntakeFiles(
   const mediaFiles: File[] = []
   const sourceFiles: File[] = []
   const specializedFiles = new Map<BoardFileIntakeAdapter, File[]>()
-  for (const file of files) {
+  let remainingFiles = [...files]
+  for (const adapter of boardFileIntakeRegistry.list()) {
+    if (!adapter.claimFiles) continue
+    const claim = await adapter.claimFiles(remainingFiles)
+    if (claim.claimed.length > 0) specializedFiles.set(adapter, claim.claimed)
+    remainingFiles = claim.remaining
+  }
+  for (const file of remainingFiles) {
     const classification = classifyBoardFile(file)
     if (classification.kind === 'media') {
       mediaFiles.push(file)

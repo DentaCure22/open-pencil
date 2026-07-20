@@ -1,8 +1,18 @@
 import type { ContentSourceMetadata } from '@open-pencil/core/io'
 
-export type SpatialAssetFormat = 'glb' | 'gltf'
+export type SpatialAssetFormat = 'glb' | 'gltf' | 'obj' | 'stl'
 export type CadSourceFormat = 'brep' | 'dwg' | 'dxf' | 'iges' | 'step'
-export type DeferredMeshFormat = 'obj' | 'stl'
+
+export type SpatialResourceReference = {
+  assetHash: string
+  fileName: string
+  mimeType: string
+  uri: string
+}
+
+export type SpatialResourcePayload = SpatialResourceReference & {
+  bytes: Uint8Array
+}
 
 export type SpatialCameraState = {
   position: [number, number, number]
@@ -17,6 +27,7 @@ export type SpatialMediaSource = {
   homeCamera: SpatialCameraState | null
   metadata: ContentSourceMetadata
   previewHash: string | null
+  resources: SpatialResourceReference[]
 }
 
 export type SpatialViewerClassification = {
@@ -47,14 +58,6 @@ export type CadSourceClassification = {
   }
 }
 
-export type DeferredMeshClassification = {
-  disposition: 'generic-source'
-  format: DeferredMeshFormat
-  kind: 'mesh-source'
-  label: string
-  reason: string
-}
-
 export type RejectedSpatialClassification = {
   disposition: 'reject'
   kind: 'oversize'
@@ -70,7 +73,6 @@ export type UnknownSpatialClassification = {
 
 export type SpatialFileClassification =
   | CadSourceClassification
-  | DeferredMeshClassification
   | RejectedSpatialClassification
   | SpatialViewerClassification
   | ThreeExperienceClassification

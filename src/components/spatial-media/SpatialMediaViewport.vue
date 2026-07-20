@@ -17,6 +17,7 @@ import { loadSpatialAsset } from '@/app/spatial-media/runtime/load'
 import type {
   SpatialCameraState,
   SpatialMediaSource,
+  SpatialResourcePayload,
   SpatialRuntimeStats
 } from '@/app/spatial-media/types'
 
@@ -175,8 +176,15 @@ async function startViewer(): Promise<void> {
   viewerState.value = 'loading'
   errorMessage.value = ''
   try {
+    const resources: SpatialResourcePayload[] = source.resources.map((reference) => {
+      const resourceBytes = store.graph.images.get(reference.assetHash)
+      if (!resourceBytes) {
+        throw new Error(`The retained local resource "${reference.uri}" is unavailable.`)
+      }
+      return { ...reference, bytes: resourceBytes }
+    })
     const [loaded, three, controlsModule] = await Promise.all([
-      loadSpatialAsset(bytes, source.format),
+      loadSpatialAsset(bytes, source.format, resources),
       import('three'),
       import('three/addons/controls/OrbitControls.js')
     ])
@@ -256,6 +264,7 @@ onBeforeUnmount(() => disposeViewer('paused'))
     ref="rootRef"
     class="relative size-full overflow-hidden bg-[#09080d]"
     data-test-id="spatial-media-gltf-viewer"
+    :data-format="source.format"
     :data-interactive="interactive"
     :data-element-visible="visible"
     :data-runtime-state="viewerState"
@@ -273,6 +282,14 @@ onBeforeUnmount(() => disposeViewer('paused'))
           class="shrink-0 rounded-full border border-[#a78bfa]/25 px-1.5 py-0.5 text-[8px] font-bold tracking-[0.08em] text-[#b9a8ef]"
         >
           {{ source.format.toUpperCase() }} · SOURCE
+        </span>
+        <span
+          v-if="source.resources.length > 0"
+          class="shrink-0 text-[8px] font-semibold tracking-[0.06em] text-[#8f899a]"
+          :aria-label="`${source.resources.length} retained local model resources`"
+          data-test-id="spatial-media-resource-count"
+        >
+          +{{ source.resources.length }} LOCAL
         </span>
       </div>
       <div class="flex shrink-0 items-center gap-1">

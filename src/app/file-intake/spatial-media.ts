@@ -1,9 +1,18 @@
-import { classifySpatialFile, placeSpatialMediaFiles } from '@/app/spatial-media'
 import { placeSourceObjectFiles } from '@/app/source-object/intake'
+import {
+  claimSpatialMediaFiles,
+  classifySpatialFile,
+  placeSpatialMediaFiles
+} from '@/app/spatial-media'
 
 import type { BoardFileIntakeAdapter } from './registry'
 
 export const spatialMediaFileIntakeAdapter: BoardFileIntakeAdapter = {
+  claimFiles: (files) =>
+    claimSpatialMediaFiles(
+      files,
+      (file) => classifySpatialFile(file).disposition === 'spatial-viewer'
+    ),
   id: 'spatial-media',
   matches: (file) => classifySpatialFile(file).disposition === 'spatial-viewer',
   async placeFiles(editor, files, cx, cy) {

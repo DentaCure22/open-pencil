@@ -6,6 +6,7 @@ import type {
   SpatialAssetFormat,
   SpatialCameraState,
   SpatialMediaSource,
+  SpatialResourceReference,
   ThreeExperienceMetadata
 } from './types'
 
@@ -15,6 +16,7 @@ const KIND_KEY = `${KEY_PREFIX}kind`
 const CAMERA_KEY = `${KEY_PREFIX}camera`
 const HOME_CAMERA_KEY = `${KEY_PREFIX}home-camera`
 const PREVIEW_KEY = `${KEY_PREFIX}preview-asset`
+const RESOURCES_KEY = `${KEY_PREFIX}resources`
 const THREE_EXPERIENCE_KEY = `${KEY_PREFIX}three-experience`
 
 type StoredThreeExperienceMetadata = Omit<Partial<ThreeExperienceMetadata>, 'permission'> & {
@@ -52,6 +54,25 @@ function parseCamera(value: string | null): SpatialCameraState | null {
   }
 }
 
+function parseResources(value: string | null): SpatialResourceReference[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (item): item is SpatialResourceReference =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof Reflect.get(item, 'assetHash') === 'string' &&
+        typeof Reflect.get(item, 'fileName') === 'string' &&
+        typeof Reflect.get(item, 'mimeType') === 'string' &&
+        typeof Reflect.get(item, 'uri') === 'string'
+    )
+  } catch {
+    return []
+  }
+}
+
 export function spatialMediaPluginData(
   existing: PluginDataEntry[],
   input: {
@@ -59,6 +80,7 @@ export function spatialMediaPluginData(
     format?: SpatialAssetFormat
     homeCamera?: SpatialCameraState | null
     previewHash?: string | null
+    resources?: SpatialResourceReference[]
   }
 ): PluginDataEntry[] {
   const next = existing.filter(
@@ -68,12 +90,13 @@ export function spatialMediaPluginData(
   if (input.camera) next.push(entry(CAMERA_KEY, JSON.stringify(input.camera)))
   if (input.homeCamera) next.push(entry(HOME_CAMERA_KEY, JSON.stringify(input.homeCamera)))
   if (input.previewHash) next.push(entry(PREVIEW_KEY, input.previewHash))
+  if (input.resources?.length) next.push(entry(RESOURCES_KEY, JSON.stringify(input.resources)))
   return next
 }
 
 export function spatialMediaSource(node: Pick<SceneNode, 'pluginData'>): SpatialMediaSource | null {
   const format = pluginValue(node, KIND_KEY)
-  if (format !== 'glb' && format !== 'gltf') return null
+  if (format !== 'glb' && format !== 'gltf' && format !== 'obj' && format !== 'stl') return null
   const metadata = readContentSource(node)
   if (!metadata) return null
   const assetHash = assetHashFromReference(metadata.source)
@@ -85,7 +108,8 @@ export function spatialMediaSource(node: Pick<SceneNode, 'pluginData'>): Spatial
     format,
     homeCamera: parseCamera(pluginValue(node, HOME_CAMERA_KEY)),
     metadata,
-    previewHash: pluginValue(node, PREVIEW_KEY)
+    previewHash: pluginValue(node, PREVIEW_KEY),
+    resources: parseResources(pluginValue(node, RESOURCES_KEY))
   }
 }
 

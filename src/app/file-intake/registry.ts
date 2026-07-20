@@ -1,6 +1,12 @@
 import type { Editor } from '@open-pencil/core/editor'
 
+export type BoardFileIntakeClaim = {
+  claimed: File[]
+  remaining: File[]
+}
+
 export type BoardFileIntakeAdapter = {
+  claimFiles?: (files: File[]) => Promise<BoardFileIntakeClaim>
   id: string
   matches: (file: Pick<File, 'name' | 'size' | 'type'>) => boolean
   placeFiles: (editor: Editor, files: File[], cx: number, cy: number) => Promise<string[]>
@@ -22,6 +28,10 @@ export class BoardFileIntakeRegistry {
 
   find(file: Pick<File, 'name' | 'size' | 'type'>): BoardFileIntakeAdapter | null {
     return this.adapters.find((adapter) => adapter.matches(file)) ?? null
+  }
+
+  list(): readonly BoardFileIntakeAdapter[] {
+    return this.adapters
   }
 }
 

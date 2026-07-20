@@ -31,13 +31,11 @@ describe('downloadable source object intake', () => {
     )
   })
 
-  test('keeps office, 3D, and CAD files on the generic boundary when no adapter is registered', () => {
+  test('keeps office and CAD files on the generic boundary while mesh formats use the viewer', () => {
     const names = [
       'forecast.xlsx',
       'brief.docx',
       'review.pptx',
-      'mesh.obj',
-      'mesh.stl',
       'assembly.step',
       'assembly.stp',
       'surface.iges',
@@ -53,7 +51,7 @@ describe('downloadable source object intake', () => {
         reason: 'no-board-adapter'
       })
     }
-    for (const name of ['scene.gltf', 'scene.glb']) {
+    for (const name of ['scene.gltf', 'scene.glb', 'mesh.obj', 'mesh.stl']) {
       expect(classifyBoardFile(new File([], name))).toEqual({
         adapterId: 'spatial-media',
         kind: 'specialized'

@@ -1,5 +1,6 @@
 export * from './classify'
 export * from './intake'
+export * from './resources'
 export * from './source'
 export * from './three-experience'
 export * from './types'
