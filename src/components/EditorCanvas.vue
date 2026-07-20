@@ -27,6 +27,7 @@ import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaborati
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { isHtmlBoardFrame } from '@/app/html-board/workspace'
+import { cadDrawingSource } from '@/app/cad/source'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
 import { mediaEvidenceSource } from '@/app/media-evidence/source'
 import { sourceObjectSource } from '@/app/source-object/source'
@@ -47,6 +48,7 @@ import IconLucidePanelLeft from '~icons/lucide/panel-left'
 import IconLucidePanelRight from '~icons/lucide/panel-right'
 import IconLucidePanelTop from '~icons/lucide/panel-top'
 import AnimatedDitherBackground from './canvas/AnimatedDitherBackground.vue'
+import CadDrawingOverlays from './cad/CadDrawingOverlays.vue'
 import CanvasMenu from './canvas/CanvasMenu.vue'
 import HtmlBoardEmbeds from './canvas/HtmlBoardEmbeds.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
@@ -174,6 +176,7 @@ const prefersNativeHitTarget = computed(() =>
       node &&
       !isSmylrLiveAppFrameNode(node) &&
       !isHtmlBoardFrame(node) &&
+      !cadDrawingSource(node) &&
       !mediaEvidenceSource(node) &&
       !sourceObjectSource(node) &&
       !spatialMediaSource(node)
@@ -222,6 +225,7 @@ const interactionCanvasClass = computed(() =>
           @pointerdown="clearLiveContainerHighlight"
         />
         <MediaEvidenceOverlays />
+        <CadDrawingOverlays />
         <SourceObjectOverlays />
         <SmylrLiveAppEmbed />
         <SmylrPooledLiveAppEmbeds />

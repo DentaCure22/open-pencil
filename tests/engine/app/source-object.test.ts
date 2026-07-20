@@ -31,7 +31,7 @@ describe('downloadable source object intake', () => {
     )
   })
 
-  test('keeps office, 3D, and CAD files on the generic boundary when no adapter is registered', () => {
+  test('keeps unsupported office, 3D, and CAD files on the generic boundary', () => {
     const names = [
       'forecast.xlsx',
       'brief.docx',
@@ -43,7 +43,6 @@ describe('downloadable source object intake', () => {
       'surface.iges',
       'surface.igs',
       'solid.brep',
-      'drawing.dxf',
       'drawing.dwg'
     ]
 
@@ -59,6 +58,10 @@ describe('downloadable source object intake', () => {
         kind: 'specialized'
       })
     }
+    expect(classifyBoardFile(new File([], 'drawing.dxf'))).toEqual({
+      adapterId: 'cad-drawing',
+      kind: 'specialized'
+    })
     expect(classifyBoardFile(new File([], 'photo.png', { type: 'image/png' }))).toEqual({
       kind: 'media',
       mediaKind: 'raster'

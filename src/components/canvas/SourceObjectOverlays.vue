@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { cadFallbackDescription } from '@/app/cad/classify'
 import { useEditorStore } from '@/app/editor/active-store'
 import { sourceObjectSource, type SourceObjectSource } from '@/app/source-object/source'
 
@@ -95,6 +96,10 @@ function byteSize(source: SourceObjectSource): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+function cadFallback(source: SourceObjectSource): string | null {
+  return cadFallbackDescription(source.metadata.format)
+}
 </script>
 
 <template>
@@ -121,13 +126,19 @@ function byteSize(source: SourceObjectSource): string {
         <div
           class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#292535] text-[#b9a7ef]"
         >
-          <icon-lucide-file-archive class="size-5" />
+          <icon-lucide-ruler v-if="cadFallback(item.source)" class="size-5" />
+          <icon-lucide-file-archive v-else class="size-5" />
         </div>
         <div class="min-w-0 flex-1">
           <p class="text-[12px] font-medium text-[#e5e3e9]">Preview unavailable</p>
           <p class="mt-1 text-[10px] leading-4 text-[#aaa7b1]">
-            Original file preserved. Open or download it without losing filename, MIME type, or
-            bytes.
+            <template v-if="cadFallback(item.source)">
+              {{ cadFallback(item.source) }} Original file preserved.
+            </template>
+            <template v-else>
+              Original file preserved. Open or download it without losing filename, MIME type, or
+              bytes.
+            </template>
           </p>
           <p class="mt-2 truncate text-[9px] text-[#7f7b88]">
             {{ item.source.metadata.mimeType }} · {{ byteSize(item.source) }}
@@ -136,7 +147,13 @@ function byteSize(source: SourceObjectSource): string {
       </div>
 
       <footer class="flex h-11 items-center justify-between border-t border-white/8 px-4">
-        <span class="text-[9px] font-medium text-[#8f8a99]">Unsupported board preview</span>
+        <span class="text-[9px] font-medium text-[#8f8a99]">
+          {{
+            cadFallback(item.source)
+              ? 'CAD kernel fallback · exact source retained'
+              : 'Unsupported board preview'
+          }}
+        </span>
         <div
           v-if="isSelected(item.node.id) && assetUrl(item.source)"
           class="pointer-events-auto flex gap-2"

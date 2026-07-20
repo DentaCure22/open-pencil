@@ -92,6 +92,7 @@
     "culori": "^4.0.2",
     "dedent": "^1.7.1",
     "ditherwave": "0.1.0",
+    "dxf-parser": "1.1.2",
     "fflate": "^0.8.2",
     "fzstd": "^0.1.1",
     "html2canvas": "^1.4.1",

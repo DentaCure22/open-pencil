@@ -8,14 +8,21 @@ const KIND = 'downloadable-source'
 const BYTE_LENGTH_KEY = 'byte-length'
 
 const EXTENSION_MIME_TYPES = new Map<string, string>([
+  ['brep', 'model/vnd.opencascade.brep'],
   ['doc', 'application/msword'],
   ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  ['dwg', 'image/vnd.dwg'],
+  ['dxf', 'image/vnd.dxf'],
+  ['iges', 'model/iges'],
+  ['igs', 'model/iges'],
   ['key', 'application/vnd.apple.keynote'],
   ['numbers', 'application/vnd.apple.numbers'],
   ['pages', 'application/vnd.apple.pages'],
   ['ppt', 'application/vnd.ms-powerpoint'],
   ['pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
   ['rtf', 'application/rtf'],
+  ['step', 'model/step'],
+  ['stp', 'model/step'],
   ['tar', 'application/x-tar'],
   ['xls', 'application/vnd.ms-excel'],
   ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],

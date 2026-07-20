@@ -1,5 +1,4 @@
 import type {
-  CadSourceFormat,
   DeferredMeshFormat,
   SpatialFileClassification,
   SpatialViewerClassification
@@ -26,16 +25,6 @@ const VIEWER_EXTENSIONS = new Map<string, SpatialViewerClassification>([
       label: 'Self-contained glTF asset'
     }
   ]
-])
-
-const CAD_EXTENSIONS = new Map<string, CadSourceFormat>([
-  ['brep', 'brep'],
-  ['dwg', 'dwg'],
-  ['dxf', 'dxf'],
-  ['iges', 'iges'],
-  ['igs', 'iges'],
-  ['step', 'step'],
-  ['stp', 'step']
 ])
 
 const DEFERRED_MESH_EXTENSIONS = new Map<string, DeferredMeshFormat>([
@@ -83,19 +72,6 @@ export function classifySpatialFile(
   const viewer = VIEWER_EXTENSIONS.get(fileExtension)
   if (viewer) return viewer
 
-  const cadFormat = CAD_EXTENSIONS.get(fileExtension)
-  if (cadFormat) {
-    return {
-      disposition: 'generic-source',
-      fidelity: { editable: false, topology: 'unverified', units: 'unverified' },
-      format: cadFormat,
-      kind: 'engineering-cad',
-      label: `${cadFormat.toUpperCase()} engineering CAD source`,
-      reason:
-        'Retain exact bytes and download access; preview and native CAD editing wait for topology and unit-fidelity proof.'
-    }
-  }
-
   const meshFormat = DEFERRED_MESH_EXTENSIONS.get(fileExtension)
   if (meshFormat) {
     return {
@@ -110,9 +86,3 @@ export function classifySpatialFile(
 
   return { disposition: 'not-spatial', kind: 'unknown', label: 'Not a spatial source' }
 }
-
-export const CAD_ADAPTER_STAGES = [
-  'Retain exact source bytes, identity, and download access in the generic source object.',
-  'Convert in an isolated worker with a pinned OpenCascade.js build; prove units, assemblies, topology, and deterministic tessellation.',
-  'Expose topology-aware inspection only after fixture round-trips; do not claim native CAD editing before lossless edit/export proof.'
-] as const

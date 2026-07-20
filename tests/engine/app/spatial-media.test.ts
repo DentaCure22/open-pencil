@@ -33,17 +33,15 @@ describe('spatial media classification and source persistence', () => {
     await initCodec()
   })
 
-  test('keeps viewer, authored Three.js, CAD, and deferred meshes distinct', () => {
+  test('keeps viewer, authored Three.js, and deferred meshes distinct', () => {
     expect(classifySpatialFile(new File([], 'model.glb')).disposition).toBe('spatial-viewer')
     expect(classifySpatialFile(new File([], 'scene.gltf')).disposition).toBe('spatial-viewer')
     expect(classifySpatialFile(new File([], 'hero.three.js')).disposition).toBe(
       'three-experience-adapter'
     )
-    const cad = classifySpatialFile(new File([], 'assembly.step'))
-    expect(cad).toMatchObject({
-      disposition: 'generic-source',
-      fidelity: { editable: false, topology: 'unverified', units: 'unverified' },
-      kind: 'engineering-cad'
+    expect(classifySpatialFile(new File([], 'assembly.step'))).toMatchObject({
+      disposition: 'not-spatial',
+      kind: 'unknown'
     })
     expect(classifySpatialFile(new File([], 'scan.stl'))).toMatchObject({
       disposition: 'generic-source',
