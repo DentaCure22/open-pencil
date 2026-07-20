@@ -1,0 +1,115 @@
+import { useFileDialog } from '@vueuse/core'
+
+import { setOpenPencilOpenFileHandler } from '@/app/browser-bridge'
+import { openFileInNewTab } from '@/app/tabs'
+import { isTauri } from '@/app/tauri/env'
+import { IS_BROWSER } from '@/constants'
+
+export const OPENPENCIL_DOCUMENT_EXTENSIONS = [
+  'fig',
+  'pen',
+  'html',
+  'htm',
+  'xhtml',
+  'jsx',
+  'tsx',
+  'md',
+  'markdown',
+  'mdx',
+  'txt',
+  'svg',
+  'json',
+  'csv'
+]
+
+const fileDialog = useFileDialog({
+  accept: OPENPENCIL_DOCUMENT_EXTENSIONS.map((extension) => `.${extension}`).join(','),
+  multiple: false,
+  reset: true
+})
+
+fileDialog.onChange((files) => {
+  const file = files?.[0]
+  if (file) void openFileInNewTab(file)
+})
+
+if (IS_BROWSER && 'window' in globalThis) {
+  setOpenPencilOpenFileHandler(async (path: string) => {
+    const response = await fetch(path)
+    const blob = await response.blob()
+    const name = path.split('/').pop() ?? 'file.fig'
+    const file = new File([blob], name, { type: 'application/octet-stream' })
+    await openFileInNewTab(file, undefined, path)
+  })
+}
+
+export async function readTauriDesignFile(path: string): Promise<File> {
+  const { readFile } = await import('@tauri-apps/plugin-fs')
+  const bytes = await readFile(path)
+  return new File([bytes], path.split('/').pop() ?? 'file.fig')
+}
+
+export async function chooseTauriOpenPath(): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const path = await open({
+    filters: [
+      {
+        name: 'OpenPencil-compatible file',
+        extensions: [...OPENPENCIL_DOCUMENT_EXTENSIONS]
+      }
+    ],
+    multiple: false
+  })
+  return typeof path === 'string' ? path : null
+}
+
+export async function openFileFromPath(path: string) {
+  if (!isTauri()) return
+  const file = await readTauriDesignFile(path)
+  await openFileInNewTab(file, undefined, path)
+}
+
+export async function openFileDialog() {
+  if (isTauri()) {
+    const path = await chooseTauriOpenPath()
+    if (!path) return
+    await openFileFromPath(path)
+    return
+  }
+
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [
+          {
+            description: 'OpenPencil-compatible file',
+            accept: {
+              'application/octet-stream': ['.fig'],
+              'application/json': ['.pen', '.json'],
+              'application/schema+json': ['.json'],
+              'image/svg+xml': ['.svg'],
+              'text/html': ['.html', '.htm'],
+              'application/xhtml+xml': ['.xhtml'],
+              'text/jsx': ['.jsx'],
+              'text/tsx': ['.tsx'],
+              'text/markdown': ['.md', '.markdown', '.mdx'],
+              'text/csv': ['.csv'],
+              'text/plain': ['.pen', '.txt']
+            }
+          }
+        ]
+      })
+      const file = await handle.getFile()
+      await openFileInNewTab(file, handle)
+      return
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
+    }
+  }
+
+  fileDialog.open()
+}
+
+export async function importFileDialog() {
+  await openFileDialog()
+}

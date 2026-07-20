@@ -1,0 +1,391 @@
+import { expect, test, type Page } from '@playwright/test'
+
+import { expectDefined } from '#tests/helpers/assert'
+import { CanvasHelper } from '#tests/helpers/canvas'
+
+async function selectedNodeSnapshot(page: Page) {
+  return page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const selectedId = [...store.state.selectedIds][0]
+    const selected = selectedId ? store.graph.getNode(selectedId) : null
+    return selected
+      ? {
+          id: selected.id,
+          type: selected.type,
+          parentId: selected.parentId,
+          componentId: selected.componentId,
+          pageId: store.state.currentPageId,
+          width: selected.width,
+          childTexts: store.graph
+            .getChildren(selected.id)
+            .filter((child) => child.type === 'TEXT')
+            .map((child) => child.text)
+        }
+      : null
+  })
+}
+
+test('assets expose an honest count and keyboard-accessible row actions', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+  await page.getByTestId('left-panel-assets-tab').click()
+
+  const assetItems = page.getByTestId('asset-item')
+  await expect(page.getByTestId('computed-assets-count')).toContainText(
+    `${await assetItems.count()} shown`
+  )
+  const buttonAsset = page.locator('[data-asset-id="smylr-computed:button"]')
+  await expect(buttonAsset.getByTestId('asset-open')).toHaveAccessibleName(/Button/)
+  await expect(buttonAsset.getByTestId('asset-details')).toHaveRole('button')
+  await expect(buttonAsset.getByTestId('asset-details')).toHaveAccessibleName('Component details')
+  await expect(buttonAsset.getByTestId('asset-insert')).toHaveRole('button')
+  await expect(buttonAsset.getByTestId('asset-insert')).toHaveAccessibleName('Create instance')
+  canvas.assertNoErrors()
+})
+
+test('assets publish a portable library and review imports before applying', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+  await page.getByTestId('left-panel-assets-tab').click()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('assets-publish-library').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('untitled.openpencil-library.json')
+
+  const chooserPromise = page.waitForEvent('filechooser')
+  await page.getByTestId('assets-import-library').click()
+  const chooser = await chooserPromise
+  await chooser.setFiles({
+    name: 'acme.openpencil-library.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        format: 'openpencil/library/v1',
+        library: {
+          key: 'acme-ui',
+          name: 'Acme UI',
+          version: '1.0.0',
+          publishedAt: '2026-07-20T00:00:00.000Z'
+        },
+        components: [],
+        tokens: {
+          $schema: 'https://www.designtokens.org/schemas/2025.10/format.json',
+          $extensions: {},
+          Acme: {
+            color: {
+              accent: {
+                $type: 'color',
+                $value: {
+                  colorSpace: 'srgb',
+                  components: [0.45, 0.25, 0.9],
+                  alpha: 1
+                }
+              }
+            }
+          }
+        },
+        images: {}
+      })
+    )
+  })
+
+  const review = page.getByTestId('assets-library-review')
+  await expect(review).toBeVisible()
+  await expect(review).toContainText('Review library update')
+  await expect(review).toContainText('Acme UI')
+  await expect(review.getByTestId('assets-library-apply')).toBeVisible()
+  await review.getByRole('button', { name: 'Cancel' }).click()
+  await expect(review).toBeHidden()
+  canvas.assertNoErrors()
+})
+
+test('assets panel groups component sets and inserts the default variant', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+
+  const ids = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+
+    const pageNode = store.graph.getNode(store.state.currentPageId)
+    if (!pageNode) throw new Error('Current page not found')
+
+    const set = store.graph.createNode('COMPONENT_SET', pageNode.id, {
+      name: 'Button',
+      x: 80,
+      y: 80,
+      width: 260,
+      height: 100,
+      sourceLibraryKey: 'lk-test-library',
+      symbolDescription: 'Reusable button component',
+      symbolLinks: [{ uri: 'https://example.com/button', displayName: 'Button docs' }],
+      componentPropertyDefinitions: [
+        {
+          id: 'prop:type',
+          name: 'Type',
+          type: 'VARIANT',
+          defaultValue: 'Secondary',
+          variantOptions: ['Primary', 'Secondary']
+        }
+      ]
+    })
+    const primary = store.graph.createNode('COMPONENT', set.id, {
+      name: 'Type=Primary',
+      x: 0,
+      y: 0,
+      width: 96,
+      height: 40,
+      componentPropertyValues: { Type: 'Primary' }
+    })
+    store.graph.createNode('TEXT', primary.id, {
+      name: 'Label',
+      text: 'Primary',
+      width: 72,
+      height: 20
+    })
+    const secondary = store.graph.createNode('COMPONENT', set.id, {
+      name: 'Type=Secondary',
+      x: 120,
+      y: 0,
+      width: 132,
+      height: 40,
+      componentPropertyValues: { Type: 'Secondary' }
+    })
+    store.graph.createNode('TEXT', secondary.id, {
+      name: 'Label',
+      text: 'Secondary',
+      width: 96,
+      height: 20
+    })
+    const duplicateSecondary = store.graph.createNode('COMPONENT', set.id, {
+      name: 'Type=Secondary duplicate',
+      x: 280,
+      y: 0,
+      width: 132,
+      height: 40,
+      componentPropertyValues: { Type: 'Secondary' }
+    })
+    const card = store.graph.createNode('COMPONENT', pageNode.id, {
+      name: 'Card',
+      x: 80,
+      y: 240,
+      width: 160,
+      height: 100
+    })
+    store.requestRender()
+    return {
+      setId: set.id,
+      primaryId: primary.id,
+      secondaryId: secondary.id,
+      duplicateSecondaryId: duplicateSecondary.id,
+      cardId: card.id
+    }
+  })
+  await canvas.waitForRender()
+
+  await page.getByTestId('left-panel-assets-tab').click()
+
+  const assetsPanel = page.getByTestId('assets-panel')
+  const sceneAssetItems = page
+    .getByTestId('asset-item')
+    .and(page.locator('[data-asset-kind="scene"]'))
+  await expect(sceneAssetItems).toHaveCount(2)
+  await expect(assetsPanel).toContainText('Button')
+  await expect(assetsPanel).toContainText('Card')
+  await expect(assetsPanel).not.toContainText('Type=Primary')
+  await expect(assetsPanel).not.toContainText('Type=Secondary')
+  const buttonAsset = page.locator(`[data-asset-id="${ids.setId}"]`)
+  await expect(buttonAsset.getByTestId('asset-open')).toHaveAccessibleName(/Button/)
+  await expect(buttonAsset.getByTestId('asset-details')).toHaveRole('button')
+  await expect(buttonAsset.getByTestId('asset-details')).toHaveAccessibleName('Component details')
+  await expect(buttonAsset.getByTestId('asset-insert')).toHaveRole('button')
+  await expect(buttonAsset.getByTestId('asset-insert')).toHaveAccessibleName('Create instance')
+  await expect(page.getByTestId('computed-assets-count')).toContainText(
+    `${await page.getByTestId('asset-item').count()} shown`
+  )
+  await expect(buttonAsset.getByTestId('asset-variant-summary')).toContainText('Type')
+  await expect(buttonAsset.getByTestId('asset-library-badge')).toContainText('Library')
+  await expect(buttonAsset.getByTestId('asset-description')).toContainText(
+    'Reusable button component'
+  )
+  await expect(buttonAsset.getByTestId('asset-docs')).toBeVisible()
+  await expect(buttonAsset.getByTestId('asset-variant-conflict')).toContainText(
+    'Duplicate variant values'
+  )
+
+  await buttonAsset.getByTestId('asset-details').click()
+  const details = page.getByTestId('asset-details-dialog')
+  await expect(details).toBeVisible()
+  await expect(details).toContainText('Button')
+  await expect(details.getByTestId('asset-details-preview')).toBeVisible()
+  await expect(details.getByTestId('asset-details-preview-image')).toBeVisible()
+  await expect(details.getByTestId('asset-details-description')).toContainText(
+    'Reusable button component'
+  )
+  await expect(details.getByTestId('asset-details-library')).toContainText('lk-test-library')
+  await expect(details.getByTestId('asset-details-docs')).toBeVisible()
+  await expect(details.getByTestId('asset-details-property')).toContainText('Type')
+  await page.getByTestId('asset-details-close').click()
+  await expect(details).toBeHidden()
+
+  await page.getByTestId('assets-search').fill('card')
+  await expect(sceneAssetItems).toHaveCount(1)
+  await expect(assetsPanel).toContainText('Card')
+  await page.locator(`[data-asset-id="${ids.cardId}"]`).getByTestId('asset-insert').click()
+  await canvas.waitForRender()
+
+  const cardInstance = await selectedNodeSnapshot(page)
+  expect(cardInstance?.type).toBe('INSTANCE')
+  expect(cardInstance?.componentId).toBe(ids.cardId)
+
+  await page.getByTestId('assets-search').fill('missing asset')
+  await expect(page.getByTestId('assets-empty')).toBeVisible()
+  await expect(sceneAssetItems).toHaveCount(0)
+
+  await page.getByTestId('assets-search').fill('button')
+  await expect(sceneAssetItems).toHaveCount(1)
+  await page.locator(`[data-asset-id="${ids.setId}"]`).getByTestId('asset-insert').click()
+  await canvas.waitForRender()
+
+  const inserted = await selectedNodeSnapshot(page)
+
+  expect(inserted?.type).toBe('INSTANCE')
+  expect(inserted?.componentId).toBe(ids.secondaryId)
+  expect(inserted?.parentId).toBe(inserted?.pageId)
+  expect(inserted?.width).toBe(132)
+  expect(inserted?.childTexts).toEqual(['Secondary'])
+
+  await expect(page.getByTestId('variant-section')).toBeVisible()
+
+  await page.getByTestId('variant-section').getByRole('combobox').click()
+  await page.getByRole('option', { name: 'Primary' }).click()
+
+  expectDefined(inserted?.id, 'inserted instance id')
+  const switched = await selectedNodeSnapshot(page)
+  expect(switched?.componentId).toBe(ids.primaryId)
+  expect(switched?.width).toBe(96)
+  expect(switched?.childTexts).toEqual(['Primary'])
+
+  canvas.assertNoErrors()
+})
+
+test('assets insertion accounts for entered container coordinates', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+
+  const setup = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    store.state.panX = 0
+    store.state.panY = 0
+    store.state.zoom = 1
+    const pageNode = store.graph.getNode(store.state.currentPageId)
+    if (!pageNode) throw new Error('Current page not found')
+    const frame = store.graph.createNode('FRAME', pageNode.id, {
+      name: 'Target Frame',
+      x: 200,
+      y: 150,
+      width: 300,
+      height: 240
+    })
+    const component = store.graph.createNode('COMPONENT', pageNode.id, {
+      name: 'Panel Card',
+      x: 40,
+      y: 40,
+      width: 120,
+      height: 60
+    })
+    store.state.enteredContainerId = frame.id
+    store.requestRender()
+    return { frameId: frame.id, componentId: component.id }
+  })
+  await canvas.waitForRender()
+
+  await page.getByTestId('left-panel-assets-tab').click()
+  await page.locator(`[data-asset-id="${setup.componentId}"]`).getByTestId('asset-insert').click()
+  await canvas.waitForRender()
+
+  const inserted = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const selectedId = [...store.state.selectedIds][0]
+    const selected = selectedId ? store.graph.getNode(selectedId) : null
+    if (!selected) return null
+    const abs = store.graph.getAbsolutePosition(selected.id)
+    const center = store.screenToCanvas(
+      ...(Object.values(store.viewportCanvasCenter()) as [number, number])
+    )
+    return {
+      parentId: selected.parentId,
+      centerX: abs.x + selected.width / 2,
+      centerY: abs.y + selected.height / 2,
+      expectedCenterX: center.x,
+      expectedCenterY: center.y
+    }
+  })
+
+  expect(inserted?.parentId).toBe(setup.frameId)
+  expect(inserted?.centerX).toBeCloseTo(inserted?.expectedCenterX ?? 0, 1)
+  expect(inserted?.centerY).toBeCloseTo(inserted?.expectedCenterY ?? 0, 1)
+  canvas.assertNoErrors()
+})
+
+test('clicking an asset opens and selects its separate component canvas', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+
+  const ids = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const componentPage = store.graph.addPage('Button')
+    const component = store.graph.createNode('COMPONENT', componentPage.id, {
+      name: 'Button',
+      x: 80,
+      y: 80,
+      width: 120,
+      height: 36,
+      sourceLibraryKey: 'smylr-native',
+      symbolDescription: 'Native Smylr Button · src/components/ui/button.tsx'
+    })
+    store.requestRender()
+    return { componentId: component.id, pageId: componentPage.id }
+  })
+
+  await page.getByTestId('left-panel-assets-tab').click()
+  await page.locator(`[data-asset-id="${ids.componentId}"]`).click()
+  await canvas.waitForRender()
+
+  const opened = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    return {
+      pageId: store.state.currentPageId,
+      selectedIds: [...store.state.selectedIds]
+    }
+  })
+  expect(opened.pageId).toBe(ids.pageId)
+  expect(opened.selectedIds).toEqual([ids.componentId])
+})
+
+test('demo exposes component set assets', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/demo')
+  await canvas.waitForInit()
+
+  await page.getByTestId('left-panel-assets-tab').click()
+  const assetsPanel = page.getByTestId('assets-panel')
+
+  await expect(assetsPanel).toContainText('Button')
+  await expect(assetsPanel).toContainText('2 variants · Variant')
+  await expect(assetsPanel).toContainText('Avatar')
+  await expect(assetsPanel).not.toContainText('Button/Primary')
+
+  canvas.assertNoErrors()
+})

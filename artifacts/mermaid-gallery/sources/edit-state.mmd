@@ -1,9 +1,0 @@
-stateDiagram-v2
-  [*] --> Draft
-  Draft --> InReview : share
-  InReview --> NeedsChanges : revise
-  NeedsChanges --> InReview : update
-  InReview --> Approved : keep
-  Approved --> Promoted : apply
-  Promoted --> [*]
-

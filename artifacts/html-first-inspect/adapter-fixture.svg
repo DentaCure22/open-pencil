@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="520" height="180" viewBox="0 0 520 180">
-  <rect width="520" height="180" rx="24" fill="#f7f7f5"/>
-  <rect x="42" y="56" width="150" height="68" rx="14" fill="#ffffff" stroke="#d7d9df"/>
-  <rect x="328" y="56" width="150" height="68" rx="14" fill="#ffffff" stroke="#d7d9df"/>
-  <path d="M192 90h136" stroke="#3159d9" stroke-width="4"/>
-  <path d="m320 80 12 10-12 10" fill="none" stroke="#3159d9" stroke-width="4"/>
-  <text x="117" y="96" text-anchor="middle" font-family="Inter, sans-serif" font-size="18">Draft</text>
-  <text x="403" y="96" text-anchor="middle" font-family="Inter, sans-serif" font-size="18">Review</text>
-</svg>

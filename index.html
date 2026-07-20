@@ -2,55 +2,120 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Open Pencil — Live App Workspaces</title>
-    <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e1e1e" />
+    <title>OpenPencil</title>
+    <style>
+      :root {
+        --loader-bg: #1e1e1e;
+        --loader-fg: 255, 255, 255;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --loader-bg: #f3f4f6;
+          --loader-fg: 32, 33, 36;
+        }
+      }
+      html[data-theme='dark'] {
+        --loader-bg: #1e1e1e;
+        --loader-fg: 255, 255, 255;
+      }
+      html[data-theme='light'] {
+        --loader-bg: #f3f4f6;
+        --loader-fg: 32, 33, 36;
+      }
+      body { margin: 0; background: var(--loader-bg); }
+      #loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        color: rgb(var(--loader-fg));
+        background: var(--loader-bg);
+        transition: opacity 0.3s;
+      }
+      #loader.fade-out { opacity: 0; pointer-events: none; }
+      #loader svg { width: 32px; height: 32px; opacity: 0.45; }
+      #loader .bar {
+        position: absolute;
+        bottom: 50%;
+        left: 50%;
+        transform: translate(-50%, 40px);
+        width: 100px;
+        height: 2px;
+        background: rgba(var(--loader-fg), 0.08);
+        border-radius: 1px;
+        overflow: hidden;
+      }
+      #loader .bar::after {
+        content: '';
+        display: block;
+        height: 100%;
+        width: 40%;
+        background: rgba(var(--loader-fg), 0.25);
+        border-radius: 1px;
+        animation: slide 1s ease-in-out infinite;
+      }
+      @keyframes slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+      }
+    </style>
   </head>
+
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <span class="mark">P</span>
-          <div><strong>Open Pencil</strong><span>Live App Workspaces</span></div>
-        </div>
-        <div class="workspace-title">
-          <span class="crumb">Workspaces / Dental Chart Improvements</span>
-          <strong>Patient header exploration</strong>
-        </div>
-        <div class="top-actions">
-          <span id="saveState" class="saved-state">Saved locally</span>
-          <button class="button ghost" data-command="reset-demo">Reset demo</button>
-          <button class="button primary" data-command="new-draft">New draft</button>
-        </div>
-      </header>
-
-      <aside class="sidebar">
-        <label class="search"><span>⌕</span><input id="treeSearch" type="search" placeholder="Search project" /></label>
-        <nav id="projectTree" class="project-tree" aria-label="Project folders"></nav>
-        <footer class="sidebar-footer">
-          <div><span class="sync-dot"></span><span>Workspace persistence</span></div>
-          <strong>Local prototype</strong>
-        </footer>
-      </aside>
-
-      <section id="stage" class="stage"></section>
-
-      <aside class="inspector">
-        <div class="inspector-tabs"><button class="active">Design</button><button>Code</button><button>AI</button></div>
-        <div id="inspectorContent" class="inspector-content"></div>
-      </aside>
-    </main>
-
-    <div id="menu" class="menu" hidden></div>
-    <div id="dialogBackdrop" class="dialog-backdrop" hidden>
-      <form id="dialog" class="dialog">
-        <header><div><span id="dialogEyebrow">Create</span><h2 id="dialogTitle">Save state</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></header>
-        <div id="dialogFields"></div>
-        <footer><button type="button" class="button ghost" data-close-dialog>Cancel</button><button id="dialogSubmit" class="button primary" type="submit">Continue</button></footer>
-      </form>
+    <div id="loader">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m15.232 5.232 3.536 3.536m-2.036-5.036a2.5 2.5 0 0 1 3.536 3.536L6.5 21.036H3v-3.572L16.732 3.732Z"/>
+      </svg>
+      <div class="bar"></div>
     </div>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <div id="app"></div>
+    <!-- Failsafe: only clear splash after boot timeout or a hard error (not immediately). -->
+    <script>
+      (function () {
+        function dismiss() {
+          var el = document.getElementById('loader')
+          if (!el) return
+          el.classList.add('fade-out')
+          el.style.pointerEvents = 'none'
+          setTimeout(function () {
+            try {
+              if (el.parentNode) el.parentNode.removeChild(el)
+            } catch (e) {}
+          }, 320)
+        }
+        // Give the module graph time to mount; canvas also dismisses on ready.
+        setTimeout(dismiss, 8000)
+        window.addEventListener('error', function () {
+          setTimeout(dismiss, 50)
+        })
+        window.addEventListener('unhandledrejection', function () {
+          setTimeout(dismiss, 50)
+        })
+        // Kill any stale service workers that pin old broken bundles
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) {
+              r.unregister()
+            })
+          })
+        }
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) {
+              caches.delete(k)
+            })
+          })
+        }
+      })()
+    </script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

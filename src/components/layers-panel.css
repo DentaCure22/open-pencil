@@ -1,0 +1,28 @@
+.layers-panel {
+  position: relative;
+  container-type: inline-size;
+  isolation: isolate;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.layers-panel [data-test-id='layers-scroll'] [data-reka-collection-item] {
+  width: 100%;
+}
+
+@container (max-width: 260px) {
+  .layers-panel__mode,
+  .layers-panel__route {
+    display: none;
+  }
+}
+
+@container (max-width: 210px) {
+  .layers-panel [data-test-id='layers-utilities'] {
+    flex-wrap: wrap;
+  }
+
+  .layers-panel [data-test-id='layers-utilities'] label {
+    flex-basis: 100%;
+  }
+}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "OpenPencil Agent Bridge"
-  short_description: "Use safe semantic controls for OpenPencil agents"
-  default_prompt: "Use $openpencil-agent-bridge to choose and operate the safest OpenPencil agent control surface."

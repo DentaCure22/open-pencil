@@ -1,4 +1,0 @@
-interface:
-  display_name: "OpenPencil Knowledge Canvas"
-  short_description: "Write, map, design, and embed real apps on one canvas"
-  default_prompt: "Use $openpencil-knowledge-canvas to organize this work as a polished typed workspace across document, canvas, graph, design, and live-app views."
