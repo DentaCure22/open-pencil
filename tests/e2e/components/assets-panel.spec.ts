@@ -374,6 +374,134 @@ test('clicking an asset opens and selects its separate component canvas', async 
   expect(opened.selectedIds).toEqual([ids.componentId])
 })
 
+test('variant thumbnails open their source canvas and drag linked instances onto this board', async ({
+  page
+}) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+
+  const ids = await page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const targetPageId = store.state.currentPageId
+    const componentPage = store.graph.addPage('Button components')
+    const set = store.graph.createNode('COMPONENT_SET', componentPage.id, {
+      name: 'Button variants',
+      x: 80,
+      y: 80,
+      width: 280,
+      height: 100,
+      componentPropertyDefinitions: [
+        {
+          id: 'prop:state',
+          name: 'State',
+          type: 'VARIANT',
+          defaultValue: 'Primary',
+          variantOptions: ['Primary', 'Secondary']
+        }
+      ]
+    })
+    const primary = store.graph.createNode('COMPONENT', set.id, {
+      name: 'State=Primary',
+      x: 0,
+      y: 0,
+      width: 104,
+      height: 40,
+      componentPropertyValues: { State: 'Primary' },
+      fills: [
+        {
+          type: 'SOLID',
+          color: { r: 0.36, g: 0.2, b: 0.92, a: 1 },
+          opacity: 1,
+          visible: true
+        }
+      ]
+    })
+    const secondary = store.graph.createNode('COMPONENT', set.id, {
+      name: 'State=Secondary',
+      x: 128,
+      y: 0,
+      width: 120,
+      height: 40,
+      componentPropertyValues: { State: 'Secondary' },
+      fills: [
+        {
+          type: 'SOLID',
+          color: { r: 0.18, g: 0.2, b: 0.24, a: 1 },
+          opacity: 1,
+          visible: true
+        }
+      ]
+    })
+    store.requestRender()
+    await store.switchPage(targetPageId)
+    return {
+      componentPageId: componentPage.id,
+      primaryId: primary.id,
+      secondaryId: secondary.id,
+      setId: set.id,
+      targetPageId
+    }
+  })
+  await canvas.waitForRender()
+
+  await page.getByTestId('left-panel-assets-tab').click()
+  const asset = page.locator(`[data-asset-id="${ids.setId}"]`)
+  await asset.getByTestId('asset-variants-trigger').click()
+  const dropdown = page.getByTestId('asset-variants-dropdown')
+  await expect(dropdown).toBeVisible()
+  await expect(dropdown.getByTestId('asset-variant-item')).toHaveCount(2)
+  await expect(dropdown.locator(`[data-variant-id="${ids.primaryId}"] img`)).toBeVisible()
+
+  await dropdown.locator(`[data-variant-id="${ids.primaryId}"]`).click()
+  await canvas.waitForRender()
+  const opened = await selectedNodeSnapshot(page)
+  expect(opened?.pageId).toBe(ids.componentPageId)
+  expect(opened?.id).toBe(ids.primaryId)
+
+  await page.evaluate(async (targetPageId) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    await store.switchPage(targetPageId)
+  }, ids.targetPageId)
+  await canvas.waitForRender()
+
+  const variantTrigger = page
+    .locator(`[data-asset-id="${ids.setId}"]`)
+    .getByTestId('asset-variants-trigger')
+  await variantTrigger.click()
+  const secondary = page
+    .getByTestId('asset-variants-dropdown')
+    .locator(`[data-variant-id="${ids.secondaryId}"]`)
+  const canvasArea = page.getByTestId('canvas-area')
+  const canvasBounds = await canvasArea.boundingBox()
+  expectDefined(canvasBounds, 'canvas bounds')
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  const dropPoint = {
+    clientX: canvasBounds.x + 540,
+    clientY: canvasBounds.y + 360
+  }
+  await secondary.dispatchEvent('dragstart', { dataTransfer })
+  expect(
+    await dataTransfer.evaluate((value) =>
+      value.getData('application/x-openpencil-component-variant')
+    )
+  ).toContain(ids.secondaryId)
+  await expect(page.getByTestId('canvas-drop-overlay')).toBeVisible()
+  await canvasArea.dispatchEvent('dragenter', { ...dropPoint, dataTransfer })
+  await canvasArea.dispatchEvent('dragover', { ...dropPoint, dataTransfer })
+  await canvasArea.dispatchEvent('drop', { ...dropPoint, dataTransfer })
+  await secondary.dispatchEvent('dragend', { dataTransfer })
+  await canvas.waitForRender()
+
+  const placed = await selectedNodeSnapshot(page)
+  expect(placed?.type).toBe('INSTANCE')
+  expect(placed?.componentId).toBe(ids.secondaryId)
+  expect(placed?.pageId).toBe(ids.targetPageId)
+  canvas.assertNoErrors()
+})
+
 test('demo exposes component set assets', async ({ page }) => {
   const canvas = new CanvasHelper(page)
   await page.goto('/demo')

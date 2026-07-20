@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('source-backed Three.js sample runs with every external request blocked', async ({ page }) => {
-  await page.goto('http://127.0.0.1:1466/?test&html-source')
+  await page.goto('/?test&html-source')
   await page.getByTestId('three-experience-start').click()
   await expect(page.getByTestId('html-board-frame')).toBeVisible()
   const sourceMetadata = await page.evaluate(() => {

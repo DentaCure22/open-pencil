@@ -1,6 +1,6 @@
-import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 
-const editor = useEditorSetup('/?test')
+const editor = useEditorSetupWithClear('/?test')
 
 function assertNoMermaidErrors(): void {
   expect(
@@ -15,9 +15,12 @@ function assertNoMermaidErrors(): void {
 
 test.beforeEach(async () => {
   const menubar = editor.page.locator('[role="menubar"]')
-  if (!(await menubar.isVisible())) {
-    await editor.page.getByTestId('app-menu-toggle').click()
+  const appMenuToggle = editor.page.getByTestId('app-menu-toggle')
+  if (await menubar.isVisible()) {
+    await appMenuToggle.click()
+    await expect(menubar).toBeHidden()
   }
+  await appMenuToggle.click()
   await expect(menubar).toBeVisible()
 })
 
@@ -320,8 +323,14 @@ function getStoreStateNumber(key: 'selectedIds' | 'zoom') {
   }, key)
 }
 
+async function drawRectangleFromToolbar(x: number, y: number, width: number, height: number) {
+  await editor.page.getByRole('button', { name: 'Rectangle', exact: true }).click()
+  await editor.canvas.drag(x, y, x + width, y + height)
+  await editor.canvas.waitForRender()
+}
+
 test('Undo via Edit menu works', async () => {
-  await editor.canvas.drawRect(200, 200, 100, 100)
+  await drawRectangleFromToolbar(520, 400, 100, 100)
   const beforeUndo = await getStoreStateNumber('selectedIds')
   expect(beforeUndo).toBe(1)
 
@@ -334,7 +343,7 @@ test('Undo via Edit menu works', async () => {
 })
 
 test('Duplicate via Edit menu works', async () => {
-  await editor.canvas.drawRect(300, 300, 80, 80)
+  await drawRectangleFromToolbar(560, 440, 80, 80)
 
   const countBefore = await editor.page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
@@ -356,6 +365,7 @@ test('Duplicate via Edit menu works', async () => {
 })
 
 test('Zoom to fit via View menu works', async () => {
+  await drawRectangleFromToolbar(700, 500, 100, 100)
   await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'View' }).click()
   await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Zoom in' }).click()
   await editor.canvas.waitForRender()

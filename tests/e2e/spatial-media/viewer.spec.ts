@@ -17,7 +17,7 @@ async function cameraState(page: Page, nodeId: string) {
 }
 
 test('glTF viewer persists camera state and disposes its offscreen runtime', async ({ page }) => {
-  await page.goto('http://127.0.0.1:1466/?test&no-chrome&no-rulers')
+  await page.goto('/?test&no-chrome&no-rulers')
   const nodeId = await page.evaluate(
     ({ bytes, hash }) => {
       const store = window.openPencil?.getStore?.()
@@ -165,7 +165,7 @@ test('glTF viewer persists camera state and disposes its offscreen runtime', asy
 })
 
 test('invalid glTF reaches an explicit error state and unmounts cleanly', async ({ page }) => {
-  await page.goto('http://127.0.0.1:1466/?test&no-chrome&no-rulers')
+  await page.goto('/?test&no-chrome&no-rulers')
   const nodeId = await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')

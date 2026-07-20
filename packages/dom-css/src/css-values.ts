@@ -1,4 +1,4 @@
-import valueParser, { type ParsedNode } from 'postcss-value-parser'
+import valueParser from 'postcss-value-parser'
 
 import { colorToCSS, parseColor } from '@open-pencil/core/color'
 import type { Effect, Fill, SceneNode, Stroke } from '@open-pencil/scene-graph'
@@ -7,6 +7,8 @@ import type { Color } from '@open-pencil/scene-graph/primitives'
 import type { DesignStyleDeclaration } from './types'
 
 const TRANSPARENT_KEYWORDS = new Set(['transparent', 'rgba(0, 0, 0, 0)', 'rgb(0 0 0 / 0)'])
+
+type ParsedNode = ReturnType<typeof valueParser>['nodes'][number]
 
 export function parseCSSNumber(value: string | undefined): number | null {
   if (!value) return null

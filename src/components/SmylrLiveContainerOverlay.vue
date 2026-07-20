@@ -295,7 +295,7 @@ function beginResize(handle: CornerHandle, event: PointerEvent) {
   event.preventDefault()
   event.stopPropagation()
   const current = translatePair(
-    liveInspectorPatchDraft.value?.styles.translate ?? node.computedStyle?.translate
+    liveInspectorPatchDraft.value?.styles?.translate ?? node.computedStyle?.translate
   )
   resizeDrag.value = {
     baseX: current.x,
@@ -331,7 +331,7 @@ function beginRotate(event: PointerEvent) {
     pointerId: event.pointerId,
     startAngle: Math.atan2(event.clientY - centerClientY, event.clientX - centerClientX),
     startRotation: numericRotation(
-      liveInspectorPatchDraft.value?.styles.rotate ?? node.computedStyle?.rotate
+      liveInspectorPatchDraft.value?.styles?.rotate ?? node.computedStyle?.rotate
     )
   }
   ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
@@ -393,7 +393,7 @@ function beginMove(event: PointerEvent, selectOnClick = false) {
   event.preventDefault()
   event.stopPropagation()
   const current = translatePair(
-    liveInspectorPatchDraft.value?.styles.translate ?? node.computedStyle?.translate
+    liveInspectorPatchDraft.value?.styles?.translate ?? node.computedStyle?.translate
   )
   moveDrag.value = {
     baseX: current.x,

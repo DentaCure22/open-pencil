@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "rendererVersion": "8",
+  "rendererVersion": "9",
   "generatedFrom": {
     "fixtureSource": "docs/design-labs/open-pencil-component-fixtures.json",
     "inventorySource": "docs/design-labs/component-inventory.json",
@@ -18,6 +18,7 @@
       "overlayWidth": 420,
       "overlayHeight": 144,
       "interactionHeight": 180,
+      "variants": [],
       "repository": "Smylr-Elite",
       "inventory": {
         "layer": "primitive",
@@ -32,6 +33,22 @@
       "sourcePath": "src/components/ui/alert.tsx",
       "symbol": "Alert",
       "selector": "[data-slot=alert]",
+      "variants": [
+        {
+          "id": "default",
+          "label": "Default",
+          "props": {
+            "variant": "default"
+          }
+        },
+        {
+          "id": "destructive",
+          "label": "Destructive",
+          "props": {
+            "variant": "destructive"
+          }
+        }
+      ],
       "frameWidth": 560,
       "frameHeight": 280,
       "overlayWidth": 420,
@@ -57,6 +74,7 @@
       "frameHeight": 220,
       "overlayWidth": 48,
       "overlayHeight": 48,
+      "variants": [],
       "interactionHeight": 48,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -72,6 +90,106 @@
       "sourcePath": "src/components/ui/badge.tsx",
       "symbol": "Badge",
       "selector": "[data-slot=badge]",
+      "variants": [
+        {
+          "id": "default",
+          "label": "Default",
+          "props": {
+            "variant": "default"
+          }
+        },
+        {
+          "id": "secondary",
+          "label": "Secondary",
+          "props": {
+            "variant": "secondary"
+          }
+        },
+        {
+          "id": "destructive",
+          "label": "Destructive",
+          "props": {
+            "variant": "destructive"
+          }
+        },
+        {
+          "id": "outline",
+          "label": "Outline",
+          "props": {
+            "variant": "outline"
+          }
+        },
+        {
+          "id": "flat",
+          "label": "Flat",
+          "props": {
+            "variant": "flat"
+          }
+        },
+        {
+          "id": "popped",
+          "label": "Popped",
+          "props": {
+            "variant": "popped"
+          }
+        },
+        {
+          "id": "success",
+          "label": "Success",
+          "props": {
+            "variant": "success"
+          }
+        },
+        {
+          "id": "warning",
+          "label": "Warning",
+          "props": {
+            "variant": "warning"
+          }
+        },
+        {
+          "id": "info",
+          "label": "Info",
+          "props": {
+            "variant": "info"
+          }
+        },
+        {
+          "id": "neutral",
+          "label": "Neutral",
+          "props": {
+            "variant": "neutral"
+          }
+        },
+        {
+          "id": "ghost",
+          "label": "Ghost",
+          "props": {
+            "variant": "ghost"
+          }
+        },
+        {
+          "id": "depth-indent",
+          "label": "Depth: Indent",
+          "props": {
+            "depth": "indent"
+          }
+        },
+        {
+          "id": "depth-pop",
+          "label": "Depth: Pop",
+          "props": {
+            "depth": "pop"
+          }
+        },
+        {
+          "id": "depth-none",
+          "label": "Depth: None",
+          "props": {
+            "depth": "none"
+          }
+        }
+      ],
       "frameWidth": 360,
       "frameHeight": 220,
       "overlayWidth": 88,
@@ -94,6 +212,127 @@
       "sourcePath": "src/components/ui/button.tsx",
       "symbol": "Button",
       "selector": "[data-slot=button]",
+      "variants": [
+        {
+          "id": "default",
+          "label": "Default",
+          "props": {
+            "variant": "default"
+          }
+        },
+        {
+          "id": "destructive",
+          "label": "Destructive",
+          "props": {
+            "variant": "destructive"
+          }
+        },
+        {
+          "id": "success",
+          "label": "Success",
+          "props": {
+            "variant": "success"
+          }
+        },
+        {
+          "id": "warning",
+          "label": "Warning",
+          "props": {
+            "variant": "warning"
+          }
+        },
+        {
+          "id": "outline",
+          "label": "Outline",
+          "props": {
+            "variant": "outline"
+          }
+        },
+        {
+          "id": "flat",
+          "label": "Flat",
+          "props": {
+            "variant": "flat"
+          }
+        },
+        {
+          "id": "secondary",
+          "label": "Secondary",
+          "props": {
+            "variant": "secondary"
+          }
+        },
+        {
+          "id": "selected",
+          "label": "Selected",
+          "props": {
+            "variant": "selected"
+          }
+        },
+        {
+          "id": "ghost",
+          "label": "Ghost",
+          "props": {
+            "variant": "ghost"
+          }
+        },
+        {
+          "id": "soft",
+          "label": "Soft",
+          "props": {
+            "variant": "soft"
+          }
+        },
+        {
+          "id": "link",
+          "label": "Link",
+          "props": {
+            "variant": "link"
+          }
+        },
+        {
+          "id": "size-sm",
+          "label": "Size: Small",
+          "props": {
+            "size": "sm"
+          }
+        },
+        {
+          "id": "size-xs",
+          "label": "Size: Extra small",
+          "props": {
+            "size": "xs"
+          }
+        },
+        {
+          "id": "size-lg",
+          "label": "Size: Large",
+          "props": {
+            "size": "lg"
+          }
+        },
+        {
+          "id": "size-icon",
+          "label": "Size: Icon",
+          "props": {
+            "size": "icon"
+          }
+        },
+        {
+          "id": "size-icon-sm",
+          "label": "Size: Small icon",
+          "props": {
+            "size": "icon-sm"
+          }
+        },
+        {
+          "id": "size-icon-tab",
+          "label": "Size: Tab icon",
+          "props": {
+            "size": "icon-tab"
+          }
+        }
+      ],
       "frameWidth": 400,
       "frameHeight": 240,
       "overlayWidth": 132,
@@ -120,6 +359,7 @@
       "frameHeight": 520,
       "overlayWidth": 280,
       "overlayHeight": 300,
+      "variants": [],
       "interactionHeight": 300,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -139,6 +379,7 @@
       "frameHeight": 420,
       "overlayWidth": 432,
       "overlayHeight": 166,
+      "variants": [],
       "interactionHeight": 166,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -158,6 +399,7 @@
       "frameHeight": 220,
       "overlayWidth": 24,
       "overlayHeight": 24,
+      "variants": [],
       "interactionHeight": 24,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -178,6 +420,7 @@
       "overlayWidth": 168,
       "overlayHeight": 40,
       "interactionHeight": 220,
+      "variants": [],
       "repository": "Smylr-Elite",
       "inventory": {
         "layer": "primitive",
@@ -196,6 +439,7 @@
       "frameHeight": 240,
       "overlayWidth": 320,
       "overlayHeight": 40,
+      "variants": [],
       "interactionHeight": 40,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -215,6 +459,7 @@
       "frameHeight": 220,
       "overlayWidth": 320,
       "overlayHeight": 8,
+      "variants": [],
       "interactionHeight": 8,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -234,6 +479,7 @@
       "frameHeight": 260,
       "overlayWidth": 280,
       "overlayHeight": 80,
+      "variants": [],
       "interactionHeight": 80,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -254,6 +500,7 @@
       "overlayWidth": 256,
       "overlayHeight": 40,
       "interactionHeight": 240,
+      "variants": [],
       "repository": "Smylr-Elite",
       "inventory": {
         "layer": "primitive",
@@ -268,6 +515,36 @@
       "sourcePath": "src/components/ui/separator.tsx",
       "symbol": "Separator",
       "selector": "[data-slot=separator]",
+      "variants": [
+        {
+          "id": "default",
+          "label": "Default",
+          "props": {
+            "variant": "default"
+          }
+        },
+        {
+          "id": "indent",
+          "label": "Indent",
+          "props": {
+            "variant": "indent"
+          }
+        },
+        {
+          "id": "thin-indent",
+          "label": "Thin indent",
+          "props": {
+            "variant": "thinIndent"
+          }
+        },
+        {
+          "id": "pop",
+          "label": "Pop",
+          "props": {
+            "variant": "pop"
+          }
+        }
+      ],
       "frameWidth": 560,
       "frameHeight": 220,
       "overlayWidth": 320,
@@ -293,6 +570,7 @@
       "frameHeight": 220,
       "overlayWidth": 320,
       "overlayHeight": 24,
+      "variants": [],
       "interactionHeight": 24,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -312,6 +590,7 @@
       "frameHeight": 220,
       "overlayWidth": 44,
       "overlayHeight": 24,
+      "variants": [],
       "interactionHeight": 24,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -331,6 +610,7 @@
       "frameHeight": 520,
       "overlayWidth": 720,
       "overlayHeight": 210,
+      "variants": [],
       "interactionHeight": 210,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -350,6 +630,7 @@
       "frameHeight": 280,
       "overlayWidth": 360,
       "overlayHeight": 96,
+      "variants": [],
       "interactionHeight": 96,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -369,6 +650,7 @@
       "frameHeight": 320,
       "overlayWidth": 360,
       "overlayHeight": 92,
+      "variants": [],
       "interactionHeight": 92,
       "repository": "Smylr-Elite",
       "inventory": {
@@ -389,6 +671,7 @@
       "overlayWidth": 128,
       "overlayHeight": 40,
       "interactionHeight": 120,
+      "variants": [],
       "repository": "Smylr-Elite",
       "inventory": {
         "layer": "primitive",

@@ -14,6 +14,7 @@ export {
   toDesignNode
 } from './to-design-document'
 export {
+  cloneSmylrSceneNodeIntoGraph,
   copySmylrLiveContainerGraphResources,
   smylrLiveContainerToSceneGraph
 } from './to-scene-graph'

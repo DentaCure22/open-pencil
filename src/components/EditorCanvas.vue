@@ -22,6 +22,7 @@ import {
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
 import { useEditorStore } from '@/app/editor/active-store'
+import { useAssetVariantDrop } from '@/app/editor/assets/drag'
 import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaboration-awareness'
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
@@ -64,6 +65,7 @@ const { ditherPresentation = 'overlay' } = defineProps<{
 
 const store = useEditorStore()
 const collab = useCollabInjected()
+const canvasAreaRef = ref<HTMLDivElement | null>(null)
 const sceneCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
@@ -99,6 +101,13 @@ const {
 
 useTextEdit(canvasRef, store)
 const { isDraggingOver } = useFileIntakeDrop(canvasRef, store)
+const {
+  isDraggingAssetVariant,
+  onDragEnter: onAssetVariantDragEnter,
+  onDragLeave: onAssetVariantDragLeave,
+  onDragOver: onAssetVariantDragOver,
+  onDrop: onAssetVariantDrop
+} = useAssetVariantDrop(canvasAreaRef, store)
 
 const paddingSideIcons = {
   top: IconLucidePanelTop,
@@ -188,8 +197,13 @@ const interactionCanvasClass = computed(() =>
       @contextmenu="selectAtContextPoint"
     >
       <div
+        ref="canvasAreaRef"
         data-test-id="canvas-area"
         class="canvas-area relative isolate h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden overscroll-none"
+        @dragenter="onAssetVariantDragEnter"
+        @dragleave="onAssetVariantDragLeave"
+        @dragover="onAssetVariantDragOver"
+        @drop="onAssetVariantDrop"
       >
         <!-- Scene stays transparent so the dither can sit behind native objects; live iframe is z-[5]. -->
         <canvas
@@ -221,8 +235,10 @@ const interactionCanvasClass = computed(() =>
           leave-to-class="opacity-0"
         >
           <div
-            v-if="isDraggingOver"
-            class="pointer-events-none absolute inset-0 z-40 border-2 border-dashed border-accent/60 bg-accent/5"
+            v-if="isDraggingOver || isDraggingAssetVariant"
+            data-test-id="canvas-drop-overlay"
+            class="absolute inset-0 z-40 border-2 border-dashed border-accent/60 bg-accent/5"
+            :class="isDraggingAssetVariant ? 'pointer-events-auto' : 'pointer-events-none'"
           />
         </Transition>
         <PopoverRoot :open="!!autoLayoutPaddingEdit">

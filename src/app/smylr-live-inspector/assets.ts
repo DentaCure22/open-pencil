@@ -48,25 +48,27 @@ export function findSmylrComputedComponentAsset(
   sourcePath: string
 ): SmylrLiveComponentAsset | null {
   const expectedSlot = componentSlotName(name)
-  let exact: SmylrLiveContainerNode | null = null
-  let related: SmylrLiveContainerNode | null = null
+  const exact: SmylrLiveContainerNode[] = []
+  const related: SmylrLiveContainerNode[] = []
 
-  const keepLargest = (
-    current: SmylrLiveContainerNode | null,
-    candidate: SmylrLiveContainerNode
-  ) => (!current || nodeArea(candidate) > nodeArea(current) ? candidate : current)
+  const largest = (nodes: SmylrLiveContainerNode[]): SmylrLiveContainerNode | null =>
+    nodes.reduce<SmylrLiveContainerNode | null>(
+      (current, candidate) =>
+        !current || nodeArea(candidate) > nodeArea(current) ? candidate : current,
+      null
+    )
 
   const visit = (node: SmylrLiveContainerNode) => {
     const slot = node.attrs?.['data-slot']?.toLowerCase()
-    if (slot === expectedSlot) exact = keepLargest(exact, node)
+    if (slot === expectedSlot) exact.push(node)
     else if (slot?.startsWith(`${expectedSlot}-`)) {
-      related = keepLargest(related, node)
+      related.push(node)
     }
     for (const child of node.children ?? []) visit(child)
   }
 
   visit(document.tree)
-  const node = exact ?? related
+  const node = largest(exact) ?? largest(related)
   if (!node) return null
   return {
     id: `smylr-computed:${expectedSlot}:${node.id}`,

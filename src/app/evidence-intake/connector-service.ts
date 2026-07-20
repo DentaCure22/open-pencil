@@ -97,7 +97,8 @@ export async function collectEvidenceWithConnectors(
     const grantedScopes = requestedScopes.filter((scope) => input.grant.scopes.includes(scope))
     const providerRunId = `evidence-provider-run_${stablePart(input.collectionId)}-${stablePart(request.id)}`
     const missingScope = grantedScopes.length !== requestedScopes.length
-    const unsupported = !descriptor.capabilities.evidenceRead || !connector.readEvidence
+    const readEvidence = connector.readEvidence
+    const unsupported = !descriptor.capabilities.evidenceRead || !readEvidence
     if (missingScope || unsupported) {
       const item = redactedConnectorItem({
         id: request.id,
@@ -140,7 +141,7 @@ export async function collectEvidenceWithConnectors(
     let failureProviderRequestId: string | undefined
     let failureResponseStatus: number | undefined
     try {
-      const result = await connector.readEvidence({ grantedScopes, now: retrievedAt, request })
+      const result = await readEvidence({ grantedScopes, now: retrievedAt, request })
       transport = result.transport
       item = {
         access: 'allowed',

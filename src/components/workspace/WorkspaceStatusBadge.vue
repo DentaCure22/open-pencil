@@ -12,9 +12,12 @@ type WorkspaceStatus =
   | 'applied'
   | 'archived'
   | 'authorized'
+  | 'decided'
+  | 'in-review'
   | 'proposed'
   | 'required'
   | 'restored'
+  | 'revised'
   | 'rollback-failed'
   | 'rolled-back'
 

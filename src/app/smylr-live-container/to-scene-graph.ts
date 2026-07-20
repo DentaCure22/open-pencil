@@ -17,7 +17,7 @@ export function copySmylrLiveContainerGraphResources(source: SceneGraph, target:
     target.activeMode.set(collectionId, modeId)
 }
 
-function cloneIntoGraph(
+export function cloneSmylrSceneNodeIntoGraph(
   source: SceneGraph,
   sourceNode: SceneNode,
   target: SceneGraph,
@@ -27,7 +27,7 @@ function cloneIntoGraph(
 
   for (const childId of sourceNode.childIds) {
     const child = source.getNode(childId)
-    if (child) cloneIntoGraph(source, child, target, clone.id)
+    if (child) cloneSmylrSceneNodeIntoGraph(source, child, target, clone.id)
   }
 
   return clone
@@ -156,7 +156,7 @@ export function smylrLiveContainerToSceneGraph(document: SmylrLiveContainerDocum
     })
 
     for (const child of sourceGraph.getChildren(sourcePage.id)) {
-      cloneIntoGraph(sourceGraph, child, graph, targetPage.id)
+      cloneSmylrSceneNodeIntoGraph(sourceGraph, child, graph, targetPage.id)
     }
   })
 

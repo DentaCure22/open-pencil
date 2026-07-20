@@ -2,11 +2,11 @@
 import { useEditorStore } from '@/app/editor/active-store'
 import { nodeIcon } from '@/app/editor/icons'
 import { openExternalLink, toast } from '@/app/shell/ui'
+import { SMYLR_COMPUTED_ASSETS } from '@/app/smylr-component-library/computed-catalog'
 import {
-  SMYLR_COMPUTED_ASSETS,
-  type SmylrComputedAssetDefinition
-} from '@/app/smylr-component-library/computed-catalog'
-import { ensureSmylrLiveComponentCanvas } from '@/app/smylr-component-library/live-component-canvas'
+  ensureSmylrLiveComponentCanvas,
+  placeSmylrLiveComponentVariant
+} from '@/app/smylr-component-library/live-component-canvas'
 import {
   setLiveInspectorActiveFrame,
   setLiveInspectorInteractionMode
@@ -34,37 +34,16 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useFileDialog } from '@vueuse/core'
 import AppInput from '@/components/ui/AppInput.vue'
 import Tip from '@/components/ui/Tip.vue'
+import AssetVariantDropdown from '@/components/assets/AssetVariantDropdown.vue'
+import type {
+  AssetVariant,
+  ComputedAsset,
+  LocalAsset,
+  SceneAsset,
+  SceneAssetVariant
+} from '@/components/assets/types'
 import { useButtonUI } from '@/components/ui/button'
 import { useDialogUI } from '@/components/ui/dialog'
-
-type SceneAsset = {
-  id: string
-  kind: 'scene'
-  name: string
-  node: SceneNode
-  componentId: string | null
-  variants: Array<{ name: string; values: string[] }>
-  variantCount: number
-  hasConflicts: boolean
-  sourceLibraryKey: string | null
-  description: string
-  docsUrl: string | null
-  sourcePath: string | null
-}
-
-type ComputedAsset = SmylrComputedAssetDefinition & {
-  id: string
-  kind: 'computed'
-  componentId: null
-  variants: []
-  variantCount: 0
-  hasConflicts: false
-  sourceLibraryKey: 'smylr-computed'
-  description: string
-  docsUrl: null
-}
-
-type LocalAsset = SceneAsset | ComputedAsset
 
 const editor = useEditorStore()
 const { panels, commands } = useI18n()
@@ -164,6 +143,33 @@ function componentSetVariantInfo(componentSetId: string) {
   }))
 }
 
+function sceneVariantItems(componentSetId: string): SceneAssetVariant[] {
+  return editor.graph
+    .getChildren(componentSetId)
+    .filter((node) => node.type === 'COMPONENT')
+    .map((node) => ({
+      componentId: node.id,
+      id: node.id,
+      kind: 'scene' as const,
+      label: node.name
+    }))
+}
+
+function computedVariantAxes(asset: (typeof SMYLR_COMPUTED_ASSETS)[number]) {
+  const axes = new Map<string, Set<string>>()
+  for (const variant of asset.variants) {
+    for (const [name, value] of Object.entries(variant.props)) {
+      const values = axes.get(name) ?? new Set<string>()
+      values.add(value)
+      axes.set(name, values)
+    }
+  }
+  return [...axes].map(([name, values]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    values: [...values]
+  }))
+}
+
 function sourcePathFor(node: SceneNode) {
   return (
     node.pluginData.find(
@@ -190,15 +196,17 @@ const sceneAssets = computed<SceneAsset[]>(() => {
         node.type === 'COMPONENT_SET' ? editor.getDefaultVariantForComponentSet(node.id) : node
       const conflicts =
         node.type === 'COMPONENT_SET' ? editor.getComponentSetVariantConflicts(node.id) : []
-      const variants = node.type === 'COMPONENT_SET' ? componentSetVariantInfo(node.id) : []
+      const variantAxes = node.type === 'COMPONENT_SET' ? componentSetVariantInfo(node.id) : []
+      const variantItems = node.type === 'COMPONENT_SET' ? sceneVariantItems(node.id) : []
       return {
         id: node.id,
         kind: 'scene' as const,
         name: node.name,
         node,
         componentId: defaultVariant?.id ?? null,
-        variants,
-        variantCount: node.type === 'COMPONENT_SET' ? node.childIds.length : 0,
+        variantAxes,
+        variantCount: variantItems.length,
+        variantItems,
         hasConflicts: conflicts.length > 0,
         sourceLibraryKey: node.sourceLibraryKey,
         description: node.symbolDescription,
@@ -215,8 +223,13 @@ const computedAssets = computed<ComputedAsset[]>(() => {
     id: `smylr-computed:${asset.fixtureId}`,
     kind: 'computed' as const,
     componentId: null,
-    variants: [],
-    variantCount: 0,
+    variantAxes: computedVariantAxes(asset),
+    variantCount: asset.variants.length,
+    variantItems: asset.variants.map((variant) => ({
+      ...variant,
+      fixtureId: asset.fixtureId,
+      kind: 'computed' as const
+    })),
     hasConflicts: false,
     sourceLibraryKey: 'smylr-computed' as const,
     description: `Live from ${asset.sourcePath}`,
@@ -244,6 +257,10 @@ const selectedAsset = computed(
 const selectedPreviewNodeId = computed(() =>
   selectedAsset.value?.kind === 'scene' ? selectedAsset.value.componentId : null
 )
+
+function assetVariantNames(asset: LocalAsset): string {
+  return asset.variantAxes.map((variant) => variant.name).join(', ')
+}
 
 function revokePreview() {
   if (!previewUrl.value) return
@@ -297,25 +314,30 @@ function pageIdForNode(node: SceneNode) {
   return null
 }
 
-async function openSceneAssetCanvas(asset: SceneAsset) {
+async function openSceneAssetCanvas(asset: SceneAsset, variant?: SceneAssetVariant) {
   detailsOpen.value = false
-  const pageId = pageIdForNode(asset.node)
+  const target = variant ? editor.graph.getNode(variant.componentId) : asset.node
+  if (!target) return toast.warning('This component variant is not available')
+  const pageId = pageIdForNode(target)
   if (!pageId) return toast.warning('This component canvas is not available')
   await editor.switchPage(pageId)
   editor.setTool('SELECT')
-  editor.select([asset.node.id])
+  editor.select([target.id])
   await nextTick()
   editor.zoomToSelection()
-  toast.info(`${asset.name} component canvas opened`)
+  toast.info(`${variant?.label ?? asset.name} component canvas opened`)
 }
 
-async function openLiveComponentAsset(asset: ComputedAsset) {
+async function openLiveComponentAsset(asset: ComputedAsset, variantId?: string) {
+  const openId = variantId ? `${asset.id}:${variantId}` : asset.id
   if (openingAssetId.value) return
-  openingAssetId.value = asset.id
+  openingAssetId.value = openId
   assetOpenError.value = null
-  toast.info(`Opening the live ${asset.name} component…`)
+  const variant = asset.variants.find((candidate) => candidate.id === variantId)
+  const displayName = variant ? `${asset.name} ${variant.label}` : asset.name
+  toast.info(`Opening the live ${displayName} component…`)
   try {
-    const { page, frame } = ensureSmylrLiveComponentCanvas(editor, asset)
+    const { page, frame } = ensureSmylrLiveComponentCanvas(editor, asset, variantId)
     await editor.switchPage(page.id)
     editor.state.enteredContainerId = null
     editor.select([frame.id])
@@ -323,7 +345,7 @@ async function openLiveComponentAsset(asset: ComputedAsset) {
     setLiveInspectorInteractionMode('interact')
     await nextTick()
     await fitSmylrPageToViewport(editor, [frame.id], { settle: false })
-    toast.info(`${asset.name} live component canvas opened`)
+    toast.info(`${displayName} live component canvas opened`)
   } catch (error) {
     console.warn('[Smylr computed asset]', error)
     assetOpenError.value = error instanceof Error ? error.message : `Could not open ${asset.name}`
@@ -336,6 +358,16 @@ async function openLiveComponentAsset(asset: ComputedAsset) {
 async function openAssetCanvas(asset: LocalAsset) {
   if (asset.kind === 'computed') return openLiveComponentAsset(asset)
   return openSceneAssetCanvas(asset)
+}
+
+async function openAssetVariant(asset: LocalAsset, variant: AssetVariant) {
+  if (asset.kind === 'computed' && variant.kind === 'computed') {
+    await openLiveComponentAsset(asset, variant.id)
+    return
+  }
+  if (asset.kind === 'scene' && variant.kind === 'scene') {
+    await openSceneAssetCanvas(asset, variant)
+  }
 }
 
 function insertionPoint(component: SceneNode, parentId: string) {
@@ -353,7 +385,9 @@ function insertionPoint(component: SceneNode, parentId: string) {
 
 async function insertAsset(asset: LocalAsset) {
   if (asset.kind === 'computed') {
-    await openLiveComponentAsset(asset)
+    const canvasCenter = editor.viewportCanvasCenter()
+    const center = editor.screenToCanvas(canvasCenter.x, canvasCenter.y)
+    placeSmylrLiveComponentVariant(editor, asset, undefined, center.x, center.y)
     return
   }
   if (!asset.componentId) return
@@ -483,14 +517,14 @@ async function insertSelectedAsset() {
               {{ asset.sourcePath }}
             </span>
             <span
-              v-if="asset.variants.length > 0"
+              v-if="asset.variantAxes.length > 0"
               data-test-id="asset-variant-summary"
               class="text-muted mt-0.5 block truncate text-[10px]"
             >
               {{
                 panels.assetVariantSummary({
                   count: asset.variantCount,
-                  names: asset.variants.map((variant) => variant.name).join(', ')
+                  names: assetVariantNames(asset)
                 })
               }}
             </span>
@@ -510,6 +544,11 @@ async function insertSelectedAsset() {
             </span>
           </span>
         </button>
+        <AssetVariantDropdown
+          v-if="asset.variantItems.length > 0"
+          :asset="asset"
+          @open-variant="openAssetVariant(asset, $event)"
+        />
         <Tip v-if="asset.docsUrl" :label="panels.openDocumentation">
           <button
             type="button"
@@ -634,7 +673,11 @@ async function insertSelectedAsset() {
                 class="mt-3 w-full"
                 @click="insertSelectedAsset"
               >
-                {{ selectedAsset.kind === 'computed' ? 'Open live canvas' : panels.insertInstance }}
+                {{
+                  selectedAsset.kind === 'computed'
+                    ? 'Insert live component'
+                    : panels.insertInstance
+                }}
               </button>
             </div>
 
@@ -676,13 +719,13 @@ async function insertSelectedAsset() {
                 </button>
               </section>
 
-              <section v-if="selectedAsset.variants.length > 0">
+              <section v-if="selectedAsset.variantAxes.length > 0">
                 <h3 class="text-muted text-[11px] font-medium tracking-wider uppercase">
                   {{ panels.properties }}
                 </h3>
                 <div class="mt-2 flex flex-col gap-2">
                   <div
-                    v-for="variant in selectedAsset.variants"
+                    v-for="variant in selectedAsset.variantAxes"
                     :key="variant.name"
                     data-test-id="asset-details-property"
                     class="border-border bg-input/40 rounded border px-2 py-1.5"

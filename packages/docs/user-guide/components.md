@@ -23,7 +23,18 @@ Select two or more components and press <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd>
 
 Right-click a component and select **Create instance** from the context menu. The instance appears 40 px to the right of the source component, visually identical.
 
-Instance creation is available only through the context menu — there's no toolbar button.
+You can also create a linked instance from **Assets**; there is no permanent toolbar button.
+
+## Using Variants from Assets
+
+Open **Assets** and choose the variant-grid button beside a component set or connected source component. The dropdown shows a visual preview for every available variant.
+
+- Click a preview to open and select that exact variant on its source canvas.
+- Drag a preview onto the active Board to place it where you drop it.
+- Canvas-native variants remain linked instances of their component master.
+- Connected Smylr variants remain live, source-backed frames rather than frozen screenshots.
+
+Placing a variant is one undoable action. Opening a variant reuses its existing component canvas instead of copying the master onto another Board.
 
 ## Portable Design Libraries
 

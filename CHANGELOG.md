@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Show component variants as visual thumbnails in Assets, open each variant on its source canvas, and drag linked native or source-backed variants onto the active Board with normal undo/redo.
+- Reconcile editable Mermaid, JSON, CSV, and SVG projections against their retained source so unchanged files save exact bytes and native edits surface an explicit current/conflict state.
+- Route PDF, video, audio, large raster, code, office, CAD, and other unsupported files through one source-backed intake boundary that preserves filename, MIME type, exact bytes, undo/redo, and native document reopen.
+- Add offline authored Three.js experiences plus GLB and self-contained glTF viewing with persisted camera state and bounded cleanup; unsupported CAD and external-resource models remain honest retained-source fallbacks.
 - Add portable OpenPencil design-library publishing and review-before-apply imports for local components and DTCG design tokens, preserving component instance links, modes, aliases, bindings, and embedded images while keeping connected Smylr assets source-backed.
 - Turn the Dental Chart Flow Board into an editable app-screen journey: four real web screens now read left to right through labeled action arrows, with explicit start, finish, and return-to-edit paths; moving a screen reattaches its native labels and connectors, and first entry fits the whole journey instead of one isolated state.
 - Project one stable Smylr alternate and exact lifecycle revision through Current, Flow, Focus, Compare, Knowledge, and Review, using real product artifacts, typed intent/evidence lineage, latest transition receipts, normal Undo, and independent per-view movement memory.
