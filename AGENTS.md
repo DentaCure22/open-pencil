@@ -221,6 +221,14 @@ Self-review checklist:
 ## Rendering
 
 - Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM
+- Trusted app-like board content uses one **Code Object** contract under `src/app/code-object/`:
+  an ordinary persisted `FRAME` owns its editable TypeScript/TSX source, name, serializable
+  properties/state, attachments, Design/Interact, transforms, undo, duplication, connectors, and
+  persistence. Presets insert that same frame-owned contract; compatibility adapters may preserve
+  older component behavior but are not a separate product/data type. ReactDOM is the internal
+  renderer, not a separate scene-node or product object type. Nested components stay inside one
+  frame/root. Mermaid creates native nodes/connectors. Iframes are reserved for external/untrusted
+  embeds. Keep `src/app/live-react-surface/` read-compatibility only.
 - `renderVersion` vs `sceneVersion`: `renderVersion` = canvas repaint (pan/zoom/hover); `sceneVersion` = scene graph mutations. UI that only cares about graph data should avoid watching repaint-only state; use editor events for incremental surfaces such as the layer tree.
 - `requestRender()` bumps both counters; `requestRepaint()` bumps only `renderVersion`
 - `renderNow()` is only for surface recreation and font loading (need immediate draw)

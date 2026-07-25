@@ -104,11 +104,7 @@ function relativeRect(rect: IntentRect, parent?: IntentRect): SmylrLiveContainer
 function edgeStyle(prefix: 'border' | 'padding', edges: IntentEdges) {
   const suffix = prefix === 'border' ? '-width' : ''
 
-  if (
-    edges.top === edges.right &&
-    edges.right === edges.bottom &&
-    edges.bottom === edges.left
-  ) {
+  if (edges.top === edges.right && edges.right === edges.bottom && edges.bottom === edges.left) {
     return {
       [prefix === 'border' ? 'border-width' : 'padding']: px(edges.top)
     }

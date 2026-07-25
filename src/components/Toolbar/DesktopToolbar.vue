@@ -3,7 +3,6 @@ import Tip from '@/components/ui/Tip.vue'
 import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import ToolFlyout from '@/components/Toolbar/ToolFlyout.vue'
-import TraceControls from '@/components/narrated-trace/TraceControls.vue'
 import TraceAnnotationControls from '@/components/narrated-trace/TraceAnnotationControls.vue'
 import { narratedTraceAnnotationTool, setNarratedTraceAnnotationTool } from '@/app/narrated-trace'
 import { toolbarToolTestId, ToolbarItem } from '@open-pencil/vue'
@@ -90,7 +89,6 @@ function selectEditorTool(tool: Tool) {
       </template>
       <slot name="workspace" />
       <TraceAnnotationControls />
-      <TraceControls />
       <span class="mx-0.5 h-6 w-px self-center bg-border" aria-hidden="true" />
       <CollabPanel />
     </div>

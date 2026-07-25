@@ -23,7 +23,8 @@ const smylrEmbed = Boolean(process.env.SMYLR_OPENPENCIL_BASE) || base.includes('
 export default defineConfig(async ({ command }) => ({
   base,
   resolve: {
-    alias: createOpenPencilAliases(__dirname)
+    alias: createOpenPencilAliases(__dirname),
+    dedupe: ['@univerjs/core', '@wendellhu/redi', 'react', 'react-dom', 'rxjs']
   },
   define: {
     __OPENPENCIL_APP_VERSION__: JSON.stringify(packageJson.version),

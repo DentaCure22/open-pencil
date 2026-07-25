@@ -1,4 +1,5 @@
 import type { LearningReceipt } from '@/app/workspace'
+
 import type {
   DogfoodRun,
   ComposedExperienceFieldGateDefinition,
@@ -6,7 +7,7 @@ import type {
   IntentExperienceFieldGateDefinition,
   IntentExperienceFieldGateEvaluation,
   PromotionGateDefinition,
-  PromotionGateEvaluation,
+  PromotionGateEvaluation
 } from './types'
 
 const isPassingRun = (run: DogfoodRun, maximumRepairCount: number) =>
@@ -21,11 +22,7 @@ const hasModelId = (run: DogfoodRun): run is DogfoodRun & { modelId: string } =>
   typeof run.modelId === 'string'
 
 const hasVerifiedHumanAttestation = (run: DogfoodRun): boolean => {
-  if (
-    !run.attestationVerified ||
-    !run.attestationAuthorityRef ||
-    !run.attestationSessionId
-  ) {
+  if (!run.attestationVerified || !run.attestationAuthorityRef || !run.attestationSessionId) {
     return false
   }
   if (run.attestationKind === 'authenticated-session') return true
@@ -52,10 +49,7 @@ type GateFacts = {
   visualAccepted: boolean
 }
 
-const collectUnmetGates = (
-  facts: GateFacts,
-  definition: PromotionGateDefinition
-) => {
+const collectUnmetGates = (facts: GateFacts, definition: PromotionGateDefinition) => {
   const unmetGates: string[] = []
   if (facts.safetyViolation) unmetGates.push('zero-safety-violations')
   if (facts.distinctPassingModels.length < definition.requiredDistinctModels) {
@@ -112,29 +106,27 @@ export const INTERACTIVE_PROGRAM_PROMOTION_GATE: PromotionGateDefinition = {
   requireComparisonWin: true,
   requireKeyboardAcceptance: true,
   requireVerifiedHumanEvidence: true,
-  requireVisualAcceptance: true,
+  requireVisualAcceptance: true
 }
 
-export const INTENT_EXPERIENCE_FIELD_GATE: IntentExperienceFieldGateDefinition =
-  {
-    id: 'intent-experience-cross-form-v1',
-    maximumRepairCount: 1,
-    minimumDistinctForms: 4,
-    minimumHumanPasses: 3,
-    minimumHumanRuns: 5,
-    requireComparisonWin: true,
-    requireKeyboardAcceptance: true,
-    requireVerifiedHumanEvidence: true,
-    requireVisualAcceptance: true,
-  }
+export const INTENT_EXPERIENCE_FIELD_GATE: IntentExperienceFieldGateDefinition = {
+  id: 'intent-experience-cross-form-v1',
+  maximumRepairCount: 1,
+  minimumDistinctForms: 4,
+  minimumHumanPasses: 3,
+  minimumHumanRuns: 5,
+  requireComparisonWin: true,
+  requireKeyboardAcceptance: true,
+  requireVerifiedHumanEvidence: true,
+  requireVisualAcceptance: true
+}
 
-export const COMPOSED_EXPERIENCE_FIELD_GATE: ComposedExperienceFieldGateDefinition =
-  {
-    id: 'composed-experience-usefulness-v1',
-    maximumDistractingRuns: 0,
-    minimumHelpfulHumanRuns: 2,
-    minimumVerifiedHumanRuns: 3,
-  }
+export const COMPOSED_EXPERIENCE_FIELD_GATE: ComposedExperienceFieldGateDefinition = {
+  id: 'composed-experience-usefulness-v1',
+  maximumDistractingRuns: 0,
+  minimumHelpfulHumanRuns: 2,
+  minimumVerifiedHumanRuns: 3
+}
 
 function resolveFieldGateStatus(
   safetyViolation: boolean,
@@ -146,9 +138,7 @@ function resolveFieldGateStatus(
   return verifiedHumanRuns > 0 ? 'candidate' : 'not-ready'
 }
 
-export const dogfoodRunFromLearningReceipt = (
-  receipt: LearningReceipt
-): DogfoodRun => ({
+export const dogfoodRunFromLearningReceipt = (receipt: LearningReceipt): DogfoodRun => ({
   attestationAuthorityRef: receipt.attestation.authorityRef,
   attestationKind: receipt.attestation.kind,
   attestationReviewDigest: receipt.attestation.proof?.claim.reviewDigest,
@@ -157,14 +147,12 @@ export const dogfoodRunFromLearningReceipt = (
   comparisonBaselineContentHash: receipt.comparisonBaseline?.contentHash,
   comparisonBaselineKind: receipt.comparisonBaseline?.kind,
   comparisonOutcome: receipt.comparisonOutcome,
-  compositionEvaluations: (receipt.compositionEvaluations ?? []).map(
-    (evaluation) => ({
-      companionSurfaceId: evaluation.companionSurface.objectId,
-      outcome: evaluation.outcome,
-      primarySurfaceId: evaluation.primarySurface.objectId,
-      relationId: evaluation.relation.relationId,
-    })
-  ),
+  compositionEvaluations: (receipt.compositionEvaluations ?? []).map((evaluation) => ({
+    companionSurfaceId: evaluation.companionSurface.objectId,
+    outcome: evaluation.outcome,
+    primarySurfaceId: evaluation.primarySurface.objectId,
+    relationId: evaluation.relation.relationId
+  })),
   durableReceipt: receipt.durableOutcome,
   evidenceTraceable: receipt.evidenceTraceable,
   executionKind: receipt.executionKind,
@@ -180,19 +168,15 @@ export const dogfoodRunFromLearningReceipt = (
   rendererId: receipt.rendererId,
   repairCount: receipt.repairCount,
   safetyViolation: receipt.safetyViolation,
-  visualAccepted: receipt.visualAccepted,
+  visualAccepted: receipt.visualAccepted
 })
 
 export const evaluatePromotionGate = (
   runs: DogfoodRun[],
   definition: PromotionGateDefinition
 ): PromotionGateEvaluation => {
-  const relevantRuns = runs.filter(
-    (run) => run.formId === definition.candidateFormId
-  )
-  const automatedRuns = relevantRuns.filter(
-    (run) => run.executionKind === 'automated'
-  )
+  const relevantRuns = runs.filter((run) => run.formId === definition.candidateFormId)
+  const automatedRuns = relevantRuns.filter((run) => run.executionKind === 'automated')
   const humanRuns = relevantRuns.filter((run) => run.executionKind === 'human')
   const passingAutomatedRuns = automatedRuns.filter((run) =>
     isPassingRun(run, definition.maximumRepairCount)
@@ -205,9 +189,7 @@ export const evaluatePromotionGate = (
     isPassingRun(run, definition.maximumRepairCount)
   )
   const distinctPassingModels = [
-    ...new Set(
-      passingAutomatedRuns.filter(hasModelId).map((run) => run.modelId)
-    ),
+    ...new Set(passingAutomatedRuns.filter(hasModelId).map((run) => run.modelId))
   ].sort()
   const safetyViolation = relevantRuns.some((run) => run.safetyViolation)
   const visualAccepted = passingHumanRuns.some((run) => run.visualAccepted)
@@ -222,13 +204,12 @@ export const evaluatePromotionGate = (
     safetyViolation,
     verifiedHumanPasses,
     verifiedHumanRuns,
-    visualAccepted,
+    visualAccepted
   }
   const unmetGates = collectUnmetGates(facts, definition)
 
   const technicalReady =
-    !safetyViolation &&
-    distinctPassingModels.length >= definition.requiredDistinctModels
+    !safetyViolation && distinctPassingModels.length >= definition.requiredDistinctModels
   const fieldReady =
     humanRuns.length >= definition.minimumHumanRuns &&
     passingHumanRuns.length >= definition.minimumHumanPasses &&
@@ -249,7 +230,7 @@ export const evaluatePromotionGate = (
     technicalRuns: automatedRuns.length,
     unmetGates,
     verifiedHumanPasses: verifiedHumanPasses.length,
-    verifiedHumanRuns: verifiedHumanRuns.length,
+    verifiedHumanRuns: verifiedHumanRuns.length
   }
 }
 
@@ -265,16 +246,12 @@ export const evaluateIntentExperienceFieldGate = (
   const verifiedHumanPasses = verifiedHumanRuns.filter((run) =>
     isPassingRun(run, definition.maximumRepairCount)
   )
-  const distinctForms = [
-    ...new Set(verifiedHumanRuns.map((run) => run.formId)),
-  ].sort()
+  const distinctForms = [...new Set(verifiedHumanRuns.map((run) => run.formId))].sort()
   const safetyViolation = humanRuns.some((run) => run.safetyViolation)
   const unmetGates: string[] = []
   if (safetyViolation) unmetGates.push('zero-safety-violations')
-  if (humanRuns.length < definition.minimumHumanRuns)
-    unmetGates.push('human-runs')
-  if (passingHumanRuns.length < definition.minimumHumanPasses)
-    unmetGates.push('human-passes')
+  if (humanRuns.length < definition.minimumHumanRuns) unmetGates.push('human-runs')
+  if (passingHumanRuns.length < definition.minimumHumanPasses) unmetGates.push('human-passes')
   if (definition.requireVerifiedHumanEvidence) {
     if (verifiedHumanRuns.length < definition.minimumHumanRuns) {
       unmetGates.push('verified-human-runs')
@@ -283,12 +260,8 @@ export const evaluateIntentExperienceFieldGate = (
       unmetGates.push('verified-human-passes')
     }
   }
-  if (distinctForms.length < definition.minimumDistinctForms)
-    unmetGates.push('form-breadth')
-  if (
-    definition.requireVisualAcceptance &&
-    !passingHumanRuns.some((run) => run.visualAccepted)
-  ) {
+  if (distinctForms.length < definition.minimumDistinctForms) unmetGates.push('form-breadth')
+  if (definition.requireVisualAcceptance && !passingHumanRuns.some((run) => run.visualAccepted)) {
     unmetGates.push('visual-acceptance')
   }
   if (
@@ -297,17 +270,10 @@ export const evaluateIntentExperienceFieldGate = (
   ) {
     unmetGates.push('keyboard-acceptance')
   }
-  if (
-    definition.requireComparisonWin &&
-    !passingHumanRuns.some(hasControlledComparisonWin)
-  ) {
+  if (definition.requireComparisonWin && !passingHumanRuns.some(hasControlledComparisonWin)) {
     unmetGates.push('comparison-win')
   }
-  const status = resolveFieldGateStatus(
-    safetyViolation,
-    unmetGates,
-    verifiedHumanRuns.length
-  )
+  const status = resolveFieldGateStatus(safetyViolation, unmetGates, verifiedHumanRuns.length)
   return {
     definitionId: definition.id,
     distinctForms,
@@ -316,7 +282,7 @@ export const evaluateIntentExperienceFieldGate = (
     status,
     unmetGates,
     verifiedHumanPasses: verifiedHumanPasses.length,
-    verifiedHumanRuns: verifiedHumanRuns.length,
+    verifiedHumanRuns: verifiedHumanRuns.length
   }
 }
 
@@ -325,24 +291,17 @@ export const evaluateComposedExperienceFieldGate = (
   definition: ComposedExperienceFieldGateDefinition = COMPOSED_EXPERIENCE_FIELD_GATE
 ): ComposedExperienceFieldGateEvaluation => {
   const humanRuns = runs.filter(
-    (run) =>
-      run.executionKind === 'human' && run.compositionEvaluations.length > 0
+    (run) => run.executionKind === 'human' && run.compositionEvaluations.length > 0
   )
   const verifiedHumanRuns = humanRuns.filter(
     (run) => run.familyAttestationVerified && hasVerifiedHumanAttestation(run)
   )
   const helpfulVerifiedHumanRuns = verifiedHumanRuns.filter(
     (run) =>
-      run.compositionEvaluations.some(
-        (evaluation) => evaluation.outcome === 'helped'
-      ) &&
-      run.compositionEvaluations.every(
-        (evaluation) => evaluation.outcome !== 'distracted'
-      )
+      run.compositionEvaluations.some((evaluation) => evaluation.outcome === 'helped') &&
+      run.compositionEvaluations.every((evaluation) => evaluation.outcome !== 'distracted')
   )
-  const evaluations = verifiedHumanRuns.flatMap(
-    (run) => run.compositionEvaluations
-  )
+  const evaluations = verifiedHumanRuns.flatMap((run) => run.compositionEvaluations)
   const helpfulEvaluations = evaluations.filter(
     (evaluation) => evaluation.outcome === 'helped'
   ).length
@@ -376,6 +335,6 @@ export const evaluateComposedExperienceFieldGate = (
     requiredVerifiedHumanRuns: definition.minimumVerifiedHumanRuns,
     status,
     unmetGates,
-    verifiedHumanRuns: verifiedHumanRuns.length,
+    verifiedHumanRuns: verifiedHumanRuns.length
   }
 }

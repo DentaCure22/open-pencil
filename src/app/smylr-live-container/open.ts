@@ -1,5 +1,7 @@
-import { applyImportedDocument } from '@/app/document/io/imported-document'
 import type { Editor, EditorState } from '@open-pencil/core/editor'
+
+import { applyImportedDocument } from '@/app/document/io/imported-document'
+
 import { parseSmylrLiveContainerClipboardText } from './clipboard-packet'
 import { sampleSmylrLiveContainerDocument } from './sample'
 import { smylrLiveContainerToSceneGraph } from './to-scene-graph'
@@ -20,11 +22,9 @@ type SmylrLiveContainerOpenOptions = {
 export function createSmylrLiveContainerOpenActions({
   editor,
   fitCurrentPageToViewport,
-  state,
+  state
 }: SmylrLiveContainerOpenOptions) {
-  async function openSmylrLiveContainerDocument(
-    document: SmylrLiveContainerDocument
-  ) {
+  async function openSmylrLiveContainerDocument(document: SmylrLiveContainerDocument) {
     state.loading = true
 
     try {
@@ -73,6 +73,6 @@ export function createSmylrLiveContainerOpenActions({
     getSmylrLiveContainerDocument,
     openSmylrLiveContainerClipboardDocument,
     openSampleSmylrLiveContainerDocument,
-    openSmylrLiveContainerDocument,
+    openSmylrLiveContainerDocument
   }
 }

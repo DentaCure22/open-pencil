@@ -2,8 +2,16 @@
 import { useEventListener, useUrlSearchParams } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import type { SceneNode } from '@open-pencil/scene-graph'
+
 import { readCacheJson, writeCacheJson } from '@/app/cache'
+import { codeObjectDocument } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
+import {
+  isSmylrLiveComponentFrame,
+  smylrLiveComponentDisplayName,
+  syncSmylrLiveComponentIntrinsicSize
+} from '@/app/smylr-component-library/live-component-canvas'
 import {
   workLifecycleActionLabel,
   workLifecycleStatusLabel,
@@ -15,10 +23,7 @@ import {
   forwardFrameSurfaceWheel,
   isEmbeddedSurfaceWheelMessage
 } from '@/app/editor/canvas/embedded-surface-wheel'
-import {
-  smylrFrameBaseUrlFor,
-  smylrOpenPencilFrameUrlFor
-} from '@/app/smylr-live-inspector/frame-origin'
+import { smylrFrameBaseUrlFor } from '@/app/smylr-live-inspector/frame-origin'
 import { isLiveInspectorMessageFromFrame } from '@/app/smylr-live-inspector/message-source'
 import {
   isSmylrOpenPencilInspectorMessage,
@@ -57,9 +62,18 @@ import {
 import { runLiveWorkspaceMutationWithUndo } from '@/app/smylr-live-inspector/history'
 import { syncLiveWorkspaceExperienceProjection } from '@/app/smylr-live-inspector/experience-projections'
 import {
-  isDentalChartAppFlowScreen,
-  syncDentalChartAppFlowGeometry
-} from '@/app/smylr-production/app-flow/scene'
+  resolveSnapshotSource,
+  SMYLR_LIVE_FRAME_SNAPSHOT_CACHE_NAMESPACE
+} from '@/app/smylr-production/live/snapshot-fallback'
+import {
+  isSmylrReadOnlyReferenceFrame,
+  smylrRuntimeBaseUrlForFrame
+} from '@/app/smylr-production/live/reference-runtime'
+import {
+  appScreenFlowPluginValue,
+  isNativeReactAppFlowFrame
+} from '@/app/smylr-production/app-flow/primitives'
+import { syncAppScreenFlowGeometryForNode } from '@/app/smylr-production/app-flow/scene'
 import { liveFrameCornerStyle } from '@/app/smylr-production/frame-corners'
 import {
   createLiveFrameTransformController,
@@ -76,6 +90,11 @@ import {
   resolveSelectedLiveRuntimeFrameId,
   shouldShowLiveRuntime
 } from '@/app/smylr-production/live/runtime-retention'
+import {
+  smylrLiveRuntimeLabelFor,
+  smylrLiveRuntimeTargetFor,
+  smylrLiveRuntimeUrlFor
+} from '@/app/smylr-production/live/runtime-target'
 import { isWorkspaceItemTombstoned } from '@/app/smylr-production/live/frame-tombstones'
 import {
   moveBetweenSmylrProductionViews,
@@ -106,7 +125,7 @@ import './smylr-live-frame-header.css'
 
 type PreviewStatus = 'queued' | 'rendering' | 'ready' | 'failed'
 
-const PREVIEW_TIMEOUT_MS = 8_000
+const PREVIEW_TIMEOUT_MS = 15_000
 const WORKFLOW_ACTION_PRIORITY: Record<WorkLifecycleAction, number> = {
   approve: 0,
   archive: 2,
@@ -125,6 +144,7 @@ const EXPERIENCE_PURPOSES: Array<{ label: string; purpose: ExperienceProjectionP
   { label: 'Knowledge', purpose: 'knowledge' },
   { label: 'Review', purpose: 'review' }
 ]
+const SMYLR_OPENPENCIL_COMPONENT_READY = 'SMYLR_OPENPENCIL_COMPONENT_READY_V1'
 const store = useEditorStore()
 const workspaceUi = useKnowledgeWorkspaceUi(store)
 const activeExperienceProjection = workspaceUi.experienceProjection
@@ -138,7 +158,7 @@ const selectedRuntimeFrameId = ref<string | null>(null)
 const lastInteractedRuntimeFrameId = ref<string | null>(null)
 const retainedRuntimeFrameId = ref<string | null>(null)
 const sharedRuntimeLoadedFrameId = ref<string | null>(null)
-const sharedRuntimeLoadRoute = ref<string | null>(null)
+const sharedRuntimeHydrationVersion = ref(0)
 const sharedRuntimeReady = ref(false)
 const sharedIframeElement = ref<HTMLIFrameElement | null>(null)
 const selectedRuntimeMode = ref<'select' | 'interact' | null>(null)
@@ -154,7 +174,17 @@ const alternateHeaderDrag = ref<{
   startX: number
   startY: number
 } | null>(null)
+const componentHeaderDrag = ref<{
+  frameId: string
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startX: number
+  startY: number
+} | null>(null)
 const iframeElements = new Map<string, HTMLIFrameElement>()
+const componentIframeElements = new Map<string, HTMLIFrameElement>()
+const componentReadyFrameIds = ref(new Set<string>())
 const captureTimers = new Map<string, number>()
 const previewTimeouts = new Map<string, number>()
 const captureRequested = new Set<string>()
@@ -168,10 +198,40 @@ const baseUrl = computed(() => {
     : smylrFrameBaseUrlFor(window.location.href)
 })
 
-const alternateFrames = computed(() => {
+function runtimeBaseUrlForFrame(frame: SceneNode) {
+  return smylrRuntimeBaseUrlForFrame(frame, baseUrl.value)
+}
+
+function runtimeOriginForFrameId(frameId: string) {
+  const frame = store.graph.getNode(frameId)
+  return new URL(frame ? runtimeBaseUrlForFrame(frame) : baseUrl.value).origin
+}
+
+function isReadOnlyReferenceFrame(frameId: string) {
+  return isSmylrReadOnlyReferenceFrame(store.graph.getNode(frameId))
+}
+
+const liveFrames = computed(() => {
   void syncTick.value
-  return findSmylrLiveAppFrames(store).filter(
-    (frame) => smylrLiveAppFrameState(frame) !== 'current'
+  return findSmylrLiveAppFrames(store)
+})
+const componentFrames = computed(() =>
+  liveFrames.value.filter(
+    (frame) => isSmylrLiveComponentFrame(frame) && smylrLiveAppFrameState(frame) !== 'current'
+  )
+)
+const selectedComponentFrame = computed(() => {
+  if (store.state.selectedIds.size !== 1) return null
+  const [selectedId] = store.state.selectedIds
+  return componentFrames.value.find((frame) => frame.id === selectedId) ?? null
+})
+const alternateFrames = computed(() => {
+  return liveFrames.value.filter(
+    (frame) =>
+      smylrLiveAppFrameState(frame) !== 'current' &&
+      !isSmylrLiveComponentFrame(frame) &&
+      !isNativeReactAppFlowFrame(frame) &&
+      codeObjectDocument(frame) === null
   )
 })
 
@@ -218,6 +278,11 @@ function hideAlternateFrameHeaderSoon(frameId: string) {
   )
 }
 
+function shouldShowAlternateFrameHeader(frameId: string) {
+  if (!isFlowView()) return true
+  return hoveredFrameIds.value.has(frameId) || liveInspectorActiveFrameId.value === frameId
+}
+
 function workspaceItemForFrame(frameId: string) {
   const frame = store.graph.getNode(frameId)
   const itemId = frame ? smylrLiveAppFrameWorkspaceItemId(frame) : null
@@ -227,7 +292,7 @@ function workspaceItemForFrame(frameId: string) {
 function snapshotCacheKey(frameId: string) {
   const frame = store.graph.getNode(frameId)
   if (!frame) return ''
-  return `smylr-live-frame-snapshot/v4/${encodeURIComponent(smylrLiveAppFrameRoute(frame))}/${encodeURIComponent(smylrLiveAppFrameState(frame))}`
+  return `${SMYLR_LIVE_FRAME_SNAPSHOT_CACHE_NAMESPACE}/${encodeURIComponent(smylrLiveAppFrameRoute(frame))}/${encodeURIComponent(smylrLiveAppFrameState(frame))}`
 }
 
 function hasSharpPersistedPreview(
@@ -244,6 +309,44 @@ function setPreviewStatus(frameId: string, status: PreviewStatus) {
 
 function previewStatus(frameId: string): PreviewStatus {
   return previewStatuses.value[frameId] ?? 'queued'
+}
+
+function runtimeTargetForFrame(frame: SceneNode) {
+  return smylrLiveRuntimeTargetFor({
+    flowNodeKind: appScreenFlowPluginValue(frame, 'appFlowNodeKind'),
+    route: smylrLiveAppFrameRoute(frame),
+    state: smylrLiveAppFrameState(frame)
+  })
+}
+
+function runtimeLabelForFrame(frame: SceneNode) {
+  return smylrLiveRuntimeLabelFor(runtimeTargetForFrame(frame))
+}
+
+function previewStatusLabel(frameId: string) {
+  switch (previewStatus(frameId)) {
+    case 'rendering':
+      return 'Capturing live source'
+    case 'queued':
+      return 'Live snapshot queued'
+    case 'failed':
+      return 'Live snapshot unavailable'
+    case 'ready':
+      return 'Live snapshot ready'
+  }
+}
+
+function previewStatusDetail(frameId: string, frame: SceneNode) {
+  switch (previewStatus(frameId)) {
+    case 'rendering':
+      return 'Capturing from the source-backed runtime.'
+    case 'queued':
+      return 'Queued for the shared source-backed runtime.'
+    case 'failed':
+      return `Select to load ${runtimeLabelForFrame(frame)} live, or retry.`
+    case 'ready':
+      return `Rendered from ${runtimeLabelForFrame(frame)}.`
+  }
 }
 
 function clearFrameTimers(frameId: string) {
@@ -284,7 +387,15 @@ async function restoreSnapshots() {
       const cachedPreview = persistedPreview
         ? null
         : await readCacheJson<string>(snapshotCacheKey(frame.id))
-      return [frame.id, persistedPreview ?? cachedPreview, item?.preview?.status] as const
+      return [
+        frame.id,
+        resolveSnapshotSource({
+          cachedSnapshot: cachedPreview,
+          policy: 'source-only',
+          sharpPersistedPreview: persistedPreview
+        }),
+        item?.preview?.status
+      ] as const
     })
   )
   const nextSnapshots: Record<string, string> = {}
@@ -363,6 +474,43 @@ function activateSelectedRuntime() {
   activateRuntimeFrame(frameId)
 }
 
+function releaseFlowRuntimeForOverview() {
+  if (!isFlowView() || store.state.selectedIds.size > 0 || liveInspectorSelectedId.value) {
+    return false
+  }
+  selectedRuntimeMode.value = null
+  lastInteractedRuntimeFrameId.value = null
+  setLiveInspectorActiveFrame(null)
+  activateRuntimeFrame(null)
+  return true
+}
+
+function syncSelectedComponentMode() {
+  const frame = selectedComponentFrame.value
+  const activeFrame = liveInspectorActiveFrameId.value
+    ? store.graph.getNode(liveInspectorActiveFrameId.value)
+    : null
+
+  if (!frame) {
+    if (!activeFrame || !isSmylrLiveComponentFrame(activeFrame)) return
+    postComponentRuntimeMode(activeFrame.id, 'frame')
+    setLiveInspectorActiveFrame(null)
+    if (liveInspectorInteractionMode.value === 'interact') {
+      setLiveInspectorInteractionMode('frame')
+    }
+    return
+  }
+
+  const keepsInteraction =
+    liveInspectorActiveFrameId.value === frame.id &&
+    liveInspectorInteractionMode.value === 'interact'
+  setLiveInspectorActiveFrame(frame.id)
+  if (!keepsInteraction) {
+    setLiveInspectorInteractionMode('frame')
+    postComponentRuntimeMode(frame.id, 'frame')
+  }
+}
+
 async function reconcilePool() {
   ensureWorkspaceFrames()
   const lastInteractedFrameId = lastInteractedRuntimeFrameId.value
@@ -387,21 +535,27 @@ onMounted(() => {
       previewWorkerFrameId.value = null
       selectedRuntimeFrameId.value = null
       selectedRuntimeMode.value = null
+      if (isFlowView()) {
+        lastInteractedRuntimeFrameId.value = null
+        setLiveInspectorActiveFrame(null)
+      }
       bindSharedRuntimeToFrame(sharedRuntimeOwnerFrameId.value)
+      syncSelectedComponentMode()
       void reconcilePool()
     }),
     store.onEditorEvent('node:updated', (id, changes) => {
       sync()
       if (!['height', 'width', 'x', 'y'].some((key) => key in changes)) return
       const node = store.graph.getNode(id)
-      if (!isDentalChartAppFlowScreen(node) || !node?.parentId) return
-      syncDentalChartAppFlowGeometry(store.graph, node.parentId)
+      syncAppScreenFlowGeometryForNode(store.graph, node)
     }),
     store.onEditorEvent('selection:changed', () => {
       sync()
-      activateSelectedRuntime()
+      syncSelectedComponentMode()
+      if (!releaseFlowRuntimeForOverview()) activateSelectedRuntime()
     })
   ]
+  syncSelectedComponentMode()
   void restoreLiveWorkspace().then(reconcilePool)
 })
 
@@ -410,6 +564,8 @@ onUnmounted(() => {
   captureTimers.forEach((timer) => window.clearTimeout(timer))
   previewTimeouts.forEach((timer) => window.clearTimeout(timer))
   alternateHeaderHideTimers.forEach((timer) => window.clearTimeout(timer))
+  componentIframeElements.clear()
+  componentReadyFrameIds.value = new Set()
 })
 
 watch(liveWorkspaceItems, () => {
@@ -442,17 +598,19 @@ function bindSharedRuntimeToFrame(frameId: string | null) {
   if (frameId) {
     retainedRuntimeFrameId.value = frameId
     if (sharedRuntimeLoadedFrameId.value !== frameId) {
-      const frame = store.graph.getNode(frameId)
-      const item = workspaceItemForFrame(frameId)
       sharedRuntimeLoadedFrameId.value = frameId
-      sharedRuntimeLoadRoute.value =
-        item?.runtimeRoute ?? (frame ? smylrLiveAppFrameRoute(frame) : null)
       sharedRuntimeReady.value = false
     }
   }
   iframeElements.clear()
   const iframe = sharedIframeElement.value
   if (frameId && iframe) iframeElements.set(frameId, iframe)
+}
+
+function hydrateRuntimeFrame(frameId: string) {
+  sharedRuntimeHydrationVersion.value += 1
+  sharedRuntimeReady.value = false
+  bindSharedRuntimeToFrame(frameId)
 }
 
 function setSharedIframeElement(value: Element | null) {
@@ -487,7 +645,7 @@ function postRuntimeCommand(
       kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE,
       mode
     },
-    new URL(baseUrl.value).origin
+    runtimeOriginForFrameId(frameId)
   )
 }
 
@@ -496,7 +654,7 @@ function activateWorkspacePatches(frameId: string) {
   if (!target) return
   target.postMessage(
     { action: 'clear-all-preview-styles', kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE },
-    new URL(baseUrl.value).origin
+    runtimeOriginForFrameId(frameId)
   )
   window.setTimeout(() => {
     if (sharedRuntimeOwnerFrameId.value !== frameId) return
@@ -527,7 +685,7 @@ function applyWorkspacePatches(frameId: string) {
         styles: patch.styles,
         tokenPatch: { add: patch.add, remove: patch.remove }
       },
-      new URL(baseUrl.value).origin
+      runtimeOriginForFrameId(frameId)
     )
   }
 }
@@ -561,7 +719,7 @@ function requestSnapshot(frameId: string) {
   )
   iframe.contentWindow.postMessage(
     { action: 'request-snapshot', kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE },
-    new URL(baseUrl.value).origin
+    runtimeOriginForFrameId(frameId)
   )
 }
 
@@ -625,7 +783,7 @@ function retryPreview(frameId: string) {
 function handleSharedRuntimeWheelMessage(event: MessageEvent) {
   if (!isEmbeddedSurfaceWheelMessage(event.data, SMYLR_OPENPENCIL_INSPECTOR_MESSAGE)) return
   const frameId = sharedRuntimeOwnerFrameId.value
-  const expectedOrigin = new URL(baseUrl.value).origin
+  const expectedOrigin = frameId ? runtimeOriginForFrameId(frameId) : ''
   if (
     !frameId ||
     !isLiveInspectorMessageFromFrame(
@@ -652,7 +810,7 @@ useEventListener(window, 'message', handleSharedRuntimeWheelMessage)
 useEventListener(window, 'message', (event: MessageEvent) => {
   if (!isSmylrOpenPencilInspectorMessage(event.data)) return
   const frameId = sharedRuntimeOwnerFrameId.value
-  const expectedOrigin = new URL(baseUrl.value).origin
+  const expectedOrigin = frameId ? runtimeOriginForFrameId(frameId) : ''
   if (
     !frameId ||
     !isLiveInspectorMessageFromFrame(
@@ -700,6 +858,140 @@ function frameStyle(frameId: string) {
   return liveFrameCanvasStyle(store, frame)
 }
 
+function componentRuntimeSrc(frameId: string) {
+  const frame = store.graph.getNode(frameId)
+  if (!frame) return ''
+  const route = smylrLiveAppFrameRoute(frame)
+  return `${baseUrl.value}${route.startsWith('/') ? route : `/${route}`}`
+}
+
+function setComponentFrameReady(frameId: string, ready: boolean) {
+  const next = new Set(componentReadyFrameIds.value)
+  if (ready) next.add(frameId)
+  else next.delete(frameId)
+  componentReadyFrameIds.value = next
+}
+
+function setComponentIframeElement(frameId: string, value: Element | null) {
+  const iframe = value instanceof HTMLIFrameElement ? value : null
+  if (componentIframeElements.get(frameId) !== iframe) setComponentFrameReady(frameId, false)
+  if (iframe) componentIframeElements.set(frameId, iframe)
+  else componentIframeElements.delete(frameId)
+}
+
+function handleComponentReadyMessage(event: MessageEvent) {
+  const data = event.data as {
+    intrinsicHeight?: unknown
+    intrinsicWidth?: unknown
+    kind?: unknown
+  }
+  if (
+    event.origin !== new URL(baseUrl.value).origin ||
+    typeof event.data !== 'object' ||
+    event.data === null ||
+    data.kind !== SMYLR_OPENPENCIL_COMPONENT_READY
+  ) {
+    return
+  }
+  const frameEntry = [...componentIframeElements.entries()].find(
+    ([, iframe]) => iframe.contentWindow === event.source
+  )
+  if (!frameEntry) return
+  const frameId = frameEntry[0]
+  setComponentFrameReady(frameId, true)
+  if (typeof data.intrinsicWidth !== 'number' || typeof data.intrinsicHeight !== 'number') return
+  if (
+    syncSmylrLiveComponentIntrinsicSize(store, frameId, {
+      height: data.intrinsicHeight,
+      width: data.intrinsicWidth
+    })
+  ) {
+    sync()
+  }
+}
+
+useEventListener(window, 'message', handleComponentReadyMessage)
+
+function componentFrameIsReady(frameId: string) {
+  return componentReadyFrameIds.value.has(frameId)
+}
+
+function postComponentRuntimeMode(frameId: string, mode: 'frame' | 'interact') {
+  componentIframeElements.get(frameId)?.contentWindow?.postMessage(
+    {
+      action: 'set-interaction-mode',
+      kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE,
+      mode
+    },
+    new URL(baseUrl.value).origin
+  )
+}
+
+function handleComponentRuntimeLoad(frameId: string) {
+  postComponentRuntimeMode(frameId, componentFrameIsInteractive(frameId) ? 'interact' : 'frame')
+}
+
+function componentFrameIsInteractive(frameId: string) {
+  return (
+    selectedComponentFrame.value?.id === frameId &&
+    liveInspectorActiveFrameId.value === frameId &&
+    liveInspectorInteractionMode.value === 'interact'
+  )
+}
+
+function setComponentFrameMode(frameId: string, mode: 'frame' | 'interact') {
+  if (mode === 'interact' && !componentFrameIsReady(frameId)) return
+  store.select([frameId])
+  setLiveInspectorActiveFrame(frameId)
+  setLiveInspectorInteractionMode(mode)
+  postComponentRuntimeMode(frameId, mode)
+  sync()
+}
+
+function beginComponentHeaderMove(frameId: string, event: PointerEvent) {
+  const frame = store.graph.getNode(frameId)
+  if (!frame || event.button !== 0) return
+  setComponentFrameMode(frameId, 'frame')
+  componentHeaderDrag.value = {
+    frameId,
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startX: frame.x,
+    startY: frame.y
+  }
+  ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
+}
+
+function moveComponentFromHeader(event: PointerEvent) {
+  const drag = componentHeaderDrag.value
+  const frame = drag ? store.graph.getNode(drag.frameId) : null
+  if (!drag || !frame || drag.pointerId !== event.pointerId) return
+  const zoom = Math.max(store.state.zoom, 0.01)
+  store.graph.updateNodePositionPreview(
+    frame.id,
+    drag.startX + (event.clientX - drag.startClientX) / zoom,
+    drag.startY + (event.clientY - drag.startClientY) / zoom
+  )
+  store.requestRepaint()
+  sync()
+}
+
+function endComponentHeaderMove(event: PointerEvent) {
+  const drag = componentHeaderDrag.value
+  const frame = drag ? store.graph.getNode(drag.frameId) : null
+  if (!drag || drag.pointerId !== event.pointerId) return
+  componentHeaderDrag.value = null
+  if (!frame) return
+  const final = { x: frame.x, y: frame.y }
+  if (final.x !== drag.startX || final.y !== drag.startY) {
+    store.graph.updateNodePositionPreview(frame.id, drag.startX, drag.startY)
+    store.updateNode(frame.id, final)
+    store.commitNodeUpdate(frame.id, { x: drag.startX, y: drag.startY }, 'Move component')
+  }
+  sync()
+}
+
 function overlayStyle(frameId: string) {
   void syncTick.value
   const frame = store.graph.getNode(frameId)
@@ -723,6 +1015,7 @@ const frameSelectionHandleStyle = LIVE_FRAME_RESIZE_HANDLE_STYLE
 const frameRotationHandleStyle = LIVE_FRAME_ROTATE_HANDLE_STYLE
 
 const sharedRuntimeSrc = computed(() => {
+  void syncTick.value
   const frameId = sharedRuntimeLoadedFrameId.value
   const retainedFrameId = retainedRuntimeFrameId.value
   const frame =
@@ -731,18 +1024,10 @@ const sharedRuntimeSrc = computed(() => {
     alternateFrames.value[0] ??
     null
   if (!frame) return ''
-  const route = sharedRuntimeLoadRoute.value ?? smylrLiveAppFrameRoute(frame)
-  const flowState = isDentalChartAppFlowScreen(frame)
-    ? smylrLiveAppFrameState(frame)
-    : 'shared-page-runtime'
-  return smylrOpenPencilFrameUrlFor({
-    baseUrl: baseUrl.value,
+  return smylrLiveRuntimeUrlFor({
+    baseUrl: runtimeBaseUrlForFrame(frame),
     openPencilHref: window.location.href,
-    params: {
-      'smylr-flow-state': flowState,
-      'smylr-openpencil-transport': 'post-message'
-    },
-    route
+    target: runtimeTargetForFrame(frame)
   })
 })
 
@@ -751,22 +1036,25 @@ watch(sharedRuntimeSrc, () => {
 })
 
 function selectFrame(frameId: string, mode?: 'frame' | 'select' | 'interact') {
+  const requestedMode = isReadOnlyReferenceFrame(frameId) ? 'frame' : mode
   // Establish the scene selection first. Toolbar mode synchronization derives
   // its target from the selected frame; setting the global mode first lets the
   // previously selected Current frame win the same tick.
   store.select([frameId])
   setLiveInspectorActiveFrame(frameId)
-  selectedRuntimeMode.value = mode === 'select' || mode === 'interact' ? mode : null
-  if (mode !== 'frame') {
+  selectedRuntimeMode.value =
+    requestedMode === 'select' || requestedMode === 'interact' ? requestedMode : null
+  activateRuntimeFrame(frameId)
+  hydrateRuntimeFrame(frameId)
+  if (requestedMode !== 'frame') {
     lastInteractedRuntimeFrameId.value = frameId
-    activateRuntimeFrame(frameId)
     const target = sharedIframeElement.value?.contentWindow ?? null
-    setLiveInspectorCommandTarget(target, new URL(baseUrl.value).origin)
+    setLiveInspectorCommandTarget(target, runtimeOriginForFrameId(frameId))
   }
-  if (mode) setLiveInspectorInteractionMode(mode)
-  if (mode !== 'frame') {
-    postRuntimeCommand(frameId, 'set-interaction-mode', mode ?? 'interact')
-    postRuntimeCommand(frameId, 'request-tree', mode ?? 'interact')
+  if (requestedMode) setLiveInspectorInteractionMode(requestedMode)
+  if (requestedMode !== 'frame') {
+    postRuntimeCommand(frameId, 'set-interaction-mode', requestedMode ?? 'interact')
+    postRuntimeCommand(frameId, 'request-tree', requestedMode ?? 'interact')
   }
   sync()
 }
@@ -816,6 +1104,7 @@ function endAlternateHeaderMove(event: PointerEvent) {
 }
 
 function workflowLabel(frameId: string) {
+  if (isReadOnlyReferenceFrame(frameId)) return 'Read-only reference'
   const item = workspaceItemForFrame(frameId)
   if (!item) return isFlowView() ? 'Flow state' : 'Alternate'
   return liveWorkspaceLifecycleLabel(item)
@@ -860,7 +1149,7 @@ function restoreSnapshot(frameId: string) {
   if (!target) return
   target.postMessage(
     { action: 'clear-preview-style', kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE },
-    new URL(baseUrl.value).origin
+    runtimeOriginForFrameId(frameId)
   )
   window.setTimeout(() => applyWorkspacePatches(frameId), 50)
 }
@@ -870,7 +1159,13 @@ function isFlowView() {
 }
 
 function showAppScreenFlowOverview() {
-  store.select([])
+  store.clearSelection()
+  selectedRuntimeMode.value = null
+  lastInteractedRuntimeFrameId.value = null
+  setLiveInspectorActiveFrame(null)
+  activateRuntimeFrame(null)
+  enqueueMissingSnapshots()
+  window.setTimeout(startNextPreview, 0)
   void fitSmylrPageToViewport(store)
 }
 
@@ -1107,7 +1402,8 @@ function showsSnapshot(frameId: string) {
     type="button"
     data-test-id="app-screen-flow-overview"
     class="pointer-events-auto absolute top-14 right-3 z-40 flex items-center gap-1.5 rounded-lg border border-border bg-panel/95 px-2.5 py-1.5 text-[10px] font-medium text-surface shadow-lg backdrop-blur transition-colors hover:bg-hover"
-    @click="showAppScreenFlowOverview"
+    @click.stop="showAppScreenFlowOverview"
+    @pointerdown.stop
   >
     <icon-lucide-route class="size-3.5" />
     Overview
@@ -1138,15 +1434,92 @@ function showsSnapshot(frameId: string) {
     </button>
   </div>
 
+  <template v-for="frame in componentFrames" :key="frame.id">
+    <div
+      :data-live-component-frame-id="frame.id"
+      class="absolute top-0 left-0 z-[5] overflow-hidden bg-transparent"
+      :class="componentFrameIsInteractive(frame.id) ? 'pointer-events-auto' : 'pointer-events-none'"
+      :style="{ ...frameStyle(frame.id), ...liveFrameCornerStyle(frame) }"
+    >
+      <iframe
+        :ref="(value) => setComponentIframeElement(frame.id, value as Element | null)"
+        data-test-id="placed-live-component-runtime"
+        :data-interaction-mode="componentFrameIsInteractive(frame.id) ? 'interact' : 'frame'"
+        :src="componentRuntimeSrc(frame.id)"
+        :title="`${frame.name} component`"
+        allowtransparency="true"
+        :tabindex="componentFrameIsInteractive(frame.id) ? 0 : -1"
+        loading="eager"
+        class="size-full border-0 bg-transparent"
+        :class="
+          componentFrameIsInteractive(frame.id) ? 'pointer-events-auto' : 'pointer-events-none'
+        "
+        @load="handleComponentRuntimeLoad(frame.id)"
+      />
+    </div>
+    <div
+      v-if="!componentFrameIsInteractive(frame.id)"
+      class="pointer-events-none absolute top-0 left-0 z-[9]"
+      :style="overlayStyle(frame.id)"
+    >
+      <button
+        type="button"
+        data-test-id="placed-live-component-enter-interact"
+        class="pointer-events-auto absolute inset-0 bg-transparent disabled:cursor-wait"
+        :aria-label="
+          componentFrameIsReady(frame.id)
+            ? `Use ${smylrLiveComponentDisplayName(frame)}`
+            : `${smylrLiveComponentDisplayName(frame)} is loading`
+        "
+        :disabled="!componentFrameIsReady(frame.id)"
+        @click.stop.prevent="setComponentFrameMode(frame.id, 'interact')"
+        @pointerdown.stop.prevent="setComponentFrameMode(frame.id, 'interact')"
+      />
+    </div>
+    <div
+      v-if="selectedComponentFrame?.id === frame.id"
+      data-test-id="placed-live-component-selection"
+      class="pointer-events-none absolute top-0 left-0 z-10 border border-violet-500"
+      :style="overlayStyle(frame.id)"
+    >
+      <button
+        type="button"
+        data-test-id="placed-live-component-header"
+        class="pointer-events-auto absolute left-1/2 flex cursor-move items-center gap-1.5 rounded-md border border-violet-500 bg-panel px-2 py-1 text-[10px] font-medium whitespace-nowrap text-surface shadow-sm transition-colors hover:bg-hover"
+        :style="liveFrameHeaderStyle(store.state.zoom)"
+        :aria-label="
+          componentFrameIsInteractive(frame.id)
+            ? `Finish interacting and move ${smylrLiveComponentDisplayName(frame)}`
+            : `Move ${smylrLiveComponentDisplayName(frame)}`
+        "
+        @click.stop="setComponentFrameMode(frame.id, 'frame')"
+        @pointercancel.stop="endComponentHeaderMove"
+        @pointerdown.stop.prevent="beginComponentHeaderMove(frame.id, $event)"
+        @pointermove.stop="moveComponentFromHeader"
+        @pointerup.stop="endComponentHeaderMove"
+      >
+        <span class="max-w-32 truncate">{{ smylrLiveComponentDisplayName(frame) }}</span>
+        <span
+          v-if="!componentFrameIsReady(frame.id) || componentFrameIsInteractive(frame.id)"
+          class="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-500"
+        >
+          {{ componentFrameIsReady(frame.id) ? 'Done' : 'Loading' }}
+        </span>
+      </button>
+    </div>
+  </template>
+
   <template v-for="frame in alternateFrames" :key="frame.id">
     <div
       :data-live-frame-id="frame.id"
       :data-live-frame-state="smylrLiveAppFrameState(frame)"
+      :data-live-frame-route="runtimeTargetForFrame(frame).route"
       class="pointer-events-none absolute top-0 left-0 z-[5]"
       :style="frameStyle(frame.id)"
     >
       <div
-        class="absolute inset-0 overflow-hidden bg-white shadow-lg"
+        data-test-id="smylr-live-frame-snapshot-surface"
+        class="absolute inset-0 overflow-hidden bg-white shadow-[var(--shadow-live-frame)]"
         :style="liveFrameCornerStyle(frame)"
       >
         <img
@@ -1171,29 +1544,30 @@ function showsSnapshot(frameId: string) {
             />
             <icon-lucide-image-off v-else class="mx-auto mb-2 size-7" />
             <p class="text-xs font-medium">
-              {{
-                previewStatus(frame.id) === 'rendering'
-                  ? 'Rendering preview'
-                  : previewStatus(frame.id) === 'queued'
-                    ? 'Preview queued'
-                    : 'Preview unavailable'
-              }}
+              {{ previewStatusLabel(frame.id) }}
             </p>
             <p class="mt-1 text-[10px]">
-              {{
-                previewStatus(frame.id) === 'failed'
-                  ? 'Open this frame live or retry its snapshot.'
-                  : 'One shared runtime processes previews in order.'
-              }}
+              {{ previewStatusDetail(frame.id, frame) }}
             </p>
             <button
-              v-if="previewStatus(frame.id) !== 'ready'"
+              v-if="previewStatus(frame.id) === 'failed'"
               type="button"
-              :aria-label="`Retry preview for ${frame.name}`"
+              :aria-label="`Open live source for ${frame.name}`"
+              class="pointer-events-auto mt-2 rounded border border-border px-2 py-1 text-[10px] text-surface hover:bg-hover"
+              @click.stop="selectFrame(frame.id, 'interact')"
+              @pointerdown.stop
+            >
+              Open live source
+            </button>
+            <button
+              v-else-if="previewStatus(frame.id) !== 'ready'"
+              type="button"
+              :aria-label="`Retry live snapshot for ${frame.name}`"
               class="pointer-events-auto mt-2 rounded border border-border px-2 py-1 text-[10px] text-surface hover:bg-hover"
               @click.stop="retryPreview(frame.id)"
+              @pointerdown.stop
             >
-              Retry preview now
+              Retry live snapshot
             </button>
           </div>
         </div>
@@ -1210,18 +1584,27 @@ function showsSnapshot(frameId: string) {
       <!-- Press the frame body → live app (header stays move/frame mode). -->
       <Tip
         v-if="!ownsRuntimeInteraction(frame.id) && previewStatus(frame.id) !== 'failed'"
-        :label="`Use live app in ${frame.name}`"
+        :disabled="isFlowView()"
+        :label="
+          isReadOnlyReferenceFrame(frame.id)
+            ? `${frame.name} is a separate read-only historical build`
+            : `Open ${runtimeLabelForFrame(frame)} in the live source`
+        "
       >
         <div
           data-test-id="smylr-live-frame-enter-interact"
-          class="pointer-events-auto absolute inset-0 z-[1] cursor-pointer"
+          class="pointer-events-auto absolute inset-0 z-[1]"
+          :class="isReadOnlyReferenceFrame(frame.id) ? 'cursor-default' : 'cursor-pointer'"
           @pointerenter="revealAlternateFrameHeader(frame.id)"
           @pointerleave="hideAlternateFrameHeaderSoon(frame.id)"
-          @pointerdown.stop.prevent="selectFrame(frame.id, 'interact')"
+          @pointerdown.stop.prevent="
+            selectFrame(frame.id, isReadOnlyReferenceFrame(frame.id) ? 'frame' : 'interact')
+          "
           @wheel="handleFrameSurfaceWheel"
         />
       </Tip>
       <span
+        v-if="shouldShowAlternateFrameHeader(frame.id)"
         data-test-id="smylr-live-alternate-frame-header"
         class="smylr-live-frame-header pointer-events-auto absolute left-1/2 z-[2] flex cursor-move items-center gap-0.5 whitespace-nowrap rounded-md border border-border bg-panel px-1 py-0.5 text-surface shadow-sm transition-colors hover:border-violet-500 hover:bg-hover"
         :class="store.state.selectedIds.has(frame.id) ? 'border-violet-500 bg-hover' : ''"
@@ -1239,11 +1622,20 @@ function showsSnapshot(frameId: string) {
           class="smylr-live-frame-header__title max-w-36 truncate px-1 text-[10px] font-medium"
           >{{ smylrLiveAppFrameDisplayName(frame.name) }}</strong
         >
+        <Tip :label="`Source-backed view ${runtimeLabelForFrame(frame)}`">
+          <span
+            data-test-id="smylr-live-frame-source"
+            class="max-w-36 truncate rounded bg-surface/5 px-1 text-[8px] font-medium text-muted"
+            :aria-label="`Source-backed view ${runtimeLabelForFrame(frame)}`"
+          >
+            {{ runtimeLabelForFrame(frame) }}
+          </span>
+        </Tip>
         <span v-if="previewStatus(frame.id) !== 'ready'" class="smylr-live-frame-header__preview">
           <Tip label="Retry preview">
             <button
               type="button"
-              :aria-label="`Retry preview for ${frame.name}`"
+              :aria-label="`Retry live snapshot for ${frame.name}`"
               class="flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-surface"
               @click.stop="retryPreview(frame.id)"
               @pointerdown.stop
@@ -1481,13 +1873,16 @@ function showsSnapshot(frameId: string) {
     @pointerleave="hideAlternateFrameHeaderSoon(sharedRuntimeFrame.id)"
   >
     <div
-      class="absolute inset-0 overflow-hidden bg-white shadow-lg"
+      data-test-id="smylr-live-frame-runtime-surface"
+      class="absolute inset-0 overflow-hidden bg-white shadow-[var(--shadow-live-frame)]"
       :style="liveFrameCornerStyle(sharedRuntimeFrame)"
     >
       <iframe
-        :key="sharedRuntimeLoadedFrameId ?? 'shared-runtime'"
+        :key="`${sharedRuntimeLoadedFrameId ?? 'shared-runtime'}:${sharedRuntimeHydrationVersion}`"
         :ref="(value) => setSharedIframeElement(value as Element | null)"
         :data-live-frame-id="sharedRuntimeFrame.id"
+        :data-live-frame-route="runtimeTargetForFrame(sharedRuntimeFrame).route"
+        :data-live-frame-state="runtimeTargetForFrame(sharedRuntimeFrame).state"
         :src="sharedRuntimeSrc"
         class="size-full border-0 bg-white"
         title="Shared live alternate runtime"

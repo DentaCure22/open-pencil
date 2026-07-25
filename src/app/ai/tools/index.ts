@@ -11,12 +11,12 @@ import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { getActiveEditorStore } from '@/app/editor/active-store'
 import type { EditorStore } from '@/app/editor/active-store'
 import { ensureGraphFonts } from '@/app/editor/fonts'
+import { normalizeLiveInspectorStylePatch } from '@/app/smylr-live-inspector/patch'
 import {
   liveInspectorPatchDraftFor,
   previewLiveInspectorDraft,
   selectedLiveInspectorNode
 } from '@/app/smylr-live-inspector/session'
-import { normalizeLiveInspectorStylePatch } from '@/app/smylr-live-inspector/patch'
 
 export const MAX_AGENT_STEPS = 50
 

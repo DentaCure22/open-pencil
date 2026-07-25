@@ -1,7 +1,6 @@
 import type { SmylrLiveContainerDocument } from './types'
 
-export const SMYLR_OPENPENCIL_LIVE_CONTAINER_MARKER =
-  'SMYLR_OPENPENCIL_LIVE_CONTAINER_V1'
+export const SMYLR_OPENPENCIL_LIVE_CONTAINER_MARKER = 'SMYLR_OPENPENCIL_LIVE_CONTAINER_V1'
 
 type SmylrLiveContainerClipboardPacket = {
   document?: SmylrLiveContainerDocument
@@ -9,9 +8,7 @@ type SmylrLiveContainerClipboardPacket = {
   version?: number
 }
 
-function assertLiveContainerDocument(
-  value: unknown
-): asserts value is SmylrLiveContainerDocument {
+function assertLiveContainerDocument(value: unknown): asserts value is SmylrLiveContainerDocument {
   if (!value || typeof value !== 'object') {
     throw new Error('Clipboard did not contain a Smylr live container document.')
   }
@@ -32,9 +29,7 @@ function jsonTextAfterMarker(text: string) {
   const markerIndex = text.indexOf(SMYLR_OPENPENCIL_LIVE_CONTAINER_MARKER)
   if (markerIndex === -1) return null
 
-  const afterMarker = text
-    .slice(markerIndex + SMYLR_OPENPENCIL_LIVE_CONTAINER_MARKER.length)
-    .trim()
+  const afterMarker = text.slice(markerIndex + SMYLR_OPENPENCIL_LIVE_CONTAINER_MARKER.length).trim()
   const jsonStart = afterMarker.indexOf('{')
   if (jsonStart === -1) {
     throw new Error('Clipboard Smylr live container packet has no JSON body.')

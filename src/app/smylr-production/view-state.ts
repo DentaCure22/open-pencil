@@ -154,7 +154,7 @@ export function smylrProductionPageView(node: SceneNode | null | undefined) {
   }
   const kind = pluginValue(node, 'kind')
   const pageId = pluginValue(node, 'pageId')
-  return kind && pageId ? { kind, pageId } : null
+  return kind && pageId ? { kind, pageId } : { kind: 'ordinary-board', pageId: node.id }
 }
 
 export function captureSmylrProductionView(store: EditorStore): SmylrProductionViewState | null {

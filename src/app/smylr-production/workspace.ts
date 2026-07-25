@@ -1,11 +1,37 @@
-import type { ViewportInsets } from '@open-pencil/core/editor'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '../editor/session'
-import { visibleElementRect } from '../editor/viewport-insets'
+import { editorViewportInsets } from '../editor/viewport-insets'
+import {
+  createSidebarBoard,
+  createSidebarPage,
+  moveSidebarBoard,
+  orderedSidebarBoards,
+  removeSidebarPage,
+  renameSidebarBoard,
+  resolveSidebarWorkspace,
+  sidebarWorkspacePluginData,
+  SMYLR_PROJECT_ID
+} from '../sidebar-workspace/tree'
 import type { LiveWorkspaceItem } from '../smylr-live-inspector/workspace'
-import { syncDentalChartAppFlowScene } from './app-flow/scene'
+import {
+  loadOpenPencilWorkspaceIdentity,
+  OPENPENCIL_WORKSPACE_DOCUMENT_NAME,
+  stampOpenPencilWorkspaceIdentity
+} from '../workspace-document/identity'
+import { syncAppScreenFlowCodeObjects } from './app-flow/code-objects'
+import {
+  DENTAL_CHART_APP_FLOW,
+  PRODUCT_MAP_DENTAL_CHART_APP_FLOW,
+  SMYLR_DURABLE_APP_FLOW_DEFINITIONS,
+  type AppScreenFlowDefinition
+} from './app-flow/model'
+import {
+  syncAppScreenFlowScene,
+  syncDentalChartAppFlowScene,
+  syncProductMapDentalChartAppFlowScene
+} from './app-flow/scene'
 import {
   createSmylrBrandDesignPage,
   SMYLR_BRAND_BOARD_KIND,
@@ -30,16 +56,27 @@ import {
   isWorkspaceItemTombstoned,
   loadLiveFrameTombstones
 } from './live/frame-tombstones'
-import { SMYLR_PRODUCTION_PAGES, smylrProductionPageById, type SmylrProductionPage } from './pages'
+import {
+  SMYLR_PRODUCTION_PAGES,
+  SMYLR_RETIRED_PRODUCTION_PAGE_IDS,
+  smylrProductionPageById,
+  type SmylrProductionPage
+} from './pages'
+import { syncTechnicalFlowScene, TECHNICAL_FLOW_SAVE_FINDING_ID } from './technical-flow'
 import { yieldAnimationFrames } from './yield-frames'
 
 const PLUGIN_ID = 'smylr-production'
+const HTML_BOARD_PLUGIN_ID = 'openpencil-html-board'
+const HTML_BOARD_KEY = 'board-key'
 const LIVE_APP_KIND = 'live-app-frame'
 const LIVE_APP_FRAME_WIDTH = 1280
 const LIVE_APP_FRAME_HEIGHT = 900
 const LIVE_APP_FRAME_GAP = 120
 const FLOW_PAGE_SUFFIX = ' — Flow'
-const VIEWPORT_SAFE_GAP = 24
+export const SMYLR_PRODUCT_MAP_PAGE_KIND = 'smylr-product-map-page'
+export const SMYLR_PRODUCT_MAP_PAGE_ID = PRODUCT_MAP_DENTAL_CHART_APP_FLOW.pageId
+export const SMYLR_PRODUCT_MAP_PAGE_NAME = PRODUCT_MAP_DENTAL_CHART_APP_FLOW.label
+export const SMYLR_PRODUCT_MAP_PROJECT_NAME = 'Maps & Flows'
 
 type WorkspaceOptions = {
   selectedPageId?: string
@@ -72,12 +109,19 @@ function pluginValue(node: SceneNode, key: string): string | undefined {
   return node.pluginData.find((entry) => entry.pluginId === PLUGIN_ID && entry.key === key)?.value
 }
 
+function htmlBoardKey(node: SceneNode): string | undefined {
+  return node.pluginData.find(
+    (entry) => entry.pluginId === HTML_BOARD_PLUGIN_ID && entry.key === HTML_BOARD_KEY
+  )?.value
+}
+
 export function isSmylrLiveAppFrameNode(node: SceneNode | null | undefined): boolean {
   return Boolean(node && pluginValue(node, 'kind') === LIVE_APP_KIND)
 }
 
 export function isSmylrFlowPageNode(node: SceneNode | null | undefined): boolean {
-  return Boolean(node && pluginValue(node, 'kind') === 'smylr-flow-page')
+  const kind = node ? pluginValue(node, 'kind') : undefined
+  return kind === 'smylr-flow-page' || kind === SMYLR_PRODUCT_MAP_PAGE_KIND
 }
 
 function createLiveAppPage(graph: SceneGraph, page: SmylrProductionPage, pageNode: SceneNode) {
@@ -134,6 +178,258 @@ function createFlowCanvasPage(graph: SceneGraph, page: SmylrProductionPage) {
   return flowPage.id
 }
 
+function appFlowPagePluginData(definition: AppScreenFlowDefinition): SceneNode['pluginData'] {
+  return [
+    pluginData('kind', 'smylr-flow-page'),
+    pluginData('pageId', definition.pageId),
+    pluginData('route', definition.route),
+    pluginData('flowId', definition.id),
+    pluginData('flowSchemaVersion', definition.schemaVersion),
+    pluginData('flowSourceFile', definition.sourceFile),
+    pluginData('flowSourceFormat', 'markdown')
+  ]
+}
+
+function appFlowPageByDefinition(
+  graph: SceneGraph,
+  definition: AppScreenFlowDefinition
+): SceneNode | null {
+  return (
+    graph.getPages().find((page) => pluginValue(page, 'flowId') === definition.id) ??
+    graph
+      .getPages()
+      .find(
+        (page) =>
+          pluginValue(page, 'kind') === 'smylr-flow-page' &&
+          pluginValue(page, 'pageId') === definition.pageId
+      ) ??
+    graph.getPages().find((page) => page.name === definition.label) ??
+    null
+  )
+}
+
+function ensureAppFlowPageMetadata(
+  graph: SceneGraph,
+  page: SceneNode,
+  definition: AppScreenFlowDefinition
+): boolean {
+  const expectedPluginData = appFlowPagePluginData(definition)
+  const managedKeys = new Set(expectedPluginData.map((entry) => entry.key))
+  const managedEntries = page.pluginData.filter(
+    (entry) => entry.pluginId === PLUGIN_ID && managedKeys.has(entry.key)
+  )
+  const metadataMatches =
+    managedEntries.length === expectedPluginData.length &&
+    expectedPluginData.every((expected) =>
+      managedEntries.some(
+        (actual) => actual.key === expected.key && actual.value === expected.value
+      )
+    )
+  if (page.name === definition.label && metadataMatches) return false
+
+  graph.updateNode(page.id, {
+    name: definition.label,
+    pluginData: [
+      ...page.pluginData.filter(
+        (entry) => !(entry.pluginId === PLUGIN_ID && managedKeys.has(entry.key))
+      ),
+      ...expectedPluginData
+    ]
+  })
+  return true
+}
+
+function syncAppFlowPage(
+  graph: SceneGraph,
+  page: SceneNode,
+  definition: AppScreenFlowDefinition
+): boolean {
+  const metadataChanged = ensureAppFlowPageMetadata(graph, page, definition)
+  const synced = syncAppScreenFlowScene(graph, page.id, definition)
+  return metadataChanged || synced.changed
+}
+
+function createDurableAppFlowPage(
+  graph: SceneGraph,
+  definition: AppScreenFlowDefinition
+): SceneNode {
+  const page = graph.addPage(definition.label)
+  if (definition.id === TECHNICAL_FLOW_SAVE_FINDING_ID) {
+    syncTechnicalFlowScene(graph, page.id, definition)
+  } else {
+    syncAppFlowPage(graph, page, definition)
+  }
+  return graph.getNode(page.id) ?? page
+}
+
+function syncCodeObjectFlowBoards(graph: SceneGraph): boolean {
+  const definitions = [
+    DENTAL_CHART_APP_FLOW,
+    PRODUCT_MAP_DENTAL_CHART_APP_FLOW,
+    ...SMYLR_DURABLE_APP_FLOW_DEFINITIONS.filter(
+      (definition) => definition.id !== TECHNICAL_FLOW_SAVE_FINDING_ID
+    )
+  ]
+  let changed = false
+  for (const definition of definitions) {
+    const page =
+      definition.id === PRODUCT_MAP_DENTAL_CHART_APP_FLOW.id
+        ? productMapPageByIdentity(graph)
+        : appFlowPageByDefinition(graph, definition)
+    if (!page) continue
+    const result = syncAppScreenFlowCodeObjects(graph, page.id, definition)
+    changed ||= result.changed
+  }
+  return changed
+}
+
+function productMapPagePluginData(): SceneNode['pluginData'] {
+  return [
+    pluginData('kind', SMYLR_PRODUCT_MAP_PAGE_KIND),
+    pluginData('pageId', SMYLR_PRODUCT_MAP_PAGE_ID),
+    pluginData('route', PRODUCT_MAP_DENTAL_CHART_APP_FLOW.route)
+  ]
+}
+
+function productMapPageByIdentity(graph: SceneGraph): SceneNode | null {
+  return (
+    graph
+      .getPages()
+      .find(
+        (page) =>
+          pluginValue(page, 'kind') === SMYLR_PRODUCT_MAP_PAGE_KIND &&
+          pluginValue(page, 'pageId') === SMYLR_PRODUCT_MAP_PAGE_ID
+      ) ??
+    graph.getPages().find((page) => page.name === SMYLR_PRODUCT_MAP_PAGE_NAME) ??
+    null
+  )
+}
+
+function ensureProductMapPageMetadata(graph: SceneGraph, page: SceneNode): boolean {
+  const managedKeys = new Set(['kind', 'pageId', 'route'])
+  const expectedPluginData = productMapPagePluginData()
+  const managedEntries = page.pluginData.filter(
+    (entry) => entry.pluginId === PLUGIN_ID && managedKeys.has(entry.key)
+  )
+  const metadataMatches =
+    managedEntries.length === expectedPluginData.length &&
+    expectedPluginData.every((expected) =>
+      managedEntries.some(
+        (actual) => actual.key === expected.key && actual.value === expected.value
+      )
+    )
+  if (page.name === SMYLR_PRODUCT_MAP_PAGE_NAME && metadataMatches) return false
+
+  const nextPluginData = [
+    ...page.pluginData.filter(
+      (entry) => !(entry.pluginId === PLUGIN_ID && managedKeys.has(entry.key))
+    ),
+    ...expectedPluginData
+  ]
+  graph.updateNode(page.id, { name: SMYLR_PRODUCT_MAP_PAGE_NAME, pluginData: nextPluginData })
+  return true
+}
+
+function removeLegacyProductMapProjection(graph: SceneGraph, pageId: string): boolean {
+  let changed = false
+  for (const child of [...graph.getChildren(pageId)]) {
+    const isLegacyCapture = child.name.startsWith('Saved capture ·')
+    const isLegacyConnector = child.name === 'Line'
+    const isLegacyMermaid = child.name === 'Mermaid diagram'
+    if (!isLegacyCapture && !isLegacyConnector && !isLegacyMermaid) continue
+    graph.deleteNode(child.id)
+    changed = true
+  }
+  return changed
+}
+
+function syncProductMapPage(graph: SceneGraph, page: SceneNode): boolean {
+  const removedLegacy = removeLegacyProductMapProjection(graph, page.id)
+  const synced = syncProductMapDentalChartAppFlowScene(graph, page.id)
+  return removedLegacy || synced.changed
+}
+
+function createProductMapCanvasPage(graph: SceneGraph): SceneNode {
+  const page = graph.addPage(SMYLR_PRODUCT_MAP_PAGE_NAME)
+  graph.updateNode(page.id, { pluginData: productMapPagePluginData() })
+  syncProductMapPage(graph, page)
+  return graph.getNode(page.id) ?? page
+}
+
+type ManagedFlowBoard = {
+  label: string
+  pageId: string
+}
+
+function ensureMapsAndFlowsSidebarPlacement(
+  graph: SceneGraph,
+  managedBoards: ManagedFlowBoard[]
+): boolean {
+  const root = graph.getNode(graph.rootId)
+  if (!root) return false
+
+  const resolution = resolveSidebarWorkspace(graph)
+  let workspace = resolution.workspace
+  const smylrProject = workspace.pages.find((page) => page.id === SMYLR_PROJECT_ID)
+  if (!smylrProject) return false
+
+  let project = workspace.pages.find(
+    (page) => page.parentId === smylrProject.id && page.name === SMYLR_PRODUCT_MAP_PROJECT_NAME
+  )
+  if (!project) {
+    const created = createSidebarPage(workspace, {
+      name: SMYLR_PRODUCT_MAP_PROJECT_NAME,
+      parentId: smylrProject.id
+    })
+    workspace = created.workspace
+    project = created.page
+  }
+
+  for (const managedBoard of managedBoards) {
+    let board = workspace.boards.find((candidate) => candidate.pageId === managedBoard.pageId)
+    if (!board) {
+      workspace = createSidebarBoard(workspace, {
+        icon: 'flow',
+        label: managedBoard.label,
+        pageId: managedBoard.pageId,
+        parentPageId: project.id
+      })
+      board = workspace.boards.find((candidate) => candidate.pageId === managedBoard.pageId)
+    }
+    if (!board) continue
+
+    if (board.parentPageId !== project.id) {
+      workspace = moveSidebarBoard(
+        workspace,
+        managedBoard.pageId,
+        project.id,
+        orderedSidebarBoards(workspace, project.id).length
+      )
+    }
+    const currentBoard = workspace.boards.find(
+      (candidate) => candidate.pageId === managedBoard.pageId
+    )
+    if (currentBoard && currentBoard.label !== managedBoard.label) {
+      workspace = renameSidebarBoard(workspace, managedBoard.pageId, managedBoard.label)
+    }
+  }
+
+  for (const legacyProject of workspace.pages.filter(
+    (page) => page.parentId === null && page.name === SMYLR_PRODUCT_MAP_PROJECT_NAME
+  )) {
+    const isEmpty =
+      !workspace.boards.some((board) => board.parentPageId === legacyProject.id) &&
+      !workspace.pages.some((page) => page.parentId === legacyProject.id)
+    if (isEmpty) workspace = removeSidebarPage(workspace, legacyProject.id)
+  }
+
+  const nextPluginData = sidebarWorkspacePluginData(root, workspace)
+  const changed =
+    resolution.changed || JSON.stringify(root.pluginData) !== JSON.stringify(nextPluginData)
+  if (changed) graph.updateNode(root.id, { pluginData: nextPluginData })
+  return changed
+}
+
 const DESIGN_PAGE_IDS = new Set([SMYLR_TOKENS_PAGE_ID, SMYLR_BRAND_PAGE_ID])
 
 export function createSmylrProductionWorkspaceGraph(
@@ -172,6 +468,15 @@ export function createSmylrProductionWorkspaceGraph(
   const brandPageNode = graph.addPage('Brand Guidelines')
   const brandBoardId = createSmylrBrandDesignPage(graph, brandPageNode)
 
+  const productMapPage = createProductMapCanvasPage(graph)
+  const durableFlowPages = SMYLR_DURABLE_APP_FLOW_DEFINITIONS.map((definition) =>
+    createDurableAppFlowPage(graph, definition)
+  )
+  ensureMapsAndFlowsSidebarPlacement(graph, [
+    { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMapPage.id },
+    ...durableFlowPages.map((page) => ({ label: page.name, pageId: page.id }))
+  ])
+
   if (options.selectedPageId === SMYLR_TOKENS_PAGE_ID) {
     selectedPageNodeId = tokensPageNode.id
     selectedLiveFrameId = ''
@@ -204,29 +509,6 @@ export function createSmylrProductionWorkspaceGraph(
   }
 }
 
-/** Keep fitted Smylr frames clear of the floating editor chrome. */
-function smylrViewportInsets(): ViewportInsets {
-  const canvas = visibleElementRect('[data-test-id="canvas-area"]')
-  if (!canvas) return {}
-
-  const layers = visibleElementRect('[data-test-id="layers-panel"]')
-  const toolbar = visibleElementRect('[data-test-id="toolbar"]')
-  const boardDock = visibleElementRect('[data-test-id="board-dock"]')
-
-  return {
-    left: layers
-      ? Math.max(VIEWPORT_SAFE_GAP, layers.right - canvas.left + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP,
-    right: VIEWPORT_SAFE_GAP,
-    top: toolbar
-      ? Math.max(VIEWPORT_SAFE_GAP, toolbar.bottom - canvas.top + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP,
-    bottom: boardDock
-      ? Math.max(VIEWPORT_SAFE_GAP, canvas.bottom - boardDock.top + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP
-  }
-}
-
 /** Fit page content into the canvas area that remains visible around editor panels. */
 export async function fitSmylrPageToViewport(
   store: EditorStore,
@@ -237,7 +519,7 @@ export async function fitSmylrPageToViewport(
   if (ids.length > 0) store.select(ids)
 
   const fit = () => {
-    const insets = smylrViewportInsets()
+    const insets = editorViewportInsets()
     if (ids.length > 0) store.zoomToSelection(insets)
     else store.zoomToFit(insets)
   }
@@ -342,6 +624,123 @@ export function isSmylrFoundationsStale(store: EditorStore): boolean {
   return getSmylrFoundationsRevision(store) !== SMYLR_FOUNDATIONS_REVISION
 }
 
+/** Repair missing production pages without replacing user-authored ordinary boards. */
+export function repairSmylrProductionWorkspaceStructure(store: EditorStore): boolean {
+  if (!hasSmylrProductionWorkspace(store)) return false
+  let touched = false
+  const productionPageIds: string[] = []
+
+  for (const page of store.graph.getPages()) {
+    const kind = pluginValue(page, 'kind')
+    const pageId = pluginValue(page, 'pageId')
+    const isManagedProductionPage = kind === 'smylr-production-page' || kind === 'smylr-flow-page'
+    if (isManagedProductionPage && pageId && SMYLR_RETIRED_PRODUCTION_PAGE_IDS.has(pageId)) {
+      store.deletePage(page.id)
+      touched = true
+    }
+  }
+
+  for (const page of SMYLR_PRODUCTION_PAGES) {
+    let currentPage = store.graph
+      .getPages()
+      .find(
+        (candidate) =>
+          pluginValue(candidate, 'kind') === 'smylr-production-page' &&
+          pluginValue(candidate, 'pageId') === page.id
+      )
+    if (!currentPage) {
+      currentPage = store.graph.addPage(page.label)
+      createLiveAppPage(store.graph, page, currentPage)
+      touched = true
+    }
+    productionPageIds.push(currentPage.id)
+
+    let flowPage = store.graph
+      .getPages()
+      .find(
+        (candidate) =>
+          pluginValue(candidate, 'kind') === 'smylr-flow-page' &&
+          pluginValue(candidate, 'pageId') === page.id
+      )
+    if (!flowPage) {
+      const flowPageId = createFlowCanvasPage(store.graph, page)
+      flowPage = store.graph.getNode(flowPageId) ?? undefined
+      touched = true
+    }
+    if (flowPage) productionPageIds.push(flowPage.id)
+  }
+
+  let tokensPage = findFoundationsPage(store, SMYLR_TOKENS_PAGE_ID)
+  if (!tokensPage) {
+    tokensPage = store.graph.addPage('Design System')
+    createSmylrTokensDesignPage(store.graph, tokensPage)
+    touched = true
+  }
+  productionPageIds.push(tokensPage.id)
+
+  let brandPage = findFoundationsPage(store, SMYLR_BRAND_PAGE_ID)
+  if (!brandPage) {
+    brandPage = store.graph.addPage('Brand Guidelines')
+    createSmylrBrandDesignPage(store.graph, brandPage)
+    touched = true
+  }
+  productionPageIds.push(brandPage.id)
+
+  let productMapPage = productMapPageByIdentity(store.graph)
+  if (!productMapPage) {
+    productMapPage = store.graph.addPage(SMYLR_PRODUCT_MAP_PAGE_NAME)
+    touched = true
+  }
+  if (ensureProductMapPageMetadata(store.graph, productMapPage)) touched = true
+  if (syncProductMapPage(store.graph, productMapPage)) touched = true
+  productionPageIds.push(productMapPage.id)
+
+  const durableFlowPages: SceneNode[] = []
+  for (const definition of SMYLR_DURABLE_APP_FLOW_DEFINITIONS) {
+    let flowPage = appFlowPageByDefinition(store.graph, definition)
+    if (!flowPage) {
+      flowPage = createDurableAppFlowPage(store.graph, definition)
+      touched = true
+    } else if (
+      definition.id === TECHNICAL_FLOW_SAVE_FINDING_ID
+        ? syncTechnicalFlowScene(store.graph, flowPage.id, definition).changed
+        : syncAppFlowPage(store.graph, flowPage, definition)
+    ) {
+      computeAllLayouts(store.graph, flowPage.id)
+      touched = true
+    }
+    durableFlowPages.push(flowPage)
+    productionPageIds.push(flowPage.id)
+  }
+
+  const root = store.graph.getNode(store.graph.rootId)
+  if (!root) return touched
+  const foundationIds = new Set(productionPageIds)
+  const remainingPageIds = root.childIds.filter((id) => {
+    const node = store.graph.getNode(id)
+    return node?.type === 'CANVAS' && node.parentId === root.id && !foundationIds.has(id)
+  })
+  const orderedPageIds = [...productionPageIds, ...remainingPageIds]
+  if (
+    orderedPageIds.length !== root.childIds.length ||
+    orderedPageIds.some((id, index) => root.childIds[index] !== id)
+  ) {
+    store.graph.updateNode(root.id, { childIds: orderedPageIds })
+    touched = true
+  }
+
+  if (
+    ensureMapsAndFlowsSidebarPlacement(store.graph, [
+      { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMapPage.id },
+      ...durableFlowPages.map((page) => ({ label: page.name, pageId: page.id }))
+    ])
+  ) {
+    touched = true
+  }
+
+  return touched
+}
+
 function findFoundationsPage(store: EditorStore, pageId: string): SceneNode | null {
   for (const page of store.graph.getPages()) {
     const kind = pluginValue(page, 'kind')
@@ -382,6 +781,41 @@ export async function refreshSmylrFoundationsBoardsInPlace(
       computeAllLayouts(store.graph, dentalFlowPage.id)
       touched = true
     }
+  }
+
+  const productMapPage = productMapPageByIdentity(store.graph)
+  if (productMapPage && syncProductMapPage(store.graph, productMapPage)) {
+    computeAllLayouts(store.graph, productMapPage.id)
+    touched = true
+  }
+
+  const durableFlowPages = SMYLR_DURABLE_APP_FLOW_DEFINITIONS.flatMap((definition) => {
+    const page = appFlowPageByDefinition(store.graph, definition)
+    if (!page) return []
+    const changed =
+      definition.id === TECHNICAL_FLOW_SAVE_FINDING_ID
+        ? syncTechnicalFlowScene(store.graph, page.id, definition).changed
+        : syncAppFlowPage(store.graph, page, definition)
+    if (changed) {
+      computeAllLayouts(store.graph, page.id)
+      touched = true
+    }
+    return [{ definition, page }]
+  })
+
+  if (syncCodeObjectFlowBoards(store.graph)) touched = true
+
+  if (
+    productMapPage &&
+    ensureMapsAndFlowsSidebarPlacement(store.graph, [
+      { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMapPage.id },
+      ...durableFlowPages.map(({ definition, page }) => ({
+        label: definition.label,
+        pageId: page.id
+      }))
+    ])
+  ) {
+    touched = true
   }
 
   // Only refresh the page you're looking at (or both if unspecified).
@@ -489,12 +923,15 @@ export async function openSmylrProductionWorkspace(
   const workspace = createSmylrProductionWorkspaceGraph(options)
   const isDesignPage = DESIGN_PAGE_IDS.has(options.selectedPageId ?? '')
 
+  syncCodeObjectFlowBoards(workspace.graph)
+
   stampFoundationsRevision(workspace.graph)
+  stampOpenPencilWorkspaceIdentity(workspace.graph, await loadOpenPencilWorkspaceIdentity())
 
   // Pause a frame so HMR / renderer aren't mid-draw when we swap the graph.
   await yieldAnimationFrames(1)
 
-  store.state.documentName = 'Smylr Production Canvas'
+  store.state.documentName = OPENPENCIL_WORKSPACE_DOCUMENT_NAME
   try {
     await loadLiveFrameTombstones()
     applyLiveFrameTombstones(workspace.graph)
@@ -548,6 +985,7 @@ export async function switchSmylrProductionPage(
     const id = pluginValue(page, 'pageId')
     const isMatch =
       id === pageId ||
+      htmlBoardKey(page) === pageId ||
       (pageId === SMYLR_TOKENS_PAGE_ID && kind === SMYLR_TOKENS_PAGE_KIND) ||
       (pageId === SMYLR_BRAND_PAGE_ID && kind === SMYLR_BRAND_PAGE_KIND) ||
       (kind === 'smylr-production-page' && id === pageId)
@@ -745,6 +1183,10 @@ export function ensureSmylrAlternateLiveAppFrame(
 
 export function smylrLiveAppFrameRoute(node: SceneNode): string {
   return pluginValue(node, 'route') ?? SMYLR_PRODUCTION_PAGES[0].route
+}
+
+export function smylrLiveAppFrameCaptureSrc(node: SceneNode): string | null {
+  return pluginValue(node, 'captureSrc') ?? null
 }
 
 export function hasSmylrProductionWorkspace(store: EditorStore): boolean {

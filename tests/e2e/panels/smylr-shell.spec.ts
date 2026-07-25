@@ -13,11 +13,13 @@ function centerX(bounds: Rect | null) {
 
 async function letAppReceivePointerEvents() {
   await editor.page.addStyleTag({
-    content: '[data-testid="react-grab-overlay"] { pointer-events: none !important; }'
+    content: 'html body [data-testid="react-grab-overlay"] { pointer-events: none !important; }'
   })
   await editor.page.locator('[data-testid="react-grab-overlay"]').evaluateAll((overlays) => {
     for (const overlay of overlays) {
-      if (overlay instanceof HTMLElement) overlay.style.pointerEvents = 'none'
+      if (overlay instanceof HTMLElement) {
+        overlay.style.setProperty('pointer-events', 'none', 'important')
+      }
     }
   })
 }
@@ -147,6 +149,45 @@ test('floating editor chrome follows light and dark themes', async () => {
   expect(darkUtilityTabs).toBe('rgba(0, 0, 0, 0.3)')
 })
 
+test('live app frames use calm theme-aware separation without native scene effects', async () => {
+  const surface = editor.page.getByTestId('smylr-live-frame-surface')
+  await expect(surface).toBeVisible()
+  await expect(surface).toHaveClass(/shadow-\[var\(--shadow-live-frame\)\]/)
+  await expect(surface).not.toHaveClass(/shadow-lg/)
+
+  const shadowForTheme = (theme: 'dark' | 'light') =>
+    surface.evaluate((element, nextTheme) => {
+      document.documentElement.dataset.theme = nextTheme
+      return getComputedStyle(element).boxShadow
+    }, theme)
+
+  const darkShadow = await shadowForTheme('dark')
+  const lightShadow = await shadowForTheme('light')
+  expect(darkShadow).toContain('0px 2px 6px')
+  expect(lightShadow).toContain('0px 1px 4px')
+  expect(lightShadow).not.toBe(darkShadow)
+
+  const liveFramePaint = await editor.page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const frame = [...store.graph.getAllNodes()].find((node) =>
+      node.pluginData.some(
+        (entry) =>
+          entry.pluginId === 'smylr-production' &&
+          entry.key === 'kind' &&
+          entry.value === 'live-app-frame'
+      )
+    )
+    if (!frame) throw new Error('Smylr live frame not initialized')
+    return {
+      effects: frame.effects.length,
+      fills: frame.fills.length,
+      strokes: frame.strokes.length
+    }
+  })
+  expect(liveFramePaint).toEqual({ effects: 0, fills: 0, strokes: 0 })
+})
+
 async function createSelectedTestNode() {
   selectedTestNodeId = await editor.page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
@@ -218,7 +259,13 @@ test('Smylr falls back to Layers when Design has no context', async () => {
   await expect(editor.page.getByTestId('sidebar-context-inspector')).toHaveCount(0)
   await expect(editor.page.getByTestId('layers-scroll')).toBeVisible()
   const utilityAreaBounds = await editor.page.getByTestId('left-panel-utility-area').boundingBox()
-  const layersTabBounds = await editor.page.getByTestId('left-panel-layers-tab').boundingBox()
+  const utilityTabs = [
+    editor.page.getByTestId('left-panel-layers-tab'),
+    editor.page.getByTestId('left-panel-assets-tab'),
+    editor.page.getByTestId('left-panel-trace-tab')
+  ]
+  const utilityTabBounds = await Promise.all(utilityTabs.map((tab) => tab.boundingBox()))
+  const layersTabBounds = utilityTabBounds[0]
   expect(layersTabBounds?.y).toBeCloseTo((utilityAreaBounds?.y ?? 0) + 8, 0)
   expect(layersTabBounds?.height).toBeCloseTo(32, 0)
 
@@ -237,14 +284,14 @@ test('Smylr falls back to Layers when Design has no context', async () => {
     'true'
   )
   await expect(editor.page.getByTestId('layers-scroll')).toBeVisible()
-  await expect
-    .poll(
-      async () => (await editor.page.getByTestId('left-panel-layers-tab').boundingBox())?.y ?? 0
-    )
-    .toBeGreaterThan((layersTabBounds?.y ?? 0) + 200)
+  for (const [index, utilityTab] of utilityTabs.entries()) {
+    await expect
+      .poll(async () => (await utilityTab.boundingBox())?.y ?? 0)
+      .toBeGreaterThan((utilityTabBounds[index]?.y ?? 0) + 200)
+  }
 })
 
-test('Smylr keeps Design with library utilities and gives Trace the full rail', async () => {
+test('Smylr keeps Design above Layers, Assets, and Trace', async () => {
   const contextInspector = editor.page.getByTestId('sidebar-context-inspector')
   const utilityViews = [
     { panel: 'layers-tree', trigger: 'left-panel-layers-tab' },
@@ -266,19 +313,23 @@ test('Smylr keeps Design with library utilities and gives Trace the full rail', 
   }
 
   await editor.page.getByTestId('left-panel-trace-tab').click()
-  await expect(contextInspector).toHaveCount(0)
+  await expect(contextInspector).toBeVisible()
+  await expect(contextInspector).toHaveAttribute('data-split', 'true')
   await expect(editor.page.getByTestId('sidebar-context-slot')).toHaveAttribute(
     'data-state',
-    'closed'
+    'open'
   )
   await expect(editor.page.getByTestId('narrated-trace-panel')).toBeVisible()
+  const contextBounds = await contextInspector.boundingBox()
+  const traceTabBounds = await editor.page.getByTestId('left-panel-trace-tab').boundingBox()
+  expect(traceTabBounds?.y).toBeGreaterThan(contextBounds?.y ?? 0)
 
   await editor.page.getByTestId('left-panel-trace-tab').click()
   await expect(editor.page.getByTestId('left-panel-trace-tab')).toHaveAttribute(
     'data-state',
     'active'
   )
-  await expect(contextInspector).toHaveCount(0)
+  await expect(contextInspector).toBeVisible()
 
   await editor.page.getByTestId('left-panel-layers-tab').click()
   await expect(contextInspector).toHaveAttribute('data-split', 'true')
@@ -328,6 +379,10 @@ test('Smylr centers both floating controls on the usable canvas', async () => {
   const toolbar = editor.page.getByTestId('toolbar')
   const dock = editor.page.getByTestId('board-dock')
 
+  await expect(dock.getByTestId('board-dock-shell')).toHaveAttribute('data-dock-layout', 'unified')
+  await expect(dock.getByTestId('board-dock-trace-center')).toHaveCount(0)
+  await expect(dock.getByRole('button', { name: 'Open Trace history' })).toHaveCount(0)
+
   const sidebarSplitterBounds = await sidebarSplitter.boundingBox()
   const canvasChromeBounds = await canvasChromeArea.boundingBox()
   const toolbarBounds = await toolbar.boundingBox()
@@ -363,6 +418,40 @@ test('Smylr centers both floating controls on the usable canvas', async () => {
   await expect
     .poll(async () => (await sidebarSplitter.boundingBox())?.width ?? 0)
     .toBeGreaterThan((sidebarSplitterBounds?.width ?? 0) - 2)
+})
+
+test('Board dock keeps Workspace inside one unified shell', async () => {
+  const dock = editor.page.getByTestId('board-dock')
+  const dockShell = dock.getByTestId('board-dock-shell')
+  const workspaceButton = dock.getByRole('button', { name: 'Workspace' })
+
+  await expect(dockShell).toHaveCount(1)
+  await expect(dockShell).toHaveAttribute('data-dock-layout', 'unified')
+  await expect(workspaceButton).toHaveAttribute('data-dock-group', 'workspace')
+  await expect(dock.getByTestId('board-dock-left-shell')).toHaveCount(0)
+  await expect(dock.getByTestId('board-dock-right-shell')).toHaveCount(0)
+  await expect(dock.getByTestId('board-dock-utility-divider')).toBeVisible()
+
+  const unifiedDockComposition = await dockShell.evaluate((shell) => {
+    const divider = shell.querySelector('[data-test-id="board-dock-utility-divider"]')
+    const workspace = shell.querySelector('[data-test-id="board-dock-more"]')
+    const interactiveItems = shell.querySelectorAll('button')
+    return {
+      dividerImmediatelyPrecedesWorkspace: divider?.nextElementSibling === workspace,
+      workspaceAtEnd: interactiveItems.item(interactiveItems.length - 1) === workspace,
+      workspaceInsideShell: workspace?.closest('[data-test-id="board-dock-shell"]') === shell
+    }
+  })
+  expect(unifiedDockComposition).toEqual({
+    dividerImmediatelyPrecedesWorkspace: true,
+    workspaceAtEnd: true,
+    workspaceInsideShell: true
+  })
+
+  await workspaceButton.click()
+  await expect(editor.page.getByTestId('board-project-browser')).toBeVisible()
+  await editor.page.keyboard.press('Escape')
+  await expect(editor.page.getByTestId('board-project-browser')).toBeHidden()
 })
 
 test('Smylr uses one contextual sidebar with top tools and a bottom board dock', async () => {
@@ -411,7 +500,7 @@ test('Smylr uses one contextual sidebar with top tools and a bottom board dock',
   await expect(toolbar.getByTestId('collab-local-avatar')).toBeVisible()
   await expect(toolbar.getByTestId('collab-share-button')).toHaveAccessibleName('Share')
   await expect(toolbar.getByTestId('narrated-trace-ink-tool')).toBeVisible()
-  await expect(toolbar.getByTestId('narrated-trace-start')).toHaveText('')
+  await expect(toolbar.getByTestId('narrated-trace-start')).toHaveCount(0)
   await expect(toolbar.locator('span.h-6.w-px')).toHaveCount(1)
   expect(
     await collaboration.evaluate((element) => {
@@ -432,7 +521,7 @@ test('Smylr uses one contextual sidebar with top tools and a bottom board dock',
   const moreProjects = dock.getByRole('button', { name: 'Workspace' })
   await expect(moreProjects).toBeVisible()
   const currentBoardButton = dock.getByRole('button').first()
-  await expect(currentBoardButton.locator('span[aria-hidden="true"]')).toBeVisible()
+  await expect(currentBoardButton.locator('span[aria-hidden="true"]')).toHaveCount(0)
   await expect(currentBoardButton).not.toHaveClass(/bg-white/)
   const currentBoardTitle = (await currentBoardButton.getAttribute('aria-label'))?.replace(
     /^Open /u,
@@ -475,8 +564,8 @@ test('Smylr uses one contextual sidebar with top tools and a bottom board dock',
       width: style.width
     }
   })
-  expect(moreTileStyle.backgroundColor).not.toBe(boardTileStyle.backgroundColor)
-  expect(moreTileStyle.borderColor).not.toBe(boardTileStyle.borderColor)
+  expect(moreTileStyle.backgroundColor).toBe(boardTileStyle.backgroundColor)
+  expect(moreTileStyle.borderColor).toBe(boardTileStyle.borderColor)
   expect(moreTileStyle.borderRadius).toBe(boardTileStyle.borderRadius)
   expect(moreTileStyle.height).toBe(boardTileStyle.height)
   expect(moreTileStyle.width).toBe(boardTileStyle.width)
@@ -576,7 +665,7 @@ test('board dock keeps three recent unpinned Boards in stable warm slots', async
     .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-test-id')))
 
   const firstWarmBoard = dock.getByTestId(`board-dock-board-${warmPageIds[0]}`)
-  await firstWarmBoard.click()
+  await firstWarmBoard.dispatchEvent('click')
   const activeBoardDot = firstWarmBoard.locator('span[aria-hidden="true"]')
   await expect(activeBoardDot).toBeVisible()
   const activeBoardTile = firstWarmBoard.getByTestId('board-dock-board-tile')
@@ -653,8 +742,8 @@ test('board dock supports Mac-style pin, close, and pinned Board reordering', as
 
   async function pinFromContextMenu(boardPageId: string) {
     const board = dock.getByTestId(`board-dock-board-${boardPageId}`)
-    await board.click({ button: 'right' })
-    await editor.page.getByTestId(`board-dock-pin-${boardPageId}`).click()
+    await board.dispatchEvent('contextmenu')
+    await editor.page.getByTestId(`board-dock-pin-${boardPageId}`).dispatchEvent('click')
     await expect(board).toHaveAttribute('data-dock-group', 'pins')
   }
 
@@ -670,6 +759,9 @@ test('board dock supports Mac-style pin, close, and pinned Board reordering', as
   await expect(pinnedBoardA.locator('span[aria-hidden="true"]')).toBeVisible()
   await expect(pinnedBoardB.locator('span[aria-hidden="true"]')).toBeVisible()
 
+  await editor.page.locator('[data-testid="react-grab-overlay"]').evaluateAll((overlays) => {
+    for (const overlay of overlays) overlay.remove()
+  })
   await pinnedBoardA.dragTo(pinnedBoardB, { targetPosition: { x: 34, y: 18 } })
   await expect
     .poll(async () => {
@@ -683,13 +775,13 @@ test('board dock supports Mac-style pin, close, and pinned Board reordering', as
     })
     .toBe(true)
 
-  await pinnedBoardB.click({ button: 'right' })
-  await editor.page.getByTestId(`board-dock-close-${boardBId}`).click()
+  await pinnedBoardB.dispatchEvent('contextmenu')
+  await editor.page.getByTestId(`board-dock-close-${boardBId}`).dispatchEvent('click')
   await expect(pinnedBoardB).toBeVisible()
   await expect(pinnedBoardB.locator('span[aria-hidden="true"]')).toHaveCount(0)
 
-  await pinnedBoardB.click({ button: 'right' })
-  await editor.page.getByTestId(`board-dock-pin-${boardBId}`).click()
+  await pinnedBoardB.dispatchEvent('contextmenu')
+  await editor.page.getByTestId(`board-dock-pin-${boardBId}`).dispatchEvent('click')
   await expect(pinnedBoardB).toHaveCount(0)
 
   await editor.page.evaluate(
@@ -730,6 +822,51 @@ test('board switcher keeps its header and project rows quiet', async () => {
       rows.every(
         (row) => [...row.children].filter((child) => child.tagName === 'SPAN').length === 1
       )
+    )
+  ).toBe(true)
+})
+
+test('board switcher reveals the active Maps & Flows branch and current board', async () => {
+  await letAppReceivePointerEvents()
+
+  const targetName = 'Product Map — Dental Chart'
+  await editor.page.evaluate(async (pageName) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const page = store.graph.getPages().find((candidate) => candidate.name === pageName)
+    if (!page) throw new Error(`Expected ${pageName} in the Smylr workspace`)
+    await store.switchPage(page.id)
+  }, targetName)
+
+  const dock = editor.page.getByTestId('board-dock')
+  await dock.getByTestId('board-dock-more').dispatchEvent('click')
+  const projectBrowser = editor.page.getByTestId('board-project-browser')
+  const back = projectBrowser.getByTestId('board-switcher-back')
+  if (await back.isVisible()) await back.dispatchEvent('click')
+
+  await expect(projectBrowser.getByRole('button', { name: 'Collapse Smylr' })).toBeVisible()
+  await expect(projectBrowser.getByRole('button', { name: 'Collapse Maps & Flows' })).toBeVisible()
+  await expect(
+    projectBrowser.getByText(`Maps & Flows / ${targetName}`, { exact: true })
+  ).toBeVisible()
+
+  for (const boardName of [
+    'User Journey — Complete Dental Exam',
+    'Task Flow — Record Finding',
+    'Screen States — Dental Chart',
+    'Recovery Flow — Save Finding',
+    'Technical Flow — Save Finding'
+  ]) {
+    await expect(projectBrowser.getByRole('button', { name: boardName, exact: true })).toBeVisible()
+  }
+
+  const currentBoardButtons = projectBrowser.locator('[aria-current="page"]')
+  expect(await currentBoardButtons.count()).toBeGreaterThan(0)
+  expect(
+    await currentBoardButtons.evaluateAll(
+      (buttons, expectedName) =>
+        buttons.every((button) => button.textContent?.includes(expectedName)),
+      targetName
     )
   ).toBe(true)
 })

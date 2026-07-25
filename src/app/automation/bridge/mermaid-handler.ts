@@ -1,8 +1,15 @@
 import { createMermaidSceneSpec, type MermaidSceneSpec } from '@open-pencil/core/diagram'
+import { mermaidDiagramOwner, reconcileMermaidDiagramSource } from '@open-pencil/core/editor'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
-import type { AutomationTarget } from '@/app/automation/bridge/target'
+import {
+  isUnknownRecord,
+  type AutomationTarget,
+  type UnknownRecord
+} from '@/app/automation/bridge/target'
 import { parseMermaidInBrowser } from '@/app/diagram/mermaid/parse'
 import { ensureGraphFonts } from '@/app/editor/fonts'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import {
   createSidebarBoard,
   createSidebarPage,
@@ -14,27 +21,55 @@ import {
 } from '@/app/sidebar-workspace/tree'
 
 type InsertMermaidArgs = {
+  allow_additional_owner: boolean
   board_name?: string
+  owner_id?: string
   project_name?: string
   source: string
+  x?: number
+  y?: number
+  zoom_to_selection: boolean
+}
+
+function readTrimmedString(value: unknown): string | undefined {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed || undefined
+}
+
+function readPosition(args: UnknownRecord): Pick<InsertMermaidArgs, 'x' | 'y'> {
+  const hasX = Object.hasOwn(args, 'x')
+  const hasY = Object.hasOwn(args, 'y')
+  if (hasX !== hasY) throw new Error('x and y must be provided together.')
+  if (!hasX) return {}
+  if (typeof args.x !== 'number' || !Number.isFinite(args.x)) {
+    throw new TypeError('x must be a finite canvas coordinate.')
+  }
+  if (typeof args.y !== 'number' || !Number.isFinite(args.y)) {
+    throw new TypeError('y must be a finite canvas coordinate.')
+  }
+  return { x: args.x, y: args.y }
 }
 
 function readArgs(value: unknown): InsertMermaidArgs {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isUnknownRecord(value)) {
     throw new Error('Mermaid arguments must be an object.')
   }
-  const args = value as Record<string, unknown>
-  const source = typeof args.source === 'string' ? args.source.trim() : ''
-  const boardName = typeof args.board_name === 'string' ? args.board_name.trim() : ''
-  const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : ''
+  const source = readTrimmedString(value.source)
+  const boardName = readTrimmedString(value.board_name)
+  const ownerId = readTrimmedString(value.owner_id)
+  const projectName = readTrimmedString(value.project_name)
   if (!source) throw new Error('Mermaid source is required.')
   if (projectName && !boardName) {
     throw new Error('board_name is required when project_name is provided.')
   }
   return {
+    allow_additional_owner: value.allow_additional_owner === true,
     source,
+    zoom_to_selection: value.zoom_to_selection !== false,
     ...(boardName ? { board_name: boardName } : {}),
-    ...(projectName ? { project_name: projectName } : {})
+    ...(ownerId ? { owner_id: ownerId } : {}),
+    ...(projectName ? { project_name: projectName } : {}),
+    ...readPosition(value)
   }
 }
 
@@ -51,7 +86,9 @@ function findProject(
   projectName: string
 ): SidebarWorkspacePage | undefined {
   const expected = normalizedName(projectName)
-  return workspace.pages.find((page) => normalizedName(page.name) === expected)
+  const matches = workspace.pages.filter((page) => normalizedName(page.name) === expected)
+  if (matches.length > 1) throw new Error(`Project name "${projectName}" is ambiguous.`)
+  return matches[0]
 }
 
 function findBoard(
@@ -61,10 +98,14 @@ function findBoard(
   boardName: string
 ): SidebarWorkspaceBoard | undefined {
   const expected = normalizedName(boardName)
-  return workspace.boards.find(
+  const matches = workspace.boards.filter(
     (board) =>
       board.parentPageId === project.id && normalizedName(boardLabel(target, board)) === expected
   )
+  if (matches.length > 1) {
+    throw new Error(`Board name "${boardName}" is ambiguous in project "${project.name}".`)
+  }
+  return matches[0]
 }
 
 function commitWorkspace(target: AutomationTarget, workspace: SidebarWorkspace): void {
@@ -80,18 +121,21 @@ function commitWorkspace(target: AutomationTarget, workspace: SidebarWorkspace):
 async function resolveBoard(
   target: AutomationTarget,
   boardName: string | undefined,
-  projectName: string | undefined
-): Promise<{ boardName: string; pageId: string; projectName?: string }> {
+  projectName: string | undefined,
+  requireExisting: boolean
+): Promise<{ boardName: string; created: boolean; pageId: string; projectName?: string }> {
   if (!boardName) {
     await target.store.switchPage(target.pageId)
-    return { boardName: target.pageName, pageId: target.pageId }
+    return { boardName: target.pageName, created: false, pageId: target.pageId }
   }
 
   let workspace = resolveSidebarWorkspace(target.store.graph).workspace
-  let project = projectName ? findProject(workspace, projectName) : undefined
+  const resolvedProjectName = projectName ?? 'Mermaid diagrams'
+  let project = findProject(workspace, resolvedProjectName)
   if (!project) {
+    if (requireExisting) throw new Error(`Project "${resolvedProjectName}" was not found.`)
     const created = createSidebarPage(workspace, {
-      name: projectName ?? 'Mermaid diagrams'
+      name: resolvedProjectName
     })
     workspace = created.workspace
     project = created.page
@@ -102,7 +146,15 @@ async function resolveBoard(
     await target.store.switchPage(existing.pageId)
     target.pageId = existing.pageId
     target.pageName = boardLabel(target, existing)
-    return { boardName: target.pageName, pageId: existing.pageId, projectName: project.name }
+    return {
+      boardName: target.pageName,
+      created: false,
+      pageId: existing.pageId,
+      projectName: project.name
+    }
+  }
+  if (requireExisting) {
+    throw new Error(`Board "${boardName}" was not found in project "${project.name}".`)
   }
 
   const pageId = target.store.addPage(boardName)
@@ -115,10 +167,19 @@ async function resolveBoard(
   await target.store.switchPage(pageId)
   target.pageId = pageId
   target.pageName = boardName
-  return { boardName, pageId, projectName: project.name }
+  return { boardName, created: true, pageId, projectName: project.name }
 }
 
-function insertionPosition(target: AutomationTarget, diagram: MermaidSceneSpec) {
+function insertionPosition(
+  target: AutomationTarget,
+  diagram: MermaidSceneSpec,
+  position: Pick<InsertMermaidArgs, 'x' | 'y'>,
+  fallback?: Pick<SceneNode, 'x' | 'y'>
+) {
+  if (position.x !== undefined && position.y !== undefined) {
+    return { x: position.x, y: position.y }
+  }
+  if (fallback) return { x: fallback.x, y: fallback.y }
   const center = target.store.screenToCanvas(window.innerWidth / 2, window.innerHeight / 2)
   return {
     x: center.x - diagram.width / 2,
@@ -126,24 +187,117 @@ function insertionPosition(target: AutomationTarget, diagram: MermaidSceneSpec) 
   }
 }
 
-export function createAutomationMermaidHandler() {
+function mermaidOwnerIdsOnBoard(target: AutomationTarget, pageId: string): string[] {
+  return target.store.graph
+    .getChildren(pageId)
+    .filter((node) => mermaidDiagramOwner(target.store.graph, node.id)?.id === node.id)
+    .map((node) => node.id)
+}
+
+export function createAutomationMermaidHandler(
+  parseMermaid: typeof parseMermaidInBrowser = parseMermaidInBrowser
+) {
   return async function handleMermaid(target: AutomationTarget, value: unknown): Promise<unknown> {
     const args = readArgs(value)
-    const board = await resolveBoard(target, args.board_name, args.project_name)
-    const diagram = createMermaidSceneSpec(await parseMermaidInBrowser(args.source))
-    const nodeIds = target.store.insertMermaidDiagram(diagram, insertionPosition(target, diagram))
-    const ownerId = [...target.store.state.selectedIds][0]
+    const board = await resolveBoard(
+      target,
+      args.board_name,
+      args.project_name,
+      Boolean(args.owner_id)
+    )
+    if (!args.owner_id && !args.allow_additional_owner && !board.created) {
+      const ownerIds = mermaidOwnerIdsOnBoard(target, board.pageId)
+      if (ownerIds.length > 0) {
+        throw new Error(
+          `Board "${board.boardName}" already contains Mermaid owner(s): ${ownerIds.join(', ')}. ` +
+            'Provide one of these owner_id values to update in place, or set ' +
+            'allow_additional_owner: true to intentionally create another diagram.'
+        )
+      }
+    }
+    const diagram = createMermaidSceneSpec(await parseMermaid(args.source))
+    const existingOwner = args.owner_id
+      ? mermaidDiagramOwner(target.store.graph, args.owner_id)
+      : null
+    if (
+      args.owner_id &&
+      (!existingOwner ||
+        existingOwner.id !== args.owner_id ||
+        existingOwner.parentId !== board.pageId)
+    ) {
+      throw new Error(
+        `Mermaid owner "${args.owner_id}" was not found on board "${board.boardName}".`
+      )
+    }
+    const position = insertionPosition(target, diagram, args, existingOwner ?? undefined)
+    const nodeIds = existingOwner
+      ? target.store.replaceMermaidDiagram(existingOwner.id, diagram, position)
+      : target.store.insertMermaidDiagram(diagram, position)
+    const ownerId = existingOwner?.id ?? [...target.store.state.selectedIds][0]
     if (await ensureGraphFonts(target.store.graph, nodeIds)) target.store.requestRender()
-    target.store.zoomToSelection()
+    if (args.zoom_to_selection) target.store.zoomToSelection(editorViewportInsets())
+    const owner = ownerId ? target.store.graph.getNode(ownerId) : undefined
     return {
       ok: true,
       result: {
         board,
+        operation: existingOwner ? 'updated' : 'created',
         editable_layers: nodeIds.length,
         node_ids: nodeIds,
         ...(ownerId ? { owner_id: ownerId } : {}),
+        ...(owner ? { diagram_id: pluginValue(owner, 'mermaid/diagram-id') } : {}),
         parser: diagram.parser,
+        appearance: diagram.appearance,
+        position,
         source_attached: true
+      }
+    }
+  }
+}
+
+function pluginValue(node: SceneNode, key: string): string | null {
+  return (
+    node.pluginData.find((entry) => entry.pluginId === 'open-pencil' && entry.key === key)?.value ??
+    null
+  )
+}
+
+export function createAutomationMermaidSourceHandler() {
+  return async function handleMermaidSource(
+    target: AutomationTarget,
+    value: unknown
+  ): Promise<unknown> {
+    if (!isUnknownRecord(value)) {
+      throw new Error('Mermaid source arguments must be an object.')
+    }
+    const ownerId = readTrimmedString(value.owner_id)
+    if (!ownerId) throw new Error('owner_id is required.')
+    const owner = mermaidDiagramOwner(target.store.graph, ownerId)
+    if (!owner || owner.id !== ownerId || owner.parentId !== target.pageId) {
+      throw new Error(`Mermaid owner "${ownerId}" was not found on page "${target.pageName}".`)
+    }
+    const reconciliation = reconcileMermaidDiagramSource(target.store.graph, ownerId)
+    const source = pluginValue(owner, 'mermaid/source')
+    if (!source || !reconciliation) {
+      throw new Error(`Mermaid source metadata is unavailable for "${ownerId}".`)
+    }
+    return {
+      ok: true,
+      result: {
+        owner_id: owner.id,
+        diagram_id: pluginValue(owner, 'mermaid/diagram-id'),
+        source,
+        parser: pluginValue(owner, 'mermaid/parser'),
+        appearance: pluginValue(owner, 'mermaid/appearance'),
+        source_revision: pluginValue(owner, 'mermaid/revision'),
+        reconciliation: {
+          status: reconciliation.status,
+          revision: reconciliation.revision,
+          message: reconciliation.message
+        },
+        editable_layers: owner.childIds.length,
+        node_ids: [...owner.childIds],
+        bounds: { x: owner.x, y: owner.y, width: owner.width, height: owner.height }
       }
     }
   }

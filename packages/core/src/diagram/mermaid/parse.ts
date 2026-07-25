@@ -83,6 +83,7 @@ export async function parseMermaidDiagram(
   }
 
   return {
+    appearance: 'dark',
     source: definition,
     revision: MERMAID_DIAGRAM_REVISION,
     parser: MERMAID_PARSER,

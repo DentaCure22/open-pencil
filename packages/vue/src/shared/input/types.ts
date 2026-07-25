@@ -1,4 +1,4 @@
-import type { Tool } from '@open-pencil/core/editor'
+import type { ResizeSnapshot, Tool } from '@open-pencil/core/editor'
 import type { NodeType, VectorNetwork } from '@open-pencil/scene-graph'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
@@ -37,13 +37,7 @@ export interface DragPan {
   startPanY: number
 }
 
-export interface OrigChildState {
-  x: number
-  y: number
-  width: number
-  height: number
-  vectorNetwork: VectorNetwork | null
-}
+export type OrigChildState = ResizeSnapshot
 
 export interface DragResize {
   type: 'resize'
@@ -54,6 +48,7 @@ export interface DragResize {
   nodeId: string
   origVectorNetwork: VectorNetwork | null
   origChildren: Map<string, OrigChildState> | null
+  proportional: boolean
 }
 
 export interface DragMarquee {

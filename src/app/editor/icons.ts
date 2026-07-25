@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
-import IconCircle from '~icons/lucide/circle'
 import IconBox from '~icons/lucide/box'
+import IconCircle from '~icons/lucide/circle'
 import IconColumns from '~icons/lucide/columns-3'
 import IconComponentSet from '~icons/lucide/component'
 import IconComponent from '~icons/lucide/diamond'

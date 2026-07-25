@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
 import {
   mediaEvidenceSource,
@@ -39,7 +40,7 @@ const items = computed<MediaEvidenceItem[]>(() => {
   void store.state.currentPageId
   const result: MediaEvidenceItem[] = []
   for (const node of store.graph.getAllNodes()) {
-    if (!node.visible || !belongsToCurrentPage(node)) continue
+    if (!node.visible || isCodeObjectFrame(node) || !belongsToCurrentPage(node)) continue
     const source = mediaEvidenceSource(node)
     if (!source) continue
     const bytes = store.graph.images.get(source.assetHash)

@@ -1,3 +1,4 @@
+import { isMermaidDiagramContainer } from '@open-pencil/core/diagram'
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -82,8 +83,16 @@ export function createTextEditInput(options: TextEditInputOptions) {
   ): SceneNode | null {
     const hit = editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
     if (!hit) return null
-    if (hit.id === containerId || editor.graph.isDescendant(hit.id, containerId)) return hit
-    return null
+    if (hit.id !== containerId && !editor.graph.isDescendant(hit.id, containerId)) return null
+    const container = editor.graph.getNode(containerId)
+    if (!isMermaidDiagramContainer(container)) return hit
+    let directChild = hit
+    while (directChild.parentId && directChild.parentId !== containerId) {
+      const parent = editor.graph.getNode(directChild.parentId)
+      if (!parent) break
+      directChild = parent
+    }
+    return directChild
   }
 
   function onDblClick(e: MouseEvent) {

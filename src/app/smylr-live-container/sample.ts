@@ -1,7 +1,7 @@
 import type {
   SmylrLiveContainerDocument,
   SmylrLiveContainerNode,
-  SmylrLiveContainerPage,
+  SmylrLiveContainerPage
 } from './types'
 
 type Rect = SmylrLiveContainerNode['rect']
@@ -18,7 +18,7 @@ const colors = {
   primary: '#2563eb',
   softBlue: '#dbeafe',
   success: '#16a34a',
-  warning: '#f59e0b',
+  warning: '#f59e0b'
 }
 
 function frame({
@@ -33,7 +33,7 @@ function frame({
   style,
   tagName = 'div',
   text,
-  tokenHints,
+  tokenHints
 }: {
   attrs?: Record<string, string>
   children?: SmylrLiveContainerNode[]
@@ -60,17 +60,11 @@ function frame({
     source,
     tagName,
     text,
-    tokenHints,
+    tokenHints
   }
 }
 
-function textBlock(
-  id: string,
-  label: string,
-  text: string,
-  rect: Rect,
-  style: Style = {}
-) {
+function textBlock(id: string, label: string, text: string, rect: Rect, style: Style = {}) {
   return frame({
     id,
     label,
@@ -80,20 +74,14 @@ function textBlock(
       'font-size': '14px',
       'font-weight': '500',
       'line-height': '20px',
-      ...style,
+      ...style
     },
     tagName: 'p',
-    text,
+    text
   })
 }
 
-function pill(
-  id: string,
-  label: string,
-  text: string,
-  rect: Rect,
-  color = colors.softBlue
-) {
+function pill(id: string, label: string, text: string, rect: Rect, color = colors.softBlue) {
   return frame({
     id,
     label,
@@ -105,10 +93,10 @@ function pill(
       'font-size': '12px',
       'font-weight': '600',
       'line-height': '16px',
-      padding: '6px 10px',
+      padding: '6px 10px'
     },
     tagName: 'span',
-    text,
+    text
   })
 }
 
@@ -118,7 +106,7 @@ function componentCard({
   rect,
   source,
   subtitle,
-  tokens,
+  tokens
 }: {
   id: string
   label: string
@@ -136,7 +124,7 @@ function componentCard({
         { height: 24, width: rect.width - 32, x: 16, y: 16 },
         {
           'font-size': '16px',
-          'font-weight': '700',
+          'font-weight': '700'
         }
       ),
       textBlock(
@@ -148,7 +136,7 @@ function componentCard({
           color: '#475569',
           'font-size': '12px',
           'font-weight': '500',
-          'line-height': '18px',
+          'line-height': '18px'
         }
       ),
       frame({
@@ -162,8 +150,8 @@ function componentCard({
           'border-width': '1px',
           display: 'flex',
           gap: '8px',
-          padding: '12px',
-        },
+          padding: '12px'
+        }
       }),
       ...tokens
         .slice(0, 3)
@@ -175,7 +163,7 @@ function componentCard({
             { height: 28, width: 92, x: 16 + index * 100, y: 186 },
             index === 0 ? '#dcfce7' : colors.softBlue
           )
-        ),
+        )
     ],
     id,
     label,
@@ -188,10 +176,10 @@ function componentCard({
       'border-radius': '10px',
       'border-width': '1px',
       'box-shadow': 'rgba(15, 23, 42, 0.08) 0px 1px 2px',
-      padding: '16px',
+      padding: '16px'
     },
     tagName: 'section',
-    tokenHints: tokens,
+    tokenHints: tokens
   })
 }
 
@@ -207,48 +195,40 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           {
             color: '#ffffff',
             'font-size': '22px',
-            'font-weight': '800',
+            'font-weight': '800'
           }
         ),
-        ...[
-          'Home',
-          'Calendar',
-          'Patients',
-          'Dental chart',
-          'Imaging',
-          'RCM',
-        ].map((item, index) =>
+        ...['Home', 'Calendar', 'Patients', 'Dental chart', 'Imaging', 'RCM'].map((item, index) =>
           frame({
             id: `app-nav-${item.toLowerCase().replaceAll(' ', '-')}`,
             label: `${item} nav item`,
             rect: { height: 42, width: 200, x: 24, y: 92 + index * 52 },
             style: {
-              'background-color':
-                item === 'Dental chart' ? colors.darkMuted : colors.dark,
+              'background-color': item === 'Dental chart' ? colors.darkMuted : colors.dark,
               'border-radius': '8px',
               color: '#ffffff',
-              padding: '11px 14px',
+              padding: '11px 14px'
             },
             tagName: 'button',
-            text: item,
+            text: item
           })
-        ),
+        )
       ],
       id: 'authenticated-sidebar',
       label: 'Authenticated sidebar',
       rect: { height: 900, width: 248, x: 0, y: 0 },
       source: {
         componentName: 'AuthenticatedShell',
-        filePath: 'src/components/layout/authenticated-shell.tsx',
+        filePath: 'src/components/layout/authenticated-shell.tsx'
       },
       style: {
         'background-color': colors.dark,
         display: 'flex',
         'flex-direction': 'column',
         gap: '10px',
-        padding: '24px',
+        padding: '24px'
       },
-      tokenHints: ['bg-sidebar', 'authenticated-shell'],
+      tokenHints: ['bg-sidebar', 'authenticated-shell']
     }),
     frame({
       children: [
@@ -259,7 +239,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           { height: 28, width: 260, x: 32, y: 22 },
           {
             'font-size': '20px',
-            'font-weight': '800',
+            'font-weight': '800'
           }
         ),
         pill(
@@ -268,7 +248,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           'Yasmin Ali',
           { height: 34, width: 132, x: 960, y: 18 },
           '#e0f2fe'
-        ),
+        )
       ],
       id: 'authenticated-topbar',
       label: 'Authenticated topbar',
@@ -276,8 +256,8 @@ const productionAppTree: SmylrLiveContainerNode = frame({
       style: {
         'background-color': colors.card,
         'border-bottom-color': colors.border,
-        'border-bottom-width': '1px',
-      },
+        'border-bottom-width': '1px'
+      }
     }),
     frame({
       children: [
@@ -288,7 +268,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           { height: 28, width: 320, x: 24, y: 18 },
           {
             'font-size': '18px',
-            'font-weight': '800',
+            'font-weight': '800'
           }
         ),
         textBlock(
@@ -298,7 +278,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           { height: 22, width: 420, x: 24, y: 50 },
           {
             color: '#64748b',
-            'font-size': '13px',
+            'font-size': '13px'
           }
         ),
         pill(
@@ -307,7 +287,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           'Ready for charting',
           { height: 34, width: 168, x: 890, y: 26 },
           '#dcfce7'
-        ),
+        )
       ],
       id: 'dental-patient-record-header',
       label: 'DentalPatientRecord header',
@@ -315,55 +295,53 @@ const productionAppTree: SmylrLiveContainerNode = frame({
       role: 'region',
       source: {
         componentName: 'DentalPatientRecord',
-        filePath:
-          'src/features/dental-chart/components/dental-patient-record.tsx',
+        filePath: 'src/features/dental-chart/components/dental-patient-record.tsx'
       },
       style: {
         'background-color': colors.card,
         'border-color': colors.border,
         'border-radius': '12px',
         'border-width': '1px',
-        'box-shadow': 'rgba(15, 23, 42, 0.06) 0px 1px 2px',
+        'box-shadow': 'rgba(15, 23, 42, 0.06) 0px 1px 2px'
       },
       tagName: 'header',
-      tokenHints: ['bg-card', 'rounded-xl', 'shadow-sm'],
+      tokenHints: ['bg-card', 'rounded-xl', 'shadow-sm']
     }),
     frame({
       children: [
-        ...['Odontogram', 'Perio', 'Imaging', 'Notes', 'Treatment'].map(
-          (item, index) =>
-            frame({
-              id: `patient-tab-${item.toLowerCase()}`,
-              label: `${item} tab`,
-              rect: { height: 38, width: 126, x: 18 + index * 136, y: 13 },
-              style: {
-                'background-color': index === 0 ? colors.primary : colors.card,
-                'border-color': index === 0 ? colors.primary : colors.border,
-                'border-radius': '8px',
-                'border-width': '1px',
-                color: index === 0 ? '#ffffff' : colors.foreground,
-                padding: '9px 16px',
-              },
-              tagName: 'button',
-              text: item,
-            })
-        ),
+        ...['Odontogram', 'Perio', 'Imaging', 'Notes', 'Treatment'].map((item, index) =>
+          frame({
+            id: `patient-tab-${item.toLowerCase()}`,
+            label: `${item} tab`,
+            rect: { height: 38, width: 126, x: 18 + index * 136, y: 13 },
+            style: {
+              'background-color': index === 0 ? colors.primary : colors.card,
+              'border-color': index === 0 ? colors.primary : colors.border,
+              'border-radius': '8px',
+              'border-width': '1px',
+              color: index === 0 ? '#ffffff' : colors.foreground,
+              padding: '9px 16px'
+            },
+            tagName: 'button',
+            text: item
+          })
+        )
       ],
       id: 'patient-tab-bar',
       label: 'Patient tab bar',
       rect: { height: 64, width: 1128, x: 284, y: 208 },
       source: {
         componentName: 'PatientTabBar',
-        filePath: 'src/components/layout/patient-tab-bar.tsx',
+        filePath: 'src/components/layout/patient-tab-bar.tsx'
       },
       style: {
         'background-color': colors.card,
         'border-color': colors.border,
         'border-radius': '12px',
         'border-width': '1px',
-        padding: '12px',
+        padding: '12px'
       },
-      tokenHints: ['PatientTabBar', 'rounded-xl'],
+      tokenHints: ['PatientTabBar', 'rounded-xl']
     }),
     frame({
       children: [
@@ -376,7 +354,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
               { height: 24, width: 300, x: 24, y: 20 },
               {
                 'font-size': '16px',
-                'font-weight': '800',
+                'font-weight': '800'
               }
             ),
             frame({
@@ -385,16 +363,15 @@ const productionAppTree: SmylrLiveContainerNode = frame({
               rect: { height: 300, width: 660, x: 24, y: 66 },
               source: {
                 componentName: 'DentalChartCanvas',
-                filePath:
-                  'src/features/dental-chart/components/dental-chart-canvas.tsx',
+                filePath: 'src/features/dental-chart/components/dental-chart-canvas.tsx'
               },
               style: {
                 'background-color': '#eef6ff',
                 'border-color': '#bfdbfe',
                 'border-radius': '14px',
-                'border-width': '1px',
+                'border-width': '1px'
               },
-              tokenHints: ['DentalChartCanvas', 'bg-info-subtle'],
+              tokenHints: ['DentalChartCanvas', 'bg-info-subtle']
             }),
             frame({
               id: 'tooth-action-toolbar',
@@ -405,9 +382,9 @@ const productionAppTree: SmylrLiveContainerNode = frame({
                 'border-radius': '10px',
                 display: 'flex',
                 gap: '8px',
-                padding: '12px',
-              },
-            }),
+                padding: '12px'
+              }
+            })
           ],
           id: 'dental-chart-workspace',
           label: 'Dental chart workspace',
@@ -416,7 +393,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
           source: {
             componentName: 'DentalRecordCanvasModeTransition',
             filePath:
-              'src/features/dental-chart/components/dental-record-canvas-mode-transition.tsx',
+              'src/features/dental-chart/components/dental-record-canvas-mode-transition.tsx'
           },
           style: {
             'background-color': colors.card,
@@ -424,10 +401,10 @@ const productionAppTree: SmylrLiveContainerNode = frame({
             'border-radius': '12px',
             'border-width': '1px',
             'box-shadow': 'rgba(15, 23, 42, 0.06) 0px 1px 2px',
-            padding: '24px',
+            padding: '24px'
           },
           tagName: 'section',
-          tokenHints: ['bg-card', 'rounded-xl', 'shadow-sm'],
+          tokenHints: ['bg-card', 'rounded-xl', 'shadow-sm']
         }),
         frame({
           children: [
@@ -438,7 +415,7 @@ const productionAppTree: SmylrLiveContainerNode = frame({
               { height: 24, width: 260, x: 20, y: 18 },
               {
                 'font-size': '16px',
-                'font-weight': '800',
+                'font-weight': '800'
               }
             ),
             componentCard({
@@ -447,11 +424,10 @@ const productionAppTree: SmylrLiveContainerNode = frame({
               rect: { height: 226, width: 320, x: 20, y: 58 },
               source: {
                 componentName: 'HealthListsGrid',
-                filePath:
-                  'src/features/dental-chart/components/health-lists-grid.tsx',
+                filePath: 'src/features/dental-chart/components/health-lists-grid.tsx'
               },
               subtitle: 'Conditions, allergies, meds',
-              tokens: ['bg-card', 'gap-2', 'rounded-lg'],
+              tokens: ['bg-card', 'gap-2', 'rounded-lg']
             }),
             componentCard({
               id: 'imaging-preview',
@@ -459,12 +435,11 @@ const productionAppTree: SmylrLiveContainerNode = frame({
               rect: { height: 226, width: 320, x: 20, y: 306 },
               source: {
                 componentName: 'DentalImagingStrip',
-                filePath:
-                  'src/features/dental-imaging/components/dental-imaging-strip.tsx',
+                filePath: 'src/features/dental-imaging/components/dental-imaging-strip.tsx'
               },
               subtitle: 'Pano, intraoral, CBCT queue',
-              tokens: ['bg-muted', 'rounded-lg', 'shadow-sm'],
-            }),
+              tokens: ['bg-muted', 'rounded-lg', 'shadow-sm']
+            })
           ],
           id: 'clinical-summary-rail',
           label: 'Clinical summary rail',
@@ -474,19 +449,18 @@ const productionAppTree: SmylrLiveContainerNode = frame({
             'border-color': colors.border,
             'border-radius': '12px',
             'border-width': '1px',
-            padding: '20px',
+            padding: '20px'
           },
           tagName: 'aside',
-          tokenHints: ['clinical-summary', 'right-rail'],
-        }),
+          tokenHints: ['clinical-summary', 'right-rail']
+        })
       ],
       id: 'dental-chart-production-canvas',
       label: 'Dental chart production canvas',
       rect: { height: 616, width: 1128, x: 284, y: 292 },
       source: {
         componentName: 'DentalPatientRecord',
-        filePath:
-          'src/features/dental-chart/components/dental-patient-record.tsx',
+        filePath: 'src/features/dental-chart/components/dental-patient-record.tsx'
       },
       style: {
         'background-color': colors.app,
@@ -495,11 +469,11 @@ const productionAppTree: SmylrLiveContainerNode = frame({
         'border-width': '1px',
         display: 'flex',
         gap: '16px',
-        padding: '24px',
+        padding: '24px'
       },
       tagName: 'main',
-      tokenHints: ['ShellSection', 'DentalPatientRecord', 'app-production'],
-    }),
+      tokenHints: ['ShellSection', 'DentalPatientRecord', 'app-production']
+    })
   ],
   id: 'smylr-production-app',
   label: 'Smylr production app',
@@ -509,10 +483,10 @@ const productionAppTree: SmylrLiveContainerNode = frame({
     'background-color': colors.app,
     display: 'flex',
     'font-family': 'Quicksand',
-    position: 'relative',
+    position: 'relative'
   },
   tagName: 'div',
-  tokenHints: ['production-app', 'authenticated-shell', 'dental-chart'],
+  tokenHints: ['production-app', 'authenticated-shell', 'dental-chart']
 })
 
 const componentAssetsTree: SmylrLiveContainerNode = frame({
@@ -524,7 +498,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       { height: 40, width: 520, x: 48, y: 40 },
       {
         'font-size': '28px',
-        'font-weight': '800',
+        'font-weight': '800'
       }
     ),
     textBlock(
@@ -534,7 +508,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       { height: 28, width: 820, x: 48, y: 82 },
       {
         color: '#475569',
-        'font-size': '14px',
+        'font-size': '14px'
       }
     ),
     textBlock(
@@ -544,7 +518,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       { height: 28, width: 320, x: 48, y: 142 },
       {
         'font-size': '18px',
-        'font-weight': '800',
+        'font-weight': '800'
       }
     ),
     componentCard({
@@ -553,10 +527,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 360, x: 48, y: 188 },
       source: {
         componentName: 'AuthenticatedShell',
-        filePath: 'src/components/layout/authenticated-shell.tsx',
+        filePath: 'src/components/layout/authenticated-shell.tsx'
       },
       subtitle: 'Sidebar, page chrome, patient context entry point',
-      tokens: ['sidebar', 'shell', 'layout'],
+      tokens: ['sidebar', 'shell', 'layout']
     }),
     componentCard({
       id: 'asset-dental-patient-record',
@@ -564,11 +538,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 360, x: 432, y: 188 },
       source: {
         componentName: 'DentalPatientRecord',
-        filePath:
-          'src/features/dental-chart/components/dental-patient-record.tsx',
+        filePath: 'src/features/dental-chart/components/dental-patient-record.tsx'
       },
       subtitle: 'Clinical record surface with selected patient context',
-      tokens: ['bg-card', 'rounded-xl', 'shadow-sm'],
+      tokens: ['bg-card', 'rounded-xl', 'shadow-sm']
     }),
     componentCard({
       id: 'asset-record-canvas',
@@ -576,11 +549,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 436, x: 816, y: 188 },
       source: {
         componentName: 'DentalRecordCanvasModeTransition',
-        filePath:
-          'src/features/dental-chart/components/dental-record-canvas-mode-transition.tsx',
+        filePath: 'src/features/dental-chart/components/dental-record-canvas-mode-transition.tsx'
       },
       subtitle: 'Main charting workspace, canvas mode, and surface owner',
-      tokens: ['canvas', 'mode-transition', 'workspace'],
+      tokens: ['canvas', 'mode-transition', 'workspace']
     }),
     textBlock(
       'blocks-heading',
@@ -589,7 +561,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       { height: 28, width: 320, x: 48, y: 474 },
       {
         'font-size': '18px',
-        'font-weight': '800',
+        'font-weight': '800'
       }
     ),
     componentCard({
@@ -598,10 +570,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 282, x: 48, y: 520 },
       source: {
         componentName: 'PatientTabBar',
-        filePath: 'src/components/layout/patient-tab-bar.tsx',
+        filePath: 'src/components/layout/patient-tab-bar.tsx'
       },
       subtitle: 'Patient-scoped route tabs',
-      tokens: ['tabs', 'patient-context', 'rounded-lg'],
+      tokens: ['tabs', 'patient-context', 'rounded-lg']
     }),
     componentCard({
       id: 'asset-health-lists-grid',
@@ -609,10 +581,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 282, x: 354, y: 520 },
       source: {
         componentName: 'HealthListsGrid',
-        filePath: 'src/features/dental-chart/components/health-lists-grid.tsx',
+        filePath: 'src/features/dental-chart/components/health-lists-grid.tsx'
       },
       subtitle: 'Medical summary cards',
-      tokens: ['grid', 'bg-card', 'gap-2'],
+      tokens: ['grid', 'bg-card', 'gap-2']
     }),
     componentCard({
       id: 'asset-perio-panel',
@@ -620,10 +592,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 282, x: 660, y: 520 },
       source: {
         componentName: 'PerioPanel',
-        filePath: 'src/features/dental-chart/components/perio-panel.tsx',
+        filePath: 'src/features/dental-chart/components/perio-panel.tsx'
       },
       subtitle: 'Perio measurements surface',
-      tokens: ['perio', 'panel', 'shadow-sm'],
+      tokens: ['perio', 'panel', 'shadow-sm']
     }),
     componentCard({
       id: 'asset-imaging-tile',
@@ -631,11 +603,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       rect: { height: 236, width: 282, x: 966, y: 520 },
       source: {
         componentName: 'DentalImagingTile',
-        filePath:
-          'src/features/dental-imaging/components/dental-imaging-tile.tsx',
+        filePath: 'src/features/dental-imaging/components/dental-imaging-tile.tsx'
       },
       subtitle: 'Image preview and metadata',
-      tokens: ['image', 'rounded-lg', 'border'],
+      tokens: ['image', 'rounded-lg', 'border']
     }),
     textBlock(
       'tokens-heading',
@@ -644,7 +615,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       { height: 28, width: 320, x: 48, y: 806 },
       {
         'font-size': '18px',
-        'font-weight': '800',
+        'font-weight': '800'
       }
     ),
     ...[
@@ -652,7 +623,7 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
       ['token-primary', 'primary', colors.primary],
       ['token-muted', 'muted', colors.muted],
       ['token-success', 'success', colors.success],
-      ['token-warning', 'warning', colors.warning],
+      ['token-warning', 'warning', colors.warning]
     ].map(([id, label, color], index) =>
       frame({
         children: [
@@ -664,8 +635,8 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
               'background-color': color,
               'border-color': colors.border,
               'border-radius': '10px',
-              'border-width': '1px',
-            },
+              'border-width': '1px'
+            }
           }),
           textBlock(
             `${id}-label`,
@@ -674,9 +645,9 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
             { height: 24, width: 120, x: 16, y: 102 },
             {
               'font-size': '13px',
-              'font-weight': '700',
+              'font-weight': '700'
             }
-          ),
+          )
         ],
         id,
         label,
@@ -685,11 +656,11 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
           'background-color': colors.card,
           'border-color': colors.border,
           'border-radius': '10px',
-          'border-width': '1px',
+          'border-width': '1px'
         },
-        tokenHints: [label],
+        tokenHints: [label]
       })
-    ),
+    )
   ],
   id: 'smylr-component-assets',
   label: 'Smylr component assets',
@@ -698,10 +669,10 @@ const componentAssetsTree: SmylrLiveContainerNode = frame({
   style: {
     'background-color': colors.app,
     'font-family': 'Quicksand',
-    position: 'relative',
+    position: 'relative'
   },
   tagName: 'section',
-  tokenHints: ['component-assets', 'library-page'],
+  tokenHints: ['component-assets', 'library-page']
 })
 
 const pages: SmylrLiveContainerPage[] = [
@@ -711,7 +682,7 @@ const pages: SmylrLiveContainerPage[] = [
     route: '/dental-chart',
     selectedId: 'dental-chart-production-canvas',
     title: 'Production App - Dental Chart',
-    tree: productionAppTree,
+    tree: productionAppTree
   },
   {
     id: 'smylr-component-assets-page',
@@ -719,8 +690,8 @@ const pages: SmylrLiveContainerPage[] = [
     route: '/dental-chart',
     selectedId: 'asset-dental-patient-record',
     title: 'Component Assets - Dental Chart',
-    tree: componentAssetsTree,
-  },
+    tree: componentAssetsTree
+  }
 ]
 
 export const sampleSmylrLiveContainerDocument: SmylrLiveContainerDocument = {
@@ -728,11 +699,11 @@ export const sampleSmylrLiveContainerDocument: SmylrLiveContainerDocument = {
   ownerMapText: [
     'Page 1: full production app surface',
     'Page 2: isolated component assets and token primitives',
-    'Default selected container: Dental chart production canvas',
+    'Default selected container: Dental chart production canvas'
   ].join('\n'),
   pages,
   route: '/dental-chart',
   selectedId: 'dental-chart-production-canvas',
   title: 'Smylr App Canvas - Dental Chart',
-  tree: productionAppTree,
+  tree: productionAppTree
 }

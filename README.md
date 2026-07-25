@@ -22,18 +22,21 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 
 - **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
 - **AI builds designs** — describe what you want in chat, 90+ tools create and modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
+- **Trace history for Codex context** — keep Ink and Focus active across gestures, observe meaningful selections and completed editor changes in one durable History feed, and let Codex retrieve a bounded document/page/time-scoped slice for follow-up work
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
-- **Knowledge workspaces** — organize the same typed notes, collections, graph nodes, design artifacts, reviews, and source-backed Live App Blocks across native Canvas, Document, Graph, and Review views without duplicating identity
+- **Knowledge workspaces** — organize the same typed notes, collections, graph nodes, design artifacts, reviews, and Code Objects across native Canvas, Document, Graph, and Review views without duplicating identity
 - **Flexible Pages and Boards** — group unlimited canvas Boards inside nested Pages, search and rename them inline, and reorganize the workspace with drag and drop
-- **Mermaid diagrams** — paste any Mermaid source and keep it source-backed on the board; every rendered diagram type becomes separate editable shapes, labels, connectors, and vector details with one-step undo, with polished native styling for architecture diagrams
-- **Source-backed documents** — open Markdown/MDX/text, SVG, JSON/JSON Schema, CSV, HTML, JSX, and TSX with retained source; Markdown, SVG, JSON, and CSV project into ordinary editable canvas layers, while code stays safely editable outside a live runtime
-- **Media evidence** — insert, paste, or drop raster images, PDFs, video, and audio onto a board; images remain native layers and PDF/video/audio use bounded source-backed viewers with normal board selection, movement, undo, and `.fig` persistence
+- **Mermaid diagrams** — paste source or call `insert_mermaid_diagram` from MCP to place any of the 22 supported Mermaid families directly on a Board; Mermaid 11.12.1 renders theme-aware light/dark SVG geometry that becomes separate editable native shapes, labels, connectors, and vector details while retaining its source; click once to move or resize the diagram, double-click to edit its native parts, or update the attached source to redraw it in place
+- **Workflow boards** — map product areas, journeys, tasks, screen states, recovery paths, and technical systems on ordinary Boards; Mermaid creates native connected diagrams, while app-like experiences use Code Objects
+- **Code Objects** — author one trusted TypeScript/TSX component, rendered by OpenPencil through ReactDOM inside an ordinary persisted `FRAME`; select, transform, connect, duplicate, delete, undo, save, and reopen normally, then double-click or press Enter to interact and Escape to return to Design
+- **Rich artifacts** — documents, spreadsheets, presentations, charts, forms, dashboards, and other app-like experiences are frame-owned Code Objects, not separate object systems; exact imported bytes and provenance stay attached to the owning frame
+- **Media and evidence** — basic text, shapes, vectors, frames, images, audio, video, and connectors remain ordinary native board content; PDFs use the Code Object lifecycle with retained bytes, persistent page state, and page extraction
 - **Intent-to-experience tools** — let people or agents preflight an exact blueprint, then turn captured intent into bounded briefs, maps, presentations, comparisons, decisions, or user-authored formula models with inspectable evidence, proposal provenance, capability limits, undo, and durable decision receipts
 - **Lint, convert, and extract tokens** — inspect documents, lint naming/layout/accessibility, convert between supported formats, analyze colors/typography/spacing/clusters, and extract design tokens
 - **Components, variants, and libraries** — create reusable components, group variants into component sets, insert assets as instances, and publish or review portable component libraries with DTCG design tokens
 - **Design-to-code export** — export selections as JSX/Tailwind, generate token outputs, and map designs into component-oriented code workflows
 - **Vue SDK for custom editors** — headless components and composables for embedding OpenPencil into other apps or building workflow-specific editing surfaces. [Read the SDK docs →](https://openpencil.dev/programmable/sdk/)
-- **Real-time collaboration** — P2P via WebRTC, no server, no account. Cursors, presence, follow mode
+- **One persistent workspace** — Keep every Project and Board inside one durable OpenPencil document; local browser instances, optional Cloud collaboration, and agent automation resolve the same stable workspace identity
 - **Auto layout & CSS Grid** — flex and grid layout via Yoga WASM, with gap, padding, alignment, track sizing
 - **~7 MB desktop app** — Tauri v2 for macOS, Windows, Linux. Also runs in the browser as a PWA
 
@@ -89,14 +92,18 @@ openpencil export design.fig -f html --css tailwind    # Tailwind HTML fragment
 openpencil export design.fig -f html --html standalone --assets external # HTML + assets
 openpencil convert design.pen output.fig               # Convert between document formats
 openpencil import page.html --css styles.css -o page.fig # HTML/CSS → editable .fig
+openpencil import dashboard.tsx --css dashboard.css -o dashboard.fig # React/TSX → editable .fig
+openpencil code-object upsert --workspace-id "workspace-id" --page-id "board-page-id" --object-key harness --name "Harness" --source harness.tsx
 ```
 
-DOM/CSS input flows through `@open-pencil/dom-css`, so HTML, authored CSS, and Tailwind utility CSS can become editable OpenPencil layers:
+DOM/CSS input flows through `@open-pencil/dom-css`, so React/TSX, HTML, authored CSS, and Tailwind utility CSS can become editable OpenPencil layers:
 
 ```sh
 openpencil import card.html --css card.css -o card.fig
 openpencil import card.html --tailwind "flex flex-col gap-3 w-80 p-6 rounded-xl bg-white" -o card.fig
 ```
+
+Use a Code Object when the result should stay interactive. Its TypeScript/TSX source, serializable properties, and persistent state live on one stable frame; nested components share that frame's React root. Use React/TSX import only when the result should become static editable native layers. External or untrusted websites use a sandboxed embed, not an authored HTML board.
 
 ```html
 <div className="flex flex-col gap-4 p-6 bg-white rounded-xl">
@@ -231,7 +238,9 @@ For documentation-aware agents, the docs site publishes [llms.txt](https://openp
 
 ## Collaboration
 
-Share a link to co-edit in real time. No server, no account — peers connect directly via WebRTC.
+When OpenPencil Cloud is configured, sign in once and the shared workspace connects automatically. Owners can copy a one-time cofounder invite from the collaboration control; boards, project folders, document edits, cursors, and selections then stay synchronized across devices.
+
+Without cloud configuration, private peer-to-peer rooms continue to work without accounts:
 
 1. Click the share button in the top-right panel
 2. Share the generated link (`app.openpencil.dev/share/<room-id>`)
@@ -292,7 +301,7 @@ tests/            E2E, visual, engine, and integration tests
 | Layout        | Yoga WASM (flex + grid via [fork](https://github.com/open-pencil/yoga/tree/grid)) |
 | UI            | Vue 3, Reka UI, Tailwind CSS 4                                                    |
 | File format   | Kiwi binary + Zstd + ZIP                                                          |
-| Collaboration | Trystero (WebRTC P2P) + Yjs (CRDT)                                                |
+| Collaboration | Trystero (WebRTC P2P) + Yjs (CRDT) + optional Supabase durability                 |
 | Desktop       | Tauri v2                                                                          |
 | AI/MCP        | Multi-provider (Anthropic, OpenAI, Google AI, OpenRouter), MCP SDK, Hono          |
 

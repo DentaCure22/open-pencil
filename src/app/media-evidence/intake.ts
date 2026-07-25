@@ -12,6 +12,7 @@ import {
   mediaIntakeKind,
   type MediaEvidenceKind
 } from '@/app/media-evidence/source'
+import { placePdfFiles } from '@/app/pdf-intake/intake'
 
 const MEDIA_GAP = 32
 const MEDIA_CASCADE_STEP = 32
@@ -72,7 +73,7 @@ function cascadedMediaPlacement(editor: Editor, pageId: string, bounds: Rect): R
 
 async function prepareViewerFile(file: File): Promise<PreparedMediaEvidence | null> {
   const kind = mediaIntakeKind(file)
-  if (!kind || kind === 'raster') return null
+  if (!kind || kind === 'pdf' || kind === 'raster') return null
   const bytes = new Uint8Array(await file.arrayBuffer())
   return {
     bytes,
@@ -196,18 +197,22 @@ export async function placeMediaEvidenceFiles(
   cx: number,
   cy: number
 ): Promise<string[]> {
+  const pdfFiles = files.filter((file) => mediaIntakeKind(file) === 'pdf')
   const rasterFiles = files.filter((file) => mediaIntakeKind(file) === 'raster')
   const viewerFiles = files.filter((file) => {
     const kind = mediaIntakeKind(file)
-    return kind !== null && kind !== 'raster'
+    return kind !== null && kind !== 'pdf' && kind !== 'raster'
   })
-  if (rasterFiles.length === 0 && viewerFiles.length === 0) return []
+  if (pdfFiles.length === 0 && rasterFiles.length === 0 && viewerFiles.length === 0) return []
 
   // Evidence is a board object, not a child of whichever frame happened to be selected.
   editor.clearSelection()
 
+  const pdfIds = await placePdfFiles(editor, pdfFiles, cx, cy)
   const rasterIds = rasterFiles.length > 0 ? await editor.placeImageFiles(rasterFiles, cx, cy) : []
   const viewerY = viewerCenterBelowRasters(editor, rasterIds, viewerFiles, cy)
   const viewerIds = await placeViewerFiles(editor, viewerFiles, cx, viewerY)
-  return [...rasterIds, ...viewerIds]
+  const ids = [...pdfIds, ...rasterIds, ...viewerIds]
+  editor.select(ids)
+  return ids
 }

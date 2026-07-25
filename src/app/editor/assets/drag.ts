@@ -18,11 +18,15 @@ export type AssetVariantDragPayload =
       fixtureId: string
       kind: 'computed'
       label: string
-      variantId: string
+      variantId: string | null
     }
 
 function hasAssetVariant(dataTransfer: DataTransfer | null) {
   return Boolean(dataTransfer && [...dataTransfer.types].includes(ASSET_VARIANT_DRAG_TYPE))
+}
+
+function isComputedVariantId(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
 }
 
 export function writeAssetVariantDrag(event: DragEvent, payload: AssetVariantDragPayload) {
@@ -51,7 +55,7 @@ function readAssetVariantDrag(dataTransfer: DataTransfer | null): AssetVariantDr
       'fixtureId' in value &&
       typeof value.fixtureId === 'string' &&
       'variantId' in value &&
-      typeof value.variantId === 'string' &&
+      isComputedVariantId(value.variantId) &&
       'label' in value &&
       typeof value.label === 'string'
     ) {
@@ -129,7 +133,7 @@ export function useAssetVariantDrop(canvasAreaRef: Ref<HTMLElement | null>, edit
       (candidate) => candidate.fixtureId === payload.fixtureId
     )
     if (!asset) return
-    placeSmylrLiveComponentVariant(editor, asset, payload.variantId, point.x, point.y)
+    placeSmylrLiveComponentVariant(editor, asset, payload.variantId ?? undefined, point.x, point.y)
   }
 
   useEventListener(window, ASSET_VARIANT_DRAG_START_EVENT, () => {

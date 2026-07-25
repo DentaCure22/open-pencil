@@ -1,7 +1,6 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '../editor/session'
-import { DEFAULT_LIVE_FRAME_RADIUS } from '../smylr-production/frame-corners'
 import type { SmylrComputedAssetDefinition } from './computed-catalog'
 import { SMYLR_COMPUTED_ASSET_RENDERER_VERSION } from './computed-catalog'
 
@@ -15,6 +14,11 @@ type SmylrLiveComponentRouteOptions = {
 }
 
 type LiveComponentFrameSnapshot = Partial<SceneNode> & { id: string }
+
+type SmylrLiveComponentIntrinsicSize = {
+  height: number
+  width: number
+}
 
 function pluginData(key: string, value: string): SceneNode['pluginData'][number] {
   return { pluginId: PLUGIN_ID, key, value }
@@ -57,6 +61,58 @@ export function isSmylrLiveComponentFrame(node: SceneNode | null | undefined) {
   )
 }
 
+export function smylrLiveComponentDisplayName(node: SceneNode) {
+  const componentName = pluginValue(node, 'componentName') ?? node.name.split(' / ')[0] ?? node.name
+  const variantLabel = pluginValue(node, 'variantLabel')
+  return variantLabel ? `${componentName} · ${variantLabel}` : componentName
+}
+
+function validIntrinsicDimension(value: number) {
+  return Number.isFinite(value) && value >= 1 && value <= 10_000
+}
+
+function replacePluginValue(
+  pluginDataEntries: SceneNode['pluginData'],
+  key: 'intrinsicHeight' | 'intrinsicWidth',
+  value: string
+) {
+  let replaced = false
+  const nextEntries = pluginDataEntries.map((entry) => {
+    if (entry.pluginId !== PLUGIN_ID || entry.key !== key) return entry
+    replaced = true
+    return pluginData(key, value)
+  })
+  return replaced ? nextEntries : [...nextEntries, pluginData(key, value)]
+}
+
+export function syncSmylrLiveComponentIntrinsicSize(
+  store: EditorStore,
+  frameId: string,
+  size: SmylrLiveComponentIntrinsicSize
+) {
+  if (!validIntrinsicDimension(size.width) || !validIntrinsicDimension(size.height)) return false
+  const frame = store.graph.getNode(frameId)
+  if (!frame || !isSmylrLiveComponentFrame(frame)) return false
+
+  const previousWidth = Number(pluginValue(frame, 'intrinsicWidth'))
+  const previousHeight = Number(pluginValue(frame, 'intrinsicHeight'))
+  const wasAtIntrinsicSize = frame.width === previousWidth && frame.height === previousHeight
+  const width = Math.round(size.width)
+  const height = Math.round(size.height)
+  let pluginDataEntries = replacePluginValue(frame.pluginData, 'intrinsicWidth', String(width))
+  pluginDataEntries = replacePluginValue(pluginDataEntries, 'intrinsicHeight', String(height))
+  const pluginDataChanged = !samePluginData(frame.pluginData, pluginDataEntries)
+  const frameSizeChanged = wasAtIntrinsicSize && (frame.width !== width || frame.height !== height)
+  if (!pluginDataChanged && !frameSizeChanged) return false
+
+  store.graph.updateNode(frame.id, {
+    ...(frameSizeChanged ? { height, width } : {}),
+    pluginData: pluginDataEntries
+  })
+  store.requestRender()
+  return true
+}
+
 function findLiveComponentPage(store: EditorStore, fixtureId: string, variantId?: string) {
   return (
     store.graph
@@ -76,6 +132,8 @@ function componentMetadata(asset: SmylrComputedAssetDefinition, variantId?: stri
     pluginData('componentName', asset.name),
     pluginData('sourcePath', asset.sourcePath),
     pluginData('fixtureId', asset.fixtureId),
+    pluginData('intrinsicWidth', String(asset.overlayWidth)),
+    pluginData('intrinsicHeight', String(asset.interactionHeight)),
     pluginData('rendererVersion', SMYLR_COMPUTED_ASSET_RENDERER_VERSION),
     ...(variant
       ? [pluginData('variantId', variant.id), pluginData('variantLabel', variant.label)]
@@ -127,15 +185,15 @@ export function ensureSmylrLiveComponentCanvas(
         pluginValue(node, 'kind') === LIVE_APP_KIND && pluginValue(node, 'state') === 'current'
     )
 
-  const route = smylrLiveComponentRoute(asset, variantId)
+  const route = smylrLiveComponentRoute(asset, variantId, { embed: true })
   if (!frame) {
     frame = store.graph.createNode('FRAME', page.id, {
       x: 96,
       y: 88,
-      width: asset.frameWidth,
-      height: asset.frameHeight,
+      width: asset.overlayWidth,
+      height: asset.interactionHeight,
       name: `${canvasName} / Live`,
-      cornerRadius: DEFAULT_LIVE_FRAME_RADIUS,
+      cornerRadius: 0,
       clipsContent: true,
       fills: [],
       strokes: [],
@@ -152,16 +210,18 @@ export function ensureSmylrLiveComponentCanvas(
     ...componentMetadata(asset, variantId)
   ]
   if (
-    frame.width !== asset.frameWidth ||
-    frame.height !== asset.frameHeight ||
+    frame.width !== asset.overlayWidth ||
+    frame.height !== asset.interactionHeight ||
+    frame.cornerRadius !== 0 ||
     frame.name !== `${canvasName} / Live` ||
     frame.fills.length > 0 ||
     frame.strokes.length > 0 ||
     !samePluginData(frame.pluginData, framePluginData)
   ) {
     store.graph.updateNode(frame.id, {
-      width: asset.frameWidth,
-      height: asset.frameHeight,
+      width: asset.overlayWidth,
+      height: asset.interactionHeight,
+      cornerRadius: 0,
       name: `${canvasName} / Live`,
       fills: [],
       strokes: [],
@@ -187,13 +247,15 @@ export function placeSmylrLiveComponentVariant(
   const previousSelection = new Set(store.state.selectedIds)
   const variant = asset.variants.find((candidate) => candidate.id === variantId)
   const displayName = variant ? `${asset.name} / ${variant.label}` : `${asset.name} / Live`
+  const placedWidth = asset.overlayWidth
+  const placedHeight = asset.interactionHeight
   let frame = store.graph.createNode('FRAME', parentId, {
-    x: centerX - asset.frameWidth / 2,
-    y: centerY - asset.frameHeight / 2,
-    width: asset.frameWidth,
-    height: asset.frameHeight,
+    x: centerX - placedWidth / 2,
+    y: centerY - placedHeight / 2,
+    width: placedWidth,
+    height: placedHeight,
     name: displayName,
-    cornerRadius: DEFAULT_LIVE_FRAME_RADIUS,
+    cornerRadius: 0,
     clipsContent: true,
     fills: [],
     strokes: [],
@@ -202,7 +264,7 @@ export function placeSmylrLiveComponentVariant(
   const framePluginData = [
     pluginData('kind', LIVE_APP_KIND),
     pluginData('pageId', parentId),
-    pluginData('route', smylrLiveComponentRoute(asset, variantId)),
+    pluginData('route', smylrLiveComponentRoute(asset, variantId, { embed: true })),
     pluginData('state', `placed:${frame.id}`),
     ...componentMetadata(asset, variantId)
   ]

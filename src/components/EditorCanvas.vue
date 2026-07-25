@@ -27,6 +27,7 @@ import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaborati
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { isHtmlBoardFrame } from '@/app/html-board/workspace'
+import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
 import { mediaEvidenceSource } from '@/app/media-evidence/source'
 import { sourceObjectSource } from '@/app/source-object/source'
@@ -40,6 +41,7 @@ import {
 } from '@/app/smylr-live-inspector/session'
 import {
   findCurrentSmylrLiveAppFrame,
+  isSmylrFlowPageNode,
   isSmylrLiveAppFrameNode
 } from '@/app/smylr-production/workspace'
 import IconLucidePanelBottom from '~icons/lucide/panel-bottom'
@@ -49,6 +51,7 @@ import IconLucidePanelTop from '~icons/lucide/panel-top'
 import AnimatedDitherBackground from './canvas/AnimatedDitherBackground.vue'
 import CanvasMenu from './canvas/CanvasMenu.vue'
 import HtmlBoardEmbeds from './canvas/HtmlBoardEmbeds.vue'
+import CodeObjectOverlays from './canvas/CodeObjectOverlays.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
 import NarratedTraceAnnotationOverlay from './narrated-trace/NarratedTraceAnnotationOverlay.vue'
 import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
@@ -68,12 +71,16 @@ const collab = useCollabInjected()
 const canvasAreaRef = ref<HTMLDivElement | null>(null)
 const sceneCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const usesQuietCanvasBackground = computed(() =>
+  isSmylrFlowPageNode(store.graph.getNode(store.state.currentPageId))
+)
 
 const { updateCursor } = useCanvasCollaborationAwareness(store, collab)
 const { selectAtContextPoint } = createCanvasContextSelection(canvasRef, store)
 
 useCanvas(sceneCanvasRef, store, {
   layer: 'scene',
+  preserveDrawingBuffer: true,
   showRulers: false,
   onReady: fadeOutGlobalLoader
 })
@@ -174,6 +181,7 @@ const prefersNativeHitTarget = computed(() =>
       node &&
       !isSmylrLiveAppFrameNode(node) &&
       !isHtmlBoardFrame(node) &&
+      !isCodeObjectFrame(node) &&
       !mediaEvidenceSource(node) &&
       !sourceObjectSource(node) &&
       !spatialMediaSource(node)
@@ -212,7 +220,10 @@ const interactionCanvasClass = computed(() =>
           aria-hidden="true"
           class="pointer-events-none absolute inset-0 z-[1] size-full outline-none"
         />
-        <AnimatedDitherBackground :presentation="ditherPresentation" />
+        <AnimatedDitherBackground
+          :presentation="ditherPresentation"
+          :quiet="usesQuietCanvasBackground"
+        />
         <canvas
           ref="canvasRef"
           data-test-id="canvas-element"
@@ -223,6 +234,7 @@ const interactionCanvasClass = computed(() =>
         />
         <MediaEvidenceOverlays />
         <SourceObjectOverlays />
+        <CodeObjectOverlays />
         <SmylrLiveAppEmbed />
         <SmylrPooledLiveAppEmbeds />
         <SpatialMediaOverlays />

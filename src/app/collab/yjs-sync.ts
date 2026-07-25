@@ -1,17 +1,27 @@
 import * as Y from 'yjs'
 
+import { readContentSource } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { assetHashFromReference } from '@open-pencil/scene-graph/images'
 
+import {
+  cancelPreHydrationDelete,
+  type CollabHydrationState,
+  queuePreHydrationDelete
+} from '@/app/collab/hydration'
 import type { EditorStore } from '@/app/editor/active-store'
 
 type YNodes = Y.Map<Y.Map<unknown>>
 type YImages = Y.Map<Uint8Array>
+
+const SYNC_ALL_NODE_BATCH_SIZE = 64
 
 type GraphBindingOptions = {
   store: EditorStore
   getYdoc: () => Y.Doc | null
   getYnodes: () => YNodes | null
   getSuppressGraphSync: () => boolean
+  hydration: CollabHydrationState
   setSuppressYjsEvents: (value: boolean) => void
   syncNodeToYjs: (nodeId: string) => void
 }
@@ -37,6 +47,14 @@ function logCollabSyncError(context: string, error: unknown) {
   console.error(`[Collab] ${context}:`, error)
 }
 
+function referencedAssetHashes(node: SceneNode): Set<string> {
+  const hashes = new Set(node.fills.flatMap((fill) => (fill.imageHash ? [fill.imageHash] : [])))
+  const contentSource = readContentSource(node)
+  const sourceHash = contentSource ? assetHashFromReference(contentSource.source) : null
+  if (sourceHash) hashes.add(sourceHash)
+  return hashes
+}
+
 // Clone across the graph/Yjs boundary to avoid shared mutable nested data.
 export function syncNodePropsToYMap(node: SceneNode, ynode: Y.Map<unknown>) {
   for (const [key, value] of Object.entries(node)) {
@@ -57,24 +75,31 @@ export function bindCollabGraphEvents({
   getYdoc,
   getYnodes,
   getSuppressGraphSync,
+  hydration,
   setSuppressYjsEvents,
   syncNodeToYjs
 }: GraphBindingOptions) {
   function onGraphMutation(nodeId: string) {
-    if (!getSuppressGraphSync() && getYdoc() && getYnodes()) {
+    if (getSuppressGraphSync()) return
+    if (getYdoc() && getYnodes()) {
       syncNodeToYjs(nodeId)
     }
   }
 
   const unbinds = [
     store.onEditorEvent('node:updated', (id) => onGraphMutation(id)),
-    store.onEditorEvent('node:created', (node) => onGraphMutation(node.id)),
+    store.onEditorEvent('node:created', (node) => {
+      if (!getSuppressGraphSync()) cancelPreHydrationDelete(hydration, node.id)
+      onGraphMutation(node.id)
+    }),
     store.onEditorEvent('node:reparented', (nodeId) => onGraphMutation(nodeId)),
     store.onEditorEvent('node:reordered', (nodeId) => onGraphMutation(nodeId)),
     store.onEditorEvent('node:deleted', (id) => {
+      if (getSuppressGraphSync()) return
+      queuePreHydrationDelete(hydration, id)
       const ydoc = getYdoc()
       const ynodes = getYnodes()
-      if (!getSuppressGraphSync() && ydoc && ynodes) {
+      if (ydoc && ynodes) {
         setSuppressYjsEvents(true)
         try {
           ydoc.transact(() => {
@@ -132,6 +157,27 @@ export function registerYjsObservers({
   })
 }
 
+export function pruneGraphNodesMissingFromYjs(store: EditorStore, ynodes: YNodes): string[] {
+  const depth = (node: SceneNode) => {
+    let value = 0
+    let parentId = node.parentId
+    while (parentId) {
+      value += 1
+      parentId = store.graph.getNode(parentId)?.parentId ?? null
+    }
+    return value
+  }
+  const staleNodes = [...store.graph.getAllNodes()]
+    .filter((node) => node.id !== store.graph.rootId && !ynodes.has(node.id))
+    .sort((left, right) => depth(right) - depth(left))
+
+  for (const node of staleNodes) {
+    if (store.graph.getNode(node.id)) store.graph.deleteNode(node.id)
+  }
+  if (staleNodes.length > 0) store.requestRender()
+  return staleNodes.map((node) => node.id)
+}
+
 export function createYjsGraphSync({
   getStore,
   getYdoc,
@@ -159,11 +205,10 @@ export function createYjsGraphSync({
         syncNodePropsToYMap(node, ynode)
 
         if (localYimages) {
-          for (const fill of node.fills) {
-            if (fill.imageHash && !localYimages.has(fill.imageHash)) {
-              const data = store.graph.images.get(fill.imageHash)
-              if (data) localYimages.set(fill.imageHash, data)
-            }
+          for (const hash of referencedAssetHashes(node)) {
+            if (localYimages.has(hash)) continue
+            const data = store.graph.images.get(hash)
+            if (data) localYimages.set(hash, data)
           }
         }
       })
@@ -182,24 +227,26 @@ export function createYjsGraphSync({
     const localYimages = getYimages()
     setSuppressYjsEvents(true)
     try {
-      ydoc.transact(() => {
-        for (const node of store.graph.getAllNodes()) {
-          let ynode = ynodes.get(node.id)
-          if (!ynode) {
-            ynode = new Y.Map()
-            ynodes.set(node.id, ynode)
-          }
-          syncNodePropsToYMap(node, ynode)
-        }
-      })
-      if (localYimages) {
+      const nodes = [...store.graph.getAllNodes()]
+      for (let index = 0; index < nodes.length; index += SYNC_ALL_NODE_BATCH_SIZE) {
         ydoc.transact(() => {
-          for (const [hash, data] of store.graph.images) {
-            if (!localYimages.has(hash)) {
-              localYimages.set(hash, data)
+          for (const node of nodes.slice(index, index + SYNC_ALL_NODE_BATCH_SIZE)) {
+            let ynode = ynodes.get(node.id)
+            if (!ynode) {
+              ynode = new Y.Map()
+              ynodes.set(node.id, ynode)
             }
+            syncNodePropsToYMap(node, ynode)
           }
         })
+      }
+      if (localYimages) {
+        for (const [hash, data] of store.graph.images) {
+          if (localYimages.has(hash)) continue
+          ydoc.transact(() => {
+            localYimages.set(hash, data)
+          })
+        }
       }
     } catch (error) {
       logCollabSyncError('Failed to sync document', error)

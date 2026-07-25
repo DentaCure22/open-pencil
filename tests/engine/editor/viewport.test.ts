@@ -36,6 +36,36 @@ describe('viewport fitting', () => {
     expect((top + bottom) / 2).toBeCloseTo(325)
   })
 
+  test('keeps selected descendant text readable when fitting a large diagram', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    const diagram = graph.createNode('GROUP', page.id, {
+      x: 0,
+      y: 0,
+      width: 2400,
+      height: 400
+    })
+    graph.createNode('TEXT', diagram.id, {
+      x: 0,
+      y: 0,
+      width: 140,
+      height: 24,
+      text: 'Readable label',
+      fontSize: 14
+    })
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ width: 1000, height: 700 }),
+      skipInitialGraphSetup: true
+    })
+    editor.select([diagram.id])
+
+    editor.zoomToReadableSelection(11)
+
+    expect(editor.state.zoom * 14).toBeGreaterThanOrEqual(11)
+  })
+
   test('fits an unseen page and restores its focal point when chrome changes', async () => {
     const graph = new SceneGraph()
     const firstPage = graph.getPages()[0]

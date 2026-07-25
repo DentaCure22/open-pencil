@@ -9,7 +9,7 @@ import resizeCursorSvg from '#vue/shared/assets/resize-cursor.svg?raw'
 import rotateCursorSvg from '#vue/shared/assets/rotate-cursor.svg?raw'
 import type { CornerPosition, HandlePosition } from '#vue/shared/input/types'
 
-function isSmylrLiveAppFrame(node: SceneNode): boolean {
+export function isSmylrLiveAppFrame(node: SceneNode): boolean {
   return (
     node.name.startsWith('Live Smylr App /') ||
     node.pluginData.some(
@@ -209,7 +209,6 @@ export function getHitHandleByMatrix(
   })
 
   for (const { handleKey, p } of corners) {
-
     const dx = cx - p.x
     const dy = cy - p.y
 

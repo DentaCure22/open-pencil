@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { useEditorStore } from '@/app/editor/active-store'
 import { nodeIcon } from '@/app/editor/icons'
+import { codeComponentPresetsForQuery } from '@/app/code-object/model'
 import { openExternalLink, toast } from '@/app/shell/ui'
-import { SMYLR_COMPUTED_ASSETS } from '@/app/smylr-component-library/computed-catalog'
+import {
+  SMYLR_COMPONENT_INVENTORY,
+  SMYLR_COMPUTED_ASSETS,
+  type SmylrComponentInventoryLayer
+} from '@/app/smylr-component-library/computed-catalog'
 import {
   ensureSmylrLiveComponentCanvas,
   placeSmylrLiveComponentVariant
@@ -35,9 +40,12 @@ import { useFileDialog } from '@vueuse/core'
 import AppInput from '@/components/ui/AppInput.vue'
 import Tip from '@/components/ui/Tip.vue'
 import AssetVariantDropdown from '@/components/assets/AssetVariantDropdown.vue'
+import CodeObjectAssets from '@/components/assets/CodeObjectAssets.vue'
 import type {
   AssetVariant,
   ComputedAsset,
+  InteractiveAsset,
+  InventoryAsset,
   LocalAsset,
   SceneAsset,
   SceneAssetVariant
@@ -45,8 +53,9 @@ import type {
 import { useButtonUI } from '@/components/ui/button'
 import { useDialogUI } from '@/components/ui/dialog'
 
+const emit = defineEmits<{ assetInserted: [nodeId: string] }>()
 const editor = useEditorStore()
-const { panels, commands } = useI18n()
+const { panels } = useI18n()
 const query = ref('')
 const detailsOpen = ref(false)
 const selectedAssetId = ref<string | null>(null)
@@ -60,6 +69,23 @@ const dialog = useDialogUI({
 })
 const openingAssetId = ref<string | null>(null)
 const assetOpenError = ref<string | null>(null)
+const variantOpenState = ref<Record<string, boolean>>({})
+watch(query, () => {
+  variantOpenState.value = {}
+})
+type AssetGroupId = 'features' | 'layout' | 'local' | 'primitives' | 'shared'
+type AssetGroup = {
+  assets: LocalAsset[]
+  id: AssetGroupId
+  label: string
+}
+const expandedGroups = ref<Record<AssetGroupId, boolean>>({
+  features: false,
+  layout: false,
+  local: true,
+  primitives: true,
+  shared: false
+})
 const libraryReviewOpen = ref(false)
 const libraryDialog = useDialogUI({
   content: 'flex w-[560px] max-w-[92vw] flex-col overflow-hidden'
@@ -155,6 +181,15 @@ function sceneVariantItems(componentSetId: string): SceneAssetVariant[] {
     }))
 }
 
+function originalSceneItem(componentId: string): SceneAssetVariant {
+  return {
+    componentId,
+    id: `original:${componentId}`,
+    kind: 'scene',
+    label: 'Original'
+  }
+}
+
 function computedVariantAxes(asset: (typeof SMYLR_COMPUTED_ASSETS)[number]) {
   const axes = new Map<string, Set<string>>()
   for (const variant of asset.variants) {
@@ -197,7 +232,8 @@ const sceneAssets = computed<SceneAsset[]>(() => {
       const conflicts =
         node.type === 'COMPONENT_SET' ? editor.getComponentSetVariantConflicts(node.id) : []
       const variantAxes = node.type === 'COMPONENT_SET' ? componentSetVariantInfo(node.id) : []
-      const variantItems = node.type === 'COMPONENT_SET' ? sceneVariantItems(node.id) : []
+      const variantItems =
+        node.type === 'COMPONENT_SET' ? sceneVariantItems(node.id) : [originalSceneItem(node.id)]
       return {
         id: node.id,
         kind: 'scene' as const,
@@ -205,7 +241,7 @@ const sceneAssets = computed<SceneAsset[]>(() => {
         node,
         componentId: defaultVariant?.id ?? null,
         variantAxes,
-        variantCount: variantItems.length,
+        variantCount: node.type === 'COMPONENT_SET' ? variantItems.length : 0,
         variantItems,
         hasConflicts: conflicts.length > 0,
         sourceLibraryKey: node.sourceLibraryKey,
@@ -225,11 +261,24 @@ const computedAssets = computed<ComputedAsset[]>(() => {
     componentId: null,
     variantAxes: computedVariantAxes(asset),
     variantCount: asset.variants.length,
-    variantItems: asset.variants.map((variant) => ({
-      ...variant,
-      fixtureId: asset.fixtureId,
-      kind: 'computed' as const
-    })),
+    variantItems:
+      asset.variants.length > 0
+        ? asset.variants.map((variant) => ({
+            ...variant,
+            fixtureId: asset.fixtureId,
+            kind: 'computed' as const,
+            variantId: variant.id
+          }))
+        : [
+            {
+              fixtureId: asset.fixtureId,
+              id: 'original',
+              kind: 'computed' as const,
+              label: 'Original',
+              props: {},
+              variantId: null
+            }
+          ],
     hasConflicts: false,
     sourceLibraryKey: 'smylr-computed' as const,
     description: `Live from ${asset.sourcePath}`,
@@ -237,19 +286,147 @@ const computedAssets = computed<ComputedAsset[]>(() => {
   }))
 })
 
-const assets = computed<LocalAsset[]>(() =>
-  [...computedAssets.value, ...sceneAssets.value].sort((a, b) => a.name.localeCompare(b.name))
+const liveSourcePaths = new Set(SMYLR_COMPUTED_ASSETS.map((asset) => asset.sourcePath))
+
+const inventoryAssets = computed<InventoryAsset[]>(() =>
+  SMYLR_COMPONENT_INVENTORY.filter(
+    (asset) =>
+      !liveSourcePaths.has(asset.sourcePath) &&
+      asset.openPencilAudit?.assetAction !== 'remove-from-assets'
+  ).map((asset) => ({
+    ...asset,
+    id: `smylr-inventory:${asset.sourcePath}`,
+    kind: 'inventory' as const,
+    componentId: null,
+    name: asset.componentNames[0] ?? asset.sourcePath.split('/').at(-1) ?? asset.sourcePath,
+    catalogVariantAxes: asset.variantAxes,
+    variantAxes: asset.variantAxes.map((name) => ({ name, values: [] })),
+    variantCount: 0,
+    hasConflicts: false,
+    sourceLibraryKey: 'smylr-inventory' as const,
+    description:
+      asset.componentNames.length === 1
+        ? `Source component from ${asset.sourcePath}`
+        : `${asset.componentNames.length} exported components from ${asset.sourcePath}`,
+    docsUrl: null
+  }))
 )
+
+const assets = computed<LocalAsset[]>(() =>
+  [...sceneAssets.value, ...computedAssets.value, ...inventoryAssets.value].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  )
+)
+
+function assetSearchValues(asset: LocalAsset) {
+  if (asset.kind === 'inventory') {
+    return [
+      asset.name,
+      asset.description,
+      asset.sourcePath,
+      asset.feature,
+      asset.openPencilAudit?.classification,
+      asset.openPencilAudit?.reason,
+      asset.openPencilAudit?.assetActionReason,
+      ...asset.componentNames,
+      ...asset.variantAxes.map((axis) => axis.name),
+      ...asset.stateTargets
+    ]
+  }
+  return [asset.name, asset.description, asset.sourcePath]
+}
 
 const filteredAssets = computed(() => {
   const normalized = query.value.trim().toLowerCase()
   if (!normalized) return assets.value
   return assets.value.filter((asset) =>
-    [asset.name, asset.description, asset.sourcePath].some((value) =>
-      value?.toLowerCase().includes(normalized)
-    )
+    assetSearchValues(asset).some((value) => value?.toLowerCase().includes(normalized))
   )
 })
+
+const filteredCodeComponentCount = computed(() => codeComponentPresetsForQuery(query.value).length)
+
+const assetCountLabel = computed(() => {
+  const count = filteredAssets.value.length + filteredCodeComponentCount.value
+  if (query.value.trim()) return `${count} ${count === 1 ? 'result' : 'results'}`
+  return `${count} total`
+})
+
+const assetCoverageLabel = computed(() => {
+  const liveCount =
+    filteredAssets.value.filter(isInteractiveAsset).length + filteredCodeComponentCount.value
+  const sourceOnlyCount =
+    filteredAssets.value.length - filteredAssets.value.filter(isInteractiveAsset).length
+  return `${liveCount} live · ${sourceOnlyCount} source-only`
+})
+
+function inventoryGroupId(layer: SmylrComponentInventoryLayer): AssetGroupId {
+  if (layer === 'primitive') return 'primitives'
+  if (layer === 'feature') return 'features'
+  return layer
+}
+
+function assetGroupId(asset: LocalAsset): AssetGroupId {
+  if (asset.kind === 'scene') return 'local'
+  if (asset.kind === 'computed') {
+    return inventoryGroupId(asset.inventoryLayer)
+  }
+  return inventoryGroupId(asset.layer)
+}
+
+const assetGroups = computed<AssetGroup[]>(() => {
+  const groups: AssetGroup[] = [
+    { id: 'local', label: 'Local', assets: [] },
+    { id: 'primitives', label: 'Primitives', assets: [] },
+    { id: 'layout', label: 'Layout', assets: [] },
+    { id: 'shared', label: 'Shared', assets: [] },
+    { id: 'features', label: 'Features', assets: [] }
+  ]
+  const groupById = new Map(groups.map((group) => [group.id, group]))
+  for (const asset of filteredAssets.value) groupById.get(assetGroupId(asset))?.assets.push(asset)
+  return groups.filter((group) => group.assets.length > 0)
+})
+
+function groupIsOpen(groupId: AssetGroupId) {
+  return query.value.trim().length > 0 || expandedGroups.value[groupId]
+}
+
+function toggleGroup(groupId: AssetGroupId) {
+  expandedGroups.value[groupId] = !expandedGroups.value[groupId]
+}
+
+function isInteractiveAsset(asset: LocalAsset): asset is InteractiveAsset {
+  return asset.kind !== 'inventory'
+}
+
+function sourceOnlyBadge(asset: InventoryAsset) {
+  const audit = asset.openPencilAudit
+  if (!audit) return 'Source'
+  if (audit.assetAction === 'fixture-candidate') return 'Fixture ready'
+  if (audit.classification === 'runtime-or-service') return 'Runtime'
+  if (audit.classification === 'browser-only') return 'Browser'
+  if (audit.classification === 'needs-production-boundary') return 'Boundary'
+  return 'Source'
+}
+
+function sourceOnlyStatus(asset: InventoryAsset) {
+  const audit = asset.openPencilAudit
+  if (!audit) return 'live fixture pending'
+  if (audit.assetAction === 'fixture-candidate') return 'fixture candidate'
+  return 'source-only by design'
+}
+
+function sourceOnlyClassification(asset: InventoryAsset) {
+  return asset.openPencilAudit?.classification.replaceAll('-', ' ') ?? 'not yet classified'
+}
+
+function sourceOnlyCoverage(asset: InventoryAsset) {
+  const audit = asset.openPencilAudit
+  if (audit) return audit.reason
+  if (asset.storyStatus === 'covered') return 'Story coverage found · live fixture not mapped yet'
+  if (asset.storyStatus === 'story-ready') return 'Ready for a fixture'
+  return 'Needs a fixture and state coverage'
+}
 
 const selectedAsset = computed(
   () => assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
@@ -257,10 +434,6 @@ const selectedAsset = computed(
 const selectedPreviewNodeId = computed(() =>
   selectedAsset.value?.kind === 'scene' ? selectedAsset.value.componentId : null
 )
-
-function assetVariantNames(asset: LocalAsset): string {
-  return asset.variantAxes.map((variant) => variant.name).join(', ')
-}
 
 function revokePreview() {
   if (!previewUrl.value) return
@@ -355,14 +528,9 @@ async function openLiveComponentAsset(asset: ComputedAsset, variantId?: string) 
   }
 }
 
-async function openAssetCanvas(asset: LocalAsset) {
-  if (asset.kind === 'computed') return openLiveComponentAsset(asset)
-  return openSceneAssetCanvas(asset)
-}
-
 async function openAssetVariant(asset: LocalAsset, variant: AssetVariant) {
   if (asset.kind === 'computed' && variant.kind === 'computed') {
-    await openLiveComponentAsset(asset, variant.id)
+    await openLiveComponentAsset(asset, variant.variantId ?? undefined)
     return
   }
   if (asset.kind === 'scene' && variant.kind === 'scene') {
@@ -384,10 +552,16 @@ function insertionPoint(component: SceneNode, parentId: string) {
 }
 
 async function insertAsset(asset: LocalAsset) {
+  if (asset.kind === 'inventory') {
+    toast.info(`${asset.name} needs a live fixture before it can be added to a board`)
+    return
+  }
+  variantOpenState.value[asset.id] = false
   if (asset.kind === 'computed') {
     const canvasCenter = editor.viewportCanvasCenter()
     const center = editor.screenToCanvas(canvasCenter.x, canvasCenter.y)
-    placeSmylrLiveComponentVariant(editor, asset, undefined, center.x, center.y)
+    const frame = placeSmylrLiveComponentVariant(editor, asset, undefined, center.x, center.y)
+    emit('assetInserted', frame.id)
     return
   }
   if (!asset.componentId) return
@@ -395,8 +569,15 @@ async function insertAsset(asset: LocalAsset) {
   if (!component) return
   const parentId = editor.state.enteredContainerId ?? editor.state.currentPageId
   const point = insertionPoint(component, parentId)
-  editor.createInstanceFromComponent(asset.componentId, point.x, point.y, parentId)
+  const instanceId = editor.createInstanceFromComponent(
+    asset.componentId,
+    point.x,
+    point.y,
+    parentId
+  )
+  if (!instanceId) return
   editor.requestRender()
+  emit('assetInserted', instanceId)
 }
 
 async function insertSelectedAsset() {
@@ -408,15 +589,8 @@ async function insertSelectedAsset() {
 
 <template>
   <section data-test-id="assets-panel" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <header class="flex shrink-0 items-end justify-between px-3 pt-2 pb-1.5">
-      <div class="min-w-0">
-        <span class="block truncate text-[11.5px] leading-4 font-semibold text-surface">
-          Component library
-        </span>
-        <span class="block truncate text-[9.5px] leading-3.5 text-muted/75">
-          Reusable components
-        </span>
-      </div>
+    <header class="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1.5">
+      <span class="shrink-0 text-[11.5px] leading-4 font-semibold text-surface"> Assets </span>
       <div class="flex items-center gap-1">
         <Tip label="Import library">
           <button
@@ -440,8 +614,11 @@ async function insertSelectedAsset() {
             <icon-lucide-package-plus class="size-3" />
           </button>
         </Tip>
-        <span data-test-id="computed-assets-count" class="ml-1 pb-0.5 text-[9px] text-muted/70">
-          {{ filteredAssets.length }} shown
+        <span
+          data-test-id="computed-assets-count"
+          class="ml-1 whitespace-nowrap text-[9px] text-muted/70"
+        >
+          {{ assetCountLabel }}
         </span>
       </div>
     </header>
@@ -451,9 +628,12 @@ async function insertSelectedAsset() {
         type="search"
         data-test-id="assets-search"
         size="sm"
-        placeholder="Search components"
+        placeholder="Search assets"
         class="rounded-[5px] bg-transparent"
       />
+      <p data-test-id="assets-coverage-summary" class="px-1 pt-1 text-[9px] text-muted/70">
+        {{ assetCoverageLabel }}
+      </p>
       <p
         v-if="assetOpenError"
         data-test-id="computed-asset-error"
@@ -463,132 +643,173 @@ async function insertSelectedAsset() {
       </p>
     </div>
 
-    <div class="flex-1 scrollbar-thin overflow-y-auto px-2.5 pb-3">
-      <div
-        v-for="asset in filteredAssets"
-        :key="asset.id"
-        data-test-id="asset-item"
-        :data-asset-id="asset.id"
-        :data-asset-kind="asset.kind"
-        class="group/asset flex min-h-9 w-full items-center rounded-[5px] px-1.5 py-0.5 text-[11.5px] text-muted transition-colors hover:bg-hover hover:text-surface"
-      >
+    <div class="flex-1 scrollbar-thin overflow-x-hidden overflow-y-auto px-2.5 pb-3">
+      <CodeObjectAssets :query="query" @asset-inserted="emit('assetInserted', $event)" />
+
+      <section v-for="group in assetGroups" :key="group.id" class="mb-1">
         <button
           type="button"
-          data-test-id="asset-open"
-          class="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left"
-          @click="openAssetCanvas(asset)"
+          data-test-id="asset-group-trigger"
+          :data-asset-group="group.id"
+          :aria-expanded="groupIsOpen(group.id)"
+          class="text-muted hover:text-surface flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[9.5px] font-semibold tracking-wide uppercase"
+          @click="toggleGroup(group.id)"
         >
-          <icon-lucide-loader-2
-            v-if="openingAssetId === asset.id"
-            class="text-component size-3.5 shrink-0 animate-spin"
+          <icon-lucide-chevron-right
+            class="size-3 transition-transform"
+            :class="groupIsOpen(group.id) ? 'rotate-90' : ''"
           />
-          <icon-lucide-box
-            v-else-if="asset.kind === 'computed'"
-            class="text-component size-3.5 shrink-0"
-          />
-          <component
-            v-else
-            :is="nodeIcon(asset.node)"
-            class="text-component size-3.5 shrink-0"
-            aria-hidden="true"
-          />
-          <span class="min-w-0 flex-1">
-            <span class="flex min-w-0 items-center gap-1.5">
-              <span data-test-id="asset-name" class="truncate">{{ asset.name }}</span>
-              <span
-                v-if="asset.sourceLibraryKey"
-                data-test-id="asset-library-badge"
-                class="bg-component/15 text-component shrink-0 rounded px-1 py-px text-[9px] font-medium uppercase"
-              >
-                {{
-                  asset.kind === 'computed'
-                    ? 'Computed'
-                    : asset.sourceLibraryKey === 'smylr-computed'
-                      ? 'Smylr live'
-                      : panels.assetLibraryBadge
-                }}
-              </span>
-            </span>
-            <span
-              v-if="asset.sourcePath"
-              data-test-id="asset-source-path"
-              class="text-muted mt-0.5 block truncate text-[10px]"
-            >
-              {{ asset.sourcePath }}
-            </span>
-            <span
-              v-if="asset.variantAxes.length > 0"
-              data-test-id="asset-variant-summary"
-              class="text-muted mt-0.5 block truncate text-[10px]"
-            >
-              {{
-                panels.assetVariantSummary({
-                  count: asset.variantCount,
-                  names: assetVariantNames(asset)
-                })
-              }}
-            </span>
-            <span
-              v-if="asset.description"
-              data-test-id="asset-description"
-              class="text-muted mt-0.5 block truncate text-[10px]"
-            >
-              {{ asset.description }}
-            </span>
-            <span
-              v-if="asset.hasConflicts"
-              data-test-id="asset-variant-conflict"
-              class="mt-0.5 block truncate text-[10px] text-[var(--color-warning-text)]"
-            >
-              {{ panels.duplicateVariantValues }}
-            </span>
-          </span>
+          <icon-lucide-folder-open v-if="groupIsOpen(group.id)" class="text-component size-3" />
+          <icon-lucide-folder v-else class="text-component size-3" />
+          <span class="flex-1">{{ group.label }}</span>
+          <span class="font-normal tracking-normal text-muted/70">{{ group.assets.length }}</span>
         </button>
-        <AssetVariantDropdown
-          v-if="asset.variantItems.length > 0"
-          :asset="asset"
-          @open-variant="openAssetVariant(asset, $event)"
-        />
-        <Tip v-if="asset.docsUrl" :label="panels.openDocumentation">
-          <button
-            type="button"
-            :aria-label="panels.openDocumentation"
-            :class="insertButton.base"
-            class="opacity-0 transition-opacity group-hover/asset:opacity-100 group-focus-within/asset:opacity-100"
-            data-test-id="asset-docs"
-            @click.stop="asset.docsUrl ? openExternalLink(asset.docsUrl) : undefined"
+
+        <div v-if="groupIsOpen(group.id)" data-test-id="asset-group-content">
+          <div
+            v-for="asset in group.assets"
+            :key="asset.id"
+            data-test-id="asset-item"
+            :data-asset-id="asset.id"
+            :data-asset-kind="asset.kind"
+            class="min-h-9 w-full rounded-[5px] px-1.5 py-0.5 text-[11.5px] text-muted transition-colors hover:bg-hover/60"
           >
-            <icon-lucide-book-open class="size-3" />
-          </button>
-        </Tip>
-        <Tip label="Component details">
-          <button
-            type="button"
-            aria-label="Component details"
-            :class="insertButton.base"
-            class="opacity-0 transition-opacity group-hover/asset:opacity-100 group-focus-within/asset:opacity-100"
-            data-test-id="asset-details"
-            @click.stop="openDetails(asset)"
-          >
-            <icon-lucide-info class="size-3" />
-          </button>
-        </Tip>
-        <Tip :label="commands.createInstance">
-          <button
-            type="button"
-            :aria-label="commands.createInstance"
-            :class="insertButton.base"
-            class="opacity-0 transition-opacity group-hover/asset:opacity-100 group-focus-within/asset:opacity-100"
-            data-test-id="asset-insert"
-            @click.stop="insertAsset(asset)"
-          >
-            <icon-lucide-plus class="size-3" />
-          </button>
-        </Tip>
-      </div>
+            <AssetVariantDropdown
+              v-if="isInteractiveAsset(asset)"
+              v-model:open="variantOpenState[asset.id]"
+              :asset="asset"
+              @open-variant="openAssetVariant(asset, $event)"
+            >
+              <template #default="{ open: variantsOpen }">
+                <button
+                  type="button"
+                  data-test-id="asset-open"
+                  :aria-label="`Show ${asset.name} options`"
+                  class="group/asset-open flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left"
+                  :class="variantsOpen ? 'bg-hover/60' : ''"
+                >
+                  <icon-lucide-loader-2
+                    v-if="openingAssetId === asset.id"
+                    class="text-component size-3.5 shrink-0 animate-spin"
+                  />
+                  <icon-lucide-box
+                    v-else-if="asset.kind === 'computed'"
+                    class="text-component size-3.5 shrink-0"
+                  />
+                  <component
+                    v-else
+                    :is="nodeIcon(asset.node)"
+                    class="text-component size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span data-test-id="asset-name" class="text-surface block truncate font-medium">
+                      {{ asset.name }}
+                    </span>
+                    <span
+                      v-if="asset.sourcePath || asset.variantCount > 0"
+                      data-test-id="asset-source-path"
+                      class="text-muted mt-0.5 flex min-w-0 items-center gap-1 text-[10px]"
+                    >
+                      <span v-if="asset.sourcePath" class="min-w-0 flex-1 truncate">
+                        {{ asset.sourcePath }}
+                      </span>
+                      <span
+                        v-if="asset.variantCount > 0"
+                        data-test-id="asset-variant-summary"
+                        class="shrink-0"
+                      >
+                        <span v-if="asset.sourcePath">·</span> {{ asset.variantCount }} variants
+                      </span>
+                    </span>
+                    <span
+                      v-if="asset.hasConflicts"
+                      data-test-id="asset-variant-conflict"
+                      class="mt-0.5 block truncate text-[10px] text-[var(--color-warning-text)]"
+                    >
+                      {{ panels.duplicateVariantValues }}
+                    </span>
+                  </span>
+                  <span
+                    data-test-id="asset-variants-trigger"
+                    class="text-muted/70 group-hover/asset-open:text-component flex size-5 shrink-0 items-center justify-center transition-colors"
+                    aria-hidden="true"
+                  >
+                    <icon-lucide-chevron-down
+                      class="size-3 transition-transform"
+                      :class="variantsOpen ? 'rotate-180' : ''"
+                    />
+                  </span>
+                </button>
+              </template>
+              <template #actions>
+                <button
+                  type="button"
+                  aria-label="Add to board"
+                  data-test-id="asset-insert"
+                  class="text-component hover:text-component/80 flex items-center gap-1 transition-colors"
+                  @click.stop="insertAsset(asset)"
+                >
+                  <icon-lucide-plus class="size-3" />
+                  Add to board
+                </button>
+                <button
+                  type="button"
+                  aria-label="Component details"
+                  data-test-id="asset-details"
+                  class="text-muted hover:text-surface flex items-center gap-1 transition-colors"
+                  @click.stop="openDetails(asset)"
+                >
+                  <icon-lucide-info class="size-3" />
+                  Details
+                </button>
+                <button
+                  v-if="asset.docsUrl"
+                  type="button"
+                  :aria-label="panels.openDocumentation"
+                  data-test-id="asset-docs"
+                  class="text-muted hover:text-surface flex items-center gap-1 transition-colors"
+                  @click.stop="openExternalLink(asset.docsUrl)"
+                >
+                  <icon-lucide-book-open class="size-3" />
+                  Docs
+                </button>
+              </template>
+            </AssetVariantDropdown>
+
+            <button
+              v-else
+              type="button"
+              data-test-id="asset-open"
+              :aria-label="`View ${asset.name} source component details`"
+              class="group/source flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left"
+              @click="openDetails(asset)"
+            >
+              <icon-lucide-file-code-2 class="size-3.5 shrink-0 text-component/70" />
+              <span class="min-w-0 flex-1">
+                <span data-test-id="asset-name" class="text-surface block truncate font-medium">
+                  {{ asset.name }}
+                </span>
+                <span
+                  data-test-id="asset-source-path"
+                  class="text-muted mt-0.5 block truncate text-[10px]"
+                >
+                  {{ asset.sourcePath }}
+                </span>
+              </span>
+              <span
+                data-test-id="asset-source-status"
+                class="rounded bg-input/70 px-1.5 py-0.5 text-[8px] font-medium tracking-wide text-muted/80 uppercase"
+              >
+                {{ sourceOnlyBadge(asset) }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div
-        v-if="filteredAssets.length === 0"
+        v-if="filteredAssets.length === 0 && filteredCodeComponentCount === 0"
         data-test-id="assets-empty"
         class="text-muted px-3 py-6 text-center text-xs"
       >
@@ -602,6 +823,7 @@ async function insertSelectedAsset() {
         <DialogContent
           v-if="selectedAsset"
           data-test-id="asset-details-dialog"
+          :aria-describedby="undefined"
           :class="dialog.content"
         >
           <div class="border-border flex items-center justify-between border-b px-4 py-3">
@@ -620,9 +842,11 @@ async function insertSelectedAsset() {
                   {{
                     selectedAsset.kind === 'computed'
                       ? 'Live source component'
-                      : selectedAsset.node.type === 'COMPONENT_SET'
-                        ? panels.componentSet
-                        : panels.component
+                      : selectedAsset.kind === 'inventory'
+                        ? `Source component · ${sourceOnlyStatus(selectedAsset)}`
+                        : selectedAsset.node.type === 'COMPONENT_SET'
+                          ? panels.componentSet
+                          : panels.component
                   }}
                   <span v-if="selectedAsset.variantCount > 0">
                     · {{ selectedAsset.variantCount }} variants</span
@@ -670,13 +894,16 @@ async function insertSelectedAsset() {
               <button
                 data-test-id="asset-details-insert"
                 :class="primaryButton.base"
-                class="mt-3 w-full"
+                class="mt-3 w-full disabled:cursor-not-allowed disabled:opacity-45"
+                :disabled="selectedAsset.kind === 'inventory'"
                 @click="insertSelectedAsset"
               >
                 {{
                   selectedAsset.kind === 'computed'
                     ? 'Insert live component'
-                    : panels.insertInstance
+                    : selectedAsset.kind === 'inventory'
+                      ? 'Needs live fixture'
+                      : panels.insertInstance
                 }}
               </button>
             </div>
@@ -734,10 +961,57 @@ async function insertSelectedAsset() {
                       {{ variant.name }}
                     </div>
                     <div class="text-muted mt-1 text-[11px]">
-                      {{ variant.values.join(', ') }}
+                      {{
+                        variant.values.length > 0 ? variant.values.join(', ') : 'Declared in source'
+                      }}
                     </div>
                   </div>
                 </div>
+              </section>
+
+              <section v-if="selectedAsset.kind === 'inventory'" class="mt-4">
+                <h3 class="text-muted text-[11px] font-medium tracking-wider uppercase">Exports</h3>
+                <p data-test-id="asset-details-exports" class="text-surface mt-1 text-xs leading-5">
+                  {{ selectedAsset.componentNames.join(', ') }}
+                </p>
+              </section>
+
+              <section
+                v-if="selectedAsset.kind === 'inventory' && selectedAsset.stateTargets.length > 0"
+                class="mt-4"
+              >
+                <h3 class="text-muted text-[11px] font-medium tracking-wider uppercase">States</h3>
+                <p data-test-id="asset-details-states" class="text-surface mt-1 text-xs leading-5">
+                  {{ selectedAsset.stateTargets.join(', ') }}
+                </p>
+              </section>
+
+              <section v-if="selectedAsset.kind === 'inventory'" class="mt-4">
+                <h3 class="text-muted text-[11px] font-medium tracking-wider uppercase">
+                  Coverage
+                </h3>
+                <div
+                  v-if="selectedAsset.openPencilAudit"
+                  data-test-id="asset-details-audit-meta"
+                  class="mt-1 flex flex-wrap gap-1.5"
+                >
+                  <span class="rounded bg-input/70 px-1.5 py-0.5 text-[9px] capitalize text-muted">
+                    {{ sourceOnlyClassification(selectedAsset) }}
+                  </span>
+                  <span class="rounded bg-input/70 px-1.5 py-0.5 text-[9px] capitalize text-muted">
+                    {{ selectedAsset.openPencilAudit.priority }} priority
+                  </span>
+                </div>
+                <p data-test-id="asset-details-coverage" class="text-muted mt-2 text-xs leading-5">
+                  {{ sourceOnlyCoverage(selectedAsset) }}
+                </p>
+                <p
+                  v-if="selectedAsset.openPencilAudit"
+                  data-test-id="asset-details-audit-action"
+                  class="text-muted/80 mt-1 text-[11px] leading-4"
+                >
+                  {{ selectedAsset.openPencilAudit.assetActionReason }}
+                </p>
               </section>
             </div>
           </div>

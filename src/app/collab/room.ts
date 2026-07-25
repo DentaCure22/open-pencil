@@ -3,6 +3,7 @@ import { joinRoom as joinTrysteroRoom } from 'trystero/mqtt'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
+import { isRemoteCollabOrigin, TRYSTERO_COLLAB_ORIGIN } from '@/app/collab/origins'
 import { TRYSTERO_APP_ID } from '@/constants'
 
 type CollabRoomOptions = {
@@ -10,6 +11,7 @@ type CollabRoomOptions = {
   ydoc: Y.Doc
   awareness: awarenessProtocol.Awareness
   setConnected: () => void
+  syncDocument?: boolean
   updatePeersList: () => void
 }
 
@@ -25,6 +27,7 @@ export function connectCollabRoom({
   ydoc,
   awareness,
   setConnected,
+  syncDocument = true,
   updatePeersList
 }: CollabRoomOptions): CollabRoomConnection {
   const room = joinTrysteroRoom(
@@ -62,28 +65,32 @@ export function connectCollabRoom({
   const sendSyncStep1 = (data: Uint8Array, peerId?: string) =>
     void (peerId ? sendSync(data, peerId) : sendSync(data))
 
-  getUpdate((data) => {
-    Y.applyUpdate(ydoc, new Uint8Array(data), 'remote')
-  })
+  if (syncDocument) {
+    getUpdate((data) => {
+      Y.applyUpdate(ydoc, new Uint8Array(data), TRYSTERO_COLLAB_ORIGIN)
+    })
+  }
 
   getAw((data) => {
     awarenessProtocol.applyAwarenessUpdate(awareness, new Uint8Array(data), null)
   })
 
-  getSync((data, peerId) => {
-    const sv = new Uint8Array(data)
-    const update = Y.encodeStateAsUpdate(ydoc, sv)
-    void sendSyncReply(update, peerId)
-  })
+  if (syncDocument) {
+    getSync((data, peerId) => {
+      const sv = new Uint8Array(data)
+      const update = Y.encodeStateAsUpdate(ydoc, sv)
+      void sendSyncReply(update, peerId)
+    })
 
-  getSyncReply((data) => {
-    Y.applyUpdate(ydoc, new Uint8Array(data), 'remote')
-  })
+    getSyncReply((data) => {
+      Y.applyUpdate(ydoc, new Uint8Array(data), TRYSTERO_COLLAB_ORIGIN)
+    })
 
-  ydoc.on('update', (update: Uint8Array, origin: unknown) => {
-    if (origin === 'remote') return
-    sendYjsUpdate(update)
-  })
+    ydoc.on('update', (update: Uint8Array, origin: unknown) => {
+      if (isRemoteCollabOrigin(origin)) return
+      sendYjsUpdate(update)
+    })
+  }
 
   awareness.on(
     'update',
@@ -96,8 +103,10 @@ export function connectCollabRoom({
 
   room.onPeerJoin((peerId) => {
     setConnected()
-    const sv = Y.encodeStateVector(ydoc)
-    sendSyncStep1(sv, peerId)
+    if (syncDocument) {
+      const sv = Y.encodeStateVector(ydoc)
+      sendSyncStep1(sv, peerId)
+    }
 
     const encodedUpdate = awarenessProtocol.encodeAwarenessUpdate(awareness, [awareness.clientID])
     sendAwareness(encodedUpdate, peerId)

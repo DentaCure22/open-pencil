@@ -7,12 +7,13 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
+import { createCodeObject, createUserCodeObjectDocument } from '@/app/code-object/model'
 import { parseMermaidInBrowser } from '@/app/diagram/mermaid/parse'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import { createEditorStore } from '@/app/editor/session'
 import type { EditorStore } from '@/app/editor/session'
 import { placeFileIntakeFiles } from '@/app/file-intake/intake'
-import { createSourceDocument, type SourceDocumentFormat } from '@/app/source-document/workspace'
+import { openPencilWorkspaceId } from '@/app/workspace-document/identity'
 
 export interface Tab {
   id: string
@@ -33,11 +34,17 @@ const activeTabId = shallowRef('')
 export const activeTab = computed(() => tabsRef.value.find((t) => t.id === activeTabId.value))
 
 export const allTabs = computed(() =>
-  tabsRef.value.map((t) => ({
-    id: t.id,
-    name: t.store.state.documentName,
-    isActive: t.id === activeTabId.value
-  }))
+  tabsRef.value.map((t) => {
+    void t.store.state.sceneVersion
+    const workspaceId = openPencilWorkspaceId(t.store.graph)
+    return {
+      id: t.id,
+      name: t.store.state.documentName,
+      isActive: t.id === activeTabId.value,
+      isWorkspace: workspaceId !== null,
+      workspaceId
+    }
+  })
 )
 
 export function getActiveStore(): EditorStore {
@@ -60,6 +67,17 @@ export function getTabForStore(store: EditorStore): Tab | undefined {
 
 export function getTabsSnapshot(): Tab[] {
   return [...tabsRef.value]
+}
+
+export function getWorkspaceTabs(workspaceId?: string): Tab[] {
+  return tabsRef.value.filter((tab) => {
+    const candidateId = openPencilWorkspaceId(tab.store.graph)
+    return candidateId !== null && (!workspaceId || candidateId === workspaceId)
+  })
+}
+
+export function getWorkspaceTab(workspaceId?: string): Tab | undefined {
+  return getWorkspaceTabs(workspaceId)[0]
 }
 
 export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
@@ -88,6 +106,7 @@ export function closeTab(tabId: string) {
   if (idx === -1) return
 
   const closingTab = tabsRef.value[idx]
+  if (openPencilWorkspaceId(closingTab.store.graph)) return
   const wasActive = activeTabId.value === tabId
   tabsRef.value = tabsRef.value.filter((t) => t.id !== tabId)
 
@@ -111,32 +130,43 @@ function yieldToUI(): Promise<void> {
   })
 }
 
-function sourceDocumentFormat(fileName: string): SourceDocumentFormat | null {
+function codeObjectSourceFormat(fileName: string): 'jsx' | 'tsx' | null {
   const extension = /\.([^.]+)$/i.exec(fileName)?.[1]?.toLowerCase()
-  if (extension === 'html' || extension === 'htm' || extension === 'xhtml') return 'html'
   if (extension === 'jsx') return 'jsx'
   if (extension === 'tsx') return 'tsx'
   return null
 }
 
-async function openSourceFile(
+async function openCodeObjectFile(
   store: EditorStore,
   file: File,
   handle?: FileSystemFileHandle,
   path?: string
 ): Promise<boolean> {
-  const format = sourceDocumentFormat(file.name)
+  const format = codeObjectSourceFormat(file.name)
   if (!format) return false
 
-  const sourceDocument = createSourceDocument(store, await file.text(), {
-    fileName: file.name,
-    format
+  const name = file.name.replace(/\.[^.]+$/i, '') || 'Code Object'
+  const frame = createCodeObject(store, {
+    cornerRadius: 12,
+    document: createUserCodeObjectDocument({
+      definitionId: `file.${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      name,
+      props: {},
+      source: await file.text(),
+      state: {}
+    }),
+    height: 520,
+    name,
+    width: 720,
+    x: 96,
+    y: 88
   })
   store.undo.clear()
   store.setDocumentSource(file.name, format, handle, path)
   const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
   await store.switchPage(pageId)
-  store.select([sourceDocument.id])
+  store.select([frame.id])
   await store.fitCurrentPageToViewport()
   return true
 }
@@ -176,7 +206,7 @@ export async function openFileInNewTab(
   await yieldToUI()
 
   try {
-    if (await openSourceFile(store, file, handle, path)) return
+    if (await openCodeObjectFile(store, file, handle, path)) return
     if (await openFileAsSourceObject(store, file)) return
 
     const isFig = file.name.toLowerCase().endsWith('.fig')
@@ -193,6 +223,17 @@ export async function openFileInNewTab(
               createMermaidSceneSpec(await parseMermaidInBrowser(source))
           }
         )
+
+    const importedWorkspaceId = openPencilWorkspaceId(imported)
+    const existingWorkspaceTab = importedWorkspaceId
+      ? getWorkspaceTab(importedWorkspaceId)
+      : undefined
+    if (existingWorkspaceTab && existingWorkspaceTab.id !== targetTab.id) {
+      switchTab(existingWorkspaceTab.id)
+      throw new Error(
+        `Workspace "${importedWorkspaceId}" is already open. OpenPencil keeps one live tab per workspace.`
+      )
+    }
 
     const firstPageId = imported.getPages()[0]?.id
     if (firstPageId) computeAllLayouts(imported, firstPageId)
@@ -228,6 +269,8 @@ export function useTabsStore() {
     getTabById,
     getTabForStore,
     getTabsSnapshot,
+    getWorkspaceTab,
+    getWorkspaceTabs,
     openFileInNewTab,
     getActiveStore,
     tabCount

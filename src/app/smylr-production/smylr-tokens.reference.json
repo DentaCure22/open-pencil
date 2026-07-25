@@ -1,9 +1,6 @@
 {
   "version": 3,
-  "themes": [
-    "light",
-    "dark"
-  ],
+  "themes": ["light", "dark"],
   "source": "src/styles/globals.css (:root + .dark)",
   "references": [
     "DESIGN.md",
@@ -34,9 +31,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-background"
-      ]
+      "utilities": ["bg-background"]
     },
     {
       "category": "surface",
@@ -59,9 +54,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-card"
-      ]
+      "utilities": ["bg-card"]
     },
     {
       "category": "surface",
@@ -84,9 +77,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-popover"
-      ]
+      "utilities": ["bg-popover"]
     },
     {
       "category": "surface",
@@ -109,9 +100,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-muted"
-      ]
+      "utilities": ["bg-muted"]
     },
     {
       "category": "surface",
@@ -134,9 +123,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-secondary"
-      ]
+      "utilities": ["bg-secondary"]
     },
     {
       "category": "surface",
@@ -159,9 +146,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-accent"
-      ]
+      "utilities": ["bg-accent"]
     },
     {
       "category": "surface",
@@ -184,10 +169,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-primary",
-        "text-primary"
-      ]
+      "utilities": ["bg-primary", "text-primary"]
     },
     {
       "category": "surface",
@@ -210,9 +192,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-sidebar"
-      ]
+      "utilities": ["bg-sidebar"]
     },
     {
       "category": "surface",
@@ -235,9 +215,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-primary-tint"
-      ]
+      "utilities": ["bg-primary-tint"]
     },
     {
       "category": "text",
@@ -260,9 +238,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-foreground"
-      ]
+      "utilities": ["text-foreground"]
     },
     {
       "category": "text",
@@ -285,9 +261,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-card-foreground"
-      ]
+      "utilities": ["text-card-foreground"]
     },
     {
       "category": "text",
@@ -310,9 +284,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-popover-foreground"
-      ]
+      "utilities": ["text-popover-foreground"]
     },
     {
       "category": "text",
@@ -335,9 +307,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-muted-foreground"
-      ]
+      "utilities": ["text-muted-foreground"]
     },
     {
       "category": "text",
@@ -360,9 +330,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-secondary-foreground"
-      ]
+      "utilities": ["text-secondary-foreground"]
     },
     {
       "category": "text",
@@ -385,9 +353,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-accent-foreground"
-      ]
+      "utilities": ["text-accent-foreground"]
     },
     {
       "category": "text",
@@ -410,9 +376,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-primary-foreground"
-      ]
+      "utilities": ["text-primary-foreground"]
     },
     {
       "category": "text",
@@ -435,9 +399,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-primary-tint-foreground"
-      ]
+      "utilities": ["text-primary-tint-foreground"]
     },
     {
       "category": "status",
@@ -460,9 +422,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-success"
-      ]
+      "utilities": ["bg-success"]
     },
     {
       "category": "status",
@@ -485,9 +445,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-success-foreground"
-      ]
+      "utilities": ["text-success-foreground"]
     },
     {
       "category": "status",
@@ -510,9 +468,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-success-tint"
-      ]
+      "utilities": ["bg-success-tint"]
     },
     {
       "category": "status",
@@ -535,9 +491,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-success-tint-foreground"
-      ]
+      "utilities": ["text-success-tint-foreground"]
     },
     {
       "category": "status",
@@ -560,9 +514,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-success-border"
-      ]
+      "utilities": ["border-success-border"]
     },
     {
       "category": "status",
@@ -585,9 +537,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-warning"
-      ]
+      "utilities": ["bg-warning"]
     },
     {
       "category": "status",
@@ -610,9 +560,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-warning-foreground"
-      ]
+      "utilities": ["text-warning-foreground"]
     },
     {
       "category": "status",
@@ -635,9 +583,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-warning-tint"
-      ]
+      "utilities": ["bg-warning-tint"]
     },
     {
       "category": "status",
@@ -660,9 +606,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-warning-tint-foreground"
-      ]
+      "utilities": ["text-warning-tint-foreground"]
     },
     {
       "category": "status",
@@ -685,9 +629,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-warning-border"
-      ]
+      "utilities": ["border-warning-border"]
     },
     {
       "category": "status",
@@ -710,9 +652,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-destructive"
-      ]
+      "utilities": ["bg-destructive"]
     },
     {
       "category": "status",
@@ -735,9 +675,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-destructive-foreground"
-      ]
+      "utilities": ["text-destructive-foreground"]
     },
     {
       "category": "status",
@@ -760,9 +698,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "bg-destructive-tint"
-      ]
+      "utilities": ["bg-destructive-tint"]
     },
     {
       "category": "status",
@@ -785,9 +721,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-destructive-tint-foreground"
-      ]
+      "utilities": ["text-destructive-tint-foreground"]
     },
     {
       "category": "status",
@@ -810,9 +744,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-destructive-border"
-      ]
+      "utilities": ["border-destructive-border"]
     },
     {
       "category": "status",
@@ -835,9 +767,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-primary-border"
-      ]
+      "utilities": ["border-primary-border"]
     },
     {
       "category": "border",
@@ -860,9 +790,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-border"
-      ]
+      "utilities": ["border-border"]
     },
     {
       "category": "border",
@@ -885,9 +813,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-border-subtle"
-      ]
+      "utilities": ["border-border-subtle"]
     },
     {
       "category": "border",
@@ -932,9 +858,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-input"
-      ]
+      "utilities": ["border-input"]
     },
     {
       "category": "border",
@@ -957,9 +881,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "ring-ring"
-      ]
+      "utilities": ["ring-ring"]
     },
     {
       "category": "border",
@@ -982,9 +904,7 @@
         "a": 0.22
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "border-shell-page-border"
-      ]
+      "utilities": ["border-shell-page-border"]
     },
     {
       "category": "chart",
@@ -1007,9 +927,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-chart-1"
-      ]
+      "utilities": ["text-chart-1"]
     },
     {
       "category": "chart",
@@ -1032,9 +950,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-chart-2"
-      ]
+      "utilities": ["text-chart-2"]
     },
     {
       "category": "chart",
@@ -1057,9 +973,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-chart-3"
-      ]
+      "utilities": ["text-chart-3"]
     },
     {
       "category": "chart",
@@ -1082,9 +996,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-chart-4"
-      ]
+      "utilities": ["text-chart-4"]
     },
     {
       "category": "chart",
@@ -1107,9 +1019,7 @@
         "a": 1.0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "text-chart-5"
-      ]
+      "utilities": ["text-chart-5"]
     },
     {
       "category": "radius",
@@ -1121,9 +1031,7 @@
       "previewKind": "radius",
       "radiusPx": 4,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-xs"
-      ]
+      "utilities": ["rounded-xs"]
     },
     {
       "category": "radius",
@@ -1135,9 +1043,7 @@
       "previewKind": "radius",
       "radiusPx": 6,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-sm"
-      ]
+      "utilities": ["rounded-sm"]
     },
     {
       "category": "radius",
@@ -1149,9 +1055,7 @@
       "previewKind": "radius",
       "radiusPx": 8,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-md"
-      ]
+      "utilities": ["rounded-md"]
     },
     {
       "category": "radius",
@@ -1163,9 +1067,7 @@
       "previewKind": "radius",
       "radiusPx": 10,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-lg"
-      ]
+      "utilities": ["rounded-lg"]
     },
     {
       "category": "radius",
@@ -1177,9 +1079,7 @@
       "previewKind": "radius",
       "radiusPx": 16,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-xl"
-      ]
+      "utilities": ["rounded-xl"]
     },
     {
       "category": "radius",
@@ -1191,9 +1091,7 @@
       "previewKind": "radius",
       "radiusPx": 24,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-2xl"
-      ]
+      "utilities": ["rounded-2xl"]
     },
     {
       "category": "radius",
@@ -1205,9 +1103,7 @@
       "previewKind": "radius",
       "radiusPx": 18,
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "rounded-full"
-      ]
+      "utilities": ["rounded-full"]
     },
     {
       "category": "shadow",
@@ -1232,9 +1128,7 @@
         "a": 0.15
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "shadow-sm"
-      ]
+      "utilities": ["shadow-sm"]
     },
     {
       "category": "shadow",
@@ -1259,9 +1153,7 @@
         "a": 0.35
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "shadow-card"
-      ]
+      "utilities": ["shadow-card"]
     },
     {
       "category": "shadow",
@@ -1286,9 +1178,7 @@
         "a": 0.25
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "shadow-lg"
-      ]
+      "utilities": ["shadow-lg"]
     },
     {
       "category": "shadow",
@@ -1313,9 +1203,7 @@
         "a": 0
       },
       "sourceFile": "src/styles/globals.css",
-      "utilities": [
-        "shadow-input"
-      ]
+      "utilities": ["shadow-input"]
     },
     {
       "category": "spacing",
@@ -1327,9 +1215,7 @@
       "previewKind": "spacing",
       "spacingPx": 8,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
-      "utilities": [
-        "gap-2"
-      ]
+      "utilities": ["gap-2"]
     },
     {
       "category": "spacing",
@@ -1341,9 +1227,7 @@
       "previewKind": "spacing",
       "spacingPx": 16,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
-      "utilities": [
-        "gap-4"
-      ]
+      "utilities": ["gap-4"]
     },
     {
       "category": "spacing",
@@ -1355,9 +1239,7 @@
       "previewKind": "spacing",
       "spacingPx": 20,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
-      "utilities": [
-        "p-5"
-      ]
+      "utilities": ["p-5"]
     },
     {
       "category": "spacing",
@@ -1369,9 +1251,7 @@
       "previewKind": "spacing",
       "spacingPx": 24,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
-      "utilities": [
-        "gap-6"
-      ]
+      "utilities": ["gap-6"]
     }
   ]
 }

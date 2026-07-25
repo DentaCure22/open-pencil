@@ -113,7 +113,7 @@ function byteSize(source: SourceObjectSource): string {
           {{ item.source.fileName }}
         </span>
         <span class="shrink-0 text-[9px] font-semibold tracking-[0.08em] text-[#b3a4df]">
-          {{ item.source.metadata.format.toUpperCase() }} · SOURCE
+          {{ item.source.metadata.format.toUpperCase() }} · ATTACHED FILE
         </span>
       </header>
 
@@ -142,7 +142,7 @@ function byteSize(source: SourceObjectSource): string {
           class="pointer-events-auto flex gap-2"
         >
           <a
-            :aria-label="`Open source file: ${item.source.fileName}`"
+            :aria-label="`Open attached file: ${item.source.fileName}`"
             :href="assetUrl(item.source)"
             class="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-[10px] font-medium text-[#dedbe5] hover:bg-white/6"
             rel="noopener noreferrer"
@@ -152,7 +152,7 @@ function byteSize(source: SourceObjectSource): string {
             Open
           </a>
           <a
-            :aria-label="`Download source file: ${item.source.fileName}`"
+            :aria-label="`Download attached file: ${item.source.fileName}`"
             :download="item.source.fileName"
             :href="assetUrl(item.source)"
             class="flex items-center gap-1.5 rounded-md bg-[#7662b9] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[#856fd0]"
@@ -162,7 +162,7 @@ function byteSize(source: SourceObjectSource): string {
           </a>
         </div>
         <span v-else-if="!assetUrl(item.source)" class="text-[9px] font-medium text-[#d58f8f]">
-          Source bytes unavailable
+          Attached bytes unavailable
         </span>
       </footer>
     </article>

@@ -1,8 +1,8 @@
-import type { ChatTransport, UIMessage } from 'ai'
 import { ref } from 'vue'
 
 import { IS_BROWSER } from '@open-pencil/core/constants'
 
+import { chatTransportOverride, setChatTransportOverride } from '@/app/ai/chat/override'
 import {
   apiKey,
   customAPIType,
@@ -22,17 +22,14 @@ import {
 import { exposeChatTransportOverride } from '@/app/browser-bridge'
 import { getActiveEditorStore } from '@/app/editor/active-store'
 
-export type EditorPanelTab = 'design' | 'code' | 'ai' | 'trace'
+export type EditorPanelTab = 'design' | 'code' | 'ai'
 
 const activeTab = ref<EditorPanelTab>('code')
 
 type ChatSessionManager = ReturnType<
   typeof import('@/app/ai/chat/transports').createChatSessionManager
 >
-type ChatTransportFactory = () => ChatTransport<UIMessage>
-
 let chatSessionPromise: Promise<ChatSessionManager> | null = null
-let overrideTransport: ChatTransportFactory | null = null
 let transportDirty = false
 
 function loadChatSession() {
@@ -49,7 +46,9 @@ function loadChatSession() {
       maxOutputTokens,
       getActiveEditorStore
     })
-    if (overrideTransport) chatSession.setOverrideTransport(overrideTransport)
+    if (chatTransportOverride.value) {
+      chatSession.setOverrideTransport(chatTransportOverride.value)
+    }
     if (transportDirty) chatSession.markTransportDirty()
     return chatSession
   })
@@ -80,7 +79,7 @@ registerAIChatEffects(markTransportDirty)
 
 if (IS_BROWSER) {
   exposeChatTransportOverride((factory) => {
-    overrideTransport = factory
+    setChatTransportOverride(factory)
     if (chatSessionPromise) {
       void chatSessionPromise.then((chatSession) => chatSession.setOverrideTransport(factory))
     }

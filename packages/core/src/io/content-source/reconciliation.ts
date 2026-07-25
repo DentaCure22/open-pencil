@@ -103,3 +103,14 @@ export function sourceSceneSignature(graph: SceneGraph, rootId: string): string 
   const root = graph.getNode(rootId)
   return root ? fnv1a(JSON.stringify(visualNodeSnapshot(graph, root))) : null
 }
+
+/** Stable signature for source-backed contents whose owning container may be moved freely. */
+export function sourceSceneContentsSignature(graph: SceneGraph, rootId: string): string | null {
+  const root = graph.getNode(rootId)
+  if (!root) return null
+  const contents = root.childIds.flatMap((childId) => {
+    const child = graph.getNode(childId)
+    return child ? [visualNodeSnapshot(graph, child)] : []
+  })
+  return fnv1a(JSON.stringify(contents))
+}

@@ -1,27 +1,25 @@
 import {
   getDocumentPersistenceReadiness,
-  persistOpenPencilDocument,
+  persistOpenPencilDocument
 } from '@/app/document/persistence-target'
 import type { EditorStore } from '@/app/editor/session'
 import { resolveExperienceFamily } from '@/app/experience-family'
-import {
-  observedHumanSessionState,
-  type ObservedHumanSessionState,
-} from '@/app/human-sessions'
+import { observedHumanSessionState, type ObservedHumanSessionState } from '@/app/human-sessions'
 import { verifyPersistedLearningReceiptAttestation } from '@/app/learning-receipts'
 import {
   createWorkspaceId,
   getKnowledgeWorkspace,
   type KnowledgeWorkspace,
   type LearningReceipt,
-  type WorkspaceObject,
+  type WorkspaceObject
 } from '@/app/workspace'
 import { runWorkspaceDocumentTransaction } from '@/app/workspace-ui/document-transaction'
 import {
   ensureKnowledgeWorkspacesHydrated,
-  workspaceDocumentId,
+  workspaceDocumentId
 } from '@/app/workspace-ui/persistence'
 import { useKnowledgeWorkspaceUi } from '@/app/workspace-ui/use'
+
 import {
   getPreparedFieldRun,
   prepareFieldRun,
@@ -29,7 +27,7 @@ import {
   recordFieldRunAttemptEnded,
   recordFieldRunAttemptStarted,
   type PreparedFieldRun,
-  type PrepareFieldRunInput,
+  type PrepareFieldRunInput
 } from './ledger'
 
 export type PreparedFieldRunStatus =
@@ -55,10 +53,7 @@ function exactRef(
   return left.objectId === right.objectId && left.revision === right.revision
 }
 
-function exactTarget(
-  left: PreparedFieldRun['target'],
-  right: PreparedFieldRun['target']
-): boolean {
+function exactTarget(left: PreparedFieldRun['target'], right: PreparedFieldRun['target']): boolean {
   return (
     exactRef(left.intent, right.intent) &&
     exactRef(left.evidenceManifest, right.evidenceManifest) &&
@@ -78,15 +73,10 @@ function exactFamily(
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function proofMatchesRunScope(
-  receipt: LearningReceipt,
-  run: PreparedFieldRun
-): boolean {
+function proofMatchesRunScope(receipt: LearningReceipt, run: PreparedFieldRun): boolean {
   const claim = receipt.attestation.proof?.claim
   if (run.version === 1) return claim?.version !== 2
-  return Boolean(
-    claim?.version === 2 && exactFamily(claim.scope.family, run.scope.family)
-  )
+  return Boolean(claim?.version === 2 && exactFamily(claim.scope.family, run.scope.family))
 }
 
 function fieldSessionId(runCode: string): string {
@@ -99,20 +89,15 @@ async function verifiedReceiptForRun(
   crypto: Crypto
 ): Promise<LearningReceipt | null> {
   ensureKnowledgeWorkspacesHydrated(store.graph)
-  const workspace = getKnowledgeWorkspace(
-    workspaceDocumentId(store.graph),
-    run.targetPageId
-  )
+  const workspace = getKnowledgeWorkspace(workspaceDocumentId(store.graph), run.targetPageId)
   if (!workspace) return null
   const receipts = Object.values(workspace.objects).filter(
     (object): object is LearningReceipt =>
       object.type === 'learning-receipt' &&
       object.executionKind === 'human' &&
       object.attestation.kind === 'observed-session' &&
-      object.attestation.proof?.claim.fieldSessionId ===
-        fieldSessionId(run.runCode) &&
-      object.attestation.proof.claim.surfaceRunId ===
-        run.target.surfaceRun.objectId &&
+      object.attestation.proof?.claim.fieldSessionId === fieldSessionId(run.runCode) &&
+      object.attestation.proof.claim.surfaceRunId === run.target.surfaceRun.objectId &&
       exactTarget(object.attestation.proof.claim.target, run.target) &&
       proofMatchesRunScope(object, run)
   )
@@ -130,10 +115,7 @@ async function verifiedReceiptForRun(
   return null
 }
 
-function sessionMatchesRun(
-  session: ObservedHumanSessionState,
-  run: PreparedFieldRun
-): boolean {
+function sessionMatchesRun(session: ObservedHumanSessionState, run: PreparedFieldRun): boolean {
   return Boolean(
     session.sessionId &&
     session.fieldSessionId === fieldSessionId(run.runCode) &&
@@ -145,19 +127,9 @@ function sessionMatchesRun(
   )
 }
 
-function targetStillEligible(
-  store: EditorStore,
-  run: PreparedFieldRun
-): boolean {
-  const workspace = getKnowledgeWorkspace(
-    workspaceDocumentId(store.graph),
-    run.targetPageId
-  )
-  if (
-    !workspace ||
-    !Object.hasOwn(workspace.objects, run.target.surfaceRun.objectId)
-  )
-    return false
+function targetStillEligible(store: EditorStore, run: PreparedFieldRun): boolean {
+  const workspace = getKnowledgeWorkspace(workspaceDocumentId(store.graph), run.targetPageId)
+  if (!workspace || !Object.hasOwn(workspace.objects, run.target.surfaceRun.objectId)) return false
   const object = workspace.objects[run.target.surfaceRun.objectId]
   const primaryEligible = Boolean(
     object.type === 'surface-run' &&
@@ -169,13 +141,12 @@ function targetStillEligible(
   try {
     const family = resolveExperienceFamily(workspace, run.rootSurface, {
       graph: store.graph,
-      requireMaterializedBoards: true,
+      requireMaterializedBoards: true
     })
     return (
       exactFamily(family, run.scope.family) &&
       family.members.every((member) => {
-        if (!Object.hasOwn(workspace.objects, member.surfaceRun.objectId))
-          return false
+        if (!Object.hasOwn(workspace.objects, member.surfaceRun.objectId)) return false
         const surface = workspace.objects[member.surfaceRun.objectId]
         if (surface.type !== 'surface-run') return false
         const capabilities: Record<string, unknown> = surface.capabilities
@@ -201,14 +172,13 @@ function requireEligiblePreparedFamily(
   if (run.version === 1) return
   const family = resolveExperienceFamily(workspace, run.rootSurface, {
     graph: store.graph,
-    requireMaterializedBoards: true,
+    requireMaterializedBoards: true
   })
   if (!exactFamily(family, run.scope.family)) {
     throw new Error(`field_run_family_stale: ${run.runCode}`)
   }
   for (const member of family.members) {
-    const object = workspace.objects[member.surfaceRun.objectId] as
-      WorkspaceObject | undefined
+    const object = workspace.objects[member.surfaceRun.objectId] as WorkspaceObject | undefined
     const capabilities: Record<string, unknown> =
       object?.type === 'surface-run' ? object.capabilities : {}
     if (
@@ -218,24 +188,17 @@ function requireEligiblePreparedFamily(
       capabilities.networkAccess !== false ||
       capabilities.sourceWrites !== false
     ) {
-      throw new Error(
-        `field_run_family_member_not_eligible: ${member.surfaceRun.objectId}`
-      )
+      throw new Error(`field_run_family_member_not_eligible: ${member.surfaceRun.objectId}`)
     }
   }
 }
 
-function requireMaterializedPreparedBoards(
-  store: EditorStore,
-  run: PreparedFieldRun
-): void {
+function requireMaterializedPreparedBoards(store: EditorStore, run: PreparedFieldRun): void {
   const boardIds =
     run.version === 2
       ? run.scope.family.members.map((member) => member.artifact.boardId)
       : [run.boardId]
-  const missingBoardId = boardIds.find(
-    (boardId) => !store.graph.getNode(boardId)
-  )
+  const missingBoardId = boardIds.find((boardId) => !store.graph.getNode(boardId))
   if (missingBoardId) {
     throw new Error(`field_run_board_not_materialized: ${missingBoardId}`)
   }
@@ -254,7 +217,7 @@ async function persistedMutation<T>(
     store,
     {
       historyEntryId: createWorkspaceId('mutation'),
-      label: `${input.historyLabel} ${input.runCode}`,
+      label: `${input.historyLabel} ${input.runCode}`
     },
     async () => {
       const value = mutation()
@@ -322,7 +285,7 @@ export async function preparedFieldRunSummaries(
           formId: receipt.formId,
           receiptId: receipt.id,
           run,
-          status: 'verified-completed' as const,
+          status: 'verified-completed' as const
         }
       if (sessionMatchesRun(session, run)) {
         if (session.status === 'aborted') {
@@ -330,7 +293,7 @@ export async function preparedFieldRunSummaries(
             formId: null,
             receiptId: null,
             run,
-            status: 'aborted' as const,
+            status: 'aborted' as const
           }
         }
         if (session.status === 'expired') {
@@ -338,7 +301,7 @@ export async function preparedFieldRunSummaries(
             formId: null,
             receiptId: null,
             run,
-            status: 'expired' as const,
+            status: 'expired' as const
           }
         }
         if (['active', 'issued', 'ready'].includes(session.status)) {
@@ -346,7 +309,7 @@ export async function preparedFieldRunSummaries(
             formId: null,
             receiptId: null,
             run,
-            status: 'active' as const,
+            status: 'active' as const
           }
         }
       }
@@ -357,13 +320,13 @@ export async function preparedFieldRunSummaries(
             formId: null,
             receiptId: null,
             run,
-            status: 'interrupted' as const,
+            status: 'interrupted' as const
           }
         return {
           formId: null,
           receiptId: null,
           run,
-          status: latest.result ?? 'interrupted',
+          status: latest.result ?? 'interrupted'
         }
       }
       if (!targetStillEligible(store, run)) {
@@ -371,14 +334,14 @@ export async function preparedFieldRunSummaries(
           formId: null,
           receiptId: null,
           run,
-          status: 'stale' as const,
+          status: 'stale' as const
         }
       }
       return {
         formId: null,
         receiptId: null,
         run,
-        status: 'prepared' as const,
+        status: 'prepared' as const
       }
     })
   )
@@ -391,14 +354,9 @@ export async function activatePreparedFieldRunForStore(
   ensureKnowledgeWorkspacesHydrated(store.graph)
   const run = getPreparedFieldRun(store.graph, runCode)
   if (!run) throw new Error(`field_run_not_found: ${runCode}`)
-  const workspace = getKnowledgeWorkspace(
-    workspaceDocumentId(store.graph),
-    run.targetPageId
-  )
-  if (!workspace)
-    throw new Error(`field_run_workspace_not_found: ${run.targetPageId}`)
-  const target = workspace.objects[run.target.surfaceRun.objectId] as
-    WorkspaceObject | undefined
+  const workspace = getKnowledgeWorkspace(workspaceDocumentId(store.graph), run.targetPageId)
+  if (!workspace) throw new Error(`field_run_workspace_not_found: ${run.targetPageId}`)
+  const target = workspace.objects[run.target.surfaceRun.objectId] as WorkspaceObject | undefined
   if (
     target?.type !== 'surface-run' ||
     target.revision !== run.target.surfaceRun.revision ||
@@ -415,7 +373,7 @@ export async function activatePreparedFieldRunForStore(
     purpose: run.purpose,
     rootSurface: run.rootSurface,
     route: null,
-    viewId: run.projectionViewId,
+    viewId: run.projectionViewId
   })
   requireMaterializedPreparedBoards(store, run)
   return run

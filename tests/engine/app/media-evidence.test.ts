@@ -6,6 +6,7 @@ import { readContentSource } from '@open-pencil/core/io'
 import { exportFigFile, parseFigFile } from '@open-pencil/core/io/formats/fig'
 import { assetHashFromReference } from '@open-pencil/scene-graph/images'
 
+import { codeObjectDocument } from '@/app/code-object/model'
 import { placeExtractedPdfPage } from '@/app/media-evidence/extraction'
 import { placeMediaEvidenceFiles } from '@/app/media-evidence/intake'
 import {
@@ -14,7 +15,7 @@ import {
   mediaIntakeKind
 } from '@/app/media-evidence/source'
 
-describe('media evidence intake', () => {
+describe('media and PDF intake', () => {
   beforeAll(async () => {
     await initCodec()
   })
@@ -34,7 +35,7 @@ describe('media evidence intake', () => {
     expect(mediaEvidenceMimeType(new File([], 'review.pdf'), 'pdf')).toBe('application/pdf')
   })
 
-  test('places PDF, video, and audio as ordinary source-backed frames', async () => {
+  test('places PDF as a Code Object and keeps video and audio as ordinary media frames', async () => {
     const editor = createEditor()
     const selectedFrame = editor.graph.createNode('FRAME', editor.state.currentPageId, {
       height: 200,
@@ -81,6 +82,12 @@ describe('media evidence intake', () => {
       'video/mp4',
       'audio/mpeg'
     ])
+    expect(codeObjectDocument(editor.graph.getNode(ids[0]))).toMatchObject({
+      component: 'pdf-document',
+      state: { activePage: 1, view: 'pdf' }
+    })
+    expect(codeObjectDocument(editor.graph.getNode(ids[1]))).toBeNull()
+    expect(codeObjectDocument(editor.graph.getNode(ids[2]))).toBeNull()
   })
 
   test('cascades repeated media placement instead of stacking exact duplicates', async () => {
@@ -135,7 +142,7 @@ describe('media evidence intake', () => {
     expect(hash ? editor.graph.images.has(hash) : false).toBe(false)
   })
 
-  test('redo restores both viewer nodes and their binary assets', async () => {
+  test('redo restores the PDF Code Object and its binary asset', async () => {
     const editor = createEditor()
     const file = new File([new Uint8Array([37, 80, 68, 70])], 'source.pdf', {
       type: 'application/pdf'
@@ -154,7 +161,7 @@ describe('media evidence intake', () => {
     expect(hash ? editor.graph.images.has(hash) : false).toBe(true)
   })
 
-  test('retains viewer bytes and source identity after native save and reopen', async () => {
+  test('retains PDF Code Object bytes and source identity after native save and reopen', async () => {
     const editor = createEditor()
     const bytes = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52])
     await placeMediaEvidenceFiles(
@@ -172,6 +179,10 @@ describe('media evidence intake', () => {
     const reopenedHash = reopenedSource ? assetHashFromReference(reopenedSource.source) : null
 
     expect(reopenedNode?.type).toBe('FRAME')
+    expect(codeObjectDocument(reopenedNode)).toMatchObject({
+      component: 'pdf-document',
+      state: { activePage: 1, view: 'pdf' }
+    })
     expect(reopenedSource).toMatchObject({
       fileName: 'durable.pdf',
       mimeType: 'application/pdf'

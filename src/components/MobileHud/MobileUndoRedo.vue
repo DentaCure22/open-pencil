@@ -19,10 +19,14 @@ const redoCommand = getCommand('edit.redo')
 const canUndo = computed(() => liveInspectorCanUndoDraft.value || undoCommand.enabled.value)
 const canRedo = computed(() => liveInspectorCanRedoDraft.value || redoCommand.enabled.value)
 const undoLabel = computed(() =>
-  liveInspectorCanUndoDraft.value ? `Undo ${liveInspectorUndoDraftLabel.value}` : commands.value.undo
+  liveInspectorCanUndoDraft.value
+    ? `Undo ${liveInspectorUndoDraftLabel.value}`
+    : commands.value.undo
 )
 const redoLabel = computed(() =>
-  liveInspectorCanRedoDraft.value ? `Redo ${liveInspectorRedoDraftLabel.value}` : commands.value.redo
+  liveInspectorCanRedoDraft.value
+    ? `Redo ${liveInspectorRedoDraftLabel.value}`
+    : commands.value.redo
 )
 
 function undo() {

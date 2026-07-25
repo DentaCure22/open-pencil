@@ -91,6 +91,7 @@ export function createCanvasRenderLoop(
   unsubscribe.push(editor.onEditorEvent('repaint:requested', scheduleRender))
 
   if (shouldScheduleForSelection(options.layer)) {
+    unsubscribe.push(editor.onEditorEvent('overlay:requested', scheduleRender))
     unsubscribe.push(editor.onEditorEvent('selection:changed', scheduleRender))
   }
 

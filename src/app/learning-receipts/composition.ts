@@ -1,6 +1,6 @@
 import {
   dogfoodRunFromLearningReceipt,
-  evaluateComposedExperienceFieldGate,
+  evaluateComposedExperienceFieldGate
 } from '@/app/proving-gates'
 import {
   WorkspaceDomainError,
@@ -9,8 +9,9 @@ import {
   type LearningReceipt,
   type SurfaceRun,
   type WorkspaceObject,
-  type WorkspaceObjectRevisionRef,
+  type WorkspaceObjectRevisionRef
 } from '@/app/workspace'
+
 import type { ResolvedLearningComposition } from './types'
 
 function sameReference(
@@ -20,10 +21,7 @@ function sameReference(
   return left.objectId === right.objectId && left.revision === right.revision
 }
 
-function surfaceById(
-  workspace: KnowledgeWorkspace,
-  surfaceRunId: string
-): SurfaceRun {
+function surfaceById(workspace: KnowledgeWorkspace, surfaceRunId: string): SurfaceRun {
   const surface = workspace.objects[surfaceRunId] as WorkspaceObject | undefined
   if (surface?.type !== 'surface-run') {
     throw new WorkspaceDomainError('not_found', `surface run ${surfaceRunId}`)
@@ -63,7 +61,7 @@ export function resolveLearningComposition(
         companionRef: exactSurfaceRef(companion),
         primary,
         primaryRef: exactSurfaceRef(primary),
-        relation,
+        relation
       }
     })
     .sort((left, right) => left.relation.id.localeCompare(right.relation.id))
@@ -71,9 +69,7 @@ export function resolveLearningComposition(
 
 export function compositionFieldGateFor(workspace: KnowledgeWorkspace) {
   const runs = Object.values(workspace.objects)
-    .filter(
-      (object): object is LearningReceipt => object.type === 'learning-receipt'
-    )
+    .filter((object): object is LearningReceipt => object.type === 'learning-receipt')
     .map(dogfoodRunFromLearningReceipt)
   return evaluateComposedExperienceFieldGate(runs)
 }
@@ -91,9 +87,8 @@ export function verifiedCompositionFieldGateFor(
       ...dogfoodRunFromLearningReceipt(receipt),
       attestationVerified: verifiedReceiptIds.has(receipt.id),
       familyAttestationVerified: Boolean(
-        verifiedReceiptIds.has(receipt.id) &&
-        receipt.attestation.proof?.claim.version === 2
-      ),
+        verifiedReceiptIds.has(receipt.id) && receipt.attestation.proof?.claim.version === 2
+      )
     }))
   return evaluateComposedExperienceFieldGate(runs)
 }
@@ -119,10 +114,7 @@ export function requireExactCompositionEvaluations(
   if (
     provided.length !== composition.length ||
     composition.some(
-      (resolved) =>
-        !provided.some((evaluation) =>
-          sameCompositionEvaluation(resolved, evaluation)
-        )
+      (resolved) => !provided.some((evaluation) => sameCompositionEvaluation(resolved, evaluation))
     ) ||
     provided.some(
       (evaluation) =>

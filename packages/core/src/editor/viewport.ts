@@ -154,6 +154,36 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
   }
 
+  function zoomToReadableSelection(minimumScreenTextSize = 11, insets: ViewportInsets = {}): void {
+    if (ctx.state.selectedIds.size === 0) return
+    const selectedNodes = [...ctx.state.selectedIds]
+      .map((id) => ctx.graph.getNode(id))
+      .filter((node): node is NonNullable<typeof node> => node != null)
+    if (selectedNodes.length === 0) return
+
+    zoomToSelection(insets)
+
+    const pending = selectedNodes.flatMap((node) => [node.id, ...node.childIds])
+    const visited = new Set<string>()
+    let smallestFontSize = Infinity
+    while (pending.length > 0) {
+      const id = pending.shift()
+      if (!id || visited.has(id)) continue
+      visited.add(id)
+      const node = ctx.graph.getNode(id)
+      if (!node) continue
+      if (node.type === 'TEXT') smallestFontSize = Math.min(smallestFontSize, node.fontSize)
+      pending.push(...node.childIds)
+    }
+    if (!Number.isFinite(smallestFontSize) || smallestFontSize <= 0) return
+
+    const readableZoom = minimumScreenTextSize / smallestFontSize
+    if (ctx.state.zoom >= readableZoom) return
+    const { width: viewW, height: viewH } = ctx.getViewportSize()
+    const area = resolveViewportArea(viewW, viewH, insets)
+    setZoomAroundPoint(readableZoom, area.centerX, area.centerY)
+  }
+
   return {
     screenToCanvas,
     setZoomAroundPoint,
@@ -164,6 +194,7 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToNode,
     zoomTo100,
     zoomToLevel,
-    zoomToSelection
+    zoomToSelection,
+    zoomToReadableSelection
   }
 }

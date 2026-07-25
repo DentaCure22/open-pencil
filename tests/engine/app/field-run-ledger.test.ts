@@ -1,3 +1,7 @@
+import { beforeEach, describe, expect, test } from 'bun:test'
+
+import { deserializeSceneGraph, serializeSceneGraph } from '@open-pencil/core/kiwi'
+
 import { createEditorStore } from '@/app/editor/session'
 import {
   getPreparedFieldRun,
@@ -9,7 +13,7 @@ import {
   recordFieldRunAttemptEndedForStore,
   recordFieldRunAttemptStarted,
   recordFieldRunAttemptStartedForStore,
-  type PrepareFieldRunInput,
+  type PrepareFieldRunInput
 } from '@/app/field-sessions'
 import { ObservedHumanSessionAuthority } from '@/app/human-sessions'
 import { humanLearningReviewDigest } from '@/app/learning-receipts'
@@ -24,17 +28,10 @@ import {
   createWorkspaceView,
   getKnowledgeWorkspace,
   replaceKnowledgeWorkspace,
-  workspaceRegistry,
+  workspaceRegistry
 } from '@/app/workspace'
-import {
-  deserializeSceneGraph,
-  serializeSceneGraph,
-} from '@open-pencil/core/kiwi'
-import { beforeEach, describe, expect, test } from 'bun:test'
 
-function preparation(
-  overrides: Partial<PrepareFieldRunInput> = {}
-): PrepareFieldRunInput {
+function preparation(overrides: Partial<PrepareFieldRunInput> = {}): PrepareFieldRunInput {
   return {
     boardId: 'board-field-run',
     preparedAt: '2026-07-14T21:00:00.000Z',
@@ -50,14 +47,14 @@ function preparation(
         boardRevision: 4,
         boardSchemaVersion: 4,
         kind: 'html-board',
-        sourceHash: 'fnv1a-field-run',
+        sourceHash: 'fnv1a-field-run'
       },
       evidenceManifest: { objectId: 'evidence-field-run', revision: 1 },
       intent: { objectId: 'intent-field-run', revision: 1 },
-      surfaceRun: { objectId: 'surface-field-root', revision: 1 },
+      surfaceRun: { objectId: 'surface-field-root', revision: 1 }
     },
     targetPageId: 'page-field-base',
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -68,22 +65,22 @@ function installEligibleWorkspace(store: ReturnType<typeof createEditorStore>) {
     id: 'workspace-field-run',
     name: 'Prepared field run',
     now: '2026-07-14T21:00:00.000Z',
-    pageId,
+    pageId
   })
   const context = createWorkspaceContext(initial, {
-    now: '2026-07-14T21:00:00.000Z',
+    now: '2026-07-14T21:00:00.000Z'
   })
   const intent = createIntentRecord(context, {
     capturedAt: '2026-07-14T21:00:00.000Z',
     desiredOutcome: 'Test one exact prepared human handoff.',
     id: 'intent-field-run',
-    statement: 'Use the prepared experience and report whether it helped.',
+    statement: 'Use the prepared experience and report whether it helped.'
   })
   const evidence = createEvidenceManifest(context, {
     id: 'evidence-field-run',
     intent: { objectId: intent.id, revision: 1 },
     items: [],
-    snapshotAt: '2026-07-14T21:00:00.000Z',
+    snapshotAt: '2026-07-14T21:00:00.000Z'
   })
   const surface = createSurfaceRun(context, {
     artifact: preparation().target.artifact,
@@ -92,17 +89,17 @@ function installEligibleWorkspace(store: ReturnType<typeof createEditorStore>) {
     id: 'surface-field-root',
     intent: { objectId: intent.id, revision: 1 },
     name: 'Prepared field surface',
-    recommendations: [],
+    recommendations: []
   })
   const view = createWorkspaceView({
     experienceProjection: {
       purpose: 'review',
-      rootSurface: { objectId: surface.id, revision: 1 },
+      rootSurface: { objectId: surface.id, revision: 1 }
     },
     id: 'view-field-review',
     kind: 'review',
     name: 'Prepared field review',
-    workspaceId: initial.id,
+    workspaceId: initial.id
   })
   replaceKnowledgeWorkspace(
     applyWorkspaceMutation(initial, {
@@ -113,8 +110,8 @@ function installEligibleWorkspace(store: ReturnType<typeof createEditorStore>) {
         { object: intent, type: 'create-object' },
         { object: evidence, type: 'create-object' },
         { object: surface, type: 'create-object' },
-        { type: 'create-view', view },
-      ],
+        { type: 'create-view', view }
+      ]
     }).workspace
   )
   store.graph.createNodeWithId('board-field-run', 'FRAME', pageId, {
@@ -122,7 +119,7 @@ function installEligibleWorkspace(store: ReturnType<typeof createEditorStore>) {
     name: 'Prepared field board',
     width: 1120,
     x: 80,
-    y: 80,
+    y: 80
   })
   const page = store.graph.getNode(pageId)
   if (!page) throw new Error('field-run fixture page missing')
@@ -132,29 +129,29 @@ function installEligibleWorkspace(store: ReturnType<typeof createEditorStore>) {
       {
         key: 'kind',
         pluginId: 'openpencil-knowledge-workspace',
-        value: 'workspace-projection-page',
+        value: 'workspace-projection-page'
       },
       {
         key: 'workspaceId',
         pluginId: 'openpencil-knowledge-workspace',
-        value: initial.id,
+        value: initial.id
       },
       {
         key: 'basePageId',
         pluginId: 'openpencil-knowledge-workspace',
-        value: pageId,
+        value: pageId
       },
       {
         key: 'experiencePurpose',
         pluginId: 'openpencil-knowledge-workspace',
-        value: 'review',
+        value: 'review'
       },
       {
         key: 'viewId',
         pluginId: 'openpencil-knowledge-workspace',
-        value: view.id,
-      },
-    ],
+        value: view.id
+      }
+    ]
   })
   return preparation({ projectionPageId: pageId, targetPageId: pageId })
 }
@@ -172,13 +169,13 @@ describe('Prepared field-run ledger', () => {
       rendererId: 'record-explorer-v1',
       role: 'primary' as const,
       surfaceIndex: 0,
-      surfaceRun: legacy.target.surfaceRun,
+      surfaceRun: legacy.target.surfaceRun
     }
     const support = {
       artifact: {
         ...legacy.target.artifact,
         artifactId: 'artifact-field-support',
-        boardId: 'board-field-support',
+        boardId: 'board-field-support'
       },
       formKind: 'evidence-brief' as const,
       instanceId: 'support-1',
@@ -186,7 +183,7 @@ describe('Prepared field-run ledger', () => {
       rendererId: 'evidence-brief-v1',
       role: 'support' as const,
       surfaceIndex: 1,
-      surfaceRun: { objectId: 'surface-field-support', revision: 1 },
+      surfaceRun: { objectId: 'surface-field-support', revision: 1 }
     }
     const family = {
       complete: true as const,
@@ -200,19 +197,17 @@ describe('Prepared field-run ledger', () => {
       relations: [support.relation],
       schemaVersion: 1 as const,
       supports: [support],
-      surfaceCount: 2,
+      surfaceCount: 2
     }
     const created = prepareFieldRun(store.graph, {
       ...legacy,
-      scope: { family, kind: 'experience-family', schemaVersion: 1 },
+      scope: { family, kind: 'experience-family', schemaVersion: 1 }
     })
     expect(created.run).toMatchObject({
       scope: { family: { surfaceCount: 2 }, kind: 'experience-family' },
-      version: 2,
+      version: 2
     })
-    const reloaded = deserializeSceneGraph(
-      structuredClone(serializeSceneGraph(store.graph))
-    )
+    const reloaded = deserializeSceneGraph(structuredClone(serializeSceneGraph(store.graph)))
     expect(readPreparedFieldRuns(reloaded)).toEqual([created.run])
 
     expect(() =>
@@ -222,11 +217,11 @@ describe('Prepared field-run ledger', () => {
         scope: {
           family: {
             ...family,
-            primary: { ...primary, surfaceRun: support.surfaceRun },
+            primary: { ...primary, surfaceRun: support.surfaceRun }
           },
           kind: 'experience-family',
-          schemaVersion: 1,
-        },
+          schemaVersion: 1
+        }
       })
     ).toThrow('field_run_target_invalid')
   })
@@ -238,7 +233,7 @@ describe('Prepared field-run ledger', () => {
     expect(created.run).toMatchObject({
       attempts: [],
       runCode: 'B31-S01',
-      version: 1,
+      version: 1
     })
 
     const serialized = serializeSceneGraph(store.graph)
@@ -255,10 +250,7 @@ describe('Prepared field-run ledger', () => {
   test('replays the same run and refuses run-code reuse for another target', () => {
     const store = createEditorStore()
     const first = prepareFieldRun(store.graph, preparation())
-    const replay = prepareFieldRun(
-      store.graph,
-      preparation({ preparedAt: '2026-07-14T22:00:00Z' })
-    )
+    const replay = prepareFieldRun(store.graph, preparation({ preparedAt: '2026-07-14T22:00:00Z' }))
     expect(replay).toEqual({ created: false, run: first.run })
     expect(readPreparedFieldRuns(store.graph)).toHaveLength(1)
 
@@ -271,9 +263,9 @@ describe('Prepared field-run ledger', () => {
             ...preparation().target,
             artifact: {
               ...preparation().target.artifact,
-              boardId: 'board-other',
-            },
-          },
+              boardId: 'board-other'
+            }
+          }
         })
       )
     ).toThrow('field_run_code_conflict')
@@ -285,42 +277,42 @@ describe('Prepared field-run ledger', () => {
     const first = recordFieldRunAttemptStarted(store.graph, {
       runCode: 'B31-S01',
       sessionId: 'human-session_first',
-      startedAt: '2026-07-14T21:01:00.000Z',
+      startedAt: '2026-07-14T21:01:00.000Z'
     })
     expect(first.run.attempts).toEqual([
       {
         sessionId: 'human-session_first',
-        startedAt: '2026-07-14T21:01:00.000Z',
-      },
+        startedAt: '2026-07-14T21:01:00.000Z'
+      }
     ])
 
     const second = recordFieldRunAttemptStarted(store.graph, {
       runCode: 'B31-S01',
       sessionId: 'human-session_second',
-      startedAt: '2026-07-14T21:05:00.000Z',
+      startedAt: '2026-07-14T21:05:00.000Z'
     })
     expect(second.run.attempts).toEqual([
       {
         endedAt: '2026-07-14T21:05:00.000Z',
         result: 'interrupted',
         sessionId: 'human-session_first',
-        startedAt: '2026-07-14T21:01:00.000Z',
+        startedAt: '2026-07-14T21:01:00.000Z'
       },
       {
         sessionId: 'human-session_second',
-        startedAt: '2026-07-14T21:05:00.000Z',
-      },
+        startedAt: '2026-07-14T21:05:00.000Z'
+      }
     ])
 
     const ended = recordFieldRunAttemptEnded(store.graph, {
       endedAt: '2026-07-14T21:06:00.000Z',
       result: 'aborted',
       runCode: 'B31-S01',
-      sessionId: 'human-session_second',
+      sessionId: 'human-session_second'
     })
     expect(ended.run.attempts.at(-1)).toMatchObject({
       endedAt: '2026-07-14T21:06:00.000Z',
-      result: 'aborted',
+      result: 'aborted'
     })
   })
 
@@ -333,18 +325,18 @@ describe('Prepared field-run ledger', () => {
         {
           key: 'prepared-runs-v1',
           pluginId: 'openpencil-field-runs',
-          value: JSON.stringify([{ runCode: 'forged', version: 1 }]),
-        },
-      ],
+          value: JSON.stringify([{ runCode: 'forged', version: 1 }])
+        }
+      ]
     })
     expect(readPreparedFieldRuns(store.graph)).toEqual([])
   })
 
   test('requires a durable target before preparation and replays without extra history', async () => {
     const unprepared = createEditorStore()
-    await expect(
-      prepareFieldRunForStore(unprepared, preparation())
-    ).rejects.toThrow('field_run_persistence_not_ready')
+    await expect(prepareFieldRunForStore(unprepared, preparation())).rejects.toThrow(
+      'field_run_persistence_not_ready'
+    )
     expect(readPreparedFieldRuns(unprepared.graph)).toEqual([])
     expect(unprepared.undo.canUndo).toBe(false)
 
@@ -353,7 +345,7 @@ describe('Prepared field-run ledger', () => {
     let saves = 0
     prepared.getWritableDocumentSource = () => ({
       kind: 'browser-file-handle',
-      label: 'Prepared field-run.fig',
+      label: 'Prepared field-run.fig'
     })
     prepared.persistWritableDocumentSource = async () => {
       saves += 1
@@ -366,7 +358,7 @@ describe('Prepared field-run ledger', () => {
 
     const replay = await prepareFieldRunForStore(prepared, {
       ...eligible,
-      preparedAt: '2026-07-14T23:00:00.000Z',
+      preparedAt: '2026-07-14T23:00:00.000Z'
     })
     expect(replay.created).toBe(false)
     expect(saves).toBe(1)
@@ -377,7 +369,7 @@ describe('Prepared field-run ledger', () => {
     const eligible = installEligibleWorkspace(store)
     store.getWritableDocumentSource = () => ({
       kind: 'browser-file-handle',
-      label: 'Prepared field-run.fig',
+      label: 'Prepared field-run.fig'
     })
     store.persistWritableDocumentSource = async () => true
     await prepareFieldRunForStore(store, eligible)
@@ -386,7 +378,7 @@ describe('Prepared field-run ledger', () => {
     await recordFieldRunAttemptStartedForStore(store, {
       runCode: 'B31-S01',
       sessionId: 'human-session_started',
-      startedAt: '2026-07-14T21:01:00.000Z',
+      startedAt: '2026-07-14T21:01:00.000Z'
     })
     const activeSession = {
       actorId: 'must-not-be-persisted',
@@ -396,26 +388,21 @@ describe('Prepared field-run ledger', () => {
       sessionId: 'human-session_started',
       startedAt: '2026-07-14T21:01:00.000Z',
       status: 'active' as const,
-      target: eligible.target,
+      target: eligible.target
     }
-    expect(
-      (await preparedFieldRunSummaries(store, { session: activeSession }))[0]
-        ?.status
-    ).toBe('active')
-    expect((await preparedFieldRunSummaries(store))[0]?.status).toBe(
-      'interrupted'
+    expect((await preparedFieldRunSummaries(store, { session: activeSession }))[0]?.status).toBe(
+      'active'
     )
+    expect((await preparedFieldRunSummaries(store))[0]?.status).toBe('interrupted')
 
     await recordFieldRunAttemptEndedForStore(store, {
       endedAt: '2026-07-14T21:02:00.000Z',
       result: 'aborted',
       runCode: 'B31-S01',
-      sessionId: 'human-session_started',
+      sessionId: 'human-session_started'
     })
     expect((await preparedFieldRunSummaries(store))[0]?.status).toBe('aborted')
-    expect(JSON.stringify(serializeSceneGraph(store.graph))).not.toContain(
-      'must-not-be-persisted'
-    )
+    expect(JSON.stringify(serializeSceneGraph(store.graph))).not.toContain('must-not-be-persisted')
   })
 
   test('marks completion only from a matching cryptographically reverified receipt', async () => {
@@ -423,23 +410,20 @@ describe('Prepared field-run ledger', () => {
     const eligible = installEligibleWorkspace(store)
     store.getWritableDocumentSource = () => ({
       kind: 'browser-file-handle',
-      label: 'Prepared field-run.fig',
+      label: 'Prepared field-run.fig'
     })
     store.persistWritableDocumentSource = async () => true
     await prepareFieldRunForStore(store, eligible)
-    const workspace = getKnowledgeWorkspace(
-      store.graph.rootId,
-      eligible.targetPageId
-    )
+    const workspace = getKnowledgeWorkspace(store.graph.rootId, eligible.targetPageId)
     if (!workspace) throw new Error('field-run workspace missing')
     const context = createWorkspaceContext(workspace, {
-      now: '2026-07-14T21:10:00.000Z',
+      now: '2026-07-14T21:10:00.000Z'
     })
     const receipt = createLearningReceipt(context, {
       attestation: {
         attestedAt: '2026-07-14T21:10:05.000Z',
         attestedBy: 'P01',
-        kind: 'self-report',
+        kind: 'self-report'
       },
       comparisonOutcome: 'better',
       decisionReceipt: { objectId: 'decision-field-run', revision: 1 },
@@ -462,7 +446,7 @@ describe('Prepared field-run ledger', () => {
       runId: 'field-run-review-B31-S01',
       safetyViolation: false,
       surfaceRun: eligible.target.surfaceRun,
-      visualAccepted: true,
+      visualAccepted: true
     })
     let now = Date.parse('2026-07-14T21:10:00.000Z')
     const authority = new ObservedHumanSessionAuthority({
@@ -471,13 +455,13 @@ describe('Prepared field-run ledger', () => {
       hasUserActivation: () => true,
       isAutomated: () => false,
       isVisible: () => true,
-      now: () => now,
+      now: () => now
     })
     await authority.start({
       actorId: receipt.recordedBy,
       dataPolicy: 'phi-free-declared-v1',
       fieldSessionId: 'field-session_B31-S01',
-      target: eligible.target,
+      target: eligible.target
     })
     now += 1_000
     authority.recordTaskInteraction({
@@ -487,7 +471,7 @@ describe('Prepared field-run ledger', () => {
       frameId: eligible.boardId,
       kind: 'pointerdown',
       occurredAt: new Date(now).toISOString(),
-      surfaceRunId: eligible.target.surfaceRun.objectId,
+      surfaceRunId: eligible.target.surfaceRun.objectId
     })
     now += 4_000
     const proof = await authority.issue({
@@ -497,33 +481,31 @@ describe('Prepared field-run ledger', () => {
       recordedAt: receipt.recordedAt,
       reviewDigest: await humanLearningReviewDigest(receipt),
       runId: receipt.runId,
-      surfaceRunId: receipt.surfaceRun.objectId,
+      surfaceRunId: receipt.surfaceRun.objectId
     })
     const attestation = await authority.verify(proof, proof.claim)
     const forged = {
       ...receipt,
       attestation: {
         ...attestation,
-        proof: attestation.proof
-          ? { ...attestation.proof, signature: 'forged' }
-          : undefined,
+        proof: attestation.proof ? { ...attestation.proof, signature: 'forged' } : undefined
       },
-      revision: 1,
+      revision: 1
     }
     replaceKnowledgeWorkspace({
       ...workspace,
-      objects: { ...workspace.objects, [forged.id]: forged },
+      objects: { ...workspace.objects, [forged.id]: forged }
     })
     expect((await preparedFieldRunSummaries(store))[0]?.status).toBe('prepared')
 
     const observed = { ...receipt, attestation, revision: 1 }
     replaceKnowledgeWorkspace({
       ...workspace,
-      objects: { ...workspace.objects, [observed.id]: observed },
+      objects: { ...workspace.objects, [observed.id]: observed }
     })
     expect((await preparedFieldRunSummaries(store))[0]).toMatchObject({
       receiptId: observed.id,
-      status: 'verified-completed',
+      status: 'verified-completed'
     })
   })
 })

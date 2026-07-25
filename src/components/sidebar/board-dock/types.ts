@@ -9,6 +9,7 @@ export type BoardSwitcherItem = {
 
 export type BoardSwitcherProject = {
   boards: BoardSwitcherItem[]
+  children: BoardSwitcherProject[]
   id: string
   name: string
 }

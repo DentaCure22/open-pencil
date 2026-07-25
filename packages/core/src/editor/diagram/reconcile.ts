@@ -3,7 +3,7 @@ import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import {
   mergeSourceReconciliationPluginData,
   readSourceReconciliation,
-  sourceSceneSignature,
+  sourceSceneContentsSignature,
   type SourceReconciliationResult
 } from '#core/io/content-source'
 
@@ -29,7 +29,7 @@ export function mermaidDiagramOwner(graph: SceneGraph, nodeId: string): SceneNod
 
 export function initializeMermaidSourceReconciliation(graph: SceneGraph, ownerId: string): void {
   const owner = graph.getNode(ownerId)
-  const baseline = sourceSceneSignature(graph, ownerId)
+  const baseline = sourceSceneContentsSignature(graph, ownerId)
   if (!owner || !baseline) return
   graph.updateNode(owner.id, {
     pluginData: mergeSourceReconciliationPluginData(owner.pluginData, {
@@ -51,7 +51,7 @@ export function reconcileMermaidDiagramSource(
   if (source === null) return null
   const state = readSourceReconciliation(owner)
   const revision = state?.revision ?? 1
-  if (state?.baseline && sourceSceneSignature(graph, owner.id) === state.baseline) {
+  if (state?.baseline && sourceSceneContentsSignature(graph, owner.id) === state.baseline) {
     return {
       status: 'current',
       source,

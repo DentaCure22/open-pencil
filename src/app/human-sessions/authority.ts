@@ -6,7 +6,7 @@ import type {
   ObservedSessionDataPolicy,
   ObservedSessionProofMaterial,
   ObservedSessionTarget,
-  ObservedSessionTaskInteraction,
+  ObservedSessionTaskInteraction
 } from '@/app/workspace'
 
 const PROOF_ALGORITHM = 'ECDSA-P256-SHA256' as const
@@ -62,8 +62,7 @@ export type ObservedHumanSessionState = {
   readyAt?: string
   sessionId?: string
   startedAt?: string
-  status:
-    'aborted' | 'active' | 'consumed' | 'expired' | 'idle' | 'issued' | 'ready'
+  status: 'aborted' | 'active' | 'consumed' | 'expired' | 'idle' | 'issued' | 'ready'
   scope?: ObservedExperienceFamilyScopeV2
   target?: ObservedSessionTarget
 }
@@ -103,9 +102,7 @@ function isObjectRecord(value: unknown): value is { [key: string]: unknown } {
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   if (isObjectRecord(value)) {
-    const entries = Object.entries(value).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )
+    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
     return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`
   }
   return JSON.stringify(value)
@@ -114,10 +111,7 @@ function canonicalJson(value: unknown): string {
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/, '')
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
 function base64UrlToBytes(value: string): Uint8Array {
@@ -138,16 +132,12 @@ async function digest(crypto: Crypto, value: string): Promise<string> {
   return `sha256:${bytesToHex(new Uint8Array(result))}`
 }
 
-export async function observedHumanReviewDigest(
-  value: unknown,
-  crypto: Crypto
-): Promise<string> {
+export async function observedHumanReviewDigest(value: unknown, crypto: Crypto): Promise<string> {
   return digest(crypto, canonicalJson(value))
 }
 
 function requireText(value: string, label: string): void {
-  if (!value.trim())
-    throw new Error(`${label} is required for observed-session attestation`)
+  if (!value.trim()) throw new Error(`${label} is required for observed-session attestation`)
 }
 
 function isPositiveRevision(value: number): boolean {
@@ -158,13 +148,11 @@ function requireTarget(target: ObservedSessionTarget): void {
   for (const [label, reference] of [
     ['intent', target.intent],
     ['evidenceManifest', target.evidenceManifest],
-    ['surfaceRun', target.surfaceRun],
+    ['surfaceRun', target.surfaceRun]
   ] as const) {
     requireText(reference.objectId, `${label}.objectId`)
     if (!isPositiveRevision(reference.revision)) {
-      throw new Error(
-        `${label}.revision is required for observed-session attestation`
-      )
+      throw new Error(`${label}.revision is required for observed-session attestation`)
     }
   }
   for (const [label, value] of Object.entries(target.artifact)) {
@@ -174,9 +162,7 @@ function requireTarget(target: ObservedSessionTarget): void {
     !isPositiveRevision(target.artifact.boardRevision) ||
     !isPositiveRevision(target.artifact.boardSchemaVersion)
   ) {
-    throw new Error(
-      'Exact artifact revisions are required for observed-session attestation'
-    )
+    throw new Error('Exact artifact revisions are required for observed-session attestation')
   }
 }
 
@@ -202,9 +188,7 @@ function requireFamilyScope(
     family.relations.length !== family.supports.length ||
     family.primary.surfaceIndex !== 0
   ) {
-    throw new Error(
-      'Observed family scope must contain one complete bounded family'
-    )
+    throw new Error('Observed family scope must contain one complete bounded family')
   }
   const memberIds = new Set<string>()
   family.members.forEach((member, index) => {
@@ -212,7 +196,7 @@ function requireFamilyScope(
       artifact: member.artifact,
       evidenceManifest: family.evidenceManifest,
       intent: family.intent,
-      surfaceRun: member.surfaceRun,
+      surfaceRun: member.surfaceRun
     })
     if (
       member.surfaceIndex !== index ||
@@ -239,9 +223,7 @@ function isFullClaim(
   return 'fieldSessionId' in claim
 }
 
-function reviewClaim(
-  claim: ObservedHumanSessionClaim
-): ObservedHumanReviewClaim {
+function reviewClaim(claim: ObservedHumanSessionClaim): ObservedHumanReviewClaim {
   return {
     actorId: claim.actorId,
     decisionReceiptId: claim.decisionReceiptId,
@@ -249,14 +231,11 @@ function reviewClaim(
     recordedAt: claim.recordedAt,
     reviewDigest: claim.reviewDigest,
     runId: claim.runId,
-    surfaceRunId: claim.surfaceRunId,
+    surfaceRunId: claim.surfaceRunId
   }
 }
 
-function sameClaim(
-  left: ObservedHumanSessionClaim,
-  right: ObservedHumanSessionClaim
-): boolean {
+function sameClaim(left: ObservedHumanSessionClaim, right: ObservedHumanSessionClaim): boolean {
   return canonicalJson(left) === canonicalJson(right)
 }
 
@@ -266,12 +245,10 @@ function claimMatchesExpected(
 ): boolean {
   if (isFullClaim(expected)) return sameClaim(actual, expected)
   const { finalFamilyDigest, ...baseExpected } = expected
-  if (canonicalJson(reviewClaim(actual)) !== canonicalJson(baseExpected))
-    return false
+  if (canonicalJson(reviewClaim(actual)) !== canonicalJson(baseExpected)) return false
   return (
     !finalFamilyDigest ||
-    (actual.version === 2 &&
-      actual.finalFamily.familyDigest === finalFamilyDigest)
+    (actual.version === 2 && actual.finalFamily.familyDigest === finalFamilyDigest)
   )
 }
 
@@ -344,15 +321,11 @@ function taskInteractionFailures(
   const failures: string[] = []
   const eventIds = new Set<string>()
   const familyMembers = new Map(
-    (scope?.family.members ?? []).map((member) => [
-      member.surfaceRun.objectId,
-      member,
-    ])
+    (scope?.family.members ?? []).map((member) => [member.surfaceRun.objectId, member])
   )
   const previousBySurface = new Map<string, ObservedSessionTaskInteraction>()
   interactions.forEach((interaction, index) => {
-    const previousOccurredAt =
-      index > 0 ? interactions[index - 1].occurredAt : ''
+    const previousOccurredAt = index > 0 ? interactions[index - 1].occurredAt : ''
     const member = familyMembers.get(interaction.surfaceRunId)
     if (taskEventInvalid(interaction, eventIds)) {
       failures.push('task-event')
@@ -363,22 +336,13 @@ function taskInteractionFailures(
     }
     const previousForSurface = previousBySurface.get(interaction.surfaceRunId)
     const expectedBefore = previousForSurface?.after ?? {
-      artifactRevision:
-        member?.artifact.boardRevision ?? target.artifact.boardRevision,
-      surfaceRevision:
-        member?.surfaceRun.revision ?? target.surfaceRun.revision,
+      artifactRevision: member?.artifact.boardRevision ?? target.artifact.boardRevision,
+      surfaceRevision: member?.surfaceRun.revision ?? target.surfaceRun.revision
     }
     if (taskRevisionInvalid(interaction, expectedBefore)) {
       failures.push('task-revision-chain')
     }
-    if (
-      taskTimeInvalid(
-        interaction,
-        sessionStartedAt,
-        issuedAt,
-        previousOccurredAt
-      )
-    ) {
+    if (taskTimeInvalid(interaction, sessionStartedAt, issuedAt, previousOccurredAt)) {
       failures.push('task-time')
     }
     previousBySurface.set(interaction.surfaceRunId, interaction)
@@ -399,20 +363,16 @@ function finalFamilyFor(
       )
       const last = memberInteractions.at(-1)
       return {
-        finalArtifactRevision:
-          last?.after.artifactRevision ?? member.artifact.boardRevision,
-        finalSurfaceRevision:
-          last?.after.surfaceRevision ?? member.surfaceRun.revision,
+        finalArtifactRevision: last?.after.artifactRevision ?? member.artifact.boardRevision,
+        finalSurfaceRevision: last?.after.surfaceRevision ?? member.surfaceRun.revision,
         surfaceRunId: member.surfaceRun.objectId,
-        taskInteractionCount: memberInteractions.length,
+        taskInteractionCount: memberInteractions.length
       }
-    }),
+    })
   }
 }
 
-function proofMaterial(
-  proof: ObservedHumanSessionProof
-): ObservedSessionProofMaterial {
+function proofMaterial(proof: ObservedHumanSessionProof): ObservedSessionProofMaterial {
   return {
     algorithm: proof.algorithm,
     claim: structuredClone(proof.claim),
@@ -422,8 +382,8 @@ function proofMaterial(
     taskInteractions: proof.taskInteractions.map((interaction) => ({
       ...interaction,
       after: { ...interaction.after },
-      before: { ...interaction.before },
-    })),
+      before: { ...interaction.before }
+    }))
   }
 }
 
@@ -446,7 +406,7 @@ function proofIntegrityFailures(
     proof.authorityRef !==
     `openpencil-local-observer-v${proof.claim.version === 2 ? 2 : 1}:${values.authorityFingerprint}`
       ? 'authority'
-      : '',
+      : ''
   ].filter(Boolean)
 }
 
@@ -457,21 +417,11 @@ function proofSessionFailures(
   const failures = [
     !proof.sessionId ? 'session' : '',
     proof.claim.fieldSessionId ? '' : 'field-session',
-    proof.claim.surfaceRunId !== proof.claim.target.surfaceRun.objectId
-      ? 'surface-target'
-      : '',
-    proof.claim.taskInteractionDigest !== taskInteractionDigest
-      ? 'task-digest'
-      : '',
-    proof.claim.taskInteractionCount !== proof.taskInteractions.length
-      ? 'task-count'
-      : '',
-    proof.interactionCount !== proof.taskInteractions.length
-      ? 'interactions'
-      : '',
-    proof.taskInteractions.length < MIN_TASK_INTERACTIONS
-      ? 'task-interactions'
-      : '',
+    proof.claim.surfaceRunId !== proof.claim.target.surfaceRun.objectId ? 'surface-target' : '',
+    proof.claim.taskInteractionDigest !== taskInteractionDigest ? 'task-digest' : '',
+    proof.claim.taskInteractionCount !== proof.taskInteractions.length ? 'task-count' : '',
+    proof.interactionCount !== proof.taskInteractions.length ? 'interactions' : '',
+    proof.taskInteractions.length < MIN_TASK_INTERACTIONS ? 'task-interactions' : '',
     proof.claim.finalSurfaceRevision !==
     proof.taskInteractions.findLast(
       (interaction) => interaction.surfaceRunId === proof.claim.surfaceRunId
@@ -485,7 +435,7 @@ function proofSessionFailures(
       proof.sessionStartedAt,
       proof.issuedAt,
       proof.claim.version === 2 ? proof.claim.scope : undefined
-    ),
+    )
   ].filter(Boolean)
   if (proof.claim.version === 2) {
     const expectedFinal = finalFamilyFor(
@@ -493,14 +443,10 @@ function proofSessionFailures(
       proof.taskInteractions,
       proof.claim.finalFamily.familyDigest
     )
-    if (
-      canonicalJson(expectedFinal) !== canonicalJson(proof.claim.finalFamily)
-    ) {
+    if (canonicalJson(expectedFinal) !== canonicalJson(proof.claim.finalFamily)) {
       failures.push('final-family')
     }
-    if (
-      expectedFinal.members.some((member) => member.taskInteractionCount < 1)
-    ) {
+    if (expectedFinal.members.some((member) => member.taskInteractionCount < 1)) {
       failures.push('family-member-interactions')
     }
   }
@@ -523,7 +469,7 @@ export async function verifyObservedHumanSessionProofCryptographically(
     sessionId: proof.sessionId,
     sessionStartedAt: proof.sessionStartedAt,
     signature: proof.signature,
-    taskInteractions: proof.taskInteractions,
+    taskInteractions: proof.taskInteractions
   }
   const signedPayload = canonicalJson({
     algorithm: proof.algorithm,
@@ -535,18 +481,12 @@ export async function verifyObservedHumanSessionProofCryptographically(
     publicKey: proof.publicKey,
     sessionId: proof.sessionId,
     sessionStartedAt: proof.sessionStartedAt,
-    taskInteractions: proof.taskInteractions,
+    taskInteractions: proof.taskInteractions
   })
   const proofDigest = await digest(crypto, canonicalJson(unsignedProof))
   const claimDigest = await digest(crypto, canonicalJson(proof.claim))
-  const taskInteractionDigest = await digest(
-    crypto,
-    canonicalJson(proof.taskInteractions)
-  )
-  const authorityFingerprint = await digest(
-    crypto,
-    canonicalJson(proof.publicKey)
-  )
+  const taskInteractionDigest = await digest(crypto, canonicalJson(proof.taskInteractions))
+  const authorityFingerprint = await digest(crypto, canonicalJson(proof.publicKey))
   let publicKey: CryptoKey
   try {
     publicKey = await crypto.subtle.importKey(
@@ -579,9 +519,9 @@ export async function verifyObservedHumanSessionProofCryptographically(
       authorityFingerprint,
       claimDigest,
       proofDigest,
-      validSignature,
+      validSignature
     }),
-    ...proofSessionFailures(proof, taskInteractionDigest),
+    ...proofSessionFailures(proof, taskInteractionDigest)
   ]
   if (failures.length > 0) {
     throw new Error(
@@ -598,7 +538,7 @@ export async function verifyObservedHumanSessionProofCryptographically(
       proof: proofMaterial(proof),
       proofDigest: proof.proofDigest,
       sessionId: proof.sessionId,
-      sessionStartedAt: proof.sessionStartedAt,
+      sessionStartedAt: proof.sessionStartedAt
     }
   } catch (error) {
     throw new Error(
@@ -621,9 +561,7 @@ export async function verifyPersistedObservedSessionAttestation(
     !attestation.sessionStartedAt ||
     !attestation.interactionCount
   ) {
-    throw new Error(
-      'Observed-session attestation does not contain a complete durable proof'
-    )
+    throw new Error('Observed-session attestation does not contain a complete durable proof')
   }
   return verifyObservedHumanSessionProofCryptographically(
     {
@@ -638,7 +576,7 @@ export async function verifyPersistedObservedSessionAttestation(
       sessionId: attestation.sessionId,
       sessionStartedAt: attestation.sessionStartedAt,
       signature: attestation.proof.signature,
-      taskInteractions: attestation.proof.taskInteractions,
+      taskInteractions: attestation.proof.taskInteractions
     },
     expected,
     crypto
@@ -654,8 +592,7 @@ export class ObservedHumanSessionAuthority {
   private stateFor(session: ActiveSession | null): ObservedHumanSessionState {
     if (!session) return { interactionCount: 0, status: 'idle' }
     const duration = this.runtime.now() - session.startedAtMs
-    const expired =
-      session.status === 'active' && duration > MAX_SESSION_DURATION_MS
+    const expired = session.status === 'active' && duration > MAX_SESSION_DURATION_MS
     const usedMemberCount = new Set(
       session.taskInteractions.map((interaction) => interaction.surfaceRunId)
     ).size
@@ -672,21 +609,17 @@ export class ObservedHumanSessionAuthority {
     return {
       actorId: session.actorId,
       dataPolicy: session.dataPolicy,
-      expiresAt: new Date(
-        session.startedAtMs + MAX_SESSION_DURATION_MS
-      ).toISOString(),
+      expiresAt: new Date(session.startedAtMs + MAX_SESSION_DURATION_MS).toISOString(),
       familyMemberCount: session.scope?.family.surfaceCount,
       familyMembersUsed: session.scope ? usedMemberCount : undefined,
       fieldSessionId: session.fieldSessionId,
       interactionCount: session.taskInteractions.length,
-      readyAt: new Date(
-        session.startedAtMs + MIN_SESSION_DURATION_MS
-      ).toISOString(),
+      readyAt: new Date(session.startedAtMs + MIN_SESSION_DURATION_MS).toISOString(),
       sessionId: session.sessionId,
       scope: session.scope ? structuredClone(session.scope) : undefined,
       startedAt: session.startedAt,
       status,
-      target: structuredClone(session.target),
+      target: structuredClone(session.target)
     }
   }
 
@@ -744,36 +677,26 @@ export class ObservedHumanSessionAuthority {
     return this.changed()
   }
 
-  async start(
-    input: ObservedHumanSessionStartInput
-  ): Promise<ObservedHumanSessionState> {
+  async start(input: ObservedHumanSessionStartInput): Promise<ObservedHumanSessionState> {
     this.expireSessionIfNeeded()
     if (
       this.session &&
-      !['aborted', 'consumed', 'expired'].includes(
-        this.stateFor(this.session).status
-      )
+      !['aborted', 'consumed', 'expired'].includes(this.stateFor(this.session).status)
     ) {
-      throw new Error(
-        'Finish or abort the current observed session before starting another'
-      )
+      throw new Error('Finish or abort the current observed session before starting another')
     }
     requireText(input.actorId, 'actorId')
     requireTarget(input.target)
     if (input.scope) requireFamilyScope(input.scope, input.target)
     if (this.runtime.isAutomated()) {
-      throw new Error(
-        'Automated browser environments cannot issue observed human sessions'
-      )
+      throw new Error('Automated browser environments cannot issue observed human sessions')
     }
     if (
       !this.runtime.hasUserActivation() ||
       !this.runtime.hasFocus() ||
       !this.runtime.isVisible()
     ) {
-      throw new Error(
-        'Start an observed session from a focused visible user interaction'
-      )
+      throw new Error('Start an observed session from a focused visible user interaction')
     }
     const generated = await this.runtime.crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
@@ -782,7 +705,7 @@ export class ObservedHumanSessionAuthority {
     )
     const [publicKeyJwk, privateBytes] = await Promise.all([
       this.runtime.crypto.subtle.exportKey('jwk', generated.publicKey),
-      this.runtime.crypto.subtle.exportKey('pkcs8', generated.privateKey),
+      this.runtime.crypto.subtle.exportKey('pkcs8', generated.privateKey)
     ])
     const privateKey = await this.runtime.crypto.subtle.importKey(
       'pkcs8',
@@ -791,14 +714,10 @@ export class ObservedHumanSessionAuthority {
       false,
       ['sign']
     )
-    const fingerprint = await digest(
-      this.runtime.crypto,
-      canonicalJson(publicKeyJwk)
-    )
+    const fingerprint = await digest(this.runtime.crypto, canonicalJson(publicKeyJwk))
     const startedAtMs = this.runtime.now()
     const fieldSessionId =
-      input.fieldSessionId?.trim() ||
-      `field-session_${this.runtime.crypto.randomUUID()}`
+      input.fieldSessionId?.trim() || `field-session_${this.runtime.crypto.randomUUID()}`
     requireText(fieldSessionId, 'fieldSessionId')
     this.session = {
       actorId: input.actorId.trim(),
@@ -813,7 +732,7 @@ export class ObservedHumanSessionAuthority {
       startedAtMs,
       status: 'active',
       target: structuredClone(input.target),
-      taskInteractions: [],
+      taskInteractions: []
     }
     return this.changed()
   }
@@ -824,14 +743,8 @@ export class ObservedHumanSessionAuthority {
     if (session?.status !== 'active') {
       throw new Error('No active observed session can accept task interactions')
     }
-    if (
-      this.runtime.isAutomated() ||
-      !this.runtime.hasFocus() ||
-      !this.runtime.isVisible()
-    ) {
-      throw new Error(
-        'Task interaction was not observed in a focused human session'
-      )
+    if (this.runtime.isAutomated() || !this.runtime.hasFocus() || !this.runtime.isVisible()) {
+      throw new Error('Task interaction was not observed in a focused human session')
     }
     requireText(input.eventId, 'eventId')
     requireText(input.frameId, 'frameId')
@@ -840,11 +753,7 @@ export class ObservedHumanSessionAuthority {
     if (!['keydown', 'pointerdown'].includes(input.kind)) {
       throw new Error('Task interaction kind must be pointerdown or keydown')
     }
-    if (
-      session.taskInteractions.some(
-        (interaction) => interaction.eventId === input.eventId
-      )
-    ) {
+    if (session.taskInteractions.some((interaction) => interaction.eventId === input.eventId)) {
       throw new Error(`Task interaction ${input.eventId} is already recorded`)
     }
     const failures = taskInteractionFailures(
@@ -855,9 +764,7 @@ export class ObservedHumanSessionAuthority {
       session.scope
     )
     if (failures.length > 0) {
-      throw new Error(
-        `Task interaction does not match the bound session: ${failures.join(', ')}`
-      )
+      throw new Error(`Task interaction does not match the bound session: ${failures.join(', ')}`)
     }
     session.taskInteractions.push(structuredClone(input))
     this.changed()
@@ -886,18 +793,14 @@ export class ObservedHumanSessionAuthority {
     return session
   }
 
-  async issue(
-    review: ObservedHumanReviewClaim
-  ): Promise<ObservedHumanSessionProof> {
+  async issue(review: ObservedHumanReviewClaim): Promise<ObservedHumanSessionProof> {
     for (const [label, value] of Object.entries(review)) {
       if (typeof value === 'string') requireText(value, label)
     }
     const existing = this.session
     if (existing?.status === 'issued' && existing.issuedProof) {
       if (!claimMatchesExpected(existing.issuedProof.claim, review)) {
-        throw new Error(
-          'Observed session already issued a proof for a different review'
-        )
+        throw new Error('Observed session already issued a proof for a different review')
       }
       return structuredClone(existing.issuedProof)
     }
@@ -905,14 +808,10 @@ export class ObservedHumanSessionAuthority {
     const taskInteractions = structuredClone(session.taskInteractions)
     const lastInteraction = taskInteractions.at(-1)
     if (!lastInteraction || review.occurredAt < lastInteraction.occurredAt) {
-      throw new Error(
-        'The decided outcome must follow the observed task interactions'
-      )
+      throw new Error('The decided outcome must follow the observed task interactions')
     }
     if (session.scope && !review.finalFamilyDigest?.startsWith('fnv1a-')) {
-      throw new Error(
-        'Observed family proof requires the exact final family digest'
-      )
+      throw new Error('Observed family proof requires the exact final family digest')
     }
     const { finalFamilyDigest, ...reviewClaimFields } = review
     const commonClaim = {
@@ -921,35 +820,25 @@ export class ObservedHumanSessionAuthority {
       fieldSessionId: session.fieldSessionId,
       target: structuredClone(session.target),
       taskInteractionCount: taskInteractions.length,
-      taskInteractionDigest: await digest(
-        this.runtime.crypto,
-        canonicalJson(taskInteractions)
-      ),
+      taskInteractionDigest: await digest(this.runtime.crypto, canonicalJson(taskInteractions))
     }
     const primaryLastInteraction = taskInteractions.findLast(
-      (interaction) =>
-        interaction.surfaceRunId === session.target.surfaceRun.objectId
+      (interaction) => interaction.surfaceRunId === session.target.surfaceRun.objectId
     )
     if (!primaryLastInteraction) {
-      throw new Error(
-        'Observed session requires an applied primary-surface interaction'
-      )
+      throw new Error('Observed session requires an applied primary-surface interaction')
     }
     const claim: ObservedHumanSessionClaim = session.scope
       ? {
           ...commonClaim,
-          finalFamily: finalFamilyFor(
-            session.scope,
-            taskInteractions,
-            finalFamilyDigest
-          ),
+          finalFamily: finalFamilyFor(session.scope, taskInteractions, finalFamilyDigest),
           finalSurfaceRevision: primaryLastInteraction.after.surfaceRevision,
           scope: structuredClone(session.scope),
-          version: 2,
+          version: 2
         }
       : {
           ...commonClaim,
-          finalSurfaceRevision: primaryLastInteraction.after.surfaceRevision,
+          finalSurfaceRevision: primaryLastInteraction.after.surfaceRevision
         }
     const issuedAt = new Date(this.runtime.now()).toISOString()
     const claimDigest = await digest(this.runtime.crypto, canonicalJson(claim))
@@ -963,7 +852,7 @@ export class ObservedHumanSessionAuthority {
       publicKey: session.publicKeyJwk,
       sessionId: session.sessionId,
       sessionStartedAt: session.startedAt,
-      taskInteractions,
+      taskInteractions
     })
     const signature = await this.runtime.crypto.subtle.sign(
       { name: 'ECDSA', hash: 'SHA-256' },
@@ -981,14 +870,11 @@ export class ObservedHumanSessionAuthority {
       sessionId: session.sessionId,
       sessionStartedAt: session.startedAt,
       signature: bytesToBase64Url(new Uint8Array(signature)),
-      taskInteractions,
+      taskInteractions
     }
     session.issuedProof = {
       ...unsignedProof,
-      proofDigest: await digest(
-        this.runtime.crypto,
-        canonicalJson(unsignedProof)
-      ),
+      proofDigest: await digest(this.runtime.crypto, canonicalJson(unsignedProof))
     }
     session.status = 'issued'
     this.changed()
@@ -1007,23 +893,14 @@ export class ObservedHumanSessionAuthority {
       proof.proofDigest !== session.issuedProof.proofDigest ||
       !claimMatchesExpected(proof.claim, expected)
     ) {
-      throw new Error(
-        'Observed-session proof is not the proof issued for this exact review'
-      )
+      throw new Error('Observed-session proof is not the proof issued for this exact review')
     }
-    return verifyObservedHumanSessionProofCryptographically(
-      proof,
-      expected,
-      this.runtime.crypto
-    )
+    return verifyObservedHumanSessionProofCryptographically(proof, expected, this.runtime.crypto)
   }
 
   commit(proofDigest: string): void {
     const session = this.session
-    if (
-      !session?.issuedProof ||
-      session.issuedProof.proofDigest !== proofDigest
-    ) {
+    if (!session?.issuedProof || session.issuedProof.proofDigest !== proofDigest) {
       throw new Error('Observed-session proof cannot be committed')
     }
     if (session.status === 'consumed') return

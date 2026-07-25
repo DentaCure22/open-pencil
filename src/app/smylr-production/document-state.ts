@@ -8,6 +8,11 @@ import {
 
 import { readCacheJson, readCacheValue, writeCacheJson, writeCacheValue } from '../cache'
 import type { EditorStore } from '../editor/session'
+import {
+  loadOpenPencilWorkspaceIdentity,
+  OPENPENCIL_WORKSPACE_DOCUMENT_NAME,
+  stampOpenPencilWorkspaceIdentity
+} from '../workspace-document/identity'
 import { SMYLR_FOUNDATIONS_REVISION } from './foundations-revision'
 import { applyLiveFrameTombstones, loadLiveFrameTombstones } from './live/frame-tombstones'
 
@@ -17,6 +22,7 @@ const CACHE_VERSION = 2
 const PLUGIN_ID = 'smylr-production'
 const WORKSPACE_KINDS = new Set([
   'live-app-frame',
+  'smylr-product-map-page',
   'smylr-brand-page',
   'smylr-production-page',
   'smylr-tokens-page'
@@ -128,7 +134,9 @@ export async function applySmylrProductionDocument(
     const graph = deserializeSmylrProductionDocument(value)
     if (options.applyTombstones !== false) applyLiveFrameTombstones(graph)
     if (!isSmylrProductionDocumentGraph(graph)) return false
-    store.state.documentName = 'Smylr Production Canvas'
+    const identity = await loadOpenPencilWorkspaceIdentity()
+    stampOpenPencilWorkspaceIdentity(graph, identity)
+    store.state.documentName = OPENPENCIL_WORKSPACE_DOCUMENT_NAME
     store.replaceGraph(graph)
     store.undo.clear()
     return true
@@ -152,6 +160,9 @@ export async function restoreSmylrProductionDocument(store: EditorStore): Promis
 export async function saveSmylrProductionDocument(store: EditorStore): Promise<boolean> {
   if (!isSmylrProductionDocumentGraph(store.graph)) return false
 
+  const identity = await loadOpenPencilWorkspaceIdentity()
+  stampOpenPencilWorkspaceIdentity(store.graph, identity)
+  store.state.documentName = OPENPENCIL_WORKSPACE_DOCUMENT_NAME
   const payload = serializeSmylrProductionDocument(store.graph)
   let ok = false
   try {

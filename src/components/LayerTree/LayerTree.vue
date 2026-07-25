@@ -16,6 +16,7 @@ import {
 } from '@open-pencil/vue'
 import type { LayerDragInstruction, LayerNode } from '@open-pencil/vue'
 import { useEditorStore } from '@/app/editor/active-store'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import {
   bumpLiveLayerTreeVersion,
   createSmylrLiveLayerTreeBridge,
@@ -93,8 +94,13 @@ function isAdditiveSelect(e: CustomEvent): boolean {
 }
 
 function onTreeSelect(e: CustomEvent, id: string, select: (id: string, additive: boolean) => void) {
+  const mouseEvent = e.detail?.originalEvent as MouseEvent | undefined
+  const additive = isAdditiveSelect(e)
   e.preventDefault()
-  select(id, isAdditiveSelect(e))
+  select(id, additive)
+  if (mouseEvent?.type === 'click' && mouseEvent.button === 0 && !additive) {
+    store.zoomToNode(id, editorViewportInsets())
+  }
 }
 
 function hoverLayer(layerId: string) {
@@ -158,7 +164,12 @@ function closeTreeTools() {
   showTreeTools.value = false
 }
 
-defineExpose({ closeTreeTools })
+function revealNode(nodeId: string) {
+  layerFilter.value = ''
+  store.select([nodeId])
+}
+
+defineExpose({ closeTreeTools, revealNode })
 
 function chrome(scope: Omit<LayerTreeSlotScope, 'actions'>) {
   return {

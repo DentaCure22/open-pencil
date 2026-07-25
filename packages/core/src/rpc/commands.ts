@@ -25,6 +25,8 @@ export type AutomationDocumentSummary = {
   active: boolean
   current_page_id: string
   current_page_name: string
+  kind: 'document' | 'workspace'
+  workspace_id?: string
   pages: Array<{ id: string; name: string }>
 }
 

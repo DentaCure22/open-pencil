@@ -136,9 +136,7 @@ export function htmlBoardRegisteredLiveComponentRoutes(): string[] {
   )
 }
 
-export function htmlBoardRegisteredComponentById(
-  id: string
-): HtmlBoardRegisteredComponent | null {
+export function htmlBoardRegisteredComponentById(id: string): HtmlBoardRegisteredComponent | null {
   return REGISTERED_COMPONENTS.find((component) => component.id === id) ?? null
 }
 

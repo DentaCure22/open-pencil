@@ -48,4 +48,15 @@ describe('Smylr design layer outline', () => {
 
     expect(rows?.some((row) => row.id === leaf.id)).toBe(true)
   })
+
+  test('keeps empty asset frames once Smylr outlining is active', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    graph.createNode('FRAME', page.id, { name: 'Live Smylr App / Treatment Plan' })
+    const asset = graph.createNode('FRAME', page.id, { name: 'Orbit lab' })
+
+    const rows = getDesignOutlineChildren(graph, page)
+
+    expect(rows?.some((row) => row.id === asset.id)).toBe(true)
+  })
 })

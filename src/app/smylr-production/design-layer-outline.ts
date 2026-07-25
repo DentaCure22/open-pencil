@@ -248,7 +248,6 @@ function outlinePageChildren(graph: SceneGraph, page: SceneNode): LayerNode[] {
 
     // Other containers on the page — include fully.
     if (isContainerNode(kid)) {
-      if (kid.childIds.length === 0 && !isBoardFrame(kid)) continue
       const nested = outlineBoardChildren(graph, kid)
       out.push(toLayer(kid, nested, shortBoardName(kid)))
       continue

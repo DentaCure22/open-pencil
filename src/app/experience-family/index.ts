@@ -6,5 +6,5 @@ export type {
   ResolvedExperienceFamilyV1,
   ResolveExperienceFamily,
   ResolveExperienceFamilyOptions,
-  SupportExperienceFamilyMemberV1,
+  SupportExperienceFamilyMemberV1
 } from './types'

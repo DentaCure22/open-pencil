@@ -1,10 +1,10 @@
+import { DEFAULT_FONT_FAMILY } from '@open-pencil/core/constants'
 import type {
   DesignDocument,
   DesignElement,
   DesignNode,
   DesignStyleDeclaration
 } from '@open-pencil/dom-css'
-import { DEFAULT_FONT_FAMILY } from '@open-pencil/core/constants'
 
 import type {
   SmylrLiveContainerDocument,
@@ -142,10 +142,7 @@ function childNodesFor(node: SmylrLiveContainerNode, options: DesignNodeOptions)
     return children
   }
 
-  return [
-    ...children,
-    styledTextChildFor(node)
-  ]
+  return [...children, styledTextChildFor(node)]
 }
 
 function overlayContainerStyleFor(node: SmylrLiveContainerNode): DesignStyleDeclaration {

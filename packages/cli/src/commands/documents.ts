@@ -26,8 +26,9 @@ export default defineCommand({
       console.log(
         fmtList(
           documents.map((doc) => ({
-            header: `${entity('document', doc.name, doc.id)}${doc.active ? ' [active]' : ''}`,
+            header: `${entity(doc.kind, doc.name, doc.id)}${doc.active ? ' [active]' : ''}`,
             details: {
+              ...(doc.workspace_id ? { workspace: doc.workspace_id } : {}),
               ...(doc.path ? { path: doc.path } : {}),
               current: `${doc.current_page_name} (${doc.current_page_id})`,
               pages: doc.pages.map((page) => `${page.name} (${page.id})`).join(', ')
@@ -37,7 +38,7 @@ export default defineCommand({
         )
       )
       console.log('')
-      console.log(kv('target flags', '--document-id <id> --page-id <id>'))
+      console.log(kv('target flags', '--workspace-id <id> --document-id <id> --page-id <id>'))
       console.log('')
     } catch (error) {
       printError(error)

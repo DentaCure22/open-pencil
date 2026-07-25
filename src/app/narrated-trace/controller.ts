@@ -1,4 +1,7 @@
+import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'
+
 import { resetNarratedTraceAnnotations, setNarratedTraceAnnotationTool } from './annotation'
+import { narratedTraceScopeForStore } from './scope'
 import {
   checkNarratedTraceSpeechAvailability,
   startNarratedTraceSpeech,
@@ -8,23 +11,30 @@ import {
   beginNarratedTraceSession,
   continueNarratedTraceRecord,
   finishNarratedTraceSession,
+  narratedTraceStatus,
   pauseNarratedTraceSession,
   resumeNarratedTraceSession,
   setNarratedTraceError
 } from './state'
 
+function currentScope() {
+  const store = getActiveEditorStoreOrNull()
+  return store ? narratedTraceScopeForStore(store) : undefined
+}
+
 export function startNarratedTraceRecording() {
   const speechReady = checkNarratedTraceSpeechAvailability()
-  if (!speechReady) return false
   resetNarratedTraceAnnotations()
-  beginNarratedTraceSession()
-  startNarratedTraceSpeech()
+  beginNarratedTraceSession(currentScope())
+  if (speechReady) startNarratedTraceSpeech()
+  else
+    setNarratedTraceError('Speech recognition is unavailable. Canvas actions are still recording.')
   return true
 }
 
 export function startNarratedTraceActionRecording() {
   resetNarratedTraceAnnotations()
-  beginNarratedTraceSession()
+  beginNarratedTraceSession(currentScope())
 }
 
 export function pauseNarratedTraceRecording() {
@@ -50,4 +60,15 @@ export function stopNarratedTraceRecording() {
   stopNarratedTraceSpeech()
   setNarratedTraceError(null)
   finishNarratedTraceSession()
+}
+
+export function toggleNarratedTraceRecording() {
+  const isActive =
+    narratedTraceStatus.value === 'recording' || narratedTraceStatus.value === 'paused'
+  if (isActive) {
+    stopNarratedTraceRecording()
+    return 'stopped' as const
+  }
+  startNarratedTraceRecording()
+  return 'started' as const
 }

@@ -9,12 +9,14 @@ type RpcSender = (body: Record<string, unknown>) => Promise<unknown>
 
 const automationTargetSchema = {
   document_id: z.string().describe('Optional OpenPencil document/tab ID to target').optional(),
-  page_id: z.string().describe('Optional page ID to target within the document').optional()
+  page_id: z.string().describe('Optional page ID to target within the document').optional(),
+  workspace_id: z.string().describe('Stable OpenPencil workspace ID to target').optional()
 }
 
 const requiredAutomationTargetSchema = {
   document_id: z.string().trim().min(1).describe('Exact OpenPencil document/tab ID to target'),
-  page_id: z.string().trim().min(1).describe('Exact page ID to target within the document')
+  page_id: z.string().trim().min(1).describe('Exact page ID to target within the document'),
+  workspace_id: z.string().trim().min(1).describe('Stable OpenPencil workspace ID').optional()
 }
 
 const mutationEnvelope = {
@@ -88,11 +90,12 @@ function resultWithTarget(response: unknown, value: unknown) {
 }
 
 function splitTarget(args: Record<string, unknown>) {
-  const { document_id, page_id, ...toolArgs } = args
+  const { document_id, page_id, workspace_id, ...toolArgs } = args
   return {
     target: {
       ...(typeof document_id === 'string' ? { document_id } : {}),
-      ...(typeof page_id === 'string' ? { page_id } : {})
+      ...(typeof page_id === 'string' ? { page_id } : {}),
+      ...(typeof workspace_id === 'string' ? { workspace_id } : {})
     },
     toolArgs
   }

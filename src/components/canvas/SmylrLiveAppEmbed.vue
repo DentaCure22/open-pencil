@@ -55,10 +55,12 @@ import {
   liveFrameScreenOverlayStyle,
   type FrameCorner
 } from '@/app/smylr-production/frame-transform'
+import { clearLiveFrameScenePaint } from '@/app/smylr-production/live/paint'
 import {
   findCurrentSmylrLiveAppFrame,
   fitSmylrPageToViewport,
   isSmylrLiveAppFrameNode,
+  isSmylrFlowPageNode,
   smylrLiveAppFrameDisplayName,
   smylrLiveAppFrameRoute
 } from '@/app/smylr-production/workspace'
@@ -145,8 +147,8 @@ const liveFrame = computed(() => {
 const isLiveComponentRuntime = computed(() => isSmylrLiveComponentFrame(liveFrame.value))
 
 // Migrate an already-open workspace in place. Older Smylr live-frame nodes
-// carried a blue CanvasKit stroke, leaving a second frame underneath the DOM
-// iframe until the workspace was fully re-seeded.
+// carried CanvasKit fills, strokes, or effects, leaving a second painted frame
+// underneath the DOM iframe until the workspace was fully re-seeded.
 watch(
   liveFrame,
   (frame) => {
@@ -156,9 +158,7 @@ watch(
     ) {
       setLiveInspectorActiveFrame(frame.id)
     }
-    if (!frame || (frame.fills.length === 0 && frame.strokes.length === 0)) return
-    store.graph.updateNode(frame.id, { fills: [], strokes: [] })
-    store.requestRender()
+    if (frame && clearLiveFrameScenePaint(store.graph, frame)) store.requestRender()
   },
   { immediate: true }
 )
@@ -229,6 +229,14 @@ const isCurrentRuntimeSelected = computed(() => {
 const isCurrentRuntimeActive = computed(() => {
   const frame = liveFrame.value
   return Boolean(frame && liveInspectorActiveFrameId.value === frame.id)
+})
+const isFlowPage = computed(() => {
+  void syncTick.value
+  return isSmylrFlowPageNode(store.graph.getNode(store.state.currentPageId))
+})
+const shouldShowCurrentFrameHeader = computed(() => {
+  if (!isFlowPage.value) return true
+  return frameHovered.value || isCurrentRuntimeActive.value
 })
 const isFrameSelected = computed(() => {
   // The frame remains selected internally to route the native inspector, but
@@ -678,7 +686,16 @@ watch(liveWorkspacePreviewRequest, (request) => {
     @pointerenter="showCurrentFrameHeader"
     @pointerleave="hideCurrentFrameHeaderSoon"
   >
-    <div class="absolute inset-0 overflow-hidden bg-white shadow-lg" :style="frameCornerStyle">
+    <div
+      data-test-id="smylr-live-frame-surface"
+      class="absolute inset-0 overflow-hidden"
+      :class="
+        isLiveComponentRuntime
+          ? 'bg-transparent shadow-none'
+          : 'bg-white shadow-[var(--shadow-live-frame)]'
+      "
+      :style="frameCornerStyle"
+    >
       <iframe
         ref="iframeRef"
         :key="iframeKey"
@@ -686,7 +703,9 @@ watch(liveWorkspacePreviewRequest, (request) => {
         :data-live-frame-id="liveFrame.id"
         :data-runtime-kind="isLiveComponentRuntime ? 'component' : 'production'"
         :src="iframeSrc"
-        class="size-full border-0 bg-white"
+        allowtransparency="true"
+        class="size-full border-0"
+        :class="isLiveComponentRuntime ? 'bg-transparent' : 'bg-white'"
         :style="frameIframeStyle"
         :tabindex="
           liveInspectorActiveFrameId === liveFrame.id && liveInspectorInteractionMode === 'interact'
@@ -792,7 +811,7 @@ watch(liveWorkspacePreviewRequest, (request) => {
         @wheel="handleFrameSurfaceWheel"
       />
     </Tip>
-    <Tip label="Frame mode · double-click to center this frame">
+    <Tip v-if="shouldShowCurrentFrameHeader" label="Frame mode · double-click to center this frame">
       <span
         data-test-id="smylr-live-frame-header"
         class="smylr-live-frame-header bg-panel border-border text-surface hover:bg-hover pointer-events-auto absolute left-1/2 z-[2] flex cursor-move items-center gap-0.5 rounded-md border px-1 py-0.5 whitespace-nowrap shadow-sm transition-colors hover:border-violet-500"

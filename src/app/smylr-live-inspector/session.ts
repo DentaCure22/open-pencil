@@ -1,10 +1,14 @@
+import { promiseTimeout } from '@vueuse/core'
 import { computed, ref, shallowRef } from 'vue'
+
+import { IS_BROWSER } from '@open-pencil/core/constants'
 
 import { readCacheJson, writeCacheJson } from '../cache'
 import type {
   SmylrLiveContainerDocument,
   SmylrLiveContainerNode,
   SmylrLiveContainerOwner,
+  SmylrLiveContainerPageFace,
   SmylrLiveContainerRect,
   SmylrLiveContainerSource
 } from '../smylr-live-container/types'
@@ -50,6 +54,7 @@ export type SmylrOpenPencilInspectorCommand = {
     | 'apply-preview-style'
     | 'clear-preview-style'
     | 'hover-at-point'
+    | 'request-snapshot'
     | 'request-tree'
     | 'select-at-point'
     | 'select-node'
@@ -121,12 +126,14 @@ const liveInspectorCommandTarget = shallowRef<{
   origin: string
   target: Window
 } | null>(null)
+const liveInspectorPageFaceListeners = new Set<(pageFace: SmylrLiveContainerPageFace) => void>()
 let liveInspectorPreviewReturnMode: LiveInspectorInteractionMode = 'select'
 let restoredDraftRoute: string | null = null
 let pendingDraftReplay = false
 let pendingRestoredDrafts: LiveInspectorPatchDraft[] = []
 let liveInspectorDraftCoalescing: { key: string; updatedAt: number } | null = null
 let liveInspectorDraftTransaction: { key: string; recorded: boolean } | null = null
+let liveInspectorPersistenceQueue: Promise<void> = Promise.resolve()
 const LAST_DRAFT_CACHE_KEY = 'smylr-live-overrides/current-route'
 
 type CachedLiveInspectorDrafts = {
@@ -134,11 +141,81 @@ type CachedLiveInspectorDrafts = {
   route: string
 }
 
+type LiveInspectorPreviewFrameScheduler = (callback: () => void) => () => void
+
+export type LiveInspectorPreviewScheduler = {
+  flush: () => boolean
+  schedule: (draft: LiveInspectorPatchDraft) => boolean
+}
+
+function scheduleLiveInspectorPreviewFrame(callback: () => void) {
+  if (IS_BROWSER && typeof window.requestAnimationFrame === 'function') {
+    let active = true
+    const frameId = window.requestAnimationFrame(() => {
+      if (!active) return
+      active = false
+      callback()
+    })
+    return () => {
+      active = false
+      if (IS_BROWSER && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }
+
+  let active = true
+  const run = () => {
+    if (!active) return
+    active = false
+    callback()
+  }
+  if (typeof queueMicrotask === 'function') queueMicrotask(run)
+  else setTimeout(run, 0)
+  return () => {
+    active = false
+  }
+}
+
+export function createLiveInspectorPreviewScheduler(
+  post: (draft: LiveInspectorPatchDraft) => void,
+  persist: (draft: LiveInspectorPatchDraft) => void | Promise<void>,
+  scheduleFrame: LiveInspectorPreviewFrameScheduler
+): LiveInspectorPreviewScheduler {
+  let pendingDraft: LiveInspectorPatchDraft | null = null
+  let cancelScheduledFrame: (() => void) | null = null
+
+  function flush() {
+    cancelScheduledFrame?.()
+    cancelScheduledFrame = null
+    const draft = pendingDraft
+    pendingDraft = null
+    if (!draft) return false
+    post(draft)
+    void persist(draft)
+    return true
+  }
+
+  function schedule(draft: LiveInspectorPatchDraft) {
+    pendingDraft = draft
+    if (!cancelScheduledFrame) {
+      cancelScheduledFrame = scheduleFrame(() => {
+        cancelScheduledFrame = null
+        flush()
+      })
+    }
+    return true
+  }
+
+  return { flush, schedule }
+}
+
 function draftCacheKey(route: string) {
   return `smylr-live-overrides/${privacySafeRoute(route)}`
 }
 
 function setLiveInspectorRoute(route: string | null) {
+  liveInspectorPreviewScheduler.flush()
   if (liveInspectorRoute.value !== route) {
     liveInspectorDraftUndoStack.value = []
     liveInspectorDraftRedoStack.value = []
@@ -165,14 +242,24 @@ async function persistLiveInspectorDrafts() {
   if (!route) return
   const entries = [...liveInspectorPatchDrafts.value.entries()]
   // Fountible-style: every accepted draft is durable for the canvas session (no Save gate).
-  await Promise.all([
-    writeCacheJson(draftCacheKey(route), entries),
-    writeCacheJson(LAST_DRAFT_CACHE_KEY, {
-      entries,
-      route: privacySafeRoute(route)
-    } satisfies CachedLiveInspectorDrafts)
-  ])
+  const write = async () => {
+    await Promise.all([
+      writeCacheJson(draftCacheKey(route), entries),
+      writeCacheJson(LAST_DRAFT_CACHE_KEY, {
+        entries,
+        route: privacySafeRoute(route)
+      } satisfies CachedLiveInspectorDrafts)
+    ])
+  }
+  liveInspectorPersistenceQueue = liveInspectorPersistenceQueue.then(write, write)
+  await liveInspectorPersistenceQueue
 }
+
+const liveInspectorPreviewScheduler = createLiveInspectorPreviewScheduler(
+  postLiveInspectorPreview,
+  () => persistLiveInspectorDrafts(),
+  scheduleLiveInspectorPreviewFrame
+)
 
 async function restoreLiveInspectorDrafts(route: string) {
   if (restoredDraftRoute === route || liveInspectorPatchDrafts.value.size > 0) return
@@ -276,6 +363,7 @@ type ClearLiveInspectorDocumentOptions = {
 }
 
 function clearLiveInspectorDocumentState(options: ClearLiveInspectorDocumentOptions = {}) {
+  flushLiveInspectorPreview()
   const drafts = options.preserveDrafts
     ? [...liveInspectorPatchDrafts.value.values()].map(copyLiveInspectorPatchDraft)
     : []
@@ -865,6 +953,22 @@ function receiveLiveInspectorDocument(message: SmylrOpenPencilInspectorMessage) 
   setLiveInspectorRoute(document.route)
 }
 
+function pageFaceForMessage(
+  message: SmylrOpenPencilInspectorMessage
+): SmylrLiveContainerPageFace | undefined {
+  return message.pageFace ?? message.document?.pageFace ?? message.document?.pages?.[0]?.pageFace
+}
+
+function receiveLiveInspectorPageFace(message: SmylrOpenPencilInspectorMessage) {
+  const pageFace = pageFaceForMessage(message)
+  if (!pageFace) return
+  const document = liveInspectorDocument.value
+  if (document?.pageFace !== pageFace) {
+    liveInspectorDocument.value = document ? { ...document, pageFace } : document
+  }
+  for (const listener of liveInspectorPageFaceListeners) listener(pageFace)
+}
+
 export function receiveLiveInspectorMessage(message: SmylrOpenPencilInspectorMessage) {
   if (message.auth?.href) liveInspectorAuthHref.value = message.auth.href
   if (message.auth?.status) liveInspectorAuthStatus.value = message.auth.status
@@ -884,6 +988,7 @@ export function receiveLiveInspectorMessage(message: SmylrOpenPencilInspectorMes
     }
   }
   receiveLiveInspectorDocument(message)
+  receiveLiveInspectorPageFace(message)
   if (message.document && pendingDraftReplay) {
     replayRestoredLiveInspectorDrafts(message.document)
   }
@@ -907,6 +1012,28 @@ export function receiveLiveInspectorMessage(message: SmylrOpenPencilInspectorMes
     liveInspectorSelectionEpoch.value += 1
   } else if (message.selectedId === liveInspectorSelectedId.value && message.selectedRect) {
     liveInspectorSelectedRect.value = message.selectedRect
+  }
+}
+
+/** Ask the active cooperative live frame for pixels, falling back to its latest known face. */
+export async function requestLiveInspectorPageFace(timeoutMs = 1200) {
+  const fallback = liveInspectorDocument.value?.pageFace ?? null
+  let receivePageFace: (pageFace: SmylrLiveContainerPageFace) => void = () => undefined
+  const nextPageFace = new Promise<SmylrLiveContainerPageFace>((resolve) => {
+    receivePageFace = resolve
+    liveInspectorPageFaceListeners.add(resolve)
+  })
+  if (!postLiveInspectorCommand({ action: 'request-snapshot' })) {
+    liveInspectorPageFaceListeners.delete(receivePageFace)
+    return fallback
+  }
+  try {
+    return await Promise.race([
+      nextPageFace,
+      promiseTimeout(timeoutMs).then(() => liveInspectorDocument.value?.pageFace ?? fallback)
+    ])
+  } finally {
+    liveInspectorPageFaceListeners.delete(receivePageFace)
   }
 }
 
@@ -947,6 +1074,7 @@ export function setLiveInspectorInteractionMode(mode: LiveInspectorInteractionMo
 
 export function setLiveInspectorActiveFrame(frameId: string | null) {
   if (liveInspectorActiveFrameId.value === frameId) return
+  flushLiveInspectorPreview()
   // Selection, hover and command routing are frame-local. Keeping these
   // transient values while switching runtimes leaves the previous frame's
   // invisible selection chrome over the new iframe and routes the first
@@ -1068,6 +1196,22 @@ function applyLiveInspectorDraftSnapshot(snapshot: Map<string, LiveInspectorPatc
   void persistLiveInspectorDrafts()
 }
 
+function updateLiveInspectorPatchDraft(
+  draft: LiveInspectorPatchDraft,
+  options: { coalesceKey?: string; label?: string } = {}
+) {
+  const drafts = new Map(liveInspectorPatchDrafts.value)
+  drafts.set(draft.nodeId, copyLiveInspectorPatchDraft(draft))
+  if (!recordLiveInspectorDraftMutation(drafts, options.coalesceKey, options.label, draft.nodeId))
+    return false
+  liveInspectorPatchDrafts.value = drafts
+  return true
+}
+
+export function flushLiveInspectorPreview() {
+  return liveInspectorPreviewScheduler.flush()
+}
+
 export function setLiveInspectorPatchDraft(
   draft: LiveInspectorPatchDraft | null,
   options: { coalesceKey?: string; label?: string } = {}
@@ -1076,15 +1220,13 @@ export function setLiveInspectorPatchDraft(
     clearLiveInspectorPatchDraft()
     return
   }
-  const drafts = new Map(liveInspectorPatchDrafts.value)
-  drafts.set(draft.nodeId, copyLiveInspectorPatchDraft(draft))
-  if (!recordLiveInspectorDraftMutation(drafts, options.coalesceKey, options.label, draft.nodeId))
-    return
-  liveInspectorPatchDrafts.value = drafts
+  flushLiveInspectorPreview()
+  if (!updateLiveInspectorPatchDraft(draft, options)) return
   void persistLiveInspectorDrafts()
 }
 
 export function clearLiveInspectorPatchDraft(nodeId = liveInspectorSelectedId.value ?? undefined) {
+  flushLiveInspectorPreview()
   if (!nodeId) return
   const drafts = new Map(liveInspectorPatchDrafts.value)
   drafts.delete(nodeId)
@@ -1094,6 +1236,7 @@ export function clearLiveInspectorPatchDraft(nodeId = liveInspectorSelectedId.va
 }
 
 export function clearAllLiveInspectorPatchDrafts() {
+  flushLiveInspectorPreview()
   const drafts = new Map<string, LiveInspectorPatchDraft>()
   if (!recordLiveInspectorDraftMutation(drafts)) return
   liveInspectorPatchDrafts.value = drafts
@@ -1106,6 +1249,7 @@ export function clearAllLiveInspectorPatchDrafts() {
  * cannot replay an edit that the user explicitly reset.
  */
 export function resetLiveInspectorToProduction() {
+  flushLiveInspectorPreview()
   const drafts = new Map<string, LiveInspectorPatchDraft>()
   recordLiveInspectorDraftMutation(drafts, undefined, 'Reset Current to production')
   liveInspectorPatchDrafts.value = drafts
@@ -1117,6 +1261,7 @@ export function resetLiveInspectorToProduction() {
 }
 
 export function undoLiveInspectorDraft() {
+  flushLiveInspectorPreview()
   const previous = liveInspectorDraftUndoStack.value.at(-1)
   if (!previous) return false
   liveInspectorDraftCoalescing = null
@@ -1130,6 +1275,7 @@ export function undoLiveInspectorDraft() {
 }
 
 export function redoLiveInspectorDraft() {
+  flushLiveInspectorPreview()
   const next = liveInspectorDraftRedoStack.value.at(-1)
   if (!next) return false
   liveInspectorDraftCoalescing = null
@@ -1169,8 +1315,8 @@ export function previewLiveInspectorDraft(
   draft: LiveInspectorPatchDraft,
   options: { coalesceKey?: string; label?: string } = {}
 ) {
-  setLiveInspectorPatchDraft(draft, options)
-  return postLiveInspectorPreview(draft)
+  updateLiveInspectorPatchDraft(draft, options)
+  return liveInspectorPreviewScheduler.schedule(copyLiveInspectorPatchDraft(draft))
 }
 
 export function resetLiveInspectorPreview(nodeId?: string) {

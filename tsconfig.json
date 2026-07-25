@@ -11,7 +11,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -37,7 +37,7 @@
       "@open-pencil/pen/*": ["./packages/pen/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "packages/dom-css/src/cssom.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "packages/dom-css/src/cssom.d.ts"],
   "references": [
     {
       "path": "./tsconfig.node.json"

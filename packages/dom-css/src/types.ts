@@ -7,6 +7,31 @@ export interface DesignDocument {
   children: DesignNode[]
   stylesheets?: DesignStyleSheet[]
   sourceGraph?: SceneGraph
+  source?: DesignDocumentSource
+}
+
+export interface DesignDocumentSource {
+  kind: 'html' | 'jsx' | 'react'
+  code: string
+  componentName?: string
+  states?: DesignSourceState[]
+  warnings?: string[]
+}
+
+export interface DesignSourceState {
+  index: number
+  initialValue: unknown
+  value: unknown
+}
+
+export interface DesignInteraction {
+  event: string
+  handler: string
+}
+
+export interface DesignStateBinding {
+  field: string
+  stateIndex: number
 }
 
 export interface DesignElement {
@@ -18,11 +43,17 @@ export interface DesignElement {
   computedStyle?: DesignStyleDeclaration
   sourceSceneNodeId?: string
   sourceSceneNode?: SceneNode
+  sourceId?: string
+  sourceComponent?: string
+  interactions?: DesignInteraction[]
+  stateBindings?: DesignStateBinding[]
 }
 
 export interface DesignText {
   type: 'text'
   text: string
+  sourceId?: string
+  sourceComponent?: string
 }
 
 export interface DesignStyleSheet {

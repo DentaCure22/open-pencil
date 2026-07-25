@@ -1,5 +1,6 @@
-import { classifySpatialFile, placeSpatialMediaFiles } from '@/app/spatial-media'
 import { placeSourceObjectFiles } from '@/app/source-object/intake'
+import { classifySpatialFile } from '@/app/spatial-media/classify'
+import { placeSpatialMediaFiles } from '@/app/spatial-media/intake'
 
 import type { BoardFileIntakeAdapter } from './registry'
 

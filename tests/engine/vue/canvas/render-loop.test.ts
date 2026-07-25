@@ -154,6 +154,45 @@ describe('canvas render loop', () => {
     }
   })
 
+  test('overlay-only events render full and overlay layers, coalescing without scene renders', () => {
+    const scheduler = createFrameScheduler()
+    try {
+      const { editor, emit } = createEditor()
+      let fullRenders = 0
+      let sceneRenders = 0
+      let overlayRenders = 0
+      createCanvasRenderLoop(editor, () => {
+        fullRenders++
+      })
+      createCanvasRenderLoop(
+        editor,
+        () => {
+          sceneRenders++
+        },
+        { layer: 'scene' }
+      )
+      createCanvasRenderLoop(
+        editor,
+        () => {
+          overlayRenders++
+        },
+        { layer: 'overlays' }
+      )
+
+      emit('overlay:requested')
+      emit('overlay:requested')
+      emit('overlay:requested')
+
+      expect(scheduler.pendingCount).toBe(1)
+      scheduler.flush()
+      expect(fullRenders).toBe(1)
+      expect(overlayRenders).toBe(1)
+      expect(sceneRenders).toBe(0)
+    } finally {
+      scheduler.restore()
+    }
+  })
+
   test('coalesces multiple canvas surfaces into one animation frame', () => {
     const scheduler = createFrameScheduler()
     try {

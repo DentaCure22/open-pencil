@@ -1,0 +1,1486 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/c8v32f",
+    "id": "c8v32f",
+    "slide": 2,
+    "layoutId": "f193b39a-86c5-4866-a15b-5177166daca8",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "2645efd4-38ac-4c19-8f59-f9bedbba8e83",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Helvetica Neue"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "f193b39a-86c5-4866-a15b-5177166daca8",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "2645efd4-38ac-4c19-8f59-f9bedbba8e83",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "2645efd4-38ac-4c19-8f59-f9bedbba8e83",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ulsv650n",
+      "id": "1",
+      "name": "title",
+      "bbox": [
+        41.33,
+        36.12,
+        1197.33,
+        84
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.0"
+      },
+      "geometry": "rect",
+      "text": "The board owns the deck — not a mini PowerPoint window",
+      "textPreview": "The board owns the deck — not a mini PowerPoint window",
+      "resolvedFontSize": 38.67,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 38.67,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "The board owns the deck — not a mini PowerPoint window"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "The board owns the deck — not a mini PowerPoint window",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 38.67,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "verticalAlignment": "top",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "The board owns the deck — not a mini PowerPoint window",
+              "fontSize": 38.67,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hojuhkje",
+      "id": "2",
+      "name": "intro",
+      "bbox": [
+        42.09,
+        124,
+        1050,
+        94
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.1"
+      },
+      "geometry": "rect",
+      "text": "Ownership test\nIf it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.",
+      "textPreview": "Ownership test | If it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "fontSize": 21.33,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Ownership test"
+          },
+          {
+            "index": 2,
+            "text": "If it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Ownership test",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 550,
+          "resolvedTextStyle": {
+            "fontSize": 21.33,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Ownership test",
+              "fontSize": 18,
+              "typeface": "Helvetica Neue",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "If it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 21.33,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "If it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.",
+              "fontSize": 21.33,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gnad8fit",
+      "id": "3",
+      "name": "card-1",
+      "bbox": [
+        42.94,
+        248.8,
+        580.99,
+        172
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.2"
+      },
+      "geometry": "roundRect",
+      "fillColor": "#D0EDFA"
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7ihcbq1w",
+      "id": "4",
+      "name": "card-copy-1",
+      "bbox": [
+        74.15,
+        275.8,
+        520,
+        116
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.3"
+      },
+      "geometry": "rect",
+      "text": "One ordinary board object\nSelect, move, resize, duplicate, delete, undo — exactly like a frame.",
+      "textPreview": "One ordinary board object | Select, move, resize, duplicate, delete, undo — exactly like a frame.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "One ordinary board object"
+          },
+          {
+            "index": 2,
+            "text": "Select, move, resize, duplicate, delete, undo — exactly like a"
+          },
+          {
+            "index": 3,
+            "text": "frame."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "One ordinary board object",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 900,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "One ordinary board object",
+              "fontSize": 24,
+              "typeface": "Helvetica Neue",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Select, move, resize, duplicate, delete, undo — exactly like a frame.",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Select, move, resize, duplicate, delete, undo — exactly like a frame.",
+              "fontSize": 19,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6h8b2l0r",
+      "id": "5",
+      "name": "card-2",
+      "bbox": [
+        657.68,
+        248.8,
+        580.99,
+        172
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.4"
+      },
+      "geometry": "roundRect",
+      "fillColor": "#F2F2F2"
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tkjud0j2",
+      "id": "6",
+      "name": "card-copy-2",
+      "bbox": [
+        688.89,
+        275.8,
+        520,
+        116
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.5"
+      },
+      "geometry": "rect",
+      "text": "Slides stay editable\nText, images, shapes and order are native data, not a screenshot.",
+      "textPreview": "Slides stay editable | Text, images, shapes and order are native data, not a screenshot.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Slides stay editable"
+          },
+          {
+            "index": 2,
+            "text": "Text, images, shapes and order are native data, not a"
+          },
+          {
+            "index": 3,
+            "text": "screenshot."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Slides stay editable",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 900,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Slides stay editable",
+              "fontSize": 24,
+              "typeface": "Helvetica Neue",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Text, images, shapes and order are native data, not a screenshot.",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Text, images, shapes and order are native data, not a screenshot.",
+              "fontSize": 19,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8jqt4vih",
+      "id": "7",
+      "name": "card-3",
+      "bbox": [
+        42.94,
+        458.8,
+        580.99,
+        172
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.6"
+      },
+      "geometry": "roundRect",
+      "fillColor": "#F2F2F2"
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/juhc7q10",
+      "id": "8",
+      "name": "card-copy-3",
+      "bbox": [
+        74.15,
+        485.8,
+        520,
+        116
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.7"
+      },
+      "geometry": "rect",
+      "text": "The file stays attached\nKeep the original .pptx for round-trip export and reliable recovery.",
+      "textPreview": "The file stays attached | Keep the original .pptx for round-trip export and reliable recovery.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "The file stays attached"
+          },
+          {
+            "index": 2,
+            "text": "Keep the original .pptx for round-trip export and reliable"
+          },
+          {
+            "index": 3,
+            "text": "recovery."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "The file stays attached",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 900,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "The file stays attached",
+              "fontSize": 24,
+              "typeface": "Helvetica Neue",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Keep the original .pptx for round-trip export and reliable recovery.",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Keep the original .pptx for round-trip export and reliable recovery.",
+              "fontSize": 19,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yt8byl0f",
+      "id": "9",
+      "name": "card-4",
+      "bbox": [
+        657.68,
+        458.8,
+        580.99,
+        172
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.8"
+      },
+      "geometry": "roundRect",
+      "fillColor": "#F2F2F2"
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4byto72l",
+      "id": "10",
+      "name": "card-copy-4",
+      "bbox": [
+        688.89,
+        485.8,
+        520,
+        116
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.9"
+      },
+      "geometry": "rect",
+      "text": "No second workspace\nThe deck lives in the same project, board, history and collaboration model.",
+      "textPreview": "No second workspace | The deck lives in the same project, board, history and collaboration model.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "left",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "No second workspace"
+          },
+          {
+            "index": 2,
+            "text": "The deck lives in the same project, board, history and"
+          },
+          {
+            "index": 3,
+            "text": "collaboration model."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "No second workspace",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 900,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "No second workspace",
+              "fontSize": 24,
+              "typeface": "Helvetica Neue",
+              "color": "#000000",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "The deck lives in the same project, board, history and collaboration model.",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "left",
+            "autoFit": "shrinkText",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "The deck lives in the same project, board, history and collaboration model.",
+              "fontSize": 19,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5c7uxcj6",
+      "id": "11",
+      "name": "slide-number",
+      "bbox": [
+        1184,
+        660,
+        54,
+        24
+      ],
+      "composeSource": {
+        "run": 1,
+        "path": "0.10"
+      },
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "#000000",
+        "alignment": "right",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "lineSpacingPercent": 108000,
+          "spaceAfter": 0,
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Helvetica Neue",
+            "color": "#000000",
+            "alignment": "right",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 16,
+              "typeface": "Helvetica Neue",
+              "color": "#000000"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    }
+  ],
+  "composeRuns": [
+    {
+      "index": 1,
+      "frame": {
+        "left": 0,
+        "top": 0,
+        "width": 1280,
+        "height": 720
+      },
+      "baseUnit": 1,
+      "root": {
+        "path": "0",
+        "kind": "layers",
+        "name": "openpencil-ownership-grid",
+        "requestedSize": {
+          "width": {
+            "mode": "fill",
+            "value": 1
+          },
+          "height": {
+            "mode": "fill",
+            "value": 1
+          }
+        },
+        "intrinsicSize": {
+          "width": 1238.67,
+          "height": 684
+        },
+        "frame": {
+          "left": 0,
+          "top": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "children": [
+          {
+            "path": "0.0",
+            "kind": "text",
+            "name": "title",
+            "position": {
+              "left": 41.33,
+              "top": 36.12
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 1197.33
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 84
+              }
+            },
+            "intrinsicSize": {
+              "width": 1197.33,
+              "height": 84
+            },
+            "frame": {
+              "left": 41.33,
+              "top": 36.12,
+              "width": 1197.33,
+              "height": 84
+            },
+            "snappedFrame": {
+              "left": 41.33,
+              "top": 36.12,
+              "width": 1197.33,
+              "height": 84
+            },
+            "children": [],
+            "text": "The board owns the deck — not a mini PowerPoint window",
+            "transform": "none",
+            "element": {
+              "aid": "sh/ulsv650n",
+              "id": "1",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.1",
+            "kind": "text",
+            "name": "intro",
+            "position": {
+              "left": 42.09,
+              "top": 124
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 1050
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 94
+              }
+            },
+            "intrinsicSize": {
+              "width": 1050,
+              "height": 94
+            },
+            "frame": {
+              "left": 42.09,
+              "top": 124,
+              "width": 1050,
+              "height": 94
+            },
+            "snappedFrame": {
+              "left": 42.09,
+              "top": 124,
+              "width": 1050,
+              "height": 94
+            },
+            "children": [],
+            "text": "Ownership test\nIf it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/hojuhkje",
+              "id": "2",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.2",
+            "kind": "shape",
+            "name": "card-1",
+            "position": {
+              "left": 42.94,
+              "top": 248.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 580.99
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 172
+              }
+            },
+            "intrinsicSize": {
+              "width": 580.99,
+              "height": 172
+            },
+            "frame": {
+              "left": 42.94,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "snappedFrame": {
+              "left": 42.94,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "children": [],
+            "geometry": "roundRect",
+            "element": {
+              "aid": "sh/gnad8fit",
+              "id": "3",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.3",
+            "kind": "text",
+            "name": "card-copy-1",
+            "position": {
+              "left": 74.15,
+              "top": 275.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 520
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 116
+              }
+            },
+            "intrinsicSize": {
+              "width": 520,
+              "height": 116
+            },
+            "frame": {
+              "left": 74.15,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            },
+            "snappedFrame": {
+              "left": 74.15,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            },
+            "children": [],
+            "text": "One ordinary board object\nSelect, move, resize, duplicate, delete, undo — exactly like a frame.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/7ihcbq1w",
+              "id": "4",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.4",
+            "kind": "shape",
+            "name": "card-2",
+            "position": {
+              "left": 657.68,
+              "top": 248.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 580.99
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 172
+              }
+            },
+            "intrinsicSize": {
+              "width": 580.99,
+              "height": 172
+            },
+            "frame": {
+              "left": 657.68,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "snappedFrame": {
+              "left": 657.68,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "children": [],
+            "geometry": "roundRect",
+            "element": {
+              "aid": "sh/6h8b2l0r",
+              "id": "5",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.5",
+            "kind": "text",
+            "name": "card-copy-2",
+            "position": {
+              "left": 688.89,
+              "top": 275.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 520
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 116
+              }
+            },
+            "intrinsicSize": {
+              "width": 520,
+              "height": 116
+            },
+            "frame": {
+              "left": 688.89,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            },
+            "snappedFrame": {
+              "left": 688.89,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            },
+            "children": [],
+            "text": "Slides stay editable\nText, images, shapes and order are native data, not a screenshot.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/tkjud0j2",
+              "id": "6",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.6",
+            "kind": "shape",
+            "name": "card-3",
+            "position": {
+              "left": 42.94,
+              "top": 458.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 580.99
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 172
+              }
+            },
+            "intrinsicSize": {
+              "width": 580.99,
+              "height": 172
+            },
+            "frame": {
+              "left": 42.94,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "snappedFrame": {
+              "left": 42.94,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "children": [],
+            "geometry": "roundRect",
+            "element": {
+              "aid": "sh/8jqt4vih",
+              "id": "7",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.7",
+            "kind": "text",
+            "name": "card-copy-3",
+            "position": {
+              "left": 74.15,
+              "top": 485.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 520
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 116
+              }
+            },
+            "intrinsicSize": {
+              "width": 520,
+              "height": 116
+            },
+            "frame": {
+              "left": 74.15,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            },
+            "snappedFrame": {
+              "left": 74.15,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            },
+            "children": [],
+            "text": "The file stays attached\nKeep the original .pptx for round-trip export and reliable recovery.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/juhc7q10",
+              "id": "8",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.8",
+            "kind": "shape",
+            "name": "card-4",
+            "position": {
+              "left": 657.68,
+              "top": 458.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 580.99
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 172
+              }
+            },
+            "intrinsicSize": {
+              "width": 580.99,
+              "height": 172
+            },
+            "frame": {
+              "left": 657.68,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "snappedFrame": {
+              "left": 657.68,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            },
+            "children": [],
+            "geometry": "roundRect",
+            "element": {
+              "aid": "sh/yt8byl0f",
+              "id": "9",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.9",
+            "kind": "text",
+            "name": "card-copy-4",
+            "position": {
+              "left": 688.89,
+              "top": 485.8
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 520
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 116
+              }
+            },
+            "intrinsicSize": {
+              "width": 520,
+              "height": 116
+            },
+            "frame": {
+              "left": 688.89,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            },
+            "snappedFrame": {
+              "left": 688.89,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            },
+            "children": [],
+            "text": "No second workspace\nThe deck lives in the same project, board, history and collaboration model.",
+            "transform": "none",
+            "element": {
+              "aid": "sh/4byto72l",
+              "id": "10",
+              "kind": "shape"
+            }
+          },
+          {
+            "path": "0.10",
+            "kind": "text",
+            "name": "slide-number",
+            "position": {
+              "left": 1184,
+              "top": 660
+            },
+            "requestedSize": {
+              "width": {
+                "mode": "fixed",
+                "value": 54
+              },
+              "height": {
+                "mode": "fixed",
+                "value": 24
+              }
+            },
+            "intrinsicSize": {
+              "width": 54,
+              "height": 24
+            },
+            "frame": {
+              "left": 1184,
+              "top": 660,
+              "width": 54,
+              "height": 24
+            },
+            "snappedFrame": {
+              "left": 1184,
+              "top": 660,
+              "width": 54,
+              "height": 24
+            },
+            "children": [],
+            "text": "02",
+            "transform": "none",
+            "element": {
+              "aid": "sh/5c7uxcj6",
+              "id": "11",
+              "kind": "shape"
+            }
+          }
+        ],
+        "padding": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        },
+        "alignItems": "stretch",
+        "justifyItems": "stretch",
+        "contentFrame": {
+          "left": 0,
+          "top": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "items": [
+          {
+            "path": "0.0",
+            "frame": {
+              "left": 41.33,
+              "top": 36.12,
+              "width": 1197.33,
+              "height": 84
+            }
+          },
+          {
+            "path": "0.1",
+            "frame": {
+              "left": 42.09,
+              "top": 124,
+              "width": 1050,
+              "height": 94
+            }
+          },
+          {
+            "path": "0.2",
+            "frame": {
+              "left": 42.94,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            }
+          },
+          {
+            "path": "0.3",
+            "frame": {
+              "left": 74.15,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            }
+          },
+          {
+            "path": "0.4",
+            "frame": {
+              "left": 657.68,
+              "top": 248.8,
+              "width": 580.99,
+              "height": 172
+            }
+          },
+          {
+            "path": "0.5",
+            "frame": {
+              "left": 688.89,
+              "top": 275.8,
+              "width": 520,
+              "height": 116
+            }
+          },
+          {
+            "path": "0.6",
+            "frame": {
+              "left": 42.94,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            }
+          },
+          {
+            "path": "0.7",
+            "frame": {
+              "left": 74.15,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            }
+          },
+          {
+            "path": "0.8",
+            "frame": {
+              "left": 657.68,
+              "top": 458.8,
+              "width": 580.99,
+              "height": 172
+            }
+          },
+          {
+            "path": "0.9",
+            "frame": {
+              "left": 688.89,
+              "top": 485.8,
+              "width": 520,
+              "height": 116
+            }
+          },
+          {
+            "path": "0.10",
+            "frame": {
+              "left": 1184,
+              "top": 660,
+              "width": 54,
+              "height": 24
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

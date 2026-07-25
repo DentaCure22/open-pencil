@@ -97,4 +97,18 @@ describe('Smylr production view tool state', () => {
       pageId: 'dental-chart-base'
     })
   })
+
+  test('preserves an ordinary board as the active production workspace view', async () => {
+    const store = createProductionStore()
+    const boardId = store.addPage('Product Map')
+    const board = store.graph.getNode(boardId)
+    const saved = captureSmylrProductionView(store)
+
+    expect(smylrProductionPageView(board)).toEqual({ kind: 'ordinary-board', pageId: boardId })
+    expect(saved?.location).toEqual({ kind: 'ordinary-board', pageId: boardId })
+
+    await store.switchPage(store.graph.getPages()[0]?.id ?? '')
+    expect(await applySmylrProductionView(store, saved)).toBe(true)
+    expect(store.state.currentPageId).toBe(boardId)
+  })
 })

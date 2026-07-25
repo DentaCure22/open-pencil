@@ -5,7 +5,7 @@ const editor = useEditorSetup('/?blank')
 test('shows the animated start canvas on a normal empty OpenPencil board', async () => {
   const dither = editor.page.getByTestId('animated-dither-background')
   const scene = editor.page.getByTestId('scene-canvas-element')
-  await expect(editor.page.getByTestId('html-first-canvas-welcome')).toBeVisible()
+  await expect(editor.page.getByTestId('empty-board-start')).toBeVisible()
   await expect(dither).toBeVisible()
   await expect(dither).toHaveAttribute('data-presentation', 'surface')
   expect(
@@ -18,12 +18,13 @@ test('shows the animated start canvas on a normal empty OpenPencil board', async
   await expect(editor.page.getByTestId('board-dock')).toHaveCount(0)
 })
 
-test('restores the editor chrome after creating the first live board', async () => {
-  await editor.page.getByTestId('html-first-canvas-start').click()
+test('restores the editor chrome after creating the first Code Object', async () => {
+  await editor.page.getByTestId('code-object-start').click()
 
-  await expect(editor.page.getByTestId('html-board-frame')).toBeVisible()
-  await expect(editor.page.getByTestId('html-first-canvas-welcome')).toBeHidden()
+  await expect(editor.page.locator('[data-code-object-root]')).toBeVisible()
+  await expect(editor.page.getByTestId('empty-board-start')).toBeHidden()
   await expect(editor.page.getByTestId('layers-shell')).toBeVisible()
   await expect(editor.page.getByTestId('toolbar')).toBeVisible()
   await expect(editor.page.getByTestId('board-dock')).toBeVisible()
+  await expect(editor.page.getByRole('tab', { name: 'Code' })).toBeVisible()
 })

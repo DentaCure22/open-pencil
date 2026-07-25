@@ -16,6 +16,7 @@ import {
   liveInspectorSelectedRect,
   hoveredLiveInspectorNode,
   hoveredLiveInspectorRect,
+  flushLiveInspectorPreview,
   previewLiveInspectorDraft,
   redoLiveInspectorDraft,
   selectedLiveInspectorNode,
@@ -25,6 +26,7 @@ import {
   findCurrentSmylrLiveAppFrame,
   isSmylrLiveAppFrameNode
 } from '@/app/smylr-production/workspace'
+import SmylrLiveSpacingMeasurements from '@/components/smylr-live-container-overlay/SmylrLiveSpacingMeasurements.vue'
 import Tip from '@/components/ui/Tip.vue'
 
 type CornerHandle = 'nw' | 'ne' | 'se' | 'sw'
@@ -54,6 +56,10 @@ type MoveDrag = {
   startClientY: number
   startRectX: number
   startRectY: number
+}
+type AlignmentGuide = {
+  id: string
+  style: Record<string, string>
 }
 
 const MIN_CONTAINER_SIZE = 24
@@ -90,6 +96,11 @@ const displayedRect = computed(() => liveInspectorSelectedRect.value)
 const isHoverPreview = computed(() => Boolean(hoveredLiveInspectorNode.value))
 const selectedSize = computed(() => previewSize.value ?? liveInspectorSelectedRect.value)
 const displayedSize = computed(() => selectedSize.value)
+const displayedPosition = computed(() => {
+  const rect = displayedRect.value
+  if (!rect) return null
+  return previewPosition.value ?? { x: rect.x, y: rect.y }
+})
 const liveFrame = computed(() => {
   const activeFrameId = liveInspectorActiveFrameId.value
   const activeFrame = activeFrameId ? store.graph.getNode(activeFrameId) : null
@@ -165,11 +176,11 @@ const overlayLabelStyle = computed(() => {
     padding: `${2 / zoom}px ${6 / zoom}px`
   }
 })
-const alignmentGuides = computed(() => {
-  const rect = displayedRect.value
+const alignmentGuides = computed<AlignmentGuide[]>(() => {
+  const position = displayedPosition.value
   const size = displayedSize.value
   const frame = liveFrame.value
-  if (!rect || !size || !frame) return []
+  if (!position || !size || !frame) return []
   const stroke = 1 / Math.max(store.state.zoom, 0.01)
   const common = { backgroundColor: 'var(--color-accent)', opacity: '0.38' }
   return [
@@ -178,7 +189,7 @@ const alignmentGuides = computed(() => {
       style: {
         ...common,
         height: `${stroke}px`,
-        left: `${-rect.x}px`,
+        left: `${-position.x}px`,
         top: '0px',
         width: `${frame.width}px`
       }
@@ -189,7 +200,7 @@ const alignmentGuides = computed(() => {
         ...common,
         height: `${frame.height}px`,
         left: `${size.width}px`,
-        top: `${-rect.y}px`,
+        top: `${-position.y}px`,
         width: `${stroke}px`
       }
     },
@@ -198,7 +209,7 @@ const alignmentGuides = computed(() => {
       style: {
         ...common,
         height: `${stroke}px`,
-        left: `${-rect.x}px`,
+        left: `${-position.x}px`,
         top: `${size.height}px`,
         width: `${frame.width}px`
       }
@@ -209,7 +220,7 @@ const alignmentGuides = computed(() => {
         ...common,
         height: `${frame.height}px`,
         left: '0px',
-        top: `${-rect.y}px`,
+        top: `${-position.y}px`,
         width: `${stroke}px`
       }
     }
@@ -519,6 +530,7 @@ function redoSelectedEdit() {
 function endResize(event: PointerEvent) {
   if (rotateDrag.value?.pointerId === event.pointerId) {
     rotateDrag.value = null
+    flushLiveInspectorPreview()
     return
   }
   const move = moveDrag.value
@@ -533,11 +545,16 @@ function endResize(event: PointerEvent) {
       applyDropLayer(move, event)
     }
     moveDrag.value = null
+    flushLiveInspectorPreview()
     return
   }
   const drag = resizeDrag.value
-  if (!drag || drag.pointerId !== event.pointerId) return
+  if (!drag || drag.pointerId !== event.pointerId) {
+    flushLiveInspectorPreview()
+    return
+  }
   resizeDrag.value = null
+  flushLiveInspectorPreview()
 }
 
 watch(liveInspectorSelectedId, () => {
@@ -592,6 +609,19 @@ onUnmounted(() => {
       data-test-id="smylr-live-alignment-guide"
       class="pointer-events-none absolute"
       :style="guide.style"
+    />
+    <SmylrLiveSpacingMeasurements
+      v-if="displayedPosition && displayedSize && liveFrame"
+      :children="displayedNode.children"
+      :computed-style="displayedNode.computedStyle"
+      :frame-height="liveFrame.height"
+      :frame-width="liveFrame.width"
+      :height="displayedSize.height"
+      :offset-x="displayedPosition.x"
+      :offset-y="displayedPosition.y"
+      :preview-style="liveInspectorPatchDraft?.styles"
+      :width="displayedSize.width"
+      :zoom="store.state.zoom"
     />
     <Tip label="Drag to move · drop above target · Shift-drop below">
       <div

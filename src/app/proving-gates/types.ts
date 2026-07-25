@@ -1,6 +1,9 @@
 export type DogfoodExecutionKind = 'automated' | 'human'
 export type DogfoodAttestationKind =
-  'authenticated-session' | 'automated-run' | 'observed-session' | 'self-report'
+  | 'authenticated-session'
+  | 'automated-run'
+  | 'observed-session'
+  | 'self-report'
 
 export type DogfoodOutcome = 'abandoned' | 'failed' | 'passed'
 
@@ -56,8 +59,7 @@ export type PromotionGateDefinition = {
   requireVisualAcceptance: boolean
 }
 
-export type PromotionGateStatus =
-  'candidate' | 'failed' | 'not-ready' | 'provisional'
+export type PromotionGateStatus = 'candidate' | 'failed' | 'not-ready' | 'provisional'
 
 export type PromotionGateEvaluation = {
   definitionId: string

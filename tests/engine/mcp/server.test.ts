@@ -196,8 +196,13 @@ describe('MCP server', () => {
     expect(names).toContain('get_page_tree')
     expect(names).toContain('render')
     expect(names).toContain('insert_mermaid_diagram')
+    expect(names).toContain('query_trace_history')
     expect(names).toContain('get_codegen_prompt')
     expect(tools.length).toBeGreaterThan(30)
+    const mermaid = tools.find((tool) => tool.name === 'insert_mermaid_diagram')
+    expect(Object.keys(mermaid?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(['board_name', 'owner_id', 'project_name', 'source', 'x', 'y'])
+    )
   })
 
   test('tools have descriptions and input schemas', async () => {

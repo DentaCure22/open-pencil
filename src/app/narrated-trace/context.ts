@@ -1,8 +1,16 @@
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
+import { compactNarratedTraceSession } from './compaction'
 import type { NarratedTraceContextEntry, NarratedTraceEvent, NarratedTraceSession } from './types'
 
 const MAX_TARGET_PATH_PARTS = 5
+const MAX_CHANGE_VALUE_LENGTH = 180
+const MAX_CONTEXT_BYTES = 32_768
+const MAX_CONTEXT_FIELD_LENGTH = 360
+const MAX_CONTEXT_LINES = 256
+const MAX_EXACT_CHANGE_LINES = 80
+const MAX_TARGET_LINES = 40
+const MAX_TIMELINE_LINES = 120
 const CANCELLATION_PATTERN =
   /\b(never mind|move it back|put it back|undo that|revert that|cancel that)\b/i
 
@@ -32,24 +40,30 @@ function eventText(session: NarratedTraceSession, event: NarratedTraceEvent): st
   return entry?.editedText?.trim() || event.text?.trim() || event.label
 }
 
+function compactContextField(value: string, maximum = MAX_CONTEXT_FIELD_LENGTH) {
+  const compact = value.replace(/\s+/g, ' ').trim()
+  if (compact.length <= maximum) return compact
+  return `${compact.slice(0, maximum - 1).trimEnd()}…`
+}
+
 function displayTargetPath(event: NarratedTraceEvent): string | null {
   const target = event.target
   if (!target) return null
   const collapsedPath = target.path.filter((part, index) => part !== target.path[index - 1])
   const visiblePath = collapsedPath.slice(-MAX_TARGET_PATH_PARTS)
   const prefix = collapsedPath.length > visiblePath.length ? '… / ' : ''
-  return `${prefix}${visiblePath.join(' / ') || target.name}`
+  return compactContextField(`${prefix}${visiblePath.join(' / ') || target.name}`)
 }
 
 function targetLine(event: NarratedTraceEvent): string | null {
   const target = event.target
   if (!target) return null
   const path = displayTargetPath(event) ?? target.name
-  return `- ${path} (${target.stableId})`
+  return `- ${path} (${compactContextField(target.stableId)})`
 }
 
 function timelineLine(session: NarratedTraceSession, event: NarratedTraceEvent): string {
-  const text = eventText(session, event)
+  const text = compactContextField(eventText(session, event))
   const targetName = event.target?.name
   const targetSuffix =
     targetName && !text.toLowerCase().includes(targetName.toLowerCase()) ? ` — ${targetName}` : ''
@@ -69,10 +83,23 @@ function changeLines(event: NarratedTraceEvent): string[] {
   const target = displayTargetPath(event) ?? event.target?.name ?? 'Canvas'
   return (event.changes ?? []).flatMap((change, index) => {
     if (!isMeaningfulChange(event, index)) return []
-    const before = change.before ?? 'unknown'
-    const after = change.after ?? 'removed'
+    const before = compactChangeValue(change.before ?? 'unknown')
+    const after = compactChangeValue(change.after ?? 'removed')
     return [`- ${target}.${change.property}: ${before} -> ${after}`]
   })
+}
+
+function compactChangeValue(value: string) {
+  return compactContextField(value, MAX_CHANGE_VALUE_LENGTH)
+}
+
+function boundedLines(lines: string[], maximum: number, noun: string) {
+  if (lines.length <= maximum) return lines
+  const omitted = lines.length - maximum
+  return [
+    ...lines.slice(0, maximum),
+    `- … ${omitted} additional ${noun}${omitted === 1 ? '' : 's'} omitted.`
+  ]
 }
 
 function roundedRect(rect: Rect): string {
@@ -84,13 +111,13 @@ function evidenceLine(event: NarratedTraceEvent): string | null {
   if (!evidence) return null
 
   const targetPath = evidence.targetPath?.join(' / ')
-  const target = targetPath || event.target?.name || 'Canvas'
-  const targetId = evidence.targetStableId || event.target?.stableId
-  const annotationPoints = Array.isArray(evidence.annotation?.points)
+  const target = compactContextField(targetPath || event.target?.name || 'Canvas')
+  const targetId = compactContextField(evidence.targetStableId || event.target?.stableId || '')
+  const annotationPoints = Array.isArray(evidence.annotation.points)
     ? evidence.annotation.points
     : []
   let annotation = 'visual annotation'
-  if (evidence.annotation?.kind === 'focus') {
+  if (evidence.annotation.kind === 'focus') {
     annotation =
       annotationPoints.length > 0
         ? `focus trail with ${annotationPoints.length} points`
@@ -102,33 +129,71 @@ function evidenceLine(event: NarratedTraceEvent): string | null {
     evidence.omissions.length > 0
       ? `; ${evidence.omissions.length} privacy region${evidence.omissions.length === 1 ? '' : 's'} omitted`
       : ''
+  const anchor = event.anchor
+    ? `; page ${Math.round(event.anchor.pagePoint.x)},${Math.round(event.anchor.pagePoint.y)}; region ${roundedRect(event.anchor.pageRegion)}${
+        event.anchor.targetRelativePoint
+          ? `; target-relative ${event.anchor.targetRelativePoint.x.toFixed(3)},${event.anchor.targetRelativePoint.y.toFixed(3)}`
+          : ''
+      }`
+    : ''
 
-  return `- ${formatNarratedTraceTime(event.atMs)} — ${annotation} on ${target}${targetId ? ` (${targetId})` : ''}; evidence ${evidence.evidenceId}; crop ${roundedRect(evidence.cropBounds)}; ${evidence.width}x${evidence.height} PNG${omissions}`
+  return `- ${formatNarratedTraceTime(event.atMs)} — ${annotation} on ${target}${targetId ? ` (${targetId})` : ''}; evidence ${compactContextField(evidence.evidenceId)}; crop ${roundedRect(evidence.cropBounds)}; ${evidence.width}x${evidence.height} PNG${anchor}${omissions}`
+}
+
+function finalizeContextMarkdown(lines: string[]) {
+  const encoder = new TextEncoder()
+  const marker = '- … Additional context omitted to keep this clipboard handoff focused.'
+  const output = [...lines]
+  let truncated = false
+  while (output.length > MAX_CONTEXT_LINES - 2) {
+    output.pop()
+    truncated = true
+  }
+  const fitsByteBudget = () =>
+    encoder.encode(`${[...output, ...(truncated ? ['', marker] : [])].join('\n')}\n`).byteLength <=
+    MAX_CONTEXT_BYTES
+  while (output.length > 1 && !fitsByteBudget()) {
+    output.pop()
+    truncated = true
+  }
+  return `${[...output, ...(truncated ? ['', marker] : [])].join('\n')}\n`
 }
 
 export function buildNarratedContextMarkdown(session: NarratedTraceSession | null): string {
   if (!session) return '# OpenPencil Narrated Context\n\nNo narrated context was recorded.'
 
-  const events = includedEvents(session)
-  const targetLines = Array.from(
-    new Set(events.map(targetLine).filter((line): line is string => line !== null))
+  const compactedSession = compactNarratedTraceSession(session)
+  const events = includedEvents(compactedSession)
+  const targetLines = boundedLines(
+    Array.from(new Set(events.map(targetLine).filter((line): line is string => line !== null))),
+    MAX_TARGET_LINES,
+    'target'
   )
-  const exactChanges = events.flatMap(changeLines)
+  const exactChanges = boundedLines(
+    events.flatMap(changeLines),
+    MAX_EXACT_CHANGE_LINES,
+    'exact change'
+  )
+  const timelineLines = boundedLines(
+    events.map((event) => timelineLine(compactedSession, event)),
+    MAX_TIMELINE_LINES,
+    'timeline moment'
+  )
   const evidenceLines = events.map(evidenceLine).filter((line): line is string => line !== null)
   const reviewFlags = events.flatMap((event) => {
-    const text = eventText(session, event)
+    const text = eventText(compactedSession, event)
     if (event.kind !== 'transcript' || !CANCELLATION_PATTERN.test(text)) return []
     return [`- ${formatNarratedTraceTime(event.atMs)} — Possible cancellation: “${text}”`]
   })
   const notes = events.flatMap((event) => {
-    const note = contextEntryFor(session, event.id)?.note?.trim()
-    return note ? [`- ${formatNarratedTraceTime(event.atMs)} — ${note}`] : []
+    const note = contextEntryFor(compactedSession, event.id)?.note?.trim()
+    return note ? [`- ${formatNarratedTraceTime(event.atMs)} — ${compactContextField(note)}`] : []
   })
 
   const sections = [
     '# OpenPencil Narrated Context',
     '',
-    ...(session.title?.trim() ? [`Trace: ${session.title.trim()}`] : []),
+    ...(session.title?.trim() ? [`Trace: ${compactContextField(session.title)}`] : []),
     `Session started: ${session.startedAt}`,
     `Duration: ${formatNarratedTraceTime(session.durationMs)}`,
     '',
@@ -136,9 +201,7 @@ export function buildNarratedContextMarkdown(session: NarratedTraceSession | nul
     ...(targetLines.length > 0 ? targetLines : ['- No semantic targets were included.']),
     '',
     '## Timeline',
-    ...(events.length > 0
-      ? events.map((event) => timelineLine(session, event))
-      : ['- No timeline entries were included.']),
+    ...(events.length > 0 ? timelineLines : ['- No timeline entries were included.']),
     ...(reviewFlags.length > 0 ? ['', '## Review flags', ...reviewFlags] : []),
     ...(evidenceLines.length > 0
       ? [
@@ -148,12 +211,11 @@ export function buildNarratedContextMarkdown(session: NarratedTraceSession | nul
           '- Image crops remain in the local Narrated Trace session; attach them separately when pixel inspection is needed.'
         ]
       : []),
+    ...(notes.length > 0 ? ['', '## Clarifications', ...notes] : []),
     '',
     '## Exact changes',
     ...(exactChanges.length > 0 ? exactChanges : ['- No exact changes were included.'])
   ]
 
-  if (notes.length > 0) sections.push('', '## Clarifications', ...notes)
-
-  return `${sections.join('\n')}\n`
+  return finalizeContextMarkdown(sections)
 }

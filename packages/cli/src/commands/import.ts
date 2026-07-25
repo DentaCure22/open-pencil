@@ -7,6 +7,8 @@ import {
   createHeadlessCSSRuntime,
   htmlToDesignDocument,
   htmlToSceneGraph,
+  reactSourceToDesignDocument,
+  reactSourceToSceneGraph,
   tailwindHTMLToDesignDocument,
   tailwindHTMLToSceneGraph,
   type DesignDocument
@@ -27,6 +29,7 @@ interface ImportArgs {
   tailwind?: string
   tailwindFile?: string
   pageName: string
+  react?: boolean
   json?: boolean
 }
 
@@ -60,25 +63,41 @@ function childCount(document: DesignDocument): number {
   return document.children.length
 }
 
-async function importHTML(args: ImportArgs) {
+function isReactInput(args: ImportArgs): boolean {
+  if (args.react) return true
+  return ['.jsx', '.tsx'].includes(extname(requireFile(args.file)).toLowerCase())
+}
+
+async function importSource(args: ImportArgs) {
   const file = requireFile(args.file)
-  const html = await readTextFile(file)
+  const source = await readTextFile(file)
   const runtime = createHeadlessCSSRuntime()
   const tailwind = await tailwindCandidatesForArgs(args)
   const cssText = await cssTextForArgs(args)
 
+  if (isReactInput(args)) {
+    const options = { cssText, runtime, pageName: args.pageName }
+    return {
+      document: await reactSourceToDesignDocument(source, options),
+      graph: await reactSourceToSceneGraph(source, options),
+      sourceKind: 'react' as const
+    }
+  }
+
   if (tailwind) {
     const options = { ...args, css: cssText, runtime }
     return {
-      document: await tailwindHTMLToDesignDocument(html, tailwind, options),
-      graph: await tailwindHTMLToSceneGraph(html, tailwind, options)
+      document: await tailwindHTMLToDesignDocument(source, tailwind, options),
+      graph: await tailwindHTMLToSceneGraph(source, tailwind, options),
+      sourceKind: 'html' as const
     }
   }
 
   const options = { cssText, runtime, pageName: args.pageName }
   return {
-    document: await htmlToDesignDocument(html, options),
-    graph: await htmlToSceneGraph(html, options)
+    document: await htmlToDesignDocument(source, options),
+    graph: await htmlToSceneGraph(source, options),
+    sourceKind: 'html' as const
   }
 }
 
@@ -101,7 +120,7 @@ async function writeOutput(
 }
 
 export default defineCommand({
-  meta: { description: 'Import HTML/CSS/Tailwind into an OpenPencil document' },
+  meta: { description: 'Import React/TSX or HTML/CSS/Tailwind as native editable layers' },
   args: {
     file: {
       type: 'positional',
@@ -145,6 +164,10 @@ export default defineCommand({
       description: 'Scene graph page name (default: DOM/CSS)',
       default: 'DOM/CSS'
     },
+    react: {
+      type: 'boolean',
+      description: 'Treat the input as a trusted, self-contained React/TSX module'
+    },
     json: {
       type: 'boolean',
       description: 'Print a machine-readable summary to stdout'
@@ -157,13 +180,14 @@ export default defineCommand({
       process.exit(1)
     }
 
-    const { document, graph } = await importHTML(args)
+    const { document, graph, sourceKind } = await importSource(args)
     const output = await writeOutput(args, document, graph)
     const pages = graph.getPages()
     const summary = {
       input: requireFile(args.file),
       output,
       format,
+      sourceKind,
       pages: pages.length,
       rootElements: childCount(document)
     }

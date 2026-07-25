@@ -13,8 +13,9 @@ import type {
   ResolvedExperienceFamilyV1,
   SurfaceRun,
   WorkspaceRelation,
-  WorkspaceObjectRevisionRef,
+  WorkspaceObjectRevisionRef
 } from '@/app/workspace'
+
 import type { StaticAnswerBaselineView } from './comparison'
 
 export type RecordLearningReceiptRequest = {

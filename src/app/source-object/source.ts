@@ -72,7 +72,7 @@ export function sourceObjectSource(
   return {
     assetHash,
     byteLength: Number.isSafeInteger(byteLength) && byteLength >= 0 ? byteLength : null,
-    fileName: metadata.fileName ?? 'Untitled source',
+    fileName: metadata.fileName ?? 'Untitled file',
     metadata
   }
 }

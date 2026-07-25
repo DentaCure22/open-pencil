@@ -5,6 +5,8 @@ import {
   beginNarratedTraceSession,
   buildNarratedTraceReviewSummary,
   buildNarratedContextMarkdown,
+  compactNarratedTraceSession,
+  findNarratedTraceLiveTarget,
   finishNarratedTraceSession,
   narratedTraceSession,
   narratedTracePointsPath,
@@ -287,6 +289,129 @@ describe('Narrated Trace context', () => {
     )
     expect(narratedTraceSession.value?.events[0]?.durationMs).toBe(4000)
     finishNarratedTraceSession()
+  })
+
+  test('groups generated multi-layer refreshes into one bounded background moment', () => {
+    beginNarratedTraceSession()
+    for (let index = 0; index < 40; index += 1) {
+      appendNarratedTraceEvent({
+        atMs: 63_000,
+        changes: [{ after: String(index + 1), before: String(index), property: 'width' }],
+        kind: 'edit',
+        label: `Edited generated layer ${index}`,
+        target: {
+          name: `Generated layer ${index}`,
+          path: ['Document', `Generated layer ${index}`],
+          stableId: `generated-${index}`
+        }
+      })
+    }
+
+    expect(narratedTraceSession.value?.events).toHaveLength(1)
+    expect(narratedTraceSession.value?.events[0]).toMatchObject({
+      groupedEventCount: 40,
+      groupedTargetCount: 40,
+      kind: 'sync',
+      label: 'Grouped 40 canvas changes across 40 layers'
+    })
+    expect(narratedTraceSession.value?.contextDraft).toHaveLength(1)
+    expect(buildNarratedContextMarkdown(narratedTraceSession.value)).toContain(
+      'Grouped 40 canvas changes across 40 layers'
+    )
+    expect(buildNarratedContextMarkdown(narratedTraceSession.value)).not.toContain(
+      'Generated layer 39.width'
+    )
+    finishNarratedTraceSession()
+  })
+
+  test('compacts legacy refresh noise without discarding curated moments', () => {
+    const legacy = sampleSession()
+    const generatedEvents = Array.from({ length: 24 }, (_, index) => ({
+      atMs: 30_000,
+      changes: [{ after: 'new', before: 'old', property: 'strokes' }],
+      id: `legacy-generated-${index}`,
+      kind: 'edit' as const,
+      label: `Edited legacy layer ${index}`,
+      target: {
+        name: `Legacy layer ${index}`,
+        path: ['Document', `Legacy layer ${index}`],
+        stableId: `legacy-layer-${index}`
+      }
+    }))
+    legacy.events.push(...generatedEvents)
+    legacy.contextDraft.push(
+      ...generatedEvents.map((event) => ({
+        included: true,
+        removed: false,
+        sourceEventId: event.id
+      }))
+    )
+
+    const compacted = compactNarratedTraceSession(legacy)
+    expect(compacted.events).toHaveLength(4)
+    expect(compacted.events.at(-1)).toMatchObject({
+      groupedEventCount: 24,
+      kind: 'sync'
+    })
+    expect(compacted.events[0]?.text).toBe('This needs more room.')
+  })
+
+  test('hard-caps copied context while preserving the earliest narrated intent', () => {
+    const session = sampleSession()
+    for (let index = 0; index < 220; index += 1) {
+      const id = `annotated-moment-${index}`
+      session.events.push({
+        atMs: 20_000 + index,
+        id,
+        kind: 'transcript',
+        label: `Supporting thought ${index} ${'detail '.repeat(120)}`,
+        text: `Supporting thought ${index} ${'detail '.repeat(120)}`
+      })
+      session.contextDraft.push({
+        included: true,
+        note: `Clarification ${index} ${'note '.repeat(120)}`,
+        removed: false,
+        sourceEventId: id
+      })
+    }
+
+    const markdown = buildNarratedContextMarkdown(session)
+
+    expect(markdown).toContain('Increase the patient header spacing.')
+    expect(markdown).toContain('Additional context omitted')
+    expect(markdown.split('\n').length).toBeLessThanOrEqual(257)
+    expect(new TextEncoder().encode(markdown).byteLength).toBeLessThanOrEqual(32_768)
+  })
+
+  test('resolves the smallest live container enclosing a focus region', () => {
+    const target = findNarratedTraceLiveTarget(
+      {
+        children: [
+          {
+            children: [
+              {
+                id: 'button',
+                label: 'Save button',
+                rect: { height: 48, width: 100, x: 12, y: 12 }
+              }
+            ],
+            id: 'card',
+            label: 'Patient card',
+            rect: { height: 260, width: 320, x: 40, y: 50 }
+          }
+        ],
+        id: 'root',
+        label: 'Dental chart',
+        rect: { height: 900, width: 1280, x: 0, y: 0 }
+      },
+      { height: 90, width: 150, x: 45, y: 55 }
+    )
+
+    expect(target).toMatchObject({
+      node: { id: 'card' },
+      path: ['Dental chart', 'Patient card'],
+      rect: { height: 260, width: 320, x: 40, y: 50 }
+    })
   })
 
   test('cleans noisy real-session output and flags spoken cancellations', () => {

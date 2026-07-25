@@ -7,7 +7,6 @@ import { useSceneComputed, useSelectionState } from '@open-pencil/vue'
 import { useAIChat } from '@/app/ai/chat/use'
 import { isMermaidDiagramNode } from '@/app/diagram/mermaid/selection'
 import { useEditorStore } from '@/app/editor/active-store'
-import { isHtmlBoardFrame } from '@/app/html-board/workspace'
 import { selectedSourceDocument } from '@/app/source-document/workspace'
 import { displayNameForLiveNode } from '@/app/smylr-live-inspector/layer-bridge'
 import {
@@ -31,11 +30,6 @@ const { activeTab } = useAIChat()
 const { selectedNode, selectedCount } = useSelectionState()
 const contextTab = ref<ContextTab>('design')
 
-const htmlBoardSelected = useSceneComputed(() => {
-  void store.state.sceneVersion
-  const ids = [...store.state.selectedIds]
-  return ids.length === 1 && isHtmlBoardFrame(store.graph.getNode(ids[0]))
-})
 const sourceDocumentSelected = useSceneComputed(() => {
   void store.state.sceneVersion
   return Boolean(selectedSourceDocument(store))
@@ -48,7 +42,7 @@ const mermaidDiagramSelected = useSceneComputed(() => {
 const codeTabVisible = computed(
   () => (showCodeTab || sourceDocumentSelected.value) && !mermaidDiagramSelected.value
 )
-const codeTabLabel = computed(() => (sourceDocumentSelected.value ? 'Source' : 'HTML'))
+const codeTabLabel = computed(() => (sourceDocumentSelected.value ? 'Source' : 'Code'))
 
 const selectionLabel = computed(() => {
   const liveNode = selectedLiveInspectorNode.value
@@ -74,16 +68,7 @@ watch(
 watch(
   mermaidDiagramSelected,
   (selected) => {
-    if (selected && activeTab.value !== 'trace') setContextTab('design')
-  },
-  { immediate: true }
-)
-
-watch(
-  htmlBoardSelected,
-  (selected) => {
-    if (!selected || !showCodeTab || activeTab.value === 'trace') return
-    setContextTab('code')
+    if (selected) setContextTab('design')
   },
   { immediate: true }
 )
@@ -91,14 +76,14 @@ watch(
 watch(
   sourceDocumentSelected,
   (selected) => {
-    if (!selected || activeTab.value === 'trace') return
+    if (!selected) return
     setContextTab('code')
   },
   { immediate: true }
 )
 
 watch(liveInspectorSelectionEpoch, () => {
-  if (activeTab.value !== 'trace') setContextTab('design')
+  setContextTab('design')
 })
 </script>
 

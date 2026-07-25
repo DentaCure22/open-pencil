@@ -9,8 +9,9 @@ import { useAppTheme } from '@/app/shell/theme'
 
 type DitherPresentation = 'overlay' | 'surface'
 
-const { presentation = 'surface' } = defineProps<{
+const { presentation = 'surface', quiet = false } = defineProps<{
   presentation?: DitherPresentation
+  quiet?: boolean
 }>()
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -76,9 +77,11 @@ onUnmounted(() => {
       ref="canvas"
       class="block size-full"
       :class="
-        presentation === 'surface'
-          ? 'opacity-[0.22] [[data-theme=dark]_&]:opacity-[0.62]'
-          : 'opacity-10 [[data-theme=dark]_&]:opacity-[0.19]'
+        quiet
+          ? 'opacity-[0.015] [[data-theme=dark]_&]:opacity-[0.03]'
+          : presentation === 'surface'
+            ? 'opacity-[0.22] [[data-theme=dark]_&]:opacity-[0.62]'
+            : 'opacity-10 [[data-theme=dark]_&]:opacity-[0.19]'
       "
     />
     <div

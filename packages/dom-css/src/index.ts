@@ -12,6 +12,14 @@ export {
 export { designDocumentToSceneGraph } from './to-scene-graph'
 export { sceneGraphToDesignDocument, sceneNodeToStyle } from './from-scene-graph'
 export { compileTailwindCSS } from './tailwind'
+export { reactSourceToDesignDocument, reactSourceToSceneGraph } from './react'
+export { reconcileDesignDocumentToSceneGraph } from './reconcile'
+export { patchReactInlineStyle } from './source-patch'
+export {
+  hasReactDocumentSource,
+  sourceIdForNode,
+  sourceStateBindingsForNode
+} from './source-metadata'
 export {
   browserHTMLToDesignDocument,
   browserHTMLToSceneGraph,
@@ -62,6 +70,9 @@ export type {
   BrowserToSceneGraphOptions
 } from './browser'
 export type { CompileTailwindCSSOptions } from './tailwind'
+export type { ReactSourceToDesignDocumentOptions, ReactSourceToSceneGraphOptions } from './react'
+export type { ReconcileDesignDocumentOptions, ReconcileDesignDocumentResult } from './reconcile'
+export type { ReactStylePatchRequest, ReactStylePatchResult } from './source-patch'
 export type { ExportHTMLBundle, ExportHTMLBundleOptions, ExportHTMLFile } from './html-export'
 export type { SerializeHTMLOptions } from './serialize'
 export type { ToSceneGraphOptions } from './to-scene-graph'
@@ -69,7 +80,11 @@ export type CSSComputeOptions = DesignTypes.CSSComputeOptions
 export type CSSRuntime = DesignTypes.CSSRuntime
 export type DesignDocument = DesignTypes.DesignDocument
 export type DesignElement = DesignTypes.DesignElement
+export type DesignDocumentSource = DesignTypes.DesignDocumentSource
+export type DesignInteraction = DesignTypes.DesignInteraction
 export type DesignNode = DesignTypes.DesignNode
+export type DesignSourceState = DesignTypes.DesignSourceState
+export type DesignStateBinding = DesignTypes.DesignStateBinding
 export type DesignStyleDeclaration = DesignTypes.DesignStyleDeclaration
 export type DesignStyleSheet = DesignTypes.DesignStyleSheet
 export type DesignText = DesignTypes.DesignText

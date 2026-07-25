@@ -1,72 +1,23 @@
-import type { Fill, PluginDataEntry, Stroke, VectorNetwork } from '@open-pencil/scene-graph'
+import type { PluginDataEntry, VectorNetwork } from '@open-pencil/scene-graph'
 import { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
-import type { Color, Rect } from '@open-pencil/scene-graph/primitives'
+import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import { parseColor } from '#core/color'
 
 import { finite, positive } from './geometry'
-import type { MermaidSceneNodeSpec, MermaidSkeletonElement } from './types'
+import { diagramPathFillColor, diagramPathStrokeColor } from './palette'
+import {
+  clampedOpacity,
+  paintWithOpacity,
+  skeletonStroke,
+  solidFill,
+  strokeCap,
+  strokeJoin
+} from './style'
+import type { MermaidAppearance, MermaidSceneNodeSpec, MermaidSkeletonElement } from './types'
 
 const MIN_NODE_SIZE = 1
 const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0] as const
-
-function clampedOpacity(value: number | undefined): number {
-  return Math.min(1, Math.max(0, Number.isFinite(value) ? (value ?? 1) : 1))
-}
-
-function solidFill(color: Color, opacity: number): Fill {
-  const alpha = clampedOpacity(opacity)
-  return { type: 'SOLID', color, opacity: alpha, visible: color.a * alpha > 0 }
-}
-
-function paintWithOpacity(paint: Fill, opacity: number): Fill {
-  const next: Fill = {
-    ...paint,
-    color: { ...paint.color },
-    opacity: paint.opacity * clampedOpacity(opacity),
-    visible: paint.visible && paint.opacity * clampedOpacity(opacity) > 0
-  }
-  if (paint.gradientStops) {
-    next.gradientStops = paint.gradientStops.map((stop) => ({
-      ...stop,
-      color: { ...stop.color }
-    }))
-  }
-  if (paint.gradientTransform) next.gradientTransform = { ...paint.gradientTransform }
-  return next
-}
-
-function strokeCap(value: string | undefined): Stroke['cap'] {
-  if (value === 'round') return 'ROUND'
-  if (value === 'square') return 'SQUARE'
-  return 'NONE'
-}
-
-function strokeJoin(value: string | undefined): Stroke['join'] {
-  if (value === 'round') return 'ROUND'
-  if (value === 'bevel') return 'BEVEL'
-  return 'MITER'
-}
-
-function pathStroke(
-  element: MermaidSkeletonElement,
-  color: Color,
-  opacity: number,
-  paint?: Fill
-): Stroke {
-  const alpha = clampedOpacity(opacity)
-  return {
-    align: 'CENTER',
-    cap: strokeCap(element.strokeLineCap),
-    color,
-    dashPattern: element.strokeDasharray ?? [],
-    join: strokeJoin(element.strokeLineJoin),
-    opacity: alpha,
-    paint: paint ? paintWithOpacity(paint, 1) : undefined,
-    visible: color.a * alpha > 0,
-    weight: positive(element.strokeWidth, 1)
-  }
-}
 
 function transformNetwork(
   network: VectorNetwork,
@@ -111,7 +62,8 @@ function networkBounds(network: VectorNetwork): Rect {
 export function svgPathSpec(
   element: MermaidSkeletonElement,
   key: string,
-  pluginData: PluginDataEntry[]
+  pluginData: PluginDataEntry[],
+  appearance: MermaidAppearance
 ): MermaidSceneNodeSpec | null {
   if (!element.path) return null
   const network = parseSVGPath(element.path, element.fillRule)
@@ -131,13 +83,13 @@ export function svgPathSpec(
   const strokeOpacity = overallOpacity * clampedOpacity(element.strokeOpacity)
   const fillColor =
     element.backgroundColor && element.backgroundColor !== 'none'
-      ? parseColor(element.backgroundColor)
+      ? parseColor(diagramPathFillColor(element.backgroundColor, appearance))
       : null
   const fallbackStrokeColor = element.strokePaint?.gradientStops?.[0]?.color
   const strokeColor = element.strokePaint
     ? fallbackStrokeColor
     : element.strokeColor && element.strokeColor !== 'none'
-      ? parseColor(element.strokeColor)
+      ? parseColor(diagramPathStrokeColor(element.strokeColor, appearance))
       : fallbackStrokeColor
 
   return {
@@ -155,7 +107,7 @@ export function svgPathSpec(
           ? [solidFill(fillColor, fillOpacity)]
           : [],
       strokes: strokeColor
-        ? [pathStroke(element, strokeColor, strokeOpacity, element.strokePaint)]
+        ? [skeletonStroke(element, strokeColor, strokeOpacity, element.strokePaint)]
         : [],
       vectorNetwork: network,
       blendMode: element.blendMode,

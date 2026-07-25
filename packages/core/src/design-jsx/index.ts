@@ -61,6 +61,15 @@ export { createElement } from './mini-react'
 
 export { renderJSX, renderTreeNode, buildComponent } from './render'
 
+export {
+  evaluateReactSource,
+  type EvaluateReactSourceOptions,
+  type ReactSourceElement,
+  type ReactSourceEvaluation,
+  type ReactSourceNode,
+  type ReactSourceState
+} from './react-source'
+
 import jsxReference from '#core/tools/prompts/jsx-reference.md'
 
 export { sceneNodeToJSX, selectionToJSX, type JSXFormat } from '#core/io/formats/jsx'

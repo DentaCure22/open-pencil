@@ -17,7 +17,18 @@ import {
   parseCSSNumber,
   pickStyle
 } from './css-values'
-import type { DesignDocument, DesignElement, DesignNode, DesignStyleDeclaration } from './types'
+import {
+  applyDocumentSourceMetadata,
+  applyElementSourceMetadata,
+  applyTextSourceMetadata
+} from './source-metadata'
+import type {
+  DesignDocument,
+  DesignElement,
+  DesignNode,
+  DesignStyleDeclaration,
+  DesignText
+} from './types'
 
 const DOM_CSS_PLUGIN_ID = 'open-pencil-dom-css'
 const IMAGE_SOURCE_URL_KEY = 'image-source-url'
@@ -410,7 +421,9 @@ function createTextNode(
   parentId: string,
   text: string,
   style: DesignStyleDeclaration,
-  sourceName?: string
+  sourceName?: string,
+  sourceElement?: DesignElement,
+  sourceText?: DesignText
 ) {
   const node = graph.createNode('TEXT', parentId, {
     // Element-backed text keeps its source id so live inspector adapters can
@@ -421,57 +434,39 @@ function createTextNode(
     height: 20
   })
   applyTextStyle(node, style)
+  if (sourceElement) applyElementSourceMetadata(node, sourceElement)
+  if (sourceText) applyTextSourceMetadata(node, sourceText)
   return node
 }
 
-function hasBoxStyle(style: DesignStyleDeclaration): boolean {
-  return [
-    'aspect-ratio',
-    'background-color',
-    'border-color',
-    'border-style',
-    'border-width',
-    'border-top-style',
-    'border-top-width',
-    'border-right-style',
-    'border-right-width',
-    'border-bottom-style',
-    'border-bottom-width',
-    'border-left-style',
-    'border-left-width',
-    'border-radius',
-    'box-shadow',
-    'display',
-    'height',
-    'padding',
-    'padding-top',
-    'padding-right',
-    'padding-bottom',
-    'padding-left',
-    'padding-block',
-    'padding-inline',
-    'width',
-    'min-width',
-    'max-width',
-    'min-height',
-    'max-height',
-    'object-fit',
-    'overflow',
-    'position',
-    'top',
-    'right',
-    'bottom',
-    'left',
-    'flex-wrap',
-    'align-self'
-  ].some((property) => pickStyle(style, property) !== undefined)
+function hasTextContainerStyle(style: DesignStyleDeclaration): boolean {
+  if (fillsFromStyle(style, 'background-color').length > 0) return true
+  if (dropShadowFromCSS(pickStyle(style, 'box-shadow')).length > 0) return true
+  if ((strokeWeightFromStyle(style) ?? 0) > 0 && borderStyleFromCSS(style) !== 'none') return true
+  if (
+    [
+      'padding',
+      'padding-top',
+      'padding-right',
+      'padding-bottom',
+      'padding-left',
+      'padding-block',
+      'padding-inline'
+    ].some((property) => (parseCSSNumber(pickStyle(style, property)) ?? 0) > 0)
+  ) {
+    return true
+  }
+  const position = pickStyle(style, 'position')
+  if (position === 'absolute' || position === 'fixed') return true
+  const overflow = pickStyle(style, 'overflow')
+  return overflow === 'hidden' || overflow === 'clip'
 }
 
 function createElementNode(graph: SceneGraph, parentId: string, element: DesignElement): SceneNode {
   const style = mergedStyle(element)
   if (
     isTextLikeElement(element) &&
-    !hasBoxStyle(style) &&
+    !hasTextContainerStyle(style) &&
     element.children.every((child) => child.type === 'text')
   ) {
     return createTextNode(
@@ -479,7 +474,8 @@ function createElementNode(graph: SceneGraph, parentId: string, element: DesignE
       parentId,
       textContent(element),
       style,
-      element.attrs.id || element.attrs.class || element.tagName
+      element.attrs.id || element.attrs.class,
+      element
     )
   }
 
@@ -488,6 +484,7 @@ function createElementNode(graph: SceneGraph, parentId: string, element: DesignE
     clipsContent: false
   })
   applyElementStyle(graph, node, element, style)
+  applyElementSourceMetadata(node, element)
 
   for (const child of element.children) {
     createDesignNode(graph, node.id, child, style)
@@ -504,7 +501,7 @@ function createDesignNode(
 ): SceneNode | null {
   if (node.type === 'text') {
     if (node.text.trim().length === 0) return null
-    return createTextNode(graph, parentId, node.text, inheritedStyle)
+    return createTextNode(graph, parentId, node.text, inheritedStyle, undefined, undefined, node)
   }
 
   return createElementNode(graph, parentId, node)
@@ -525,6 +522,7 @@ export function designDocumentToSceneGraph(
   const page = graph.getPages().find((node) => node.type === 'CANVAS') ?? graph.addPage('DesignDOM')
 
   page.name = options.pageName ?? 'DesignDOM'
+  applyDocumentSourceMetadata(page, document.source)
 
   for (const child of document.children) {
     createDesignNode(graph, page.id, child)

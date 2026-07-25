@@ -3,11 +3,7 @@ import { computed, watch } from 'vue'
 
 import type { RulerTheme } from '@open-pencil/core/canvas'
 import { parseColor } from '@open-pencil/core/color'
-import {
-  CANVAS_BG_COLOR,
-  CANVAS_BG_COLOR_DARK,
-  IS_BROWSER
-} from '@open-pencil/core/constants'
+import { CANVAS_BG_COLOR, CANVAS_BG_COLOR_DARK, IS_BROWSER } from '@open-pencil/core/constants'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'

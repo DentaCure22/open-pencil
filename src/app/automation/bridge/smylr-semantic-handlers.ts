@@ -7,6 +7,7 @@ import {
   getKnowledgeWorkspaceContext,
   queryKnowledgeWorkspaceItems
 } from '@/app/automation/bridge/workspace-semantic-adapter'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { createWorkLifecycleState } from '@/app/flow-state'
 import { normalizeLiveInspectorStylePatch } from '@/app/smylr-live-inspector/patch'
 import type { LiveInspectorPatchDraft } from '@/app/smylr-live-inspector/patch'
@@ -41,6 +42,7 @@ import {
 } from '@/app/smylr-live-inspector/workspace'
 import type { LiveWorkspaceItem } from '@/app/smylr-live-inspector/workspace'
 import { ensureSmylrBoardGuide, findSmylrBoardGuide } from '@/app/smylr-production/board-guide'
+import { upsertSmylrHistoricalReferenceFrame } from '@/app/smylr-production/live/reference-runtime'
 import {
   ensureSmylrAlternateLiveAppFrame,
   findCurrentSmylrLiveAppFrame,
@@ -425,6 +427,43 @@ function handleUpsertBoardGuide(target: AutomationTarget, args: UnknownRecord) {
   return result(target, 'board', { affectedStableIds: [guide.id], created: true })
 }
 
+function handleUpsertHistoricalReference(target: AutomationTarget, args: UnknownRecord) {
+  assertExpectedRevision(target, args)
+  const baseUrl = readString(args.base_url)
+  const revision = readString(args.revision)
+  const route = readString(args.route) ?? currentRoute(target) ?? '/dental-chart'
+  if (!baseUrl) throw new Error('base_url is required.')
+  if (!revision) throw new Error('revision is required.')
+  if (args.dry_run === true) {
+    return result(target, 'board', {
+      baseUrl,
+      dryRun: true,
+      route,
+      sourceRevision: revision
+    })
+  }
+  const reference = mutateWithUndo(target, 'upsert historical reference', () =>
+    upsertSmylrHistoricalReferenceFrame(target.store, target.pageId, {
+      baseUrl,
+      name: readString(args.name),
+      revision,
+      route
+    })
+  )
+  target.store.select([reference.currentFrame.id, reference.frame.id])
+  target.store.zoomToSelection(editorViewportInsets())
+  return result(target, 'board', {
+    affectedStableIds: [reference.currentFrame.id, reference.frame.id],
+    created: reference.created,
+    currentCreated: reference.currentCreated,
+    currentFrameId: reference.currentFrame.id,
+    frameId: reference.frame.id,
+    referenceMode: 'read-only',
+    route,
+    sourceRevision: revision
+  })
+}
+
 async function handleMutateWorkspaceGraph(target: AutomationTarget, args: UnknownRecord) {
   if (readString(args.operation) === 'apply_knowledge_mutations') {
     const mutation = await applyKnowledgeWorkspaceMutations(target, args)
@@ -576,6 +615,7 @@ const semanticToolHandlers = {
   propose_source_patch: handleProposeSourcePatch,
   query_workspace_items: handleQueryWorkspaceItems,
   upsert_board_guide: handleUpsertBoardGuide,
+  upsert_historical_reference: handleUpsertHistoricalReference,
   verify_change_set: handleVerifyChangeSet
 } satisfies Readonly<Record<string, SemanticToolHandler>>
 

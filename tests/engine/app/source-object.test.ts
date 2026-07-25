@@ -11,7 +11,7 @@ import { BoardFileIntakeRegistry, boardFileIntakeRegistry } from '@/app/file-int
 import { placeSourceObjectFiles } from '@/app/source-object/intake'
 import { sourceObjectMimeType, sourceObjectSource } from '@/app/source-object/source'
 
-describe('downloadable source object intake', () => {
+describe('attached file fallback intake', () => {
   beforeAll(async () => {
     await initCodec()
   })
@@ -31,11 +31,8 @@ describe('downloadable source object intake', () => {
     )
   })
 
-  test('keeps office, 3D, and CAD files on the generic boundary when no adapter is registered', () => {
+  test('routes rich modalities to Code Object adapters and keeps unsupported CAD attached', () => {
     const names = [
-      'forecast.xlsx',
-      'brief.docx',
-      'review.pptx',
       'mesh.obj',
       'mesh.stl',
       'assembly.step',
@@ -59,6 +56,20 @@ describe('downloadable source object intake', () => {
         kind: 'specialized'
       })
     }
+    for (const name of ['forecast.xlsx', 'brief.docx']) {
+      expect(classifyBoardFile(new File([], name))).toEqual({
+        adapterId: 'office',
+        kind: 'specialized'
+      })
+    }
+    expect(classifyBoardFile(new File([], 'review.pptx'))).toEqual({
+      adapterId: 'presentation',
+      kind: 'specialized'
+    })
+    expect(classifyBoardFile(new File([], 'brief.pdf'))).toEqual({
+      adapterId: 'pdf-code-object',
+      kind: 'specialized'
+    })
     expect(classifyBoardFile(new File([], 'photo.png', { type: 'image/png' }))).toEqual({
       kind: 'media',
       mediaKind: 'raster'
@@ -81,6 +92,22 @@ describe('downloadable source object intake', () => {
       kind: 'source-object',
       reason: 'no-board-adapter'
     })
+  })
+
+  test('replaces built-in adapters safely during hot reload', () => {
+    const registry = new BoardFileIntakeRegistry()
+    registry.registerOrReplace({
+      id: 'presentation',
+      matches: () => false,
+      placeFiles: async () => []
+    })
+    registry.registerOrReplace({
+      id: 'presentation',
+      matches: (file) => file.name.endsWith('.pptx'),
+      placeFiles: async () => []
+    })
+
+    expect(registry.find(new File([], 'deck.pptx'))?.id).toBe('presentation')
   })
 
   test('routes registered formats without creating a generic source object', async () => {

@@ -1,13 +1,13 @@
+import type { SceneGraph } from '@open-pencil/scene-graph'
+
 import type {
   ExperienceProjectionPurpose,
   ObservedSessionTarget,
   ResolvedExperienceFamilyV1,
-  WorkspaceObjectRevisionRef,
+  WorkspaceObjectRevisionRef
 } from '@/app/workspace'
-import type { SceneGraph } from '@open-pencil/scene-graph'
 
-export type PreparedFieldRunAttemptResult =
-  'aborted' | 'expired' | 'interrupted'
+export type PreparedFieldRunAttemptResult = 'aborted' | 'expired' | 'interrupted'
 
 export type PreparedFieldRunAttempt = {
   endedAt?: string
@@ -68,8 +68,7 @@ export type PreparedFamilyFieldRunV2 = PreparedFieldRunCommon & {
   version: 2
 }
 
-export type PreparedFieldRun =
-  PreparedSingleSurfaceFieldRunV1 | PreparedFamilyFieldRunV2
+export type PreparedFieldRun = PreparedSingleSurfaceFieldRunV1 | PreparedFamilyFieldRunV2
 
 export type PrepareFieldRunInput = Omit<
   PreparedFieldRunCommon,
@@ -87,12 +86,7 @@ const PLUGIN_ID = 'openpencil-field-runs'
 const RUNS_KEY = 'prepared-runs-v1'
 const LEDGER_RUN_LIMIT = 100
 const ATTEMPT_LIMIT = 10
-const PURPOSES = new Set<ExperienceProjectionPurpose>([
-  'focus',
-  'compare',
-  'knowledge',
-  'review',
-])
+const PURPOSES = new Set<ExperienceProjectionPurpose>(['focus', 'compare', 'knowledge', 'review'])
 const CAMPAIGN_SLOTS: FieldCampaignSlot[] = [1, 2, 3, 4, 5]
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -131,9 +125,7 @@ function isReference(value: unknown): value is WorkspaceObjectRevisionRef {
   )
 }
 
-function isArtifact(
-  value: unknown
-): value is ObservedSessionTarget['artifact'] {
+function isArtifact(value: unknown): value is ObservedSessionTarget['artifact'] {
   if (!isObjectRecord(value)) return false
   return Boolean(
     value.kind === 'html-board' &&
@@ -200,11 +192,7 @@ function isFamilyMember(value: unknown, index: number): boolean {
 }
 
 function isFamily(value: unknown): value is ResolvedExperienceFamilyV1 {
-  if (
-    !isObjectRecord(value) ||
-    !Array.isArray(value.members) ||
-    !isObjectRecord(value.primary)
-  ) {
+  if (!isObjectRecord(value) || !Array.isArray(value.members) || !isObjectRecord(value.primary)) {
     return false
   }
   if (!isFamilyHeader(value) || value.members.length !== value.surfaceCount) {
@@ -245,9 +233,7 @@ function isPreparedFieldRunCommon(value: Record<string, unknown>): boolean {
   )
 }
 
-function isFamilyScope(
-  value: unknown
-): value is PreparedFamilyFieldRunV2['scope'] {
+function isFamilyScope(value: unknown): value is PreparedFamilyFieldRunV2['scope'] {
   return Boolean(
     isObjectRecord(value) &&
     value.kind === 'experience-family' &&
@@ -276,8 +262,7 @@ function targetMatchesFamilyPrimary(run: {
     sameReference(run.target.surfaceRun, family.primary.surfaceRun) &&
     sameReference(run.target.intent, family.intent) &&
     sameReference(run.target.evidenceManifest, family.evidenceManifest) &&
-    JSON.stringify(run.target.artifact) ===
-      JSON.stringify(family.primary.artifact)
+    JSON.stringify(run.target.artifact) === JSON.stringify(family.primary.artifact)
   )
 }
 
@@ -297,10 +282,7 @@ function isAttempt(value: unknown): value is PreparedFieldRunAttempt {
 
 function isPreparedFieldRun(value: unknown): value is PreparedFieldRun {
   if (!isObjectRecord(value)) return false
-  if (
-    (value.version !== 1 && value.version !== 2) ||
-    !isPreparedFieldRunCommon(value)
-  ) {
+  if ((value.version !== 1 && value.version !== 2) || !isPreparedFieldRunCommon(value)) {
     return false
   }
   if (value.version === 1) return value.scope === undefined
@@ -309,7 +291,7 @@ function isPreparedFieldRun(value: unknown): value is PreparedFieldRun {
     boardId: value.boardId as string,
     rootSurface: value.rootSurface as WorkspaceObjectRevisionRef,
     scope: value.scope,
-    target: value.target as ObservedSessionTarget,
+    target: value.target as ObservedSessionTarget
   })
 }
 
@@ -320,9 +302,7 @@ function validRunCode(value: string): boolean {
 function normalizedRunCode(value: string): string {
   const normalized = value.trim()
   if (!validRunCode(normalized)) {
-    throw new Error(
-      'field_run_code_invalid: use 2-40 letters, numbers, hyphens, or underscores'
-    )
+    throw new Error('field_run_code_invalid: use 2-40 letters, numbers, hyphens, or underscores')
   }
   return normalized
 }
@@ -330,9 +310,7 @@ function normalizedRunCode(value: string): string {
 function normalizedCampaignId(value?: string): string {
   const normalized = value?.trim() || DEFAULT_FIELD_CAMPAIGN_ID
   if (!validCampaignId(normalized)) {
-    throw new Error(
-      'field_campaign_id_invalid: use 2-80 letters, numbers, hyphens, or underscores'
-    )
+    throw new Error('field_campaign_id_invalid: use 2-80 letters, numbers, hyphens, or underscores')
   }
   return normalized
 }
@@ -349,9 +327,7 @@ function campaignAssignment(
   )
   const requestedSlot = input?.slot
   if (requestedSlot !== undefined && !isCampaignSlot(requestedSlot)) {
-    throw new Error(
-      `field_campaign_slot_invalid: choose 1-${FIELD_CAMPAIGN_CAPACITY}`
-    )
+    throw new Error(`field_campaign_slot_invalid: choose 1-${FIELD_CAMPAIGN_CAPACITY}`)
   }
   const slot = requestedSlot ?? CAMPAIGN_SLOTS.find((value) => !occupied.has(value))
   if (!slot) {
@@ -369,22 +345,17 @@ function campaignAssignment(
     campaignId,
     capacity: FIELD_CAMPAIGN_CAPACITY,
     schemaVersion: 1,
-    slot,
+    slot
   }
 }
 
 function rootPluginValue(graph: SceneGraph): string | undefined {
   return graph
     .getNode(graph.rootId)
-    ?.pluginData.find(
-      (entry) => entry.pluginId === PLUGIN_ID && entry.key === RUNS_KEY
-    )?.value
+    ?.pluginData.find((entry) => entry.pluginId === PLUGIN_ID && entry.key === RUNS_KEY)?.value
 }
 
-function writePreparedFieldRuns(
-  graph: SceneGraph,
-  runs: PreparedFieldRun[]
-): void {
+function writePreparedFieldRuns(graph: SceneGraph, runs: PreparedFieldRun[]): void {
   if (runs.length > LEDGER_RUN_LIMIT) {
     throw new Error(
       `field_run_ledger_capacity_reached: ${LEDGER_RUN_LIMIT} immutable runs are already stored`
@@ -408,19 +379,14 @@ function writePreparedFieldRuns(
     key: RUNS_KEY,
     pluginId: PLUGIN_ID,
     value: JSON.stringify(
-      runs.toSorted((left, right) =>
-        left.preparedAt.localeCompare(right.preparedAt)
-      )
-    ),
+      runs.toSorted((left, right) => left.preparedAt.localeCompare(right.preparedAt))
+    )
   })
   graph.updateNode(root.id, { pluginData })
 }
 
 function canonicalRunIdentity(
-  run: Pick<
-    PreparedFieldRun,
-    Exclude<keyof PreparedFieldRun, 'attempts' | 'preparedAt'>
-  >
+  run: Pick<PreparedFieldRun, Exclude<keyof PreparedFieldRun, 'attempts' | 'preparedAt'>>
 ): string {
   return JSON.stringify({
     boardId: run.boardId,
@@ -433,7 +399,7 @@ function canonicalRunIdentity(
     scope: run.scope,
     target: run.target,
     targetPageId: run.targetPageId,
-    version: run.version,
+    version: run.version
   })
 }
 
@@ -448,15 +414,9 @@ export function readPreparedFieldRuns(graph: SceneGraph): PreparedFieldRun[] {
   }
 }
 
-export function getPreparedFieldRun(
-  graph: SceneGraph,
-  runCode: string
-): PreparedFieldRun | null {
+export function getPreparedFieldRun(graph: SceneGraph, runCode: string): PreparedFieldRun | null {
   const normalized = normalizedRunCode(runCode)
-  return (
-    readPreparedFieldRuns(graph).find((run) => run.runCode === normalized) ??
-    null
-  )
+  return readPreparedFieldRuns(graph).find((run) => run.runCode === normalized) ?? null
 }
 
 export function fieldCampaignState(
@@ -469,7 +429,7 @@ export function fieldCampaignState(
     .map((run) => ({
       preparedAt: run.preparedAt,
       runCode: run.runCode,
-      slot: run.campaign!.slot,
+      slot: run.campaign!.slot
     }))
     .toSorted((left, right) => left.slot - right.slot)
   const assigned = new Set(assignedSlots.map(({ slot }) => slot))
@@ -478,7 +438,7 @@ export function fieldCampaignState(
     availableSlots: CAMPAIGN_SLOTS.filter((slot) => !assigned.has(slot)),
     campaignId: normalized,
     capacity: FIELD_CAMPAIGN_CAPACITY,
-    schemaVersion: 1,
+    schemaVersion: 1
   }
 }
 
@@ -504,14 +464,10 @@ export function planPreparedFieldRun(
     : undefined
   if (
     existing &&
-    ((requestedCampaignId &&
-      requestedCampaignId !== existing.campaign?.campaignId) ||
-      (input.campaign?.slot !== undefined &&
-        input.campaign.slot !== existing.campaign?.slot))
+    ((requestedCampaignId && requestedCampaignId !== existing.campaign?.campaignId) ||
+      (input.campaign?.slot !== undefined && input.campaign.slot !== existing.campaign?.slot))
   ) {
-    throw new Error(
-      `field_run_code_conflict: ${runCode} already owns another campaign slot`
-    )
+    throw new Error(`field_run_code_conflict: ${runCode} already owns another campaign slot`)
   }
   const run: PreparedFieldRun = {
     ...structuredClone(input),
@@ -519,14 +475,12 @@ export function planPreparedFieldRun(
     campaign: existing ? existing.campaign : campaignAssignment(runs, input.campaign),
     preparedAt: input.preparedAt ?? new Date().toISOString(),
     runCode,
-    version: input.scope ? 2 : 1,
+    version: input.scope ? 2 : 1
   } as PreparedFieldRun
   if (!isPreparedFieldRun(run)) throw new Error('field_run_target_invalid')
   if (existing) {
     if (canonicalRunIdentity(existing) !== canonicalRunIdentity(run)) {
-      throw new Error(
-        `field_run_code_conflict: ${run.runCode} already targets another experience`
-      )
+      throw new Error(`field_run_code_conflict: ${run.runCode} already targets another experience`)
     }
     return { created: false, run: structuredClone(existing) }
   }
@@ -547,9 +501,7 @@ export function recordFieldRunAttemptStarted(
   if (duplicate) {
     if (
       duplicate.startedAt !== input.startedAt ||
-      runs[index].attempts.every(
-        (attempt) => attempt.sessionId !== input.sessionId
-      )
+      runs[index].attempts.every((attempt) => attempt.sessionId !== input.sessionId)
     ) {
       throw new Error(`field_run_attempt_conflict: ${input.sessionId}`)
     }
@@ -567,7 +519,7 @@ export function recordFieldRunAttemptStarted(
         : {
             ...attempt,
             endedAt: input.startedAt,
-            result: 'interrupted' as const,
+            result: 'interrupted' as const
           }
     )
     .concat({ sessionId: input.sessionId, startedAt: input.startedAt })
@@ -592,8 +544,7 @@ export function recordFieldRunAttemptEnded(
   const attemptIndex = runs[index].attempts.findIndex(
     (attempt) => attempt.sessionId === input.sessionId
   )
-  if (attemptIndex === -1)
-    throw new Error(`field_run_attempt_not_found: ${input.sessionId}`)
+  if (attemptIndex === -1) throw new Error(`field_run_attempt_not_found: ${input.sessionId}`)
   const attempt = runs[index].attempts[attemptIndex]
   if (attempt.endedAt) {
     if (attempt.endedAt !== input.endedAt || attempt.result !== input.result) {
@@ -605,7 +556,7 @@ export function recordFieldRunAttemptEnded(
   attempts[attemptIndex] = {
     ...attempt,
     endedAt: input.endedAt,
-    result: input.result,
+    result: input.result
   }
   runs[index] = { ...runs[index], attempts }
   writePreparedFieldRuns(graph, runs)

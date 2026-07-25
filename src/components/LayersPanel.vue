@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
 import { useSelectionState } from '@open-pencil/vue'
@@ -7,6 +7,7 @@ import { useSelectionState } from '@open-pencil/vue'
 import AppMenu from '@/components/Shell/AppMenu.vue'
 import { useAIChat } from '@/app/ai/chat/use'
 import { useEditorStore } from '@/app/editor/active-store'
+import { tracePanelOpenEpoch } from '@/app/narrated-trace'
 import {
   liveInspectorDocument,
   liveInspectorFrameSrc,
@@ -50,6 +51,7 @@ const utilityTabClass =
 
 interface LayerTreeHandle {
   closeTreeTools: () => void
+  revealNode: (nodeId: string) => void
 }
 
 const layerTreeRef = ref<LayerTreeHandle | null>(null)
@@ -95,7 +97,7 @@ const showContextInspector = computed(
     (contextOpen.value || (!showCodeTab && hasDesignContext.value)) &&
     (hasDesignContext.value || activeTab.value === 'code')
 )
-const showContextRail = computed(() => showContextInspector.value && openUtility.value !== 'trace')
+const showContextRail = computed(() => showContextInspector.value)
 const contextRailStateClass = computed(() => {
   if (!showContextRail.value) return 'grow-0 opacity-0'
   if (sourceDocumentSelected.value) return 'grow-[1.65] opacity-100'
@@ -113,10 +115,6 @@ watch(
 watch(
   activeTab,
   (tab) => {
-    if (tab === 'trace') {
-      openUtility.value = 'trace'
-      return
-    }
     if (tab === 'code' && !showCodeTab && !sourceDocumentSelected.value) {
       activeTab.value = 'design'
       return
@@ -128,17 +126,25 @@ watch(
   { immediate: true }
 )
 
-watch(openUtility, (kind) => {
-  if (kind === 'trace') activeTab.value = 'trace'
-  else if (activeTab.value === 'trace') activeTab.value = 'design'
+watch(openUtility, () => {
   showLiveTools.value = false
   layerTreeRef.value?.closeTreeTools()
+})
+
+watch(tracePanelOpenEpoch, () => {
+  openUtility.value = 'trace'
 })
 
 function utilityTabStateClass(kind: UtilityKind) {
   return openUtility.value === kind
     ? 'border-chrome-control-border bg-chrome-control-active text-surface shadow-sm'
     : 'text-muted hover:bg-hover hover:text-surface'
+}
+
+async function revealInsertedAsset(nodeId: string) {
+  openUtility.value = 'layers'
+  await nextTick()
+  layerTreeRef.value?.revealNode(nodeId)
 }
 
 function useLiveApp() {
@@ -319,7 +325,7 @@ function toggleLiveTools() {
         data-test-id="left-panel-assets-content"
         :class="utilityContentClass"
       >
-        <AssetsPanel />
+        <AssetsPanel @asset-inserted="revealInsertedAsset" />
       </TabsContent>
 
       <TabsContent

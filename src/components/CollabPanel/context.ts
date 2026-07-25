@@ -5,6 +5,11 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { useI18n } from '@open-pencil/vue'
 
+import {
+  createCofounderInviteUrl,
+  openPencilCloud,
+  signOutOfOpenPencilCloud
+} from '@/app/cloud/workspace'
 import { DEFAULT_COLLAB_STATE, useCollabInjected } from '@/app/collab/use'
 import { toast } from '@/app/shell/ui'
 import { getShareUrl } from '@/constants'
@@ -17,6 +22,7 @@ function createCollabPanelContext() {
   const { dialogs } = useI18n()
 
   const joinInput = ref('')
+  const creatingInvite = ref(false)
   const nameDraft = ref(collab?.state.value.localName ?? '')
   const pendingRoomId = computed(() =>
     typeof route.params.roomId === 'string' ? route.params.roomId : null
@@ -30,6 +36,13 @@ function createCollabPanelContext() {
     return getShareUrl(state.value.roomId)
   })
   const isJoining = computed(() => !!pendingRoomId.value && !state.value.connected)
+  const cloudWorkspace = computed(() => openPencilCloud.state.value.workspace)
+  const isCloudWorkspace = computed(
+    () => cloudWorkspace.value?.roomId === state.value.roomId && state.value.connected
+  )
+  const canInviteCofounder = computed(
+    () => isCloudWorkspace.value && cloudWorkspace.value?.role === 'owner'
+  )
 
   watch(
     pendingRoomId,
@@ -43,6 +56,27 @@ function createCollabPanelContext() {
     if (!shareUrl.value) return
     void copy(shareUrl.value)
     toast.info('Link copied to clipboard')
+  }
+
+  async function copyCofounderInvite() {
+    if (creatingInvite.value) return
+    creatingInvite.value = true
+    try {
+      await copy(await createCofounderInviteUrl())
+      toast.info('Cofounder invite copied')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not create the invite')
+    } finally {
+      creatingInvite.value = false
+    }
+  }
+
+  async function signOutCloud() {
+    try {
+      await signOutOfOpenPencilCloud()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not sign out')
+    }
   }
 
   function share() {
@@ -87,10 +121,15 @@ function createCollabPanelContext() {
     followingPeer,
     shareUrl,
     isJoining,
+    isCloudWorkspace,
+    canInviteCofounder,
+    creatingInvite,
     copyLink,
+    copyCofounderInvite,
     share,
     join,
     disconnect,
+    signOutCloud,
     toggleFollowPeer
   }
 }
