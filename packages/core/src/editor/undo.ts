@@ -1,6 +1,6 @@
 import { pick } from 'es-toolkit/object'
 
-import { cloneVectorNetwork, type SceneNode } from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 import type { UndoEntry } from '@open-pencil/scene-graph/undo'
 
@@ -11,21 +11,11 @@ import {
   snapshotPage as createPageSnapshot,
   type PageSnapshot
 } from './history/snapshot'
+import { createResizeSnapshot, type ResizeSnapshot } from './resize-snapshot'
 import { textAutoResizeChanges } from './text/auto-resize'
 import type { EditorContext } from './types'
 
-type ResizeSnapshot = Pick<SceneNode, 'x' | 'y' | 'width' | 'height' | 'vectorNetwork'>
 type ResizeOriginal = Rect & { vectorNetwork?: SceneNode['vectorNetwork'] }
-
-function createResizeSnapshot(node: SceneNode): ResizeSnapshot {
-  return {
-    x: node.x,
-    y: node.y,
-    width: node.width,
-    height: node.height,
-    vectorNetwork: node.vectorNetwork ? cloneVectorNetwork(node.vectorNetwork) : null
-  }
-}
 
 export function createUndoActions(ctx: EditorContext) {
   function commitMove(originals: Map<string, Vector>) {

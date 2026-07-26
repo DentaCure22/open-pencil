@@ -8,13 +8,56 @@ export type SmylrComputedAssetVariant = {
   props: Record<string, string>
 }
 
+export type SmylrComponentInventoryLayer = 'feature' | 'layout' | 'primitive' | 'shared'
+
+export type SmylrComponentStoryStatus = 'covered' | 'needs-fixture' | 'story-ready'
+
+export type SmylrSourceOnlyAuditClassification =
+  | 'direct-fixture'
+  | 'local-adapter'
+  | 'browser-only'
+  | 'runtime-or-service'
+  | 'nonvisual-component-export'
+  | 'needs-production-boundary'
+
+export type SmylrSourceOnlyAuditPriority = 'high' | 'medium' | 'low'
+
+export type SmylrSourceOnlyAuditAction =
+  | 'fixture-candidate'
+  | 'retain-source-only'
+  | 'remove-from-assets'
+
+export type SmylrSourceOnlyAudit = {
+  assetAction: SmylrSourceOnlyAuditAction
+  assetActionReason: string
+  classification: SmylrSourceOnlyAuditClassification
+  priority: SmylrSourceOnlyAuditPriority
+  reason: string
+  recommendedFixtureId: string | null
+  recommendedVariantAxes: Record<string, string[]> | null
+}
+
+export type SmylrComponentInventoryDefinition = {
+  componentNames: string[]
+  feature: string | null
+  importPath: string
+  layer: SmylrComponentInventoryLayer
+  openPencilAudit: SmylrSourceOnlyAudit | null
+  recommendedStoryRoot: string
+  sourcePath: string
+  stateTargets: string[]
+  storyStatus: SmylrComponentStoryStatus
+  storyTitles: string[]
+  variantAxes: string[]
+}
+
 export type SmylrComputedAssetDefinition = {
   fixtureId: string
   frameHeight: number
   frameWidth: number
   interactionHeight: number
-  inventoryLayer: string
-  inventoryStoryStatus: 'covered'
+  inventoryLayer: SmylrComponentInventoryLayer
+  inventoryStoryStatus: SmylrComponentStoryStatus
   inventoryStoryTitle: string
   inventoryVariantAxes: string[]
   name: string
@@ -28,14 +71,15 @@ export type SmylrComputedAssetDefinition = {
 }
 
 type RendererCatalog = {
+  components: SmylrComponentInventoryDefinition[]
   fixtures: Array<{
     fixtureId: string
     frameHeight: number
     frameWidth: number
     interactionHeight: number
     inventory: {
-      layer: string
-      storyStatus: 'covered'
+      layer: SmylrComponentInventoryLayer
+      storyStatus: SmylrComponentStoryStatus
       storyTitle: string
       variantAxes: string[]
     }
@@ -52,19 +96,91 @@ type RendererCatalog = {
   schemaVersion: 1
 }
 
+function isInventoryLayer(value: string): value is SmylrComponentInventoryLayer {
+  return ['feature', 'layout', 'primitive', 'shared'].includes(value)
+}
+
+function isStoryStatus(value: string): value is SmylrComponentStoryStatus {
+  return ['covered', 'needs-fixture', 'story-ready'].includes(value)
+}
+
+function isAuditClassification(value: string): value is SmylrSourceOnlyAuditClassification {
+  return [
+    'direct-fixture',
+    'local-adapter',
+    'browser-only',
+    'runtime-or-service',
+    'nonvisual-component-export',
+    'needs-production-boundary'
+  ].includes(value)
+}
+
+function isAuditPriority(value: string): value is SmylrSourceOnlyAuditPriority {
+  return ['high', 'medium', 'low'].includes(value)
+}
+
+function isAuditAction(value: string): value is SmylrSourceOnlyAuditAction {
+  return ['fixture-candidate', 'retain-source-only', 'remove-from-assets'].includes(value)
+}
+
+function normalizeAudit(
+  audit: (typeof rendererCatalogJson.components)[number]['openPencilAudit'],
+  sourcePath: string
+): SmylrSourceOnlyAudit | null {
+  if (audit === null) return null
+  if (
+    !isAuditClassification(audit.classification) ||
+    !isAuditPriority(audit.priority) ||
+    !isAuditAction(audit.assetAction) ||
+    audit.reason.length === 0 ||
+    audit.assetActionReason.length === 0
+  ) {
+    throw new Error(`Invalid OpenPencil source-only audit: ${sourcePath}`)
+  }
+  const recommendedVariantAxes = audit.recommendedVariantAxes
+    ? Object.fromEntries(
+        Object.entries(audit.recommendedVariantAxes).map(([name, values]) => [name, [...values]])
+      )
+    : null
+  return {
+    ...audit,
+    assetAction: audit.assetAction,
+    classification: audit.classification,
+    priority: audit.priority,
+    recommendedVariantAxes
+  }
+}
+
 function normalizeRendererCatalog(input: typeof rendererCatalogJson): RendererCatalog {
   if (input.schemaVersion !== 1) throw new Error('Unsupported Smylr renderer catalog schema')
 
   return {
+    components: input.components.map((component) => {
+      if (!isInventoryLayer(component.layer) || !isStoryStatus(component.storyStatus)) {
+        throw new Error(`Invalid Smylr component inventory entry: ${component.sourcePath}`)
+      }
+      return {
+        ...component,
+        layer: component.layer,
+        openPencilAudit: normalizeAudit(component.openPencilAudit, component.sourcePath),
+        storyStatus: component.storyStatus
+      }
+    }),
     fixtures: input.fixtures.map((fixture) => {
-      if (fixture.repository !== 'Smylr-Elite' || fixture.inventory.storyStatus !== 'covered') {
+      const inventoryLayer = fixture.inventory.layer
+      if (
+        fixture.repository !== 'Smylr-Elite' ||
+        !isStoryStatus(fixture.inventory.storyStatus) ||
+        !isInventoryLayer(inventoryLayer)
+      ) {
         throw new Error(`Invalid Smylr renderer catalog fixture: ${fixture.fixtureId}`)
       }
       return {
         ...fixture,
         inventory: {
           ...fixture.inventory,
-          storyStatus: 'covered'
+          layer: inventoryLayer,
+          storyStatus: fixture.inventory.storyStatus
         },
         repository: 'Smylr-Elite',
         variants: fixture.variants.map((variant) => {
@@ -84,6 +200,10 @@ function normalizeRendererCatalog(input: typeof rendererCatalogJson): RendererCa
 const rendererCatalog = normalizeRendererCatalog(rendererCatalogJson)
 
 export const SMYLR_COMPUTED_ASSET_RENDERER_VERSION = rendererCatalog.rendererVersion
+
+/** All source-backed Smylr component modules, including entries awaiting a live fixture. */
+export const SMYLR_COMPONENT_INVENTORY: readonly SmylrComponentInventoryDefinition[] =
+  rendererCatalog.components
 
 /**
  * Generated intersection of the Smylr Component Atlas inventory and the
@@ -119,7 +239,7 @@ function pluginValue(node: SceneNode, key: string) {
 function containsStaleComputedAsset(graph: SceneGraph, node: SceneNode): boolean {
   const kind = pluginValue(node, 'kind')
   if (
-    (kind === 'smylr-component-page' || kind === 'smylr-live-component-page') &&
+    kind === 'smylr-component-page' &&
     pluginValue(node, 'rendererVersion') !== SMYLR_COMPUTED_ASSET_RENDERER_VERSION
   ) {
     return true

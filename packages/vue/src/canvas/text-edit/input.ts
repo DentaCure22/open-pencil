@@ -1,3 +1,4 @@
+import { isMermaidDiagramContainer } from '@open-pencil/core/diagram'
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -7,9 +8,11 @@ type NodeEditMethods = Partial<{ enterNodeEditMode: (nodeId: string) => void }>
 type GetCoords = (e: MouseEvent) => { cx: number; cy: number }
 type HitTest = (cx: number, cy: number, deep: boolean) => SceneNode | null
 type SetDrag = (drag: DragState) => void
+type FocusNode = (nodeId: string) => void
 
 type TextEditInputOptions = {
   editor: Editor
+  focusNode: FocusNode
   getCoords: GetCoords
   hitTestInScope: HitTest
   hitTestSectionTitle: (cx: number, cy: number) => SceneNode | null
@@ -22,6 +25,7 @@ type TextEditInputOptions = {
 export function createTextEditInput(options: TextEditInputOptions) {
   const {
     editor,
+    focusNode,
     getCoords,
     hitTestInScope,
     hitTestSectionTitle,
@@ -82,8 +86,20 @@ export function createTextEditInput(options: TextEditInputOptions) {
   ): SceneNode | null {
     const hit = editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
     if (!hit) return null
-    if (hit.id === containerId || editor.graph.isDescendant(hit.id, containerId)) return hit
-    return null
+    if (hit.id !== containerId && !editor.graph.isDescendant(hit.id, containerId)) return null
+    const container = editor.graph.getNode(containerId)
+    if (!isMermaidDiagramContainer(container)) return hit
+    let directChild = hit
+    while (directChild.parentId && directChild.parentId !== containerId) {
+      const parent = editor.graph.getNode(directChild.parentId)
+      if (!parent) break
+      directChild = parent
+    }
+    return directChild
+  }
+
+  function focusContainerBeforeDrill(containerId: string, hit: SceneNode | null) {
+    if (hit?.type !== 'TEXT') focusNode(containerId)
   }
 
   function onDblClick(e: MouseEvent) {
@@ -100,6 +116,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
 
     if (canEnter) {
       const hit = getContainerDescendantHit(selectedId, cx, cy)
+      focusContainerBeforeDrill(selectedId, hit)
       editor.enterContainer(selectedId)
       if (hit?.type === 'TEXT') {
         startTextEditingAt(hit, cx, cy)
@@ -125,6 +142,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
       return
     }
 
+    focusNode(hit.id)
     if (hit.type === 'VECTOR') {
       nodeEditEditor.enterNodeEditMode?.(hit.id)
       return

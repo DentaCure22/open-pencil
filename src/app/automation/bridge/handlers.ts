@@ -1,5 +1,9 @@
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 
+import {
+  createAutomationCodeObjectReadHandler,
+  createAutomationCodeObjectUpsertHandler
+} from '@/app/automation/bridge/code-object-handler'
 import { createAutomationEvalHandler } from '@/app/automation/bridge/eval-handler'
 import { handleExport, handleExportJsx } from '@/app/automation/bridge/export-handlers'
 import {
@@ -7,10 +11,12 @@ import {
   handleOpenFile,
   handleSaveFile
 } from '@/app/automation/bridge/file-handlers'
-import { createAutomationMermaidHandler } from '@/app/automation/bridge/mermaid-handler'
+import {
+  createAutomationMermaidHandler,
+  createAutomationMermaidSourceHandler
+} from '@/app/automation/bridge/mermaid-handler'
 import { handleRpcFallback } from '@/app/automation/bridge/rpc-handler'
 import { handleSelection } from '@/app/automation/bridge/selection-handler'
-import { createSmylrSemanticToolHandler } from '@/app/automation/bridge/smylr-semantic-handlers'
 import {
   isUnknownRecord,
   listAutomationDocuments,
@@ -19,6 +25,7 @@ import {
   stripAutomationTargetArgs
 } from '@/app/automation/bridge/target'
 import { createAutomationToolHandler } from '@/app/automation/bridge/tool-handlers'
+import { handleTraceQuery } from '@/app/automation/bridge/trace-handler'
 import type { EditorStore } from '@/app/editor/active-store'
 
 type FigmaFactory = (store: EditorStore, pageId?: string) => FigmaAPI
@@ -31,17 +38,22 @@ type CommandHandler = (
 export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
   const handleEval = createAutomationEvalHandler(makeFigma)
   const handleMermaid = createAutomationMermaidHandler()
+  const handleMermaidSource = createAutomationMermaidSourceHandler()
+  const handleCodeObjectUpsert = createAutomationCodeObjectUpsertHandler()
+  const handleCodeObjectRead = createAutomationCodeObjectReadHandler()
   const handleTool = createAutomationToolHandler(makeFigma)
-  const handleSmylrSemanticTool = createSmylrSemanticToolHandler()
 
   const commandHandlers: Partial<Record<string, CommandHandler>> = {
     eval: handleEval,
+    upsert_code_object: handleCodeObjectUpsert,
+    get_code_object: handleCodeObjectRead,
     insert_mermaid_diagram: handleMermaid,
+    get_mermaid_source: handleMermaidSource,
     tool: handleTool,
-    smylr_semantic_tool: handleSmylrSemanticTool,
     export: handleExport,
     export_jsx: handleExportJsx,
     selection: handleSelection,
+    trace_query: handleTraceQuery,
     save_file: handleSaveFile,
     new_document: handleNewDocument,
     open_file: handleOpenFile
@@ -53,7 +65,12 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
     args: unknown
   ): Promise<unknown> {
     if (command === 'list_documents') {
-      return { ok: true, result: { documents: listAutomationDocuments(store) } }
+      return {
+        ok: true,
+        result: {
+          documents: listAutomationDocuments(store)
+        }
+      }
     }
 
     if (command === 'open_file' || command === 'new_document') {

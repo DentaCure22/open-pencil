@@ -2,6 +2,7 @@ import { parseColor } from '@open-pencil/core/color'
 import {
   MERMAID_DIAGRAM_REVISION,
   MERMAID_SVG_PARSER,
+  type MermaidAppearance,
   type MermaidDiagram,
   type MermaidSkeletonElement
 } from '@open-pencil/core/diagram'
@@ -12,6 +13,23 @@ import { IS_BROWSER } from '@/constants'
 import { MERMAID_THEME_VARIABLES } from './theme'
 
 const GEOMETRY_SELECTOR = 'path, rect, circle, ellipse, line, polyline, polygon'
+const MERMAID_RECT_CORNER_RADIUS = 10
+const SEMANTIC_RECT_SELECTOR = [
+  '.actor',
+  '.architecture-group',
+  '.architecture-service',
+  '.block',
+  '.classGroup',
+  '.cluster',
+  '.entityBox',
+  '.kanban-item',
+  '.kanban-section',
+  '.label-container',
+  '.mindmap-node',
+  '.node',
+  '.requirementBox',
+  '.statediagram-state'
+].join(', ')
 const TEXT_SELECTOR = 'text, foreignObject'
 const EXCLUDED_ANCESTORS = 'defs, marker, clipPath, mask, pattern, symbol'
 const DEFAULT_WIDTH = 640
@@ -56,6 +74,38 @@ function positiveNumber(value: string | null | undefined, fallback: number): num
 
 function matrixTuple(matrix: DOMMatrix | null): MatrixTuple {
   return matrix ? [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f] : [1, 0, 0, 1, 0, 0]
+}
+
+function hasNonAxisTransform(matrix: DOMMatrix | null): boolean {
+  return Boolean(matrix && (Math.abs(matrix.b) > 1e-6 || Math.abs(matrix.c) > 1e-6))
+}
+
+function editableTextTransform(
+  element: SVGTextElement,
+  root: SVGSVGElement
+): { bounds: Bounds; rotation: number } | null {
+  const matrix = rootMatrix(element, root)
+  if (!matrix) return null
+  const scaleX = Math.hypot(matrix.a, matrix.b)
+  const scaleY = Math.hypot(matrix.c, matrix.d)
+  const orthogonality = matrix.a * matrix.c + matrix.b * matrix.d
+  if (scaleX <= 1e-6 || scaleY <= 1e-6 || Math.abs(orthogonality) > 1e-4) {
+    const bounds = transformedBounds(element, matrix)
+    return bounds ? { bounds, rotation: 0 } : null
+  }
+  let box: DOMRect
+  try {
+    box = element.getBBox()
+  } catch {
+    return null
+  }
+  const center = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2).matrixTransform(matrix)
+  const width = Math.max(1, box.width * scaleX)
+  const height = Math.max(1, box.height * scaleY)
+  return {
+    bounds: { x: center.x - width / 2, y: center.y - height / 2, width, height },
+    rotation: (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI
+  }
 }
 
 function gradientTransform(start: DOMPoint, end: DOMPoint): GradientTransform {
@@ -344,6 +394,12 @@ function shapePath(element: SVGElement): string | null {
   return null
 }
 
+function rectangleCornerRadius(element: SVGRectElement, bounds: Bounds, scale: number): number {
+  const renderedRadius = Math.max(element.rx.baseVal.value, element.ry.baseVal.value) * scale
+  const minimumRadius = element.closest(SEMANTIC_RECT_SELECTOR) ? MERMAID_RECT_CORNER_RADIUS : 0
+  return Math.min(bounds.width / 2, bounds.height / 2, Math.max(minimumRadius, renderedRadius))
+}
+
 function styleOpacity(
   style: CSSStyleDeclaration,
   property: 'fillOpacity' | 'strokeOpacity'
@@ -360,7 +416,23 @@ function dashPattern(style: CSSStyleDeclaration): number[] {
   return values.length % 2 === 0 ? values : [...values, ...values]
 }
 
-function visibleElement(element: Element, style: CSSStyleDeclaration): boolean {
+function visibleElement(
+  element: Element,
+  style: CSSStyleDeclaration,
+  root: SVGSVGElement
+): boolean {
+  let ancestor: Element | null = element.parentElement
+  while (ancestor && ancestor !== root) {
+    const ancestorStyle = window.getComputedStyle(ancestor)
+    if (
+      ancestorStyle.display === 'none' ||
+      ancestorStyle.visibility === 'hidden' ||
+      finiteNumber(ancestorStyle.opacity, 1) <= 0
+    ) {
+      return false
+    }
+    ancestor = ancestor.parentElement
+  }
   return (
     !element.closest(EXCLUDED_ANCESTORS) &&
     style.display !== 'none' &&
@@ -369,12 +441,37 @@ function visibleElement(element: Element, style: CSSStyleDeclaration): boolean {
   )
 }
 
+function insideRoot(bounds: Bounds, root: SVGSVGElement): boolean {
+  const viewBox = root.viewBox.baseVal
+  const width = viewBox.width || positiveNumber(root.getAttribute('width'), DEFAULT_WIDTH)
+  const height = viewBox.height || positiveNumber(root.getAttribute('height'), DEFAULT_HEIGHT)
+  const left = viewBox.x
+  const top = viewBox.y
+  return (
+    bounds.x + bounds.width >= left &&
+    bounds.x <= left + width &&
+    bounds.y + bounds.height >= top &&
+    bounds.y <= top + height
+  )
+}
+
 function ancestorGroups(element: Element, root: SVGSVGElement): string[] {
   const groups: string[] = []
   let current: Element | null = element.parentElement
   while (current && current !== root) {
     if (current instanceof SVGGElement) {
-      const identity = current.id || current.getAttribute('class')?.trim()
+      const siblings = current.parentElement
+        ? Array.from(current.parentElement.children).filter(
+            (sibling) => sibling instanceof SVGGElement
+          )
+        : []
+      const index = siblings.indexOf(current)
+      const className = current.getAttribute('class')?.trim()
+      const dataId = current.getAttribute('data-id')?.trim()
+      const identity =
+        current.id ||
+        (dataId ? `${className?.split(/\s+/)[0] ?? 'group'}:${dataId}` : null) ||
+        (className ? `${className}@${Math.max(0, index)}` : `group@${Math.max(0, index)}`)
       if (identity) groups.unshift(identity)
     }
     current = current.parentElement
@@ -418,11 +515,14 @@ function geometryElement(
 ): MermaidSkeletonElement | null {
   if (!(element instanceof SVGGraphicsElement)) return null
   const style = window.getComputedStyle(element)
-  if (!visibleElement(element, style)) return null
-  const path = shapePath(element)
+  if (!visibleElement(element, style, root)) return null
   const matrix = rootMatrix(element, root)
+  const rectangle = element instanceof SVGRectElement
+  const nativeRectangle = rectangle && !hasNonAxisTransform(matrix)
+  const path = nativeRectangle ? null : shapePath(element)
   const bounds = transformedBounds(element, matrix)
-  if (!path || !bounds) return null
+  if ((!nativeRectangle && !path) || !bounds) return null
+  if (elementName(element) === 'today' && !insideRoot(bounds, root)) return null
   const scale = matrix ? Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) : 1
   const id = element.id ? `${element.id}-${index}` : `${element.tagName.toLowerCase()}-${index}`
   const fillPaint = gradientPaint(style.fill, root, matrix, bounds)
@@ -431,10 +531,11 @@ function geometryElement(
   const endArrowhead = markerKind(style.getPropertyValue('marker-end'))
   return {
     id,
-    type: 'path',
+    type: nativeRectangle ? 'rectangle' : 'path',
     name: elementName(element),
     ...bounds,
-    path,
+    path: path ?? undefined,
+    cornerRadius: nativeRectangle ? rectangleCornerRadius(element, bounds, scale) : undefined,
     transform: matrixTuple(matrix),
     backgroundColor: style.fill,
     strokeColor: style.stroke,
@@ -456,6 +557,14 @@ function geometryElement(
 }
 
 function textContent(element: Element): string {
+  if (element instanceof SVGForeignObjectElement) {
+    const html = element.querySelector<HTMLElement>('*')
+    const lines = (html?.innerText ?? element.textContent ?? '')
+      .split(/\r?\n/u)
+      .map((line) => normalizedText(line))
+      .filter(Boolean)
+    return lines.join('\n')
+  }
   if (element instanceof SVGTextElement) {
     const spans = Array.from(element.querySelectorAll(':scope > tspan'))
       .map((span) => normalizedText(span.textContent))
@@ -478,14 +587,17 @@ function textElement(
   const probe =
     element instanceof SVGForeignObjectElement
       ? (element.querySelector<HTMLElement>('*') ?? element)
-      : element
+      : (element.querySelector<SVGTSpanElement>('tspan') ?? element)
   const style = window.getComputedStyle(probe)
-  if (!visibleElement(element, style)) return null
+  if (!visibleElement(element, style, root)) return null
   const text = textContent(element)
+  const editableTransform =
+    element instanceof SVGTextElement ? editableTextTransform(element, root) : null
   const bounds =
-    element instanceof SVGForeignObjectElement
+    editableTransform?.bounds ??
+    (element instanceof SVGForeignObjectElement
       ? htmlBounds(element, root)
-      : transformedBounds(element, rootMatrix(element, root))
+      : transformedBounds(element, rootMatrix(element, root)))
   if (!text || !bounds) return null
   const paddedBounds = textBounds(element, bounds)
   const id = element.id ? `${element.id}-${index}` : `text-${index}`
@@ -504,6 +616,7 @@ function textElement(
     strokeColor: style.fill === 'none' ? style.color : style.fill,
     fillOpacity: styleOpacity(style, 'fillOpacity'),
     opacity: Math.min(1, Math.max(0, finiteNumber(style.opacity, 1))),
+    rotation: editableTransform?.rotation ?? 0,
     label: {
       text,
       fontSize: positiveNumber(style.fontSize, 16),
@@ -524,20 +637,34 @@ function prepareRoot(root: SVGSVGElement): void {
   root.style.maxWidth = 'none'
 }
 
-async function renderSvg(source: string): Promise<MermaidDiagram> {
+function nativeTransparentElements(
+  source: string,
+  elements: MermaidSkeletonElement[]
+): MermaidSkeletonElement[] {
+  const isSankey = /^\s*sankey(?:-beta)?\s*$/mu.test(source)
+  if (!isSankey) return elements
+
+  // Mermaid's SVG uses multiply for translucent Sankey links. That is faithful on its white
+  // documentation surface but turns the gradients muddy gray on a transparent dark canvas.
+  // Native editable mode keeps the gradient and opacity while making its color backdrop-safe.
+  return elements.map((element) =>
+    element.strokePaint?.gradientStops ? { ...element, blendMode: 'NORMAL' } : element
+  )
+}
+
+async function renderSvg(source: string, appearance: MermaidAppearance): Promise<MermaidDiagram> {
   if (!IS_BROWSER) throw new Error('Mermaid rendering requires a browser.')
   const { default: mermaid } = await import('mermaid')
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
-    theme: 'default',
+    theme: appearance === 'light' ? 'default' : 'dark',
     themeVariables: MERMAID_THEME_VARIABLES
   })
 
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
-  host.style.cssText =
-    'opacity:0;position:fixed;z-index:-1;left:-99999px;top:-99999px;width:4096px;height:4096px;pointer-events:none'
+  host.style.cssText = `opacity:0;position:fixed;z-index:-1;left:-99999px;top:-99999px;width:${DEFAULT_WIDTH}px;height:${DEFAULT_HEIGHT}px;pointer-events:none`
   document.body.appendChild(host)
   try {
     const id = `open-pencil-mermaid-${crypto.randomUUID()}`
@@ -549,12 +676,28 @@ async function renderSvg(source: string): Promise<MermaidDiagram> {
     const geometry = Array.from(root.querySelectorAll<SVGElement>(GEOMETRY_SELECTOR)).flatMap(
       (element, index) => geometryElement(element, root, index) ?? []
     )
-    const text = Array.from(
+    const textElements = Array.from(
       root.querySelectorAll<SVGTextElement | SVGForeignObjectElement>(TEXT_SELECTOR)
-    ).flatMap((element, index) => textElement(element, root, index) ?? [])
-    const elements = [...geometry, ...text]
+    )
+    const renderedTextElements = textElements.flatMap((element, index) => {
+      const rendered = textElement(element, root, index)
+      return rendered ? [{ element, rendered }] : []
+    })
+    const foreignObjectTexts = new Set(
+      renderedTextElements.flatMap(({ element, rendered }) =>
+        element instanceof SVGForeignObjectElement ? [rendered.text ?? ''] : []
+      )
+    )
+    const text = renderedTextElements
+      .filter(
+        ({ element, rendered }) =>
+          element instanceof SVGForeignObjectElement || !foreignObjectTexts.has(rendered.text ?? '')
+      )
+      .map(({ rendered }) => rendered)
+    const elements = nativeTransparentElements(source, [...geometry, ...text])
     if (elements.length === 0) throw new Error('Mermaid returned no editable diagram pieces.')
     return {
+      appearance,
       source,
       revision: MERMAID_DIAGRAM_REVISION,
       parser: MERMAID_SVG_PARSER,
@@ -568,8 +711,11 @@ async function renderSvg(source: string): Promise<MermaidDiagram> {
 
 let svgRenderQueue: Promise<void> = Promise.resolve()
 
-export function parseMermaidSvgInBrowser(source: string): Promise<MermaidDiagram> {
-  const task = svgRenderQueue.then(() => renderSvg(source))
+export function parseMermaidSvgInBrowser(
+  source: string,
+  appearance: MermaidAppearance = 'dark'
+): Promise<MermaidDiagram> {
+  const task = svgRenderQueue.then(() => renderSvg(source, appearance))
   svgRenderQueue = task.then(
     () => undefined,
     () => undefined

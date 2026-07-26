@@ -1,4 +1,4 @@
-import type { SceneGraph, SceneNode, NodeType } from './'
+import type { NodeType, SceneGraph, SceneNode } from './'
 import { getWorldMatrix } from './coordinate'
 import Matrix from './matrix'
 

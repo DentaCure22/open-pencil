@@ -221,6 +221,47 @@ Self-review checklist:
 ## Rendering
 
 - Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM
+- Trusted app-like board content uses one **Code Object** contract under `src/app/code-object/`:
+  an ordinary persisted `FRAME` owns its editable source or app descriptor, name, serializable
+  properties/state, attachments, Design/Interact, transforms, undo, duplication, connectors, and
+  persistence. Presets insert that same frame-owned contract; renderer subtypes are implementation
+  choices, not scene-node or product object types. Authored TypeScript/TSX uses one ReactDOM root.
+  A first-party full program may use a frame-bound **trusted-web-app** iframe so its native auth,
+  router, portals, and internal scrolling remain source-owned; never reconstruct that program's
+  DOM in OpenPencil. Trusted iframe instances stay bound to one frame and mount generation, use a
+  bounded volatile resident pool, expose semantic Layers only for the Board-selected frame, and
+  keep per-frame route/scroll checkpoints under the source app's origin rather than Board JSON or
+  Undo. External/untrusted websites remain sandboxed embeds. Mermaid creates native
+  nodes/connectors. Keep `src/app/live-react-surface/` read-compatibility only.
+- Cross-object behavior uses one **Object Graph** contract under `src/app/object-graph/`. Any ordinary
+  native object or Code Object frame may opt into the Graph capability and become an endpoint in a
+  typed `visual`, `data`, or `action` connection. React Flow is a transparent interaction and edge
+  layer on the ordinary Board: it aligns handles with the existing CanvasKit objects and shares the
+  Board viewport instead of rendering cards, a second canvas, a minimap, or a separate camera.
+  CanvasKit, Code Object DOM surfaces, and React Flow must publish from the shared
+  `scheduleEditorPresentationFrame()` clock; never add an Object Graph-local animation frame for
+  geometry or viewport projection.
+  There is no separate Graph tool or mode. Normal OpenPencil selection and transforms remain active;
+  a selected graph-enabled object exposes connection handles in place. Removing it from the graph
+  removes only its Graph capability, not the object.
+  Connections persist as typed page-owned records with stable IDs, not hidden SceneNodes or Layers;
+  React Flow derives their route and label from the live endpoint geometry. Connection selection
+  and every React Flow interaction must dispatch to normal editor actions so OpenPencil remains the
+  only authority for Board nodes, selection, transforms, persistence, permissions, and Undo/Redo.
+  Visible edge stroke, arrowhead, and label scale sublinearly from the larger current endpoint's
+  Board dimensions, while the Board camera remains the shared viewport and invisible hit targets
+  remain screen-constant. Never introduce a second graph store.
+- Page-wide coordinated behavior uses one **Board Experience** contract under
+  `src/app/board-experience/`: an ordinary `CANVAS` may persist one experience definition while
+  OpenPencil owns the single page coordinator and event loop. The experience must compose ordinary
+  native objects or Code Object frames for every meaningful visible piece; it must not paint a
+  parallel non-selectable HUD, lane, tool, or app surface over the Board. Created components keep
+  normal selection, transforms, undo/redo, duplication, and persistence. Code Objects and Board
+  Experiences both issue bounded actions through `src/app/board-authority/`; neither may create a
+  second editor store or hidden mutable board runtime. Board Authority issues revocable,
+  store-bound grants and validates explicit create/delete plus field-scoped update permissions on
+  every mutation. Transient component identities belong to one grant session and are removed when
+  that session ends; meaningful user actions use normal history.
 - `renderVersion` vs `sceneVersion`: `renderVersion` = canvas repaint (pan/zoom/hover); `sceneVersion` = scene graph mutations. UI that only cares about graph data should avoid watching repaint-only state; use editor events for incremental surfaces such as the layer tree.
 - `requestRender()` bumps both counters; `requestRepaint()` bumps only `renderVersion`
 - `renderNow()` is only for surface recreation and font loading (need immediate draw)

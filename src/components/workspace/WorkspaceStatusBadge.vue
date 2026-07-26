@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import type { LearningOutcome, LiveAppRuntimeStatus, ReviewStatus } from '@/app/workspace'
+import type { LearningOutcome, ReviewStatus } from '@/app/workspace'
 import AppBadge from '@/components/ui/AppBadge.vue'
 
 type WorkspaceStatus =
   | LearningOutcome
-  | LiveAppRuntimeStatus
   | ReviewStatus
   | 'active'
   | 'applied'
@@ -32,7 +31,6 @@ const label = computed(() =>
 
 const tone = computed(() => {
   if (
-    status === 'live' ||
     status === 'approved' ||
     status === 'verified' ||
     status === 'applied' ||
@@ -42,17 +40,11 @@ const tone = computed(() => {
   ) {
     return 'bg-green-500/15 text-green-400'
   }
-  if (status === 'preview' || status === 'preferred') return 'bg-violet-500/15 text-violet-300'
-  if (status === 'loading' || status === 'stale' || status === 'open') {
+  if (status === 'preferred') return 'bg-violet-500/15 text-violet-300'
+  if (status === 'open') {
     return 'bg-amber-500/15 text-amber-300'
   }
-  if (
-    status === 'auth-required' ||
-    status === 'unavailable' ||
-    status === 'rejected' ||
-    status === 'failed' ||
-    status === 'abandoned'
-  ) {
+  if (status === 'rejected' || status === 'failed' || status === 'abandoned') {
     return 'bg-red-500/15 text-red-300'
   }
   return 'bg-hover text-muted'

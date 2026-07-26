@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
+import { objectGraphConnectionForSelection } from '@open-pencil/scene-graph'
 import { useSelectionState } from '@open-pencil/vue'
 
 import AppMenu from '@/components/Shell/AppMenu.vue'
 import { useAIChat } from '@/app/ai/chat/use'
 import { useEditorStore } from '@/app/editor/active-store'
+import { tracePanelOpenEpoch } from '@/app/narrated-trace'
 import {
+  clearLiveInspectorSelection,
+  liveInspectorActiveFrameId,
   liveInspectorDocument,
-  liveInspectorFrameSrc,
   liveInspectorInteractionMode,
-  liveInspectorRoute,
-  liveInspectorSelectionEpoch,
-  liveInspectorStatus,
-  reloadLiveInspectorFrame,
+  selectLiveInspectorNode,
   selectedLiveInspectorNode,
+  setLiveInspectorActiveFrame,
   setLiveInspectorInteractionMode
 } from '@/app/smylr-live-inspector/session'
-import { isSmylrLiveAppFrameNode } from '@/app/smylr-production/workspace'
+import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
 import { selectedSourceDocument } from '@/app/source-document/workspace'
 import AssetsPanel from './AssetsPanel.vue'
 import LayerTree from './LayerTree/LayerTree.vue'
@@ -32,13 +33,12 @@ const { showCodeTab = true } = defineProps<{ showCodeTab?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { activeTab } = useAIChat()
 const store = useEditorStore()
-const { selectedCount, selectedNode } = useSelectionState()
+const { selectedCount, selectedIds, selectedNode } = useSelectionState()
 
 type UtilityKind = 'assets' | 'layers' | 'trace'
 
 const openUtility = ref<UtilityKind>('layers')
 const contextOpen = ref(false)
-const showLiveTools = ref(false)
 const variablesOpen = ref(false)
 
 const railMotionClass =
@@ -50,52 +50,45 @@ const utilityTabClass =
 
 interface LayerTreeHandle {
   closeTreeTools: () => void
+  revealNode: (nodeId: string) => void
 }
 
 const layerTreeRef = ref<LayerTreeHandle | null>(null)
 
-const liveStatusLabel = computed(() => {
-  if (liveInspectorStatus.value === 'connected') return 'Live'
-  if (liveInspectorStatus.value === 'loading') return 'Loading'
-  if (liveInspectorStatus.value === 'unavailable') return 'Reconnect'
-  return ''
-})
-const liveStatusDot = computed(() => {
-  if (liveInspectorStatus.value === 'connected') return 'bg-emerald-500'
-  if (liveInspectorStatus.value === 'loading') return 'bg-sky-500'
-  if (liveInspectorStatus.value === 'unavailable') return 'bg-amber-500'
-  return ''
-})
-const currentPageHasLiveApp = computed(() => {
+const hasNativeDesignContext = computed(() => {
   void store.state.sceneVersion
-  return store.graph.getChildren(store.state.currentPageId).some(isSmylrLiveAppFrameNode)
+  return (
+    selectedCount.value > 1 ||
+    Boolean(selectedNode.value) ||
+    Boolean(
+      objectGraphConnectionForSelection(store.graph, store.state.currentPageId, selectedIds.value)
+    )
+  )
 })
-const showLiveChrome = computed(
-  () =>
-    currentPageHasLiveApp.value &&
-    (liveInspectorStatus.value !== 'idle' ||
-      Boolean(liveInspectorDocument.value) ||
-      Boolean(liveInspectorFrameSrc.value))
-)
-
-const hasNativeDesignContext = computed(
-  () => selectedCount.value > 1 || Boolean(selectedNode.value)
-)
-const hasDesignContext = computed(
-  () =>
-    hasNativeDesignContext.value ||
-    Boolean(liveInspectorDocument.value && selectedLiveInspectorNode.value)
-)
+const hasDesignContext = computed(() => hasNativeDesignContext.value)
 const sourceDocumentSelected = computed(() => {
   void store.state.sceneVersion
   return Boolean(selectedSourceDocument(store))
+})
+const selectedSmylrProductionFrame = computed(() => {
+  void store.state.sceneVersion
+  const node = selectedNode.value
+  return isSmylrProductionAppCodeObjectFrame(node) ? node : null
+})
+const liveContainerModeActive = computed(() => {
+  const frame = selectedSmylrProductionFrame.value
+  return (
+    Boolean(frame) &&
+    liveInspectorActiveFrameId.value === frame?.id &&
+    liveInspectorInteractionMode.value === 'select'
+  )
 })
 const showContextInspector = computed(
   () =>
     (contextOpen.value || (!showCodeTab && hasDesignContext.value)) &&
     (hasDesignContext.value || activeTab.value === 'code')
 )
-const showContextRail = computed(() => showContextInspector.value && openUtility.value !== 'trace')
+const showContextRail = computed(() => showContextInspector.value)
 const contextRailStateClass = computed(() => {
   if (!showContextRail.value) return 'grow-0 opacity-0'
   if (sourceDocumentSelected.value) return 'grow-[1.65] opacity-100'
@@ -103,9 +96,9 @@ const contextRailStateClass = computed(() => {
 })
 
 watch(
-  [hasDesignContext, liveInspectorSelectionEpoch],
-  () => {
-    if (hasDesignContext.value) contextOpen.value = true
+  hasDesignContext,
+  (hasContext) => {
+    if (hasContext) contextOpen.value = true
   },
   { immediate: true }
 )
@@ -113,10 +106,6 @@ watch(
 watch(
   activeTab,
   (tab) => {
-    if (tab === 'trace') {
-      openUtility.value = 'trace'
-      return
-    }
     if (tab === 'code' && !showCodeTab && !sourceDocumentSelected.value) {
       activeTab.value = 'design'
       return
@@ -128,11 +117,31 @@ watch(
   { immediate: true }
 )
 
-watch(openUtility, (kind) => {
-  if (kind === 'trace') activeTab.value = 'trace'
-  else if (activeTab.value === 'trace') activeTab.value = 'design'
-  showLiveTools.value = false
+watch(openUtility, () => {
   layerTreeRef.value?.closeTreeTools()
+})
+
+watch(tracePanelOpenEpoch, () => {
+  openUtility.value = 'trace'
+})
+
+watch(liveInspectorDocument, (document) => {
+  if (liveContainerModeActive.value && document?.tree.id && !selectedLiveInspectorNode.value) {
+    selectLiveInspectorNode(document.tree.id)
+  }
+})
+
+watch(selectedSmylrProductionFrame, (frame, previousFrame) => {
+  if (
+    frame ||
+    !previousFrame ||
+    liveInspectorActiveFrameId.value !== previousFrame.id ||
+    liveInspectorInteractionMode.value !== 'select'
+  ) {
+    return
+  }
+  clearLiveInspectorSelection()
+  setLiveInspectorInteractionMode('frame')
 })
 
 function utilityTabStateClass(kind: UtilityKind) {
@@ -141,34 +150,25 @@ function utilityTabStateClass(kind: UtilityKind) {
     : 'text-muted hover:bg-hover hover:text-surface'
 }
 
-function useLiveApp() {
-  setLiveInspectorInteractionMode('interact')
+async function revealInsertedAsset(nodeId: string) {
+  openUtility.value = 'layers'
+  await nextTick()
+  layerTreeRef.value?.revealNode(nodeId)
 }
 
-function useLiveAppFromMenu() {
-  useLiveApp()
-  showLiveTools.value = false
-}
+function toggleLiveContainerMode() {
+  const frame = selectedSmylrProductionFrame.value
+  if (!frame) return
+  if (liveContainerModeActive.value) {
+    clearLiveInspectorSelection()
+    setLiveInspectorInteractionMode('frame')
+    return
+  }
 
-function reloadLiveLayersFromMenu() {
-  reloadLiveInspectorFrame()
-  showLiveTools.value = false
-}
-
-function openLiveApp() {
-  if (!liveInspectorFrameSrc.value) return
-  window.open(liveInspectorFrameSrc.value, '_blank', 'noopener,noreferrer')
-}
-
-function openLiveAppFromMenu() {
-  openLiveApp()
-  showLiveTools.value = false
-}
-
-function toggleLiveTools() {
-  const next = !showLiveTools.value
-  showLiveTools.value = next
-  if (next) layerTreeRef.value?.closeTreeTools()
+  setLiveInspectorActiveFrame(frame.id)
+  setLiveInspectorInteractionMode('select')
+  const rootId = liveInspectorDocument.value?.tree.id
+  if (rootId) selectLiveInspectorNode(rootId)
 }
 </script>
 
@@ -240,14 +240,28 @@ function toggleLiveTools() {
         <div
           class="border-border/70 relative mx-3 flex h-7 shrink-0 items-center gap-1 border-b text-[10px] text-muted/80"
         >
-          <span
-            v-if="showLiveChrome && liveStatusDot"
-            class="size-1.5 shrink-0 rounded-full"
-            :class="liveStatusDot"
-          />
-          <span class="min-w-0 flex-1 truncate">
-            {{ showLiveChrome ? liveInspectorRoute || liveStatusLabel : 'Document' }}
-          </span>
+          <span class="min-w-0 flex-1 truncate">Document</span>
+          <Tip
+            v-if="selectedSmylrProductionFrame"
+            :label="liveContainerModeActive ? 'Stop selecting containers' : 'Select containers'"
+          >
+            <button
+              type="button"
+              data-test-id="smylr-containers-tool"
+              aria-label="Select containers"
+              :aria-pressed="liveContainerModeActive"
+              class="flex h-6 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[10px] font-medium transition-colors"
+              :class="
+                liveContainerModeActive
+                  ? 'bg-accent text-white'
+                  : 'text-muted hover:bg-hover hover:text-surface'
+              "
+              @click="toggleLiveContainerMode"
+            >
+              <icon-lucide-scan-search class="size-3.5" />
+              <span>Containers</span>
+            </button>
+          </Tip>
           <Tip label="Manage design tokens">
             <button
               type="button"
@@ -259,59 +273,8 @@ function toggleLiveTools() {
               <icon-lucide-variable class="size-3.5" />
             </button>
           </Tip>
-          <Tip v-if="showLiveChrome" label="Live layer controls">
-            <button
-              type="button"
-              data-test-id="smylr-live-tools-toggle"
-              aria-label="Live layer controls"
-              class="flex size-6 shrink-0 items-center justify-center rounded-[5px] text-muted hover:bg-hover hover:text-surface"
-              :class="showLiveTools ? 'bg-hover text-surface' : ''"
-              :aria-expanded="showLiveTools"
-              @click="toggleLiveTools"
-            >
-              <icon-lucide-more-horizontal class="size-3.5" />
-            </button>
-          </Tip>
-          <div
-            v-if="showLiveChrome && showLiveTools"
-            class="border-chrome-border bg-chrome-raised shadow-chrome-menu absolute top-7 right-0 z-30 w-40 rounded-[9px] border p-1 backdrop-blur-xl"
-          >
-            <button
-              type="button"
-              data-test-id="smylr-live-interact"
-              class="flex h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[12px] text-muted hover:bg-hover hover:text-surface"
-              :class="liveInspectorInteractionMode === 'interact' ? 'bg-hover text-surface' : ''"
-              @click="useLiveAppFromMenu"
-            >
-              <icon-lucide-mouse-pointer-click class="size-3.5" />
-              <span>Use live app</span>
-            </button>
-            <button
-              type="button"
-              data-test-id="smylr-auth-reload-frame"
-              class="flex h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[12px] text-muted hover:bg-hover hover:text-surface"
-              @click="reloadLiveLayersFromMenu"
-            >
-              <icon-lucide-refresh-cw class="size-3.5" />
-              <span>Reload layers</span>
-            </button>
-            <button
-              type="button"
-              data-test-id="smylr-open-live-app"
-              class="flex h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left text-[12px] text-muted hover:bg-hover hover:text-surface disabled:cursor-default disabled:opacity-40"
-              :disabled="!liveInspectorFrameSrc"
-              @click="openLiveAppFromMenu"
-            >
-              <icon-lucide-external-link class="size-3.5" />
-              <span>Open Smylr</span>
-            </button>
-          </div>
         </div>
-        <LayerTree
-          ref="layerTreeRef"
-          data-test-id="layers-tree"
-          @tools-opened="showLiveTools = false"
-        />
+        <LayerTree ref="layerTreeRef" data-test-id="layers-tree" />
       </TabsContent>
 
       <TabsContent
@@ -319,7 +282,7 @@ function toggleLiveTools() {
         data-test-id="left-panel-assets-content"
         :class="utilityContentClass"
       >
-        <AssetsPanel />
+        <AssetsPanel @asset-inserted="revealInsertedAsset" />
       </TabsContent>
 
       <TabsContent

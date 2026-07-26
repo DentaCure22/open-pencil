@@ -1,15 +1,4 @@
-import {
-  liveInspectorActiveFrameId,
-  liveInspectorDocument,
-  liveInspectorRoute,
-  liveInspectorStatus
-} from '@/app/smylr-live-inspector/session'
-import {
-  isSmylrLiveAppFrameNode,
-  smylrLiveAppFrameDisplayName,
-  smylrLiveAppFrameRoute,
-  smylrLiveAppFrameState
-} from '@/app/smylr-production/workspace'
+import { codeObjectDocument, isCodeObjectFrame } from '@/app/code-object/model'
 import {
   WorkspaceDomainError,
   type EvidenceFreshnessStatus,
@@ -26,7 +15,7 @@ import type {
   CollectEvidenceInput,
   EvidenceIntakeResult,
   EvidenceSourceRequest,
-  LiveAppFrameEvidenceRequest
+  CodeObjectFrameEvidenceRequest
 } from './types'
 
 const PROVIDERS: Record<
@@ -51,18 +40,18 @@ const PROVIDERS: Record<
     kind: 'captured-input',
     requiredScope: 'captured-content:read'
   },
-  'live-app-frame': {
+  'code-object-frame': {
     capabilities: {
       capturedContentRead: false,
       externalWrites: false,
-      liveRuntimeRead: true,
+      liveRuntimeRead: false,
       networkAccess: false,
       sourceWrites: false,
       workspaceMetadataRead: false
     },
-    id: 'openpencil-live-app-bridge-v1',
-    kind: 'live-app',
-    requiredScope: 'live-runtime:read'
+    id: 'openpencil-code-object-v1',
+    kind: 'code-object',
+    requiredScope: 'code-object:read'
   },
   'workspace-object': {
     capabilities: {
@@ -196,27 +185,16 @@ function workspaceObjectSummary(object: WorkspaceObject): string {
   return `Canonical ${object.type} ${object.id} at exact revision ${object.revision}.`
 }
 
-function liveNodeCount(): number {
-  const root = liveInspectorDocument.value?.tree
-  if (!root) return 0
-  let count = 0
-  const visit = (node: typeof root) => {
-    count += 1
-    for (const child of node.children ?? []) visit(child)
-  }
-  visit(root)
-  return count
-}
-
-function resolveLiveAppFrameRequest(
+function resolveCodeObjectFrameRequest(
   input: CollectEvidenceInput,
-  request: LiveAppFrameEvidenceRequest,
+  request: CodeObjectFrameEvidenceRequest,
   providerRunId: string,
   scopes: string[],
   retrievedAt: string
 ): { item: EvidenceManifestItem; status: EvidenceProviderRun['status'] } {
   const frame = input.store.graph.getNode(request.frameId)
-  if (!frame || !isSmylrLiveAppFrameNode(frame)) {
+  const document = codeObjectDocument(frame)
+  if (!frame || !isCodeObjectFrame(frame) || !document) {
     return {
       item: redactedItem({
         id: request.id,
@@ -227,52 +205,29 @@ function resolveLiveAppFrameRequest(
       status: 'unavailable'
     }
   }
-  const route = smylrLiveAppFrameRoute(frame)
-  const activeLive =
-    liveInspectorActiveFrameId.value === frame.id &&
-    liveInspectorStatus.value === 'connected' &&
-    liveInspectorRoute.value === route
-  if (request.requireLive && !activeLive) {
-    return {
-      item: redactedItem({
-        id: request.id,
-        providerRunId,
-        requestedScopes: scopes,
-        retrievedAt
-      }),
-      status: 'unavailable'
-    }
-  }
-  const document =
-    activeLive && liveInspectorDocument.value?.route === route ? liveInspectorDocument.value : null
-  const truthScope: EvidenceTruthScope = activeLive ? 'live' : 'captured'
-  const sourceRef = activeLive
-    ? `live-app://smylr${route}#frame=${frame.id}`
-    : `captured://smylr/frame-definition/${frame.id}`
+  const route = typeof document.props.route === 'string' ? document.props.route : undefined
+  const truthScope: EvidenceTruthScope = 'captured'
+  const sourceRef = `code-object://${document.definitionId}#frame=${frame.id}`
   return {
     item: {
       access: 'allowed',
       facts: {
         frameId: frame.id,
-        frameState: smylrLiveAppFrameState(frame),
-        inspectorStatus: activeLive ? 'connected' : liveInspectorStatus.value,
-        nodeCount: document ? liveNodeCount() : 0,
-        route,
-        runtimeActive: activeLive
+        component: document.component,
+        definitionId: document.definitionId,
+        ...(route ? { route } : {}),
+        runtime: document.runtime
       },
-      freshness: activeLive ? 'current' : 'unknown',
+      freshness: 'current',
       id: request.id,
-      observedAt: activeLive ? (document?.capturedAt ?? retrievedAt) : undefined,
+      observedAt: retrievedAt,
       permissionScopes: scopes,
       providerRunId,
       retrievedAt,
       sourceRef,
-      summary: activeLive
-        ? 'The active Smylr frame completed the inspector handshake for this exact route. Only runtime metadata is collected; page text and field values are excluded.'
-        : 'A Smylr frame definition exists, but no matching active inspector handshake is available. This item is captured metadata, not Live runtime evidence.',
-      title: activeLive
-        ? `Live Smylr runtime · ${smylrLiveAppFrameDisplayName(frame.name)}`
-        : `Captured Smylr frame · ${smylrLiveAppFrameDisplayName(frame.name)}`,
+      summary:
+        'The persisted Code Object contract is available at this exact frame revision. Source and user-entered state are excluded from the evidence item.',
+      title: `Code Object · ${document.name}`,
       truthScope
     },
     status: 'collected'
@@ -329,7 +284,7 @@ function resolveAllowedRequest(
       status: 'collected'
     }
   }
-  return resolveLiveAppFrameRequest(input, request, providerRunId, scopes, retrievedAt)
+  return resolveCodeObjectFrameRequest(input, request, providerRunId, scopes, retrievedAt)
 }
 
 export function collectEvidence(input: CollectEvidenceInput): EvidenceIntakeResult {

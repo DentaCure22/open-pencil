@@ -70,6 +70,33 @@ const graph = await htmlToSceneGraph(
 
 For DesignDOM output without creating a scene graph, use `htmlToDesignDocument()`.
 
+## React/TSX to native layers
+
+Trusted, self-contained React modules can be evaluated into DesignDOM and converted into native SceneGraph layers. The converter retains exact TSX source, stable source IDs, supported hook state, and event intent; re-import uses a three-way merge so unchanged source-owned fields update while manual canvas overrides survive:
+
+```ts
+import {
+  reactSourceToDesignDocument,
+  reactSourceToSceneGraph,
+  reconcileDesignDocumentToSceneGraph
+} from '@open-pencil/dom-css'
+
+const source = `
+  import React, { useState } from 'react'
+  export default function Globe() {
+    const [longitude] = useState(-97)
+    return <main data-open-pencil-source-id="globe" className="globe">Earth {longitude}°</main>
+  }
+`
+
+const cssText = '.globe { width: 720px; height: 480px; }'
+const graph = await reactSourceToSceneGraph(source, { cssText })
+const next = await reactSourceToDesignDocument(source, { cssText })
+reconcileDesignDocumentToSceneGraph(graph, next)
+```
+
+Use `data-open-pencil-source-id` (or a stable `id`/React key) for reorder-safe identity. `data-open-pencil-bind-state="0:rotation"` maps primitive hook state to a native variable binding. Imported external components become labelled editable fallbacks with warnings instead of pretending to execute. React source is trusted code execution, not a sandbox.
+
 ## JSX/DOM authoring
 
 Use the package as a JSX import source when you want DOM-shaped authoring that still flows through DesignDOM, CSSOM, and SceneGraph conversion:

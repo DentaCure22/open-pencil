@@ -7,7 +7,7 @@ import type {
   KnowledgeWorkspace,
   SurfaceRun,
   WorkspaceObject,
-  WorkspaceHtmlArtifactRevisionRef,
+  WorkspaceCodeObjectArtifactRevisionRef,
   WorkspaceObjectType,
   WorkspaceRelation,
   WorkspaceView
@@ -22,7 +22,6 @@ const OBJECT_TYPES: ReadonlySet<WorkspaceObjectType> = new Set([
   'graph-node',
   'graph-edge',
   'design-artifact',
-  'live-app-block',
   'review-object',
   'intent-record',
   'evidence-manifest',
@@ -99,11 +98,11 @@ function requireUniqueStrings(values: string[], label: string): void {
 }
 
 function validateArtifactReference(
-  artifact: WorkspaceHtmlArtifactRevisionRef,
+  artifact: WorkspaceCodeObjectArtifactRevisionRef,
   label: string
 ): void {
   if (
-    artifact.kind !== 'html-board' ||
+    artifact.kind !== 'code-object' ||
     !artifact.artifactId ||
     !artifact.boardId ||
     !artifact.sourceHash ||
@@ -114,7 +113,7 @@ function validateArtifactReference(
   ) {
     throw new WorkspaceDomainError(
       'validation_failed',
-      `${label} must identify one exact HTML board revision`
+      `${label} must identify one exact Code Object revision`
     )
   }
 }
@@ -568,7 +567,7 @@ function validateObjectEntry(
   workspace: KnowledgeWorkspace,
   id: string,
   object: WorkspaceObject
-): boolean {
+): void {
   if (id !== object.id || !OBJECT_TYPES.has(object.type)) {
     throw new WorkspaceDomainError('validation_failed', `invalid workspace object entry ${id}`)
   }
@@ -597,33 +596,6 @@ function validateObjectEntry(
   validateDecisionReceipt(workspace, object)
   validateLearningReceipt(workspace, object)
   validateActionLifecycleObject(workspace, object)
-  return object.type === 'live-app-block' && object.runtime.status === 'live'
-}
-
-function validateRuntimeOwner(workspace: KnowledgeWorkspace, liveRuntimeCount: number): void {
-  if (liveRuntimeCount > 1) {
-    throw new WorkspaceDomainError(
-      'validation_failed',
-      'only one Live App Block may own the shared runtime'
-    )
-  }
-  if (!workspace.activeRuntimeBlockId) {
-    if (liveRuntimeCount > 0) {
-      throw new WorkspaceDomainError(
-        'validation_failed',
-        'a Live App Block cannot be marked Live without activeRuntimeBlockId'
-      )
-    }
-    return
-  }
-  requireObjectReference(workspace, workspace.activeRuntimeBlockId, 'activeRuntimeBlockId')
-  const owner = workspace.objects[workspace.activeRuntimeBlockId]
-  if (owner.type !== 'live-app-block' || owner.runtime.status !== 'live') {
-    throw new WorkspaceDomainError(
-      'validation_failed',
-      'activeRuntimeBlockId must reference the single Live App Block marked Live'
-    )
-  }
 }
 
 function validateRelationEntry(
@@ -642,42 +614,6 @@ function validateViewEntry(workspace: KnowledgeWorkspace, id: string, view: Work
   if (id !== view.id || view.workspaceId !== workspace.id) {
     throw new WorkspaceDomainError('scope_conflict', `view ${id} has mismatched scope`)
   }
-  const projection = view.experienceProjection
-  if (!projection) return
-  if (!['focus', 'compare', 'knowledge', 'review'].includes(projection.purpose)) {
-    throw new WorkspaceDomainError(
-      'validation_failed',
-      `view ${id} has an invalid experience projection purpose`
-    )
-  }
-  if (projection.rendererViewId !== undefined && !projection.rendererViewId.trim()) {
-    throw new WorkspaceDomainError(
-      'validation_failed',
-      `view ${id} rendererViewId must be a non-empty string`
-    )
-  }
-  requireObjectRevisionReference(
-    workspace,
-    projection.rootSurface,
-    'surface-run',
-    `view ${id} experience projection root`
-  )
-}
-
-function validateExperienceProjectionPurposes(workspace: KnowledgeWorkspace): void {
-  const claimedPurposes = new Set<string>()
-  for (const view of Object.values(workspace.views)) {
-    if (view.lifecycle !== 'active' || !view.experienceProjection) continue
-    const { purpose, rootSurface } = view.experienceProjection
-    const claim = `${rootSurface.objectId}:${purpose}`
-    if (claimedPurposes.has(claim)) {
-      throw new WorkspaceDomainError(
-        'validation_failed',
-        `surface ${rootSurface.objectId} has duplicate active ${purpose} projections`
-      )
-    }
-    claimedPurposes.add(claim)
-  }
 }
 
 function validateWorkspaceHeader(workspace: KnowledgeWorkspace): void {
@@ -694,18 +630,15 @@ function validateWorkspaceHeader(workspace: KnowledgeWorkspace): void {
 
 export function validateKnowledgeWorkspace(workspace: KnowledgeWorkspace): void {
   validateWorkspaceHeader(workspace)
-  let liveRuntimeCount = 0
   for (const [id, object] of Object.entries(workspace.objects)) {
-    if (validateObjectEntry(workspace, id, object)) liveRuntimeCount += 1
+    validateObjectEntry(workspace, id, object)
   }
-  validateRuntimeOwner(workspace, liveRuntimeCount)
   for (const [id, relation] of Object.entries(workspace.relations)) {
     validateRelationEntry(workspace, id, relation)
   }
   for (const [id, view] of Object.entries(workspace.views)) {
     validateViewEntry(workspace, id, view)
   }
-  validateExperienceProjectionPurposes(workspace)
   assertNoInlineData(workspace)
 }
 

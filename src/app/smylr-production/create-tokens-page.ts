@@ -185,7 +185,9 @@ function addFlatToken(
       width: SWATCH,
       height: SWATCH,
       name: `${token.label} · ${token.cssVariable}`,
-      fills: [solid(chrome.mode === 'dark' ? { r: 0.22, g: 0.23, b: 0.26, a: 1 } : DEMO_COLORS.white)],
+      fills: [
+        solid(chrome.mode === 'dark' ? { r: 0.22, g: 0.23, b: 0.26, a: 1 } : DEMO_COLORS.white)
+      ],
       cornerRadius: 6,
       effects: [dropShadow(s.x, s.y, s.blur, s.spread, { r: 0, g: 0, b: 0, a: s.a })],
       pluginData: plugin
@@ -248,15 +250,7 @@ function addColumn(
     cornerRadius: 1
   })
   tokens.forEach((token, i) => {
-    addFlatToken(
-      graph,
-      parentId,
-      token,
-      chrome,
-      x,
-      y + TITLE_H + 8 + i * (ROW_H + ROW_GAP),
-      width
-    )
+    addFlatToken(graph, parentId, token, chrome, x, y + TITLE_H + 8 + i * (ROW_H + ROW_GAP), width)
   })
 }
 
@@ -283,7 +277,10 @@ function addStatusStrip(
   const families = [
     { name: 'Success', keys: ['--success', '--success-tint', '--success-border'] as const },
     { name: 'Warning', keys: ['--warning', '--warning-tint', '--warning-border'] as const },
-    { name: 'Destructive', keys: ['--destructive', '--destructive-tint', '--destructive-border'] as const },
+    {
+      name: 'Destructive',
+      keys: ['--destructive', '--destructive-tint', '--destructive-border'] as const
+    },
     { name: 'Primary', keys: ['--primary', '--primary-tint', '--primary-border'] as const }
   ]
 
@@ -396,8 +393,7 @@ function buildThemeBoard(
 
   // Light board: title on the right (obvious layout edit). Dark stays left.
   const titleMaxW = 320
-  const titleX =
-    chrome.mode === 'light' ? Math.max(PAD, boardW - PAD - titleMaxW) : PAD
+  const titleX = chrome.mode === 'light' ? Math.max(PAD, boardW - PAD - titleMaxW) : PAD
   const subX = chrome.mode === 'light' ? Math.max(PAD, boardW - PAD - 160) : PAD
   addText(graph, board.id, chrome.title, titleX, 16, 22, 700, chrome.ink, titleMaxW)
   addText(graph, board.id, chrome.subtitle, subX, 42, 12, 400, chrome.muted, 160)
@@ -460,9 +456,7 @@ export function isSmylrTokensPageNode(node: SceneNode | null | undefined): boole
   if (!node) return false
   return node.pluginData.some(
     (entry) =>
-      entry.pluginId === PLUGIN_ID &&
-      entry.key === 'kind' &&
-      entry.value === SMYLR_TOKENS_PAGE_KIND
+      entry.pluginId === PLUGIN_ID && entry.key === 'kind' && entry.value === SMYLR_TOKENS_PAGE_KIND
   )
 }
 

@@ -1,26 +1,27 @@
 import type { SceneGraph } from '@open-pencil/scene-graph'
+
 import { mergeCSSText } from './css-text'
 import { jsxToDesignDocumentCore, type JSXChild } from './jsx/core'
-import {
-  createBrowserCSSRuntime,
-  type BrowserCSSRuntimeOptions,
-} from './runtime/browser'
+import { createBrowserCSSRuntime, type BrowserCSSRuntimeOptions } from './runtime/browser'
 import type { CompileTailwindCSSOptions } from './tailwind'
-import {
-  designDocumentToSceneGraph,
-  type ToSceneGraphOptions,
-} from './to-scene-graph'
+import { designDocumentToSceneGraph, type ToSceneGraphOptions } from './to-scene-graph'
 import type { CSSComputeOptions, DesignDocument } from './types'
 
 export { Fragment, jsx, jsxs } from './jsx/core'
 export { designDocumentToSceneGraph } from './to-scene-graph'
 export { sceneNodeToStyle } from './from-scene-graph'
-export type {
-  JSXChild,
-  JSXElementProps,
-  JSXStyleInput,
-  JSXTag,
-} from './jsx/core'
+export { reactSourceToDesignDocument, reactSourceToSceneGraph } from './react'
+export { reconcileDesignDocumentToSceneGraph } from './reconcile'
+export { patchReactInlineStyle } from './source-patch'
+export {
+  hasReactDocumentSource,
+  reactDocumentSourceForNode,
+  sourceIdForNode,
+  sourceStateBindingsForNode
+} from './source-metadata'
+export type { ReconcileDesignDocumentResult } from './reconcile'
+export type { ReactStylePatchResult } from './source-patch'
+export type { JSXChild, JSXElementProps, JSXStyleInput, JSXTag } from './jsx/core'
 
 export interface BrowserToDesignDocumentOptions extends BrowserCSSRuntimeOptions {
   cssText?: string
@@ -33,9 +34,7 @@ export interface BrowserHTMLToSceneGraphOptions
   extends BrowserToDesignDocumentOptions, ToSceneGraphOptions {}
 
 export interface BrowserTailwindHTMLToDesignDocumentOptions
-  extends
-    Omit<BrowserHTMLToDesignDocumentOptions, 'cssText'>,
-    CompileTailwindCSSOptions {}
+  extends Omit<BrowserHTMLToDesignDocumentOptions, 'cssText'>, CompileTailwindCSSOptions {}
 
 export interface BrowserTailwindHTMLToSceneGraphOptions
   extends BrowserTailwindHTMLToDesignDocumentOptions, ToSceneGraphOptions {}
@@ -44,9 +43,7 @@ export interface BrowserToSceneGraphOptions
   extends BrowserToDesignDocumentOptions, ToSceneGraphOptions {}
 
 export interface BrowserTailwindToDesignDocumentOptions
-  extends
-    Omit<BrowserToDesignDocumentOptions, 'cssText'>,
-    CompileTailwindCSSOptions {}
+  extends Omit<BrowserToDesignDocumentOptions, 'cssText'>, CompileTailwindCSSOptions {}
 
 export interface BrowserTailwindToSceneGraphOptions
   extends BrowserTailwindToDesignDocumentOptions, ToSceneGraphOptions {}
@@ -63,9 +60,7 @@ async function compileBrowserTailwindCSS(
   return compileTailwindCSS(candidates, options)
 }
 
-function resolveBrowserDocument(
-  documentOverride: Document | undefined
-): Document {
+function resolveBrowserDocument(documentOverride: Document | undefined): Document {
   if (documentOverride) return documentOverride
   if (typeof document === 'undefined') {
     throw new TypeError('Browser DOM/CSS helpers require a DOM document')
@@ -73,10 +68,7 @@ function resolveBrowserDocument(
   return document
 }
 
-function extractEmbeddedCSSText(
-  html: string,
-  browserDocument: Document
-): string | undefined {
+function extractEmbeddedCSSText(html: string, browserDocument: Document): string | undefined {
   const Parser = browserDocument.defaultView?.DOMParser
   if (!Parser) throw new TypeError('Browser DOM/CSS helpers require DOMParser')
   const parsed = new Parser().parseFromString(html, 'text/html')
@@ -93,10 +85,7 @@ export async function browserHTMLToDesignDocument(
   const browserDocument = resolveBrowserDocument(options.document)
   const runtime = createRuntime({ ...options, document: browserDocument })
   const document = runtime.parseHTML(html)
-  const cssText = mergeCSSText(
-    extractEmbeddedCSSText(html, browserDocument),
-    options.cssText
-  )
+  const cssText = mergeCSSText(extractEmbeddedCSSText(html, browserDocument), options.cssText)
   return runtime.computeStyles(document, cssText, options.compute)
 }
 
@@ -122,11 +111,7 @@ export async function browserTailwindHTMLToSceneGraph(
   candidates: string | Iterable<string>,
   options: BrowserTailwindHTMLToSceneGraphOptions = {}
 ): Promise<SceneGraph> {
-  const document = await browserTailwindHTMLToDesignDocument(
-    html,
-    candidates,
-    options
-  )
+  const document = await browserTailwindHTMLToDesignDocument(html, candidates, options)
   return designDocumentToSceneGraph(document, options)
 }
 
@@ -161,10 +146,6 @@ export async function browserTailwindJSXToSceneGraph(
   candidates: string | Iterable<string>,
   options: BrowserTailwindToSceneGraphOptions = {}
 ): Promise<SceneGraph> {
-  const document = await browserTailwindJSXToDesignDocument(
-    input,
-    candidates,
-    options
-  )
+  const document = await browserTailwindJSXToDesignDocument(input, candidates, options)
   return designDocumentToSceneGraph(document, options)
 }

@@ -21,6 +21,7 @@ export {
   type MarkdownImportOptions
 } from './formats/markdown'
 export { parsePenFile, readPenFile } from './formats/pen'
+export { parsePptx, type PptxDeck, type PptxElement, type PptxSlide } from './formats/pptx'
 export {
   CONTENT_SOURCE_REVISION,
   contentSourcePluginData,

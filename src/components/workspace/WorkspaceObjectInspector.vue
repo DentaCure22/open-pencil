@@ -14,7 +14,6 @@ const { object, viewKind } = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  activateLive: []
   archive: []
   connect: []
   createRecord: []
@@ -43,7 +42,6 @@ const title = computed(() => {
   if (object.type === 'collection-record') return object.title
   if (object.type === 'graph-node' || object.type === 'design-artifact') return object.label
   if (object.type === 'graph-edge') return object.label || object.relationshipType
-  if (object.type === 'live-app-block') return object.route
   if (object.type === 'review-object') return object.body || object.reviewKind
   if (object.type === 'canvas-object') return object.label || object.canvasKind
   if (object.type === 'intent-record') return object.statement || 'Intent'
@@ -51,7 +49,7 @@ const title = computed(() => {
   return 'Workspace object'
 })
 
-const canEditLabel = computed(() => object.permissions.canEdit && object.type !== 'live-app-block')
+const canEditLabel = computed(() => object.permissions.canEdit)
 
 const editableLabel = computed({
   get: () => title.value,
@@ -77,7 +75,6 @@ const editableLabel = computed({
           v-else-if="object.type === 'graph-node' || object.type === 'graph-edge'"
           class="size-3.5"
         />
-        <icon-lucide-monitor-dot v-else-if="object.type === 'live-app-block'" class="size-3.5" />
         <icon-lucide-message-square-check
           v-else-if="object.type === 'review-object' || object.type === 'decision-receipt'"
           class="size-3.5"
@@ -97,14 +94,7 @@ const editableLabel = computed({
         <strong class="block truncate text-[11px] font-semibold text-surface">{{ title }}</strong>
         <span class="block truncate text-[9px] text-muted">{{ object.type }} · {{ viewKind }}</span>
       </span>
-      <WorkspaceStatusBadge
-        v-if="object.type === 'live-app-block'"
-        :status="object.runtime.status"
-      />
-      <WorkspaceStatusBadge
-        v-else-if="object.type === 'review-object'"
-        :status="object.reviewStatus"
-      />
+      <WorkspaceStatusBadge v-if="object.type === 'review-object'" :status="object.reviewStatus" />
       <WorkspaceStatusBadge v-else-if="object.type === 'surface-run'" :status="object.status" />
       <WorkspaceStatusBadge
         v-else-if="object.type === 'decision-receipt'"
@@ -169,27 +159,6 @@ const editableLabel = computed({
       <AppTextButton data-test-id="workspace-connect-relation" @click="emit('connect')">
         Connect to…
       </AppTextButton>
-    </PanelSection>
-
-    <PanelSection v-if="object.type === 'live-app-block'" label="Live application">
-      <dl class="grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-[9px]">
-        <dt class="text-muted">Route</dt>
-        <dd class="truncate text-surface">{{ object.route }}</dd>
-        <dt class="text-muted">Environment</dt>
-        <dd class="truncate text-surface">{{ object.environment }}</dd>
-        <dt class="text-muted">Revision</dt>
-        <dd class="truncate text-surface">{{ object.sourceRevision }}</dd>
-        <dt class="text-muted">Viewport</dt>
-        <dd class="text-surface">{{ object.viewport.width }} × {{ object.viewport.height }}</dd>
-      </dl>
-      <button
-        data-test-id="workspace-activate-live-app"
-        type="button"
-        class="mt-2 h-7 w-full rounded-md bg-accent text-[10px] text-white hover:bg-accent/90"
-        @click="emit('activateLive')"
-      >
-        {{ object.runtime.status === 'live' ? 'Live now' : 'Open live on Canvas' }}
-      </button>
     </PanelSection>
 
     <PanelSection v-if="object.type === 'surface-run'" label="Decision surface">

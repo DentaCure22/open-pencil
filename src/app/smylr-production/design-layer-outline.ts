@@ -1,9 +1,10 @@
+import { isObjectGraphConnectionNode } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 /**
  * Design-layer outline for Smylr foundations parents (pages / boards).
  *
  * Keep it complete and simple:
- * - Page: show boards + live frames (hide decorative washes/rules only).
+ * - Page: show Boards + Code Object frames (hide decorative washes/rules only).
  * - Board: show section folders for token groups, and include every token row.
  * - Nested frames: recurse fully — do not drop containers.
  * - Expansion is owned by LayerTreeRoot.
@@ -18,7 +19,7 @@ import {
 } from './create-tokens-page'
 
 const PLUGIN_ID = 'smylr-production'
-const LIVE_APP_KIND = 'live-app-frame'
+const CODE_OBJECT_KIND = 'smylr-code-object-frame'
 const DESIGN_SECTION_PREFIX = 'design:section:'
 const CONTAINER_TYPES = new Set<SceneNode['type']>([
   'FRAME',
@@ -64,6 +65,10 @@ function isSceneNode(node: SceneNode | undefined): node is SceneNode {
   return node !== undefined
 }
 
+function isVisibleOutlineNode(node: SceneNode | undefined): node is SceneNode {
+  return isSceneNode(node) && !isObjectGraphConnectionNode(node)
+}
+
 function isContainerNode(node: SceneNode): boolean {
   return CONTAINER_TYPES.has(node.type)
 }
@@ -74,10 +79,10 @@ function isBoardFrame(node: SceneNode): boolean {
     k === SMYLR_TOKENS_LIGHT_BOARD_KIND ||
     k === SMYLR_TOKENS_DARK_BOARD_KIND ||
     k === SMYLR_BRAND_BOARD_KIND ||
-    k === LIVE_APP_KIND ||
+    k === CODE_OBJECT_KIND ||
     (node.type === 'FRAME' &&
       (node.name.startsWith('Design System ·') ||
-        node.name.startsWith('Live Smylr App') ||
+        node.name.startsWith('Smylr') ||
         /brand/i.test(node.name)))
   )
 }
@@ -95,8 +100,8 @@ function shortBoardName(node: SceneNode): string {
   if (k === SMYLR_TOKENS_LIGHT_BOARD_KIND) return 'Light'
   if (k === SMYLR_TOKENS_DARK_BOARD_KIND) return 'Dark'
   if (k === SMYLR_BRAND_BOARD_KIND) return 'Brand'
-  if (k === LIVE_APP_KIND) {
-    return node.name.replace(/^Live Smylr App\s*\/\s*/i, '').trim() || node.name
+  if (k === CODE_OBJECT_KIND) {
+    return node.name.replace(/^Smylr\s*\/\s*/i, '').trim() || node.name
   }
   const parts = node.name.split('·').map((p) => p.trim())
   if (parts.length >= 2) return parts.slice(1).join(' · ')
@@ -134,7 +139,7 @@ function prettySectionName(title: string): string {
  * Only hide pure decorative washes/rules.
  */
 function outlineBoardChildren(graph: SceneGraph, board: SceneNode): LayerNode[] {
-  const kids = board.childIds.map((id) => graph.getNode(id)).filter(isSceneNode)
+  const kids = board.childIds.map((id) => graph.getNode(id)).filter(isVisibleOutlineNode)
 
   const out: LayerNode[] = []
   let sectionTitle: SceneNode | null = null
@@ -219,10 +224,10 @@ function outlineBoardChildren(graph: SceneGraph, board: SceneNode): LayerNode[] 
 }
 
 /**
- * Page-level: every board + live frame. Hide decorative washes only.
+ * Page-level: every board + Code Object. Hide decorative washes only.
  */
 function outlinePageChildren(graph: SceneGraph, page: SceneNode): LayerNode[] {
-  const kids = page.childIds.map((id) => graph.getNode(id)).filter(isSceneNode)
+  const kids = page.childIds.map((id) => graph.getNode(id)).filter(isVisibleOutlineNode)
 
   const out: LayerNode[] = []
   for (const kid of kids) {
@@ -230,7 +235,7 @@ function outlinePageChildren(graph: SceneGraph, page: SceneNode): LayerNode[] {
 
     const k = kindOf(kid)
 
-    if (k === LIVE_APP_KIND) {
+    if (k === CODE_OBJECT_KIND) {
       // Children filled by live getVirtualChildren in LayerTreeRoot
       out.push(toLayer(kid, undefined, shortBoardName(kid)))
       continue
@@ -248,7 +253,6 @@ function outlinePageChildren(graph: SceneGraph, page: SceneNode): LayerNode[] {
 
     // Other containers on the page — include fully.
     if (isContainerNode(kid)) {
-      if (kid.childIds.length === 0 && !isBoardFrame(kid)) continue
       const nested = outlineBoardChildren(graph, kid)
       out.push(toLayer(kid, nested, shortBoardName(kid)))
       continue
@@ -288,7 +292,7 @@ export function getDesignOutlineChildren(
   if (isPageNode(parent)) {
     const hasSmylrStructure = parent.childIds.some((id) => {
       const n = graph.getNode(id)
-      return n ? isBoardFrame(n) || isWashOrRule(n) || kindOf(n) === LIVE_APP_KIND : false
+      return n ? isBoardFrame(n) || isWashOrRule(n) || kindOf(n) === CODE_OBJECT_KIND : false
     })
     if (hasSmylrStructure || isFoundationsPage(parent)) {
       return outlinePageChildren(graph, parent)

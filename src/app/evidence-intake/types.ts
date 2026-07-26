@@ -37,15 +37,14 @@ export type WorkspaceObjectEvidenceRequest = EvidenceRequestBase & {
   revision: number
 }
 
-export type LiveAppFrameEvidenceRequest = EvidenceRequestBase & {
+export type CodeObjectFrameEvidenceRequest = EvidenceRequestBase & {
   frameId: string
-  kind: 'live-app-frame'
-  requireLive?: boolean
+  kind: 'code-object-frame'
 }
 
 export type EvidenceSourceRequest =
   | CapturedEvidenceRequest
-  | LiveAppFrameEvidenceRequest
+  | CodeObjectFrameEvidenceRequest
   | WorkspaceObjectEvidenceRequest
 
 export type CollectEvidenceInput = {

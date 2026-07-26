@@ -1,0 +1,107 @@
+export {
+  CODE_OBJECT_SCHEMA_VERSION,
+  REACT_SHAPE_PRESETS as CODE_COMPONENT_PRESETS,
+  REACT_SHAPE_PRESETS as CODE_OBJECT_PRESETS,
+  createCodeStarterDocument,
+  createEarthSignalsDocument,
+  createOfficeDocumentDocument,
+  createOfficeSpreadsheetDocument,
+  createOpenSourceWorkspaceDocument,
+  createOpenSourceWorkspaceKit,
+  createOrbitLabDocument,
+  createPdfDocumentDocument,
+  createPptxDeckDocument,
+  createReactShape as createCodeObject,
+  createReactShapeFromPreset as createCodeObjectFromPreset,
+  createSignalBloomDocument,
+  createSmylrFlowScreenDocument,
+  createSmylrProductionAppDocument,
+  createUserCodeObjectDocument,
+  DEFAULT_CODE_OBJECT_SOURCE,
+  defaultSmylrFlowScreenState,
+  isReactShapeFrame as isCodeObjectFrame,
+  materializeReactShapeDocument as materializeCodeObjectDocument,
+  reactShapeDocument as codeObjectDocument,
+  reactShapePluginData as codeObjectPluginData,
+  reactShapePresetsForQuery as codeComponentPresetsForQuery,
+  reactShapePresetsForQuery as codeObjectPresetsForQuery,
+  reactShapeViewportInsets as codeObjectViewportInsets,
+  setReactShapeDocument as setCodeObjectDocument,
+  updateReactShapeState as updateCodeObjectState
+} from '@/app/code-object/implementation'
+
+export {
+  connectCodeObjects,
+  createCodeObjectBoardClient,
+  disconnectCodeObjects,
+  dispatchCodeObjectBoardAction,
+  setCodeObjectBoardShapeAccess
+} from '@/app/code-object/actions'
+
+export {
+  codeObjectConnectionDescriptors,
+  normalizeLegacyCodeObjectConnections
+} from '@/app/code-object/connection-migration'
+
+export { CODE_OBJECT_BOARD_API_VERSION } from '@/app/code-object/contracts'
+
+export type {
+  CreateReactShapeInput as CreateCodeObjectInput,
+  CodeStarterDocument,
+  CodeStarterState,
+  EarthSignalsDocument,
+  EarthSignalsState,
+  OfficeDocumentDocument,
+  OfficeDocumentState,
+  OfficeSpreadsheetCell,
+  OfficeSpreadsheetDocument,
+  OfficeSpreadsheetState,
+  OpenSourceArchitectureEdge,
+  OpenSourceArchitectureNode,
+  OpenSourceKanbanColumn,
+  OpenSourceKanbanTask,
+  OpenSourceWorkspaceDocument,
+  OpenSourceWorkspaceState,
+  OrbitLabDocument,
+  OrbitLabState,
+  PdfDocumentDocument,
+  PdfDocumentState,
+  PptxDeckDocument,
+  PptxDeckState,
+  ReactShapeDocument as CodeObjectDocument,
+  ReactShapePreset as CodeComponentPreset,
+  ReactShapePresetId as CodeComponentPresetId,
+  ReactShapePreset as CodeObjectPreset,
+  ReactShapePresetId as CodeObjectPresetId,
+  ReactShapeState as CodeObjectState,
+  SignalBloomDocument,
+  SignalBloomState,
+  SmylrFlowScreenDocument,
+  SmylrFlowScreenState,
+  SmylrProductionAppDocument,
+  SmylrProductionAppState,
+  UserCodeObjectDocument,
+  UserCodeObjectProps,
+  UserCodeObjectState
+} from '@/app/code-object/implementation'
+
+export type {
+  CodeObjectActionDenialReason,
+  CodeObjectActionReceipt,
+  CodeObjectBoardAction,
+  CodeObjectBoardClient,
+  CodeObjectBoardPermission,
+  CodeObjectBoardSelfSnapshot,
+  CodeObjectBoardShapeKind,
+  CodeObjectBoardShapeSnapshot,
+  CodeObjectConnection,
+  CodeObjectConnectionDescriptor,
+  CodeObjectConnectionPermission,
+  CodeObjectCreateBoardShapeAction,
+  CodeObjectCreateBoardShapeInput,
+  CodeObjectDeleteBoardShapeAction,
+  CodeObjectStatePatchAction,
+  CodeObjectUpdateBoardShapeAction,
+  CodeObjectUpdateBoardShapeInput,
+  DispatchCodeObjectBoardAction
+} from '@/app/code-object/contracts'

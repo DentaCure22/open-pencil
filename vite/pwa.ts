@@ -11,8 +11,7 @@ function rootedPath(base: string, path: string) {
  * not inject a new one.
  */
 export function openPencilPwaPlugin(base: string) {
-  const smylrEmbed =
-    Boolean(process.env.SMYLR_OPENPENCIL_BASE) || base.includes('open-pencil')
+  const smylrEmbed = Boolean(process.env.SMYLR_OPENPENCIL_BASE) || base.includes('open-pencil')
 
   return VitePWA({
     // Self-destroy for Smylr so previous dist SWs stop caching forever.
@@ -22,9 +21,7 @@ export function openPencilPwaPlugin(base: string) {
     devOptions: { enabled: false },
     workbox: {
       maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
-      globPatterns: smylrEmbed
-        ? []
-        : ['**/*.{js,css,html,wasm,png,ico,ttf,webmanifest}'],
+      globPatterns: smylrEmbed ? [] : ['**/*.{js,css,html,wasm,png,ico,ttf,webmanifest}'],
       navigateFallback: smylrEmbed ? undefined : rootedPath(base, 'index.html')
     },
     manifest: {

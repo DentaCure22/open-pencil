@@ -1,0 +1,300 @@
+.os-architecture-surface,
+.os-kanban-surface {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  color: #e7e8eb;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+.os-architecture-surface {
+  overflow: hidden;
+  background: transparent;
+}
+
+.os-architecture-surface .react-flow,
+.os-architecture-surface .react-flow__renderer,
+.os-architecture-surface .react-flow__pane {
+  background: transparent;
+}
+
+.os-architecture-surface .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid #30343c;
+  border-radius: 8px;
+  background: #171a20;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 30%);
+}
+
+.os-architecture-surface .react-flow__controls-button {
+  border-bottom-color: #30343c;
+  background: #171a20;
+  color: #b8bdc6;
+  fill: currentcolor;
+}
+
+.os-architecture-node {
+  display: flex;
+  width: 220px;
+  height: 76px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #343842;
+  border-radius: 10px;
+  background: #171a20;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 36%);
+}
+
+.os-handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #111319;
+  background: #6b95e9;
+}
+
+.os-node-icon {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #41557a;
+  border-radius: 9px;
+  background: #1a2435;
+  color: #78a4f2;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.os-node-database .os-node-icon {
+  border-color: #356d5e;
+  background: #17332c;
+  color: #62d0ab;
+}
+
+.os-node-cache .os-node-icon {
+  border-color: #71414b;
+  background: #351e24;
+  color: #ef7886;
+}
+
+.os-node-deploy .os-node-icon {
+  border-color: #735a35;
+  background: #362b1d;
+  color: #e5ad63;
+}
+
+.os-node-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.os-node-copy strong {
+  overflow: hidden;
+  color: #f0f1f3;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.os-node-copy small {
+  overflow: hidden;
+  color: #848c98;
+  font-size: 9px;
+  line-height: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.os-status {
+  align-self: flex-start;
+  padding: 3px 5px;
+  border-radius: 8px;
+  background: #1b342d;
+  color: #68cfa9;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.os-status-warning {
+  background: #382d1d;
+  color: #e1aa62;
+}
+
+.os-kanban-surface {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  background: transparent;
+}
+
+.os-kanban-lane {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid #2d3037;
+  border-radius: 10px;
+  background: #101216;
+}
+
+.os-kanban-lane header {
+  display: flex;
+  height: 48px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border-bottom: 1px solid #2b2e35;
+}
+
+.os-kanban-lane header strong {
+  color: #dfe1e5;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.os-kanban-lane header small {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 5px;
+  background: #23262d;
+  color: #8d949f;
+  font-size: 7px;
+}
+
+.os-lane-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #777f8b;
+}
+
+.os-lane-progress .os-lane-dot {
+  background: #5f91ec;
+}
+
+.os-lane-review .os-lane-dot {
+  background: #d09a51;
+}
+
+.os-lane-done .os-lane-dot {
+  background: #49ba91;
+}
+
+.os-lane-handle {
+  margin-left: auto;
+  color: #6d737d;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.os-task-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+  padding: 9px;
+}
+
+.os-kanban-lane footer {
+  display: grid;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  margin: 0 9px 9px;
+  border: 1px dashed #30343c;
+  border-radius: 7px;
+  color: #8e949e;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.os-kanban-task {
+  display: flex;
+  min-height: 108px;
+  box-sizing: border-box;
+  flex-direction: column;
+  padding: 11px;
+  border: 1px solid #30343c;
+  border-radius: 8px;
+  background: #191c22;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 30%);
+}
+
+.os-task-meta {
+  display: flex;
+  height: 16px;
+  align-items: center;
+}
+
+.os-task-meta > small {
+  color: #737b87;
+  font-size: 7px;
+  font-weight: 750;
+}
+
+.os-priority {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: #392d1d;
+  color: #dba65f;
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.os-priority-high {
+  background: #3c2026;
+  color: #eb7883;
+}
+
+.os-priority-low {
+  background: #24272d;
+  color: #9097a2;
+}
+
+.os-kanban-task > strong {
+  margin-top: 7px;
+  color: #e0e2e5;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 14px;
+}
+
+.os-task-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.os-task-tags small {
+  padding: 2px 5px;
+  border: 1px solid #323743;
+  border-radius: 4px;
+  background: #22262c;
+  color: #87909c;
+  font-size: 6px;
+  line-height: 10px;
+}

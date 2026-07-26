@@ -1,4 +1,5 @@
 export * from './images'
+export * from './object-graph'
 export * from './snap'
 export * from './export-scale'
 export * from './coordinate'
@@ -19,10 +20,11 @@ import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
 import { updateNodePreview } from './preview'
 import { clearEditedSourceMetadata } from './source-metadata'
 import { TEXT_PICTURE_KEYS } from './text-picture'
+import * as Traversal from './traversal'
 import * as Variables from './variables'
 import { normalizeVectorNetwork } from './vector-network'
 
-export type { GUID, Color } from './primitives'
+export type { GUID, Color, Rect, Vector } from './primitives'
 export * from './types'
 
 import type { Emitter } from 'nanoevents'
@@ -108,6 +110,9 @@ export class SceneGraph {
   getAllNodes(): Iterable<SceneNode> {
     return this.nodes.values()
   }
+  getDescendants(nodeId: string): Iterable<SceneNode> {
+    return Traversal.getDescendants(this.nodes, nodeId)
+  }
   getNode(id: string): SceneNode | undefined {
     return this.nodes.get(id)
   }
@@ -116,22 +121,7 @@ export class SceneGraph {
   }
 
   countDescendants(nodeId: string): number {
-    const node = this.nodes.get(nodeId)
-    if (!node) return 0
-    let count = 0
-    const stack = [...node.childIds]
-    while (stack.length > 0) {
-      const id = stack.pop()
-      if (id === undefined) break
-      count++
-      const child = this.nodes.get(id)
-      if (child) {
-        for (const childId of child.childIds) {
-          stack.push(childId)
-        }
-      }
-    }
-    return count
+    return Traversal.countDescendants(this.nodes, nodeId)
   }
   addVariable(variable: Variable): void {
     Variables.addVariable(this, variable)

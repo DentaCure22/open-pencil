@@ -9,7 +9,6 @@ export interface EditorToolDef {
 
 export const EDITOR_TOOLS: EditorToolDef[] = [
   { key: 'SELECT', label: 'Move', shortcut: 'V' },
-  { key: 'SMYLR_CONTAINER', label: 'Container', shortcut: 'C' },
   { key: 'FRAME', label: 'Frame', shortcut: 'F', flyout: ['FRAME', 'SECTION'] },
   {
     key: 'RECTANGLE',
@@ -24,7 +23,6 @@ export const EDITOR_TOOLS: EditorToolDef[] = [
 
 export const TOOL_SHORTCUTS: Partial<Record<string, Tool>> = {
   KeyV: 'SELECT',
-  KeyC: 'SMYLR_CONTAINER',
   KeyF: 'FRAME',
   KeyS: 'SECTION',
   KeyR: 'RECTANGLE',

@@ -16,18 +16,22 @@ Press <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) to open the AI
 
 ### Supported Providers
 
-| Provider | Models | Setup |
-|----------|--------|-------|
-| **OpenRouter** | Claude, GPT, Gemini, DeepSeek, Qwen, and others | API key from [openrouter.ai](https://openrouter.ai) |
-| **Anthropic** | Claude Sonnet 4.6, Claude Opus 4.6 | API key from [console.anthropic.com](https://console.anthropic.com) |
-| **OpenAI** | GPT-5.3 Codex, GPT-4.1, o3, o4-mini | API key from [platform.openai.com](https://platform.openai.com) |
-| **Google AI** | Gemini 3.1 Pro, Gemini 3 Flash | API key from [aistudio.google.dev](https://aistudio.google.dev) |
-| **Z.ai** | GLM-5.1, GLM-5, GLM-4.7, GLM-4.5 family | API key from [docs.z.ai](https://docs.z.ai/devpack/quick-start) |
-| **MiniMax** | MiniMax M2.7, M2.7-highspeed, M2.5, M2.1 | API key from [platform.minimax.io](https://platform.minimax.io/user-center/basic-information/interface-key) |
-| **OpenAI-compatible** | Any endpoint with OpenAI API format | Custom base URL + key. Supports Completions and Responses API toggle. |
-| **Anthropic-compatible** | Any endpoint with Anthropic API format | Custom base URL + key |
+| Provider                 | Models                                          | Setup                                                                                                       |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **OpenRouter**           | Claude, GPT, Gemini, DeepSeek, Qwen, and others | API key from [openrouter.ai](https://openrouter.ai)                                                         |
+| **Anthropic**            | Claude Sonnet 4.6, Claude Opus 4.6              | API key from [console.anthropic.com](https://console.anthropic.com)                                         |
+| **OpenAI**               | GPT-5.3 Codex, GPT-4.1, o3, o4-mini             | API key from [platform.openai.com](https://platform.openai.com)                                             |
+| **Google AI**            | Gemini 3.1 Pro, Gemini 3 Flash                  | API key from [aistudio.google.dev](https://aistudio.google.dev)                                             |
+| **Z.ai**                 | GLM-5.1, GLM-5, GLM-4.7, GLM-4.5 family         | API key from [docs.z.ai](https://docs.z.ai/devpack/quick-start)                                             |
+| **MiniMax**              | MiniMax M2.7, M2.7-highspeed, M2.5, M2.1        | API key from [platform.minimax.io](https://platform.minimax.io/user-center/basic-information/interface-key) |
+| **OpenAI-compatible**    | Any endpoint with OpenAI API format             | Custom base URL + key. Supports Completions and Responses API toggle.                                       |
+| **Anthropic-compatible** | Any endpoint with Anthropic API format          | Custom base URL + key                                                                                       |
 
 No backend, no subscription — your key talks directly to the provider.
+
+## Trace history
+
+Trace is a separate, time-ordered record of canvas interactions and evidence. Press <kbd>⌘</kbd> + <kbd>⌥</kbd> + <kbd>T</kbd> on macOS or <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> on Windows and Linux to open its current feed and durable history. Assistant clients can retrieve a bounded document-, Board-, and time-scoped slice through `query_trace_history`; Trace does not send events through the editor chat.
 
 ## What It Can Do
 

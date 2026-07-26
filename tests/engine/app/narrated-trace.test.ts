@@ -5,6 +5,7 @@ import {
   beginNarratedTraceSession,
   buildNarratedTraceReviewSummary,
   buildNarratedContextMarkdown,
+  compactNarratedTraceSession,
   finishNarratedTraceSession,
   narratedTraceSession,
   narratedTracePointsPath,
@@ -150,18 +151,18 @@ describe('Narrated Trace context', () => {
         atMs: 50_000,
         id: 'shape',
         kind: 'shape',
-        label: 'Created HTML Board',
+        label: 'Created Code Object',
         target: {
-          name: 'HTML Board',
-          path: ['Page 1', 'HTML Board'],
-          stableId: 'html-board'
+          name: 'Code Object',
+          path: ['Page 1', 'Code Object'],
+          stableId: 'code-object'
         }
       },
       {
         atMs: 51_000,
         id: 'selection',
         kind: 'selection',
-        label: 'Selected HTML Board'
+        label: 'Selected Code Object'
       },
       {
         atMs: 145_000,
@@ -172,7 +173,7 @@ describe('Narrated Trace context', () => {
     ] satisfies NarratedTraceEvent[]
 
     expect(buildNarratedTraceReviewSummary(events)).toBe(
-      'Created HTML Board and marked the intended revision.'
+      'Created Code Object and marked the intended revision.'
     )
     expect(isNarratedTraceSupportingEvent(events[1])).toBe(true)
     expect(isNarratedTraceSupportingEvent(events[0])).toBe(false)
@@ -289,6 +290,98 @@ describe('Narrated Trace context', () => {
     finishNarratedTraceSession()
   })
 
+  test('groups generated multi-layer refreshes into one bounded background moment', () => {
+    beginNarratedTraceSession()
+    for (let index = 0; index < 40; index += 1) {
+      appendNarratedTraceEvent({
+        atMs: 63_000,
+        changes: [{ after: String(index + 1), before: String(index), property: 'width' }],
+        kind: 'edit',
+        label: `Edited generated layer ${index}`,
+        target: {
+          name: `Generated layer ${index}`,
+          path: ['Document', `Generated layer ${index}`],
+          stableId: `generated-${index}`
+        }
+      })
+    }
+
+    expect(narratedTraceSession.value?.events).toHaveLength(1)
+    expect(narratedTraceSession.value?.events[0]).toMatchObject({
+      groupedEventCount: 40,
+      groupedTargetCount: 40,
+      kind: 'sync',
+      label: 'Grouped 40 canvas changes across 40 layers'
+    })
+    expect(narratedTraceSession.value?.contextDraft).toHaveLength(1)
+    expect(buildNarratedContextMarkdown(narratedTraceSession.value)).toContain(
+      'Grouped 40 canvas changes across 40 layers'
+    )
+    expect(buildNarratedContextMarkdown(narratedTraceSession.value)).not.toContain(
+      'Generated layer 39.width'
+    )
+    finishNarratedTraceSession()
+  })
+
+  test('compacts legacy refresh noise without discarding curated moments', () => {
+    const legacy = sampleSession()
+    const generatedEvents = Array.from({ length: 24 }, (_, index) => ({
+      atMs: 30_000,
+      changes: [{ after: 'new', before: 'old', property: 'strokes' }],
+      id: `legacy-generated-${index}`,
+      kind: 'edit' as const,
+      label: `Edited legacy layer ${index}`,
+      target: {
+        name: `Legacy layer ${index}`,
+        path: ['Document', `Legacy layer ${index}`],
+        stableId: `legacy-layer-${index}`
+      }
+    }))
+    legacy.events.push(...generatedEvents)
+    legacy.contextDraft.push(
+      ...generatedEvents.map((event) => ({
+        included: true,
+        removed: false,
+        sourceEventId: event.id
+      }))
+    )
+
+    const compacted = compactNarratedTraceSession(legacy)
+    expect(compacted.events).toHaveLength(4)
+    expect(compacted.events.at(-1)).toMatchObject({
+      groupedEventCount: 24,
+      kind: 'sync'
+    })
+    expect(compacted.events[0]?.text).toBe('This needs more room.')
+  })
+
+  test('hard-caps copied context while preserving the earliest narrated intent', () => {
+    const session = sampleSession()
+    for (let index = 0; index < 220; index += 1) {
+      const id = `annotated-moment-${index}`
+      session.events.push({
+        atMs: 20_000 + index,
+        id,
+        kind: 'transcript',
+        label: `Supporting thought ${index} ${'detail '.repeat(120)}`,
+        text: `Supporting thought ${index} ${'detail '.repeat(120)}`
+      })
+      session.contextDraft.push({
+        included: true,
+        note: `Clarification ${index} ${'note '.repeat(120)}`,
+        removed: false,
+        sourceEventId: id
+      })
+    }
+
+    const markdown = buildNarratedContextMarkdown(session)
+
+    expect(markdown).toContain('Increase the patient header spacing.')
+    expect(markdown).toContain('Additional context omitted')
+    expect(markdown.split('\n').length).toBeLessThanOrEqual(257)
+    expect(new TextEncoder().encode(markdown).byteLength).toBeLessThanOrEqual(32_768)
+  })
+
   test('cleans noisy real-session output and flags spoken cancellations', () => {
     const markdown = buildNarratedContextMarkdown(capturedSession())
 
@@ -328,7 +421,7 @@ describe('Narrated Trace context', () => {
         height: 120,
         mimeType: 'image/png',
         omissions: [{ bounds: { height: 20, width: 40, x: 10, y: 8 }, reason: 'patient-id' }],
-        source: 'live-frame',
+        source: 'frame-snapshot',
         targetPath: ['DentalChart', 'PatientHeader'],
         targetStableId: 'patient-header',
         width: 180

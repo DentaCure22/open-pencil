@@ -1,7 +1,6 @@
-import type { Rect } from '@open-pencil/scene-graph/primitives'
+import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 export type NarratedTraceStatus = 'idle' | 'recording' | 'paused' | 'review'
-export type NarratedTraceViewMode = 'history' | 'timeline'
 
 export type NarratedTraceEventKind =
   | 'transcript'
@@ -10,6 +9,7 @@ export type NarratedTraceEventKind =
   | 'ink'
   | 'shape'
   | 'screenshot'
+  | 'sync'
   | 'viewport'
   | 'navigation'
   | 'tool'
@@ -17,10 +17,40 @@ export type NarratedTraceEventKind =
   | 'redo'
   | 'note'
 
+export const NARRATED_TRACE_ACTIVITY_KINDS = [
+  'ink',
+  'screenshot',
+  'selection',
+  'tool',
+  'shape',
+  'edit'
+] as const
+
+export type NarratedTraceActivityKind = (typeof NARRATED_TRACE_ACTIVITY_KINDS)[number]
+
 export type NarratedTraceViewport = {
   panX: number
   panY: number
   zoom: number
+}
+
+/**
+ * A durable deictic anchor in page space. `targetRelativePoint` is normalized
+ * against the referenced target's bounds at capture time.
+ */
+export type NarratedTraceSpatialAnchor = {
+  pagePoint: Vector
+  pageRegion: Rect
+  targetRelativePoint?: Vector
+  viewport: NarratedTraceViewport
+}
+
+export type NarratedTraceScope = {
+  documentId: string
+  documentName?: string
+  pageId: string
+  pageName?: string
+  workspaceId?: string
 }
 
 export type NarratedTraceTarget = {
@@ -62,6 +92,8 @@ export type NarratedTraceEvidenceOmission = {
 
 export type NarratedTraceEvidence = {
   annotation: NarratedTraceEvidenceAnnotation
+  /** New captures bake the annotation into the PNG; legacy evidence is overlaid during review. */
+  annotationBaked?: boolean
   cacheKey: string
   capturedAtMs: number
   cropBounds: Rect
@@ -69,17 +101,21 @@ export type NarratedTraceEvidence = {
   height: number
   mimeType: 'image/png'
   omissions: NarratedTraceEvidenceOmission[]
-  source: 'canvas' | 'live-frame'
+  source: 'canvas' | 'frame-snapshot'
   targetPath?: string[]
   targetStableId?: string
   width: number
 }
 
 export type NarratedTraceEvent = {
+  anchor?: NarratedTraceSpatialAnchor
   atMs: number
   changes?: NarratedTraceChange[]
   durationMs?: number
   evidence?: NarratedTraceEvidence
+  evidenceStatus?: 'failed' | 'pending' | 'ready'
+  groupedEventCount?: number
+  groupedTargetCount?: number
   id: string
   kind: NarratedTraceEventKind
   label: string
@@ -117,6 +153,7 @@ export type NarratedTraceSession = {
   durationMs: number
   events: NarratedTraceEvent[]
   id: string
+  scope?: NarratedTraceScope
   startedAt: string
   title?: string
 }

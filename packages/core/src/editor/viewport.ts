@@ -57,6 +57,15 @@ export function createViewportActions(ctx: EditorContext) {
     }
   }
 
+  function setViewport(viewport: { panX: number; panY: number; zoom: number }) {
+    const previous = currentViewport()
+    ctx.state.panX = viewport.panX
+    ctx.state.panY = viewport.panY
+    ctx.state.zoom = Math.max(0.02, Math.min(256, viewport.zoom))
+    ctx.requestRepaint()
+    emitViewportChanged(previous)
+  }
+
   function setZoomAroundPoint(level: number, centerX: number, centerY: number) {
     const previous = currentViewport()
     const newZoom = Math.max(0.02, Math.min(256, level))
@@ -154,8 +163,39 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
   }
 
+  function zoomToReadableSelection(minimumScreenTextSize = 11, insets: ViewportInsets = {}): void {
+    if (ctx.state.selectedIds.size === 0) return
+    const selectedNodes = [...ctx.state.selectedIds]
+      .map((id) => ctx.graph.getNode(id))
+      .filter((node): node is NonNullable<typeof node> => node != null)
+    if (selectedNodes.length === 0) return
+
+    zoomToSelection(insets)
+
+    const pending = selectedNodes.flatMap((node) => [node.id, ...node.childIds])
+    const visited = new Set<string>()
+    let smallestFontSize = Infinity
+    while (pending.length > 0) {
+      const id = pending.shift()
+      if (!id || visited.has(id)) continue
+      visited.add(id)
+      const node = ctx.graph.getNode(id)
+      if (!node) continue
+      if (node.type === 'TEXT') smallestFontSize = Math.min(smallestFontSize, node.fontSize)
+      pending.push(...node.childIds)
+    }
+    if (!Number.isFinite(smallestFontSize) || smallestFontSize <= 0) return
+
+    const readableZoom = minimumScreenTextSize / smallestFontSize
+    if (ctx.state.zoom >= readableZoom) return
+    const { width: viewW, height: viewH } = ctx.getViewportSize()
+    const area = resolveViewportArea(viewW, viewH, insets)
+    setZoomAroundPoint(readableZoom, area.centerX, area.centerY)
+  }
+
   return {
     screenToCanvas,
+    setViewport,
     setZoomAroundPoint,
     applyZoom,
     pan,
@@ -164,6 +204,7 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToNode,
     zoomTo100,
     zoomToLevel,
-    zoomToSelection
+    zoomToSelection,
+    zoomToReadableSelection
   }
 }

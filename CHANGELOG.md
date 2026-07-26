@@ -2,9 +2,122 @@
 
 ## Unreleased
 
+- Keep the restored local Board as the single cold-start authority instead of replaying a second
+  persisted Yjs room that could resurrect deleted layers or reset Code Objects and connectors.
+- Let Shift+Arrow move selection between actually connected Code Objects in the matching Board
+  direction, while keeping ordinary nudge behavior when no directional connection exists; unify
+  transform and graph-port controls, place ports above and just outside rounded frames, and remove
+  the competing dashed graph outline.
+- Let users drag a multi-selection from empty space inside its visible group bounds, moving every
+  selected object through the normal preview, Undo/Redo, and persistence path.
+- Center containers, non-text native objects, and Code Objects in the unobstructed Board viewport
+  when they are double-clicked, while preserving their existing edit, drill-in, and interaction
+  behavior.
+- Keep Object Graph connectors physically attached through resize and rotation while their visible
+  stroke, arrowhead, and label scale sublinearly from the larger connected object's current Board
+  dimensions; keep a legibility floor for distant Board views and screen-constant invisible
+  interaction targets.
+- Let selected Smylr surfaces distinguish click from drag: click enters interaction, drag moves the
+  owning Code Object frame, Escape returns Board control, and Undo restores a committed move.
+- Route Object Graph action and data delivery through target-scoped, revocable Board Authority
+  grants so connected objects can affect only the exact Board endpoints named by their connections.
+- Mount the native authenticated Smylr program as a trusted-web-app Code Object iframe instead of
+  reconstructing its DOM; keep up to four frame-bound runtimes live for rapid comparison, park
+  overflow frames with new mount generations, restore each frame's Smylr-owned route and scroll
+  checkpoint, and keep only the Board-selected frame attached to semantic Layers.
+- Migrate legacy frame-owned Code Object `state.write` links into page-owned Object Graph records
+  without changing FRAME IDs, and route compatibility writes through revocable exact-target Board
+  Authority grants with one Undo/Redo transaction.
+- Add reviewable Static Design patch-back for supported literal React styles, stable source identity,
+  three-way source/native reconciliation, structured rejection of unsafe dynamic edits, and
+  page-scoped Board Authority rollback, provenance, and Undo/Redo.
+- Clean up orphaned transient Board Experience components when their owning experience is no
+  longer active, preventing stale simulation objects from mounting Code Object and graph runtimes
+  after reload.
+- Harden Board Authority with Board-issued revocable grants, explicit create/delete and field-scoped update permissions, versioned grant-aware mutation receipts, and automatic cleanup of transient Board Experience components when their authority session ends.
+- Give every selected Code Object the same compact Board-owned title, duplicate action, and
+  Desktop/Laptop/iPad/Phone viewport controls, including Smylr and Board Experience components,
+  while keeping interaction on the object itself instead of repeating runtime status in chrome.
+- Retire the HTML Board runtime, Smylr Container tool, Live App Block ownership model, and Focus/Compare/Knowledge/Review workspace projections; Smylr screens and source-backed component placements now use ordinary frame-owned Code Objects with normal selection, transforms, persistence, and Undo/Redo while retaining their internal component layers, selectors, attributes, and computed-style inspection.
+- Keep Workspace inside one continuous Board dock surface, separated from Board tabs by a subtle internal divider instead of a detached dock segment.
+- Remove the retired dedicated voice-assistant surface and app-server bridge while preserving generic Chat, persistent Trace History and bounded retrieval, guarded automation receipts, Code Objects, and existing saved boards.
+- Unify every trusted interactive frame under one Code Object data and inspector contract: presets, Orbit surfaces, forms, charts, documents, spreadsheets, presentations, PDFs, Smylr screens, and saved components expose frame-owned editable TSX, name, properties, and state through the same ReactDOM runtime.
+- Consolidate authored interactive content into one Code Object contract: trusted TypeScript/TSX source, serializable properties/state, nested React components, and ReactDOM rendering live inside one ordinary persisted frame with Design/Interact, transforms, connectors, undo/redo, duplication, and save/reopen; add stable `code-object upsert`/`inspect` automation with native readback and retire HTML Board creation from current product paths.
+- Connect Code Objects through explicit board-owned state permissions; authored interactions can request one atomic source-and-target state change through a scoped API, while OpenPencil validates the connection and owns persistence, receipts, and Undo/Redo.
+- Give trusted Code Objects an explicit board remote for creating, observing, changing, and deleting native shapes they own; every action stays permission-scoped and board-owned with normal selection, persistence, and Undo/Redo, and a new Board remote preset demonstrates the pattern.
+- Separate smart objects from whole-board coordination: Code Objects remain ordinary frame-owned components, while optional Board Experiences run once at page scope through the same shared board authority; refactor Tower defense so its lane, controls, towers, and spawned enemies are selectable Code Object instances, with transient motion updates kept out of per-frame Undo history.
+- Add one typed object graph across ordinary native objects and Code Objects: every object can reveal React Flow connection handles on hover or selection and use typed routed edges directly on the ordinary Board without activation, a separate Graph tool, or another mode; React Flow shares OpenPencil's viewport, follows live OpenPencil move and resize previews through one frame-coordinated projection, preserves animated dashed Bézier connectors and their styling while keeping connected edges mounted instead of viewport-culling them during transforms, and avoids creating a second canvas, card representation, controls, or minimap; visual, data, and action links remain OpenPencil-owned records with normal permissions, persistence, and Undo/Redo.
+- Highlight hovered or selected graph-capable objects with the real `border-beam` React effect, following each native object's bounds and corner radius without creating a duplicate card or intercepting Board interaction.
+- Route opened JSX/TSX files and imported PDFs directly into that Code Object contract; add saved TSX Chart and Form components, persistent PDF page navigation and extraction, and keep unsupported files as clearly labeled attachments rather than a competing source-object product.
+- Add board-native document and spreadsheet objects with quiet Design previews, full open-source Univer editing in Interaction mode, persisted edits, ordinary canvas transforms, and source-preserving DOCX/XLSX intake; PowerPoint decks gain a familiar thumbnail filmstrip and focused slide controls without becoming iframe embeds.
+- Import PPTX as a source-first React deck that behaves like an ordinary canvas object, with direct slide navigation, persisted slide state, and exact original-file download; converting its text, shapes, backgrounds, and connectors into editable canvas copies remains explicit rather than the import default.
+- Fixed collaborative workspace persistence for source-backed files so original PPTX, DOCX, spreadsheet, 3D, and other retained bytes remain available after refresh.
+- Keep Trace as one dedicated time-ordered History and evidence feed, persist Ink and Focus with their tools still active, coalesce meaningful selections, tool activations, object/container changes, and Smylr surface styles into scoped semantic events, record durable page-space points/regions plus target-relative placement anchors for Focus and explicit target clicks, show those coordinates directly in History, retain honest location evidence for blank-canvas Focus, remove editor chat/readiness/handoff controls, and expose bounded document/page/time-ranked retrieval with follow-up cursors.
+
+- Keep one persistent OpenPencil Workspace document across reloads, local browser instances, cloud sessions, and agent automation; Boards remain pages inside that document while explicitly opened files stay separate document tabs.
+- Keep development workspaces local by default; Cloud now requires `VITE_OPENPENCIL_CLOUD_ENABLED=true` so stored credentials cannot automatically hydrate a parked database.
+- Add first-class trusted Code Objects that persist as ordinary scene frames, keep one stable React root while moving and resizing, enter interaction through normal double-click or Enter behavior, preserve component state through save/undo/duplication, and include a polished interactive WebGL globe without an iframe or persistent embed chrome.
+- Convert trusted React/TSX plus authored CSS into native editable layers from the app and CLI, retain exact source and React state/event intent, preserve stable layer IDs and manual canvas overrides during re-import, and include polished globe and timeline examples; unsupported imported components remain explicit editable fallbacks.
+- Keep cloud-backed collaboration from merging a stale full IndexedDB room into Supabase, and stream first-sync Yjs state in bounded batches so small board and folder edits are not blocked behind an oversized retry.
+- Persist unsent cloud edits in a compact local outbox, retry storage with bounded backoff, and elect one checkpoint owner so refreshes cannot resurrect deleted objects during a Cloud outage.
+- Preserve object deletions made during collaboration storage hydration so an older Yjs snapshot cannot recreate the deleted object after refresh.
+- Make Supabase the single document-sync owner for cloud workspaces, cancel superseded hydration, avoid startup writes before hydration completes, recover timed-out update reads with bounded pages, and remove stale preview nodes after authoritative cloud state loads.
+- Stop cloud authentication and workspace bootstrap from leaving the editor behind an endless connecting overlay; after a bounded connection deadline, keep the local workspace usable and offer cloud retry from a non-blocking notice.
+
+- Add an optional, dedicated OpenPencil Cloud workspace with email accounts, durable Yjs board storage, automatic cross-device sync, and one-time cofounder invites while retaining local offline and direct peer editing.
+- Show persistent dashed center guides plus live margin, border, padding, content, and gap measurements for the selected Smylr container while hover remains a secondary outline; hide and lock the owning Code Object frame chrome until Containers exits.
+- Prevent duplicate persisted child references from mounting the same Code Object overlay and embedded runtime more than once, avoiding duplicate-key churn and interaction instability.
+- Keep React Grab's page-level selection overlay opt-in with `?react-grab` during development so it cannot intercept ordinary Board clicks.
+- Made source-backed components placed from Assets behave like native board objects: click the component itself to interact, drag its compact selected title to move it or leave interaction, and resize the real rendered component without exposing a surrounding card, empty parent surface, or hover toolbar.
+- Make embedded component readiness wait for the committed React render before enabling Board interaction, and keep the Global Context Menu fixture local-only so opening it never triggers an authentication redirect or CORS error.
+- Expanded the scalable source-backed component renderer from 20 to 29 live fixture families, adding EmptyState, InitialsAvatar, InputGroup, Label, SearchInput, Skeleton, Spinner, Toggle, and ToggleGroup with their usable states and variants.
+- Expanded live component coverage again from 29 to 38 families with Bubble, ButtonGroup, Empty, Field, InputOTP, Pagination, SensitiveInput, SegmentedFilter, and Timeline, including source-defined axes and interactive states.
+- Expanded live component coverage from 38 to 47 families with AlertDialog, Collapsible, CollapsibleCard, DatePicker, HoverCard, Popover, Sheet, Stepper, and TimePicker, including contained open overlays and direct on-board interaction.
+- Expanded live component coverage from 47 to 56 families with Carousel, ChatBubble, Command, ContextMenu, DetailPair, MetricCard, PreferenceRow, ScrollArea, and SelectDropdown, including real right-click, search, scroll, toggle, and selection behavior.
+- Expanded live component coverage from 56 to 65 families with Chart, ConfirmDialog, Form, FormFields, IconifyIcon, Message, SlideOverPanel, Toaster, and TreeNav, including real chart displays, validation states, contained feedback, and collapsible navigation.
+- Completed live fixture coverage for every component-bearing root UI module with Dialog, SignaturePad, and TreeNavCollapsedProvider, including contained dialog states, real pointer drawing, and collapsed-navigation context.
+- Began full-fledged layout coverage with PageHeader, PillHeaderTabs, SidebarCardDrawer, SidebarClinicLogo, ShellPageFrame, and NavContentCard, including organized layout/navigation states and direct on-board interaction.
+- Added live GlobalContextMenu, NoClinicAccessGate, and SmartSuggestions states while removing runtime bootstrappers, providers, renderer registries, and fixture plumbing from the Assets component count.
+- Completed the reusable layout category with a source-backed ActiveClinicSwitcher and removed auth shells, slot providers, route gates, hidden skip links, and glass rendering infrastructure from draggable Assets.
+- Began reusable shared coverage with live loading screens, content skeletons, patient-empty states, procedure status controls, and the Smylr intelligence icon; delayed-module plumbing is no longer presented as a draggable component.
+- Added source-backed AI building blocks for agents, tools, plans, tasks, artifacts, approvals, sources, suggestions, checkpoints, shimmer, and safe Markdown, with open/closed/error/streaming states that remain interactive on a Board.
+- Added rich shared AI blocks for attachments, reasoning traces, token context, file trees, citations, branched messages, model selection, task queues, and test-result states.
+- Added reusable changelog, chart, leaderboard, invite, price, and product quick-view blocks with source-backed state variants.
+- Added source-backed dashboard and spark-chart widgets with metric/context/chart-form variants.
+- Added a fixture-safe, source-backed patient search command with live results, empty state, filtering, and selection feedback.
+- Completed reusable shared coverage with source-backed code, commit, conversation, prompt, snippet, stack-trace, terminal, profile-menu, and sortable table fixtures; all 51 shared Assets now have live states.
+- Began feature-level live coverage with source-backed admin navigation, sign-out, clinic branding, morning huddle, report-center, and command-search states; remote actions use safe local fixture adapters while the production defaults remain unchanged.
+- Completed patient-intake, messaging, and settings Asset families with source-backed form, inbox, thread, recipient, status, color, procedure-code, and time-pattern states; deferred route and realtime plumbing stay out of draggable Assets.
+- Completed the patient check-in Asset family with source-backed completion, progress, fallback, wizard, identity, contact, medical, insurance, and consent states; the deferred route wrapper stays out of draggable Assets.
+- Completed Tasks and Users Asset families with source-backed tables, row and bulk actions, empty/worklist states, create/edit/import/invite/delete workflows, confirmations, and overflow text; invisible providers and deferred route loaders stay out of draggable Assets.
+- Completed the Smylr Intelligence Asset family with source-backed header, composer, message, conversation, empty, and full workspace states; Board interaction uses injected local responses instead of real AI or patient-network actions.
+- Completed the Agent Asset family with source-backed logo, message, approval, command, composer, thread, message-list, and full-panel states; local Board previews avoid real agent streaming and predictive-classification requests.
+- Completed the Patient Sidebar Asset family with source-backed navigation, patient search/header, insurance, metadata, overview, alerts, appointment, briefing, forms, full-sidebar, and actionable suggestion states; local previews contain search, copy-link, navigation, suggestion, and chat actions.
+- Completed the Internal Communications Asset family with source-backed workspaces, conversations, call alerts, message delivery states, team pickers, typing, and video-call surfaces; realtime/context/Daily orchestration stays out of draggable Assets and every preview uses local-only actions.
+- Completed the Patient Communications Asset family with source-backed inbox, conversation, compose, call, task, channel, and status states; local Board previews safely inject search and message generation, while the realtime bridge stays out of draggable Assets.
+- Completed the Treatment Plan Asset family with source-backed case, procedure, financial, payment, signing, presentation, and workspace states; full editors now accept isolated fixture data and safe local navigation while preserving their production store defaults.
+- Completed the Patient Onboarding Asset family with source-backed wizard, demographic, contact, insurance, medical, consent, assignment, document, duplicate, handoff, signature, and review states; renderer previews use isolated draft storage and local-only service adapters.
+- Completed the Health Chart Asset family with source-backed overview, readiness, metrics, forms, history, vitals, pharmacy, prescription, and Review of Systems states; Board previews keep edits, navigation, autosave, and medication actions local while production behavior remains unchanged.
+- Completed the Practice Analytics Asset family with 26 source-backed dashboards, shells, views, navigation controls, charts, metric cards, and workspaces; 59 live states support local view switching, clinic selection, employee search, chart controls, actions, and metric workspace editing.
+- Completed the Calendar Asset family with 37 source-backed appointment, scheduling, dialog, day-view, month-view, filtering, and waitlist fixtures; four keyboard-shortcut, realtime-sync, and runtime-bound modules remain explicitly source-only.
+- Completed 35 Dental Imaging Asset sources, including CBCT controls, real radiograph annotation, viewer chrome, intraoral grids, matrix layouts, floating images, panoramic review, and photo review; one provider/runtime module remains explicitly source-only.
+- Added 35 current Dental Chart Asset sources across 59 live states, replaced deleted legacy controls with the real SurfaceSelectionBar and DentalChartImagingCanvas, and kept the remaining 21 current Dental Chart modules explicitly source-only.
+- Completed all 45 current Dental Labs component sources with live fixtures covering order details, timelines, kanban states, restoration choices, logistics, review, submission, tracking, implant, orthodontic, and removable workflows.
+- Expanded Patient Admin to 63 live fixtures across 59 source paths, adding appointment, referral, billing, document, family, insurance, payment-plan, and profile states; 17 route-, provider-, or service-bound modules remain explicitly source-only.
+- Added 12 Accounting fixtures across 49 checked routes for metrics, statuses, row and attachment actions, connected feeds, filters, header controls, ledgers, tables, accounts, vendors, and work queues.
+- Expanded Accounting to 70 live fixtures across 66 source paths with status notices, balance and journal controls, inactive-account handling, tag/category/vendor pickers, editable cells, tables, filters, column controls, ledger metrics, journal-entry views, controlled drawers, and rule states; 39 runtime- or service-bound modules remain explicitly source-only.
+- Expanded Dental Chart live coverage to 49 source paths with direct charting, condition, estimate, canvas, odontogram, case-status, phase, and plan-tab components; seven browser-, provider-, or service-bound modules remain explicitly source-only.
+- Completed the remaining 11 renderer-safe Primitive sources with real Data Table and Sidebar fixtures, including sorting, filtering, pagination, visibility, selection, search, navigation, layout, loading, side, and surface states.
+
 ### Changed
 
-- Show component variants as visual thumbnails in Assets, open each variant on its source canvas, and drag linked native or source-backed variants onto the active Board with normal undo/redo.
+- Keep pointer awareness off the scene mutation path: local cursor moves are coalesced to one collaboration update per animation frame, local awareness changes no longer rebuild remote peers, and remote cursors repaint only the overlay canvas without advancing document revisions or waking autosave.
+- Persist production workspaces as crash-safe per-Board snapshots behind a lightweight manifest, rewriting only dirty Boards and changed assets while retaining the previous slot and the full-document fallback for recovery.
+- Keep active-Board interaction work page-local by limiting rich overlays to the current Board, releasing off-Board Code Object runtimes, stopping idle Board Experience frames, and avoiding object-graph reprojection during pan and zoom.
+- Reduce startup and pointer-move work by keeping authored Three.js out of the initial bundle, routing scene-independent hover and guide updates only to the overlay canvas, and frame-coalescing live-inspector preview transport and persistence.
+- Render all 22 supported Mermaid diagram families through Mermaid 11.12.1 with light- and dark-theme styling, preserve Mermaid rectangle radii as editable native rounded corners, convert the SVG result into editable native vectors and text, expose stable create/update placement through `insert_mermaid_diagram`, verify retained source and reconciliation through `get_mermaid_source`, and let people double-click into native parts or redraw the same diagram in one undo step.
+- Project Markdown journey files into native editable lane boards with trusted React-derived product views, stable source IDs, state/interaction metadata, override-preserving re-import, alternate routes, labeled multi-directional paths, and feedback/rework loops; flow views no longer require iframe or snapshot surfaces.
+- Index all 693 reusable Smylr component modules in organized Assets sections, with 631 source-backed live fixture entries across 623 source paths and 70 explicit source-only modules; hide six nonvisual removal candidates for 695 visible Assets total, and expand live Asset rows into calm inline variant previews that can open their source canvas or drop transparent, content-sized components onto the active Board with normal undo/redo.
 - Reconcile editable Mermaid, JSON, CSV, and SVG projections against their retained source so unchanged files save exact bytes and native edits surface an explicit current/conflict state.
 - Route PDF, video, audio, large raster, code, office, CAD, and other unsupported files through one source-backed intake boundary that preserves filename, MIME type, exact bytes, undo/redo, and native document reopen.
 - Add offline authored Three.js experiences plus GLB and self-contained glTF viewing with persisted camera state and bounded cleanup; unsupported CAD and external-resource models remain honest retained-source fallbacks.
@@ -12,31 +125,30 @@
 - Turn the Dental Chart Flow Board into an editable app-screen journey: four real web screens now read left to right through labeled action arrows, with explicit start, finish, and return-to-edit paths; moving a screen reattaches its native labels and connectors, and first entry fits the whole journey instead of one isolated state.
 - Project one stable Smylr alternate and exact lifecycle revision through Current, Flow, Focus, Compare, Knowledge, and Review, using real product artifacts, typed intent/evidence lineage, latest transition receipts, normal Undo, and independent per-view movement memory.
 - Remember each Smylr view's own camera, tool, and selection, record origin receipts against the stable work-item identity, and restore the exact prior context when moving between Current and Flow.
-- Give live-app and HTML-board revisions one guarded software-team lifecycle with durable transition receipts, normal editor Undo, explicit change-set criteria and verification-evidence gates, and a compact next-action workflow surface.
 - Keep the animated dither behind working-board canvas content so solid shapes and Mermaid diagrams no longer look transparent, while preserving the stronger empty-board atmosphere.
 - Make Smylr **Add to Flow** assign ordered flow lineage, open the existing Flow Board with the same stable alternate, preserve its independent review lifecycle, and provide an exact return to Current that survives reload.
-- Align live HTML Board headers with the calm Smylr web-view frame controls, keeping only the HTML identity, board title, and accessible Design/Inspect/Interact state while refreshing the starter with a polished interactive example.
 - Carry the theme-aware animated dither across the live canvas, broaden it across dark working boards, make the floating sidebar, toolbar, utility tabs, and Board dock follow light and dark themes, and reveal editor chrome after the first live board is created.
 - Convert every Mermaid diagram type through Mermaid's own renderer into separate editable shapes, labels, connectors, and vector details without a forced background, preserving native gradient fills and strokes, transparency, and blend behavior for diagrams such as `sankey-beta` and `architecture-beta`.
 - Make finished Trace sessions summary-first: show key outcomes by default, collapse selection/tool/viewport activity, and keep evidence as compact expandable thumbnails while preserving the full copied context.
+- Keep Trace focused during refreshes and generated board rebuilds by grouping bulk canvas mutations, hard-bounding copied context, resolving Focus to the Product Map screen or live container beneath the gesture, baking annotations into the copied PNG, and rejecting blank evidence instead of storing a white screenshot.
 - Open `.md` and `.markdown` files as editable native canvas documents with retained source metadata, structured Markdown blocks, and editable Mermaid diagrams for fenced Mermaid source.
-- Add a shared source-backed modality slice: direct Markdown/MDX/text, SVG, JSON/JSON Schema, CSV, HTML, JSX, and TSX intake plus dedicated Insert, paste, and drop flows for raster images, PDFs, video, and audio, with content-addressed binary references that survive native `.fig` save/reopen.
+- Add unified intake for Markdown/MDX/text, SVG, JSON/JSON Schema, CSV, HTML, JSX, and TSX plus dedicated Insert, paste, and drop flows for raster images, PDFs, video, and audio, retaining exact source and content-addressed binary references through native `.fig` save/reopen.
 - Open the shared Smylr workspace from the normal OpenPencil home route, group its generated canvases as clearly named Boards under one Smylr Project, and keep the complete Project tree beneath compact pinned and recent Board access.
 - Keep large canvases responsive by preserving absolute-position caches across repaint-only frames, culling offscreen retained subtrees, avoiding viewport-driven HTML iframe resynchronization, and committing live-frame transforms only when pointer interaction ends.
 - Replace the stacked Layers, Assets, and Trace sidebar rows with a compact text-only segmented control that sits at the top normally, moves beneath Design context when it appears, and keeps one utility selected with a quiet filled active state in the existing OpenPencil palette.
 - Make the Board dock behave like a macOS Dock with persistent reorderable pins, separated warm unpinned Boards, right-click Pin/Unpin and Close actions, and open-state dots independent of the active Board.
 - Simplify the Board switcher header and remove decorative project count badges and the redundant current-board pin action.
+- Reveal the active Board's complete nested Project path in the switcher, mark it as the current page for assistive technology, and keep Board and flow Overview fitting clear of the same visible editor chrome.
 - Animate the full left sidebar plus Design, Layers, Assets, and Trace as one coordinated rail, including smooth canvas-width recovery and space-sharing when Design context appears or disappears.
 - Load mobile editor chrome, AI chat runtimes, and collaboration networking only when used to reduce initial startup work and memory.
 - Add Mermaid diagram import with live preview, separate editable OpenPencil board layers, one-step undo/redo, and retained source/revision metadata.
 - Let MCP clients insert Mermaid source directly as native editable layers and optionally place the diagram on a named Board inside a named Project.
-- Move the desktop tool strip to the top, replace the right inspector with contextual Design/HTML details in the left rail, add Trace beside Layers and Assets, and move Projects into a searchable bottom board dock with persistent quick pins that scale continuously to fit the viewport. The compact switcher now prioritizes pinned and recent Boards, keeps Projects collapsed, stays open while switching Boards, and hands structural editing to a separate management view.
+- Move the desktop tool strip to the top, replace the right inspector with contextual Design and Code details in the left rail, add Trace beside Layers and Assets, and move Projects into a searchable bottom board dock with persistent quick pins that scale continuously to fit the viewport. The compact switcher now prioritizes pinned and recent Boards, keeps Projects collapsed, stays open while switching Boards, and hands structural editing to a separate management view.
 - Give Boards persistent selectable glyphs across the project tree, board switcher, and dock, with icon choice during creation, a compact icon dropdown while renaming, and readable title tooltips on dock hover.
 - Keep up to three recently used unpinned Boards in a separate macOS-style warm section of the dock, preserve icon positions while revisiting them, use an open 8px icon and edge rhythm with 6px separator breathing room, and show dock labels immediately on hover.
 - Simplify workspace organization around Projects and generic Boards, removing predefined board forms, inferred board types, the Focus/Compare/Knowledge/Review switcher, field-proof chrome, and form-specific semantic agent tools.
 - Simplify the Smylr production shell to Design and Trace inspector modes, and move compact collaboration controls into the bottom toolbar.
-- Add the first Weekly Decision proving build with canonical intent/evidence/surface/receipt lineage, a constrained interactive HTML review surface, persisted corrections, exact-revision approval receipts, and deterministic reconstruction tests.
-- Unify the floating right inspector around three quieter, labeled Design, HTML, and Trace views, remove the AI view from this surface, and simplify the code and narrated-trace presentation with progressive disclosure.
+- Unify the floating right inspector around quieter Design, Code, and Trace views, remove the AI view from this surface, and simplify the code and narrated-trace presentation with progressive disclosure.
 - Rework the left sidebar into a floating, low-clutter Projects and Boards workspace with nested Projects, unlimited generic Boards, search, inline rename, drag-and-drop organization, safe deletion, and collapsible Layers and Assets.
 - Add scene-backed project content with structured documents, collections, relations, components, tokens, assets, and scoped semantic MCP query/mutation tools without classifying the containing Board.
 - Add the first Narrated Trace slice with browser speech capture, semantic canvas events, editable vector Ink, fading Focus trails, clean cache-backed evidence crops, editable context cleanup, durable session history, preview, and Copy Context for manual Codex handoff.
@@ -57,6 +169,13 @@
 
 ### Fixes
 
+- Keep moving Code Object frames, embedded Smylr surfaces, and React Flow connectors on one
+  presentation frame, remove misleading moving-dash edge animation, and clip container content
+  and selection chrome to the frame's rounded corners.
+- Fetch complete durable board updates from Postgres after Realtime notifications so incomplete change payloads cannot interrupt cloud collaboration.
+- Center a layer's corresponding node in the unobstructed canvas when it is clicked, while keeping modifier multi-selection and keyboard navigation camera-stable.
+- Keep Smylr live-app frames calm by clearing persisted native fills, strokes, and effects beneath the DOM runtime and using restrained theme-aware separation.
+- Treat editable Mermaid diagrams as one movable object and scale their native vectors, labels, strokes, and effects proportionally when resized, including diagrams inserted before the grouped-container fix.
 - Reduce the floating sidebar shadow to a quiet separation edge so it no longer competes with canvas content.
 - Snapshot reactive live-workspace data before durable projection transactions, version projection migrations explicitly, order Review by each lifecycle transition's occurrence time, and keep Compare focused on both real artifacts instead of support metadata.
 - Prevent live workspace dialogs from throwing `DataCloneError` when JSON-backed arrays or records arrive through Vue's reactive wrappers.
@@ -70,7 +189,7 @@
 - Automatically open Layers in the Smylr sidebar whenever no Design context is available, without overriding utilities the user opened explicitly.
 - Center the top tool strip and bottom board dock together within the usable canvas, shifting both through the sidebar's shared motion curve as it opens, closes, or resizes.
 - Restore live Smylr container selection when OpenPencil and Smylr run on different local origins.
-- Keep the Smylr Design inspector visible with Layers and Assets, give active and saved Trace timelines the full sidebar rail, restore Design when Trace closes, remove its redundant live-container header, and reduce its selected-item summary to one quiet name row.
+- Keep the Smylr Design inspector visible above Layers, Assets, and Trace when a design is selected, restore Design when Trace closes, remove its redundant live-container header, and reduce its selected-item summary to one quiet name row.
 - Keep the OpenPencil sidebar title static and move the browser-only app-menu reveal to the app icon.
 - Make the sidebar app icon clearly highlight on hover and give theme, language, and performance controls a dedicated Settings menu.
 - Make Trace icon-only, use clearer pen and laser-pointer icons for Ink and Focus, and consolidate the toolbar dividers into one separator before Share.

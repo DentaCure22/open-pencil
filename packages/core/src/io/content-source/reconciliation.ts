@@ -98,8 +98,33 @@ function fnv1a(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => canonicalize(item))
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, item]) => [key, canonicalize(item)])
+  )
+}
+
+function visualSignature(value: unknown): string {
+  return fnv1a(JSON.stringify(canonicalize(value)))
+}
+
 /** Stable visual signature used to detect native divergence without storing a second source copy. */
 export function sourceSceneSignature(graph: SceneGraph, rootId: string): string | null {
   const root = graph.getNode(rootId)
-  return root ? fnv1a(JSON.stringify(visualNodeSnapshot(graph, root))) : null
+  return root ? visualSignature(visualNodeSnapshot(graph, root)) : null
+}
+
+/** Stable signature for source-backed contents whose owning container may be moved freely. */
+export function sourceSceneContentsSignature(graph: SceneGraph, rootId: string): string | null {
+  const root = graph.getNode(rootId)
+  if (!root) return null
+  const contents = root.childIds.flatMap((childId) => {
+    const child = graph.getNode(childId)
+    return child ? [visualNodeSnapshot(graph, child)] : []
+  })
+  return visualSignature(contents)
 }

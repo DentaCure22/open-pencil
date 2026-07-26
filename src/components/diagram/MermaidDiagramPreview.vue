@@ -2,11 +2,29 @@
 import { computed, type CSSProperties } from 'vue'
 
 import type { Fill, SceneNode, Stroke, VectorNetwork } from '@open-pencil/scene-graph'
+import type { Vector } from '@open-pencil/scene-graph/primitives'
 import type { MermaidSceneNodeSpec, MermaidSceneSpec } from '@open-pencil/core/diagram'
 import { colorToCSSCompact } from '@open-pencil/core/color'
 import { vectorNetworkToSVGPaths } from '@open-pencil/core/io/formats/svg'
 
-const { diagram } = defineProps<{ diagram: MermaidSceneSpec }>()
+const { diagram, mode = 'readable' } = defineProps<{
+  diagram: MermaidSceneSpec
+  mode?: 'fit' | 'readable'
+}>()
+const nodeByKey = computed(() => new Map(diagram.nodes.map((node) => [node.key, node])))
+const MIN_PREVIEW_TEXT_SIZE = 11
+
+const previewScale = computed(() => {
+  const smallestText = diagram.nodes
+    .filter((node) => node.type === 'TEXT')
+    .reduce((smallest, node) => Math.min(smallest, node.props.fontSize ?? 14), Infinity)
+  return Number.isFinite(smallestText) ? Math.max(1, MIN_PREVIEW_TEXT_SIZE / smallestText) : 1
+})
+
+const previewStyle = computed<CSSProperties>(() => ({
+  height: `${Math.ceil(Math.max(1, diagram.height) * previewScale.value)}px`,
+  width: `${Math.ceil(Math.max(1, diagram.width) * previewScale.value)}px`
+}))
 
 interface PreviewGradient {
   id: string
@@ -108,6 +126,20 @@ function nodeStyle(node: MermaidSceneNodeSpec): CSSProperties {
     : {}
 }
 
+function nodePosition(node: MermaidSceneNodeSpec): Vector {
+  let x = node.props.x ?? 0
+  let y = node.props.y ?? 0
+  let parentKey = node.parentKey
+  while (parentKey) {
+    const parent = nodeByKey.value.get(parentKey)
+    if (!parent) break
+    x += parent.props.x ?? 0
+    y += parent.props.y ?? 0
+    parentKey = parent.parentKey
+  }
+  return { x, y }
+}
+
 function strokeLineCap(stroke: Stroke | undefined): 'butt' | 'round' | 'square' {
   if (stroke?.cap === 'ROUND') return 'round'
   if (stroke?.cap === 'SQUARE') return 'square'
@@ -124,7 +156,8 @@ function strokeLineJoin(stroke: Stroke | undefined): 'bevel' | 'miter' | 'round'
 <template>
   <svg
     data-test-id="mermaid-preview"
-    class="size-full isolate"
+    :class="mode === 'fit' ? 'size-full isolate' : 'block max-w-none shrink-0 isolate'"
+    :style="mode === 'fit' ? undefined : previewStyle"
     :viewBox="`0 0 ${Math.max(1, diagram.width)} ${Math.max(1, diagram.height)}`"
     preserveAspectRatio="xMidYMid meet"
     role="img"
@@ -168,7 +201,7 @@ function strokeLineJoin(stroke: Stroke | undefined): 'bevel' | 'miter' | 'round'
     <g
       v-for="node in diagram.nodes"
       :key="node.key"
-      :transform="`translate(${node.props.x ?? 0} ${node.props.y ?? 0})`"
+      :transform="`translate(${nodePosition(node).x} ${nodePosition(node).y})`"
       :style="nodeStyle(node)"
     >
       <rect

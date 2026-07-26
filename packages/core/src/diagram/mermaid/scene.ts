@@ -1,5 +1,6 @@
+import { wcagContrast } from 'culori'
+
 import type {
-  Fill,
   PluginDataEntry,
   Stroke,
   VectorNetwork,
@@ -9,6 +10,7 @@ import type {
 import type { Color, Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 import { parseColor } from '#core/color'
+import { DEFAULT_FONT_FAMILY } from '#core/constants'
 
 import {
   finite,
@@ -18,16 +20,13 @@ import {
   positive,
   type AbsolutePoint
 } from './geometry'
-import {
-  DEFAULT_SHAPE_COLOR,
-  diagramShapeColor,
-  diagramStrokeColor,
-  diagramTextColor
-} from './palette'
+import { diagramShapeColor, diagramStrokeColor, diagramTextColor } from './palette'
 import { svgPathSpec } from './path'
+import { clampedOpacity, skeletonShapeStyle, solidFill } from './style'
 import { diagramTextAlign, diagramTextVerticalAlign, estimateTextSize } from './text'
 import type {
   MermaidDiagram,
+  MermaidAppearance,
   MermaidLabel,
   MermaidSceneNodeSpec,
   MermaidSceneSpec,
@@ -36,6 +35,24 @@ import type {
 
 const MIN_NODE_SIZE = 1
 const MARKER_SIZE = 10
+const DARK_READABLE_TEXT = parseColor('#1b1b1f')
+const LIGHT_READABLE_TEXT = parseColor('#f4f5f7')
+const STRICT_DARK_READABLE_TEXT = parseColor('#000000')
+const STRICT_LIGHT_READABLE_TEXT = parseColor('#ffffff')
+const STRUCTURAL_MERMAID_GROUPS = new Set([
+  'background',
+  'clusters',
+  'defs',
+  'edgelabels',
+  'edgepaths',
+  'grid',
+  'label',
+  'labels',
+  'legend',
+  'markers',
+  'nodes',
+  'root'
+])
 
 type MarkerKind = 'arrow' | 'bar' | 'circle' | 'crow' | 'diamond'
 
@@ -43,18 +60,32 @@ interface LineStyle {
   color: Color
   width: number
   dashed: boolean
+  opacity: number
 }
 
-function solidFill(color: Color): Fill {
-  return { type: 'SOLID', color, opacity: color.a, visible: color.a > 0 }
+function colorContrast(left: Color, right: Color): number {
+  return wcagContrast({ mode: 'rgb', ...left }, { mode: 'rgb', ...right })
+}
+
+function readableTextColor(background: Color): Color {
+  const preferred =
+    colorContrast(LIGHT_READABLE_TEXT, background) >= colorContrast(DARK_READABLE_TEXT, background)
+      ? LIGHT_READABLE_TEXT
+      : DARK_READABLE_TEXT
+  if (colorContrast(preferred, background) >= 4.5) return preferred
+  return colorContrast(STRICT_LIGHT_READABLE_TEXT, background) >=
+    colorContrast(STRICT_DARK_READABLE_TEXT, background)
+    ? STRICT_LIGHT_READABLE_TEXT
+    : STRICT_DARK_READABLE_TEXT
 }
 
 function lineStroke(style: LineStyle): Stroke {
+  const opacity = clampedOpacity(style.color.a) * clampedOpacity(style.opacity)
   return {
-    color: style.color,
+    color: { ...style.color, a: 1 },
     weight: style.width,
-    opacity: style.color.a,
-    visible: style.color.a > 0,
+    opacity,
+    visible: opacity > 0,
     align: 'CENTER',
     cap: 'ROUND',
     join: 'ROUND',
@@ -93,9 +124,10 @@ function textSpec(
   color: string | null | undefined,
   label?: MermaidLabel,
   pluginData: PluginDataEntry[] = [],
-  element?: MermaidSkeletonElement
+  element?: MermaidSkeletonElement,
+  appearance: MermaidAppearance = 'dark'
 ): MermaidSceneNodeSpec {
-  const textColor = parseColor(diagramTextColor(color))
+  const textColor = parseColor(diagramTextColor(color, appearance))
   textColor.a *= Math.min(1, Math.max(0, (element?.opacity ?? 1) * (element?.fillOpacity ?? 1)))
   return {
     key,
@@ -108,8 +140,9 @@ function textSpec(
       height: Math.max(MIN_NODE_SIZE, rect.height),
       text,
       fontSize,
-      fontFamily: element?.fontFamily,
+      fontFamily: DEFAULT_FONT_FAMILY,
       fontWeight: element?.fontWeight ?? 400,
+      rotation: element?.rotation ?? 0,
       lineHeight: fontSize * 1.25,
       textAlignHorizontal: diagramTextAlign(label),
       textAlignVertical: diagramTextVerticalAlign(label),
@@ -118,19 +151,6 @@ function textSpec(
       pluginData
     }
   }
-}
-
-function shapeStyle(element: MermaidSkeletonElement): {
-  fills: Fill[]
-  strokes: Stroke[]
-} {
-  const fillColor = parseColor(diagramShapeColor(element.backgroundColor))
-  const stroke = lineStroke({
-    color: parseColor(diagramStrokeColor(element.strokeColor)),
-    width: positive(element.strokeWidth, 2),
-    dashed: element.strokeStyle === 'dashed' || element.strokeStyle === 'dotted'
-  })
-  return { fills: [solidFill(fillColor)], strokes: [stroke] }
 }
 
 function openNetwork(points: readonly AbsolutePoint[]): VectorNetwork {
@@ -208,7 +228,8 @@ function polygonVectorSpec(
   name: string,
   points: readonly AbsolutePoint[],
   color: Color,
-  pluginData: PluginDataEntry[] = []
+  pluginData: PluginDataEntry[] = [],
+  opacity = 1
 ): MermaidSceneNodeSpec {
   const bounds = vectorBounds(points)
   return {
@@ -220,7 +241,7 @@ function polygonVectorSpec(
       y: bounds.y,
       width: bounds.width,
       height: bounds.height,
-      fills: [solidFill(color)],
+      fills: [solidFill(color, opacity)],
       strokes: [],
       vectorNetwork: polygonNetwork(bounds.local),
       pluginData
@@ -281,7 +302,8 @@ function markerSpecs(
   direction: Vector,
   kinds: MarkerKind[],
   style: LineStyle,
-  pluginData: PluginDataEntry[]
+  pluginData: PluginDataEntry[],
+  appearance: MermaidAppearance
 ): MermaidSceneNodeSpec[] {
   const perp = { x: -direction.y, y: direction.x }
   const specs: MermaidSceneNodeSpec[] = []
@@ -297,7 +319,8 @@ function markerSpecs(
           'Arrowhead',
           [cursor, offset(back, perp, 5), offset(back, perp, -5)],
           style.color,
-          pluginData
+          pluginData,
+          style.opacity
         )
       )
       cursor = offset(cursor, direction, -MARKER_SIZE - 3)
@@ -313,7 +336,8 @@ function markerSpecs(
           'Diamond marker',
           [cursor, offset(middle, perp, 4), back, offset(middle, perp, -4)],
           style.color,
-          pluginData
+          pluginData,
+          style.opacity
         )
       )
       cursor = offset(cursor, direction, -14)
@@ -331,7 +355,7 @@ function markerSpecs(
           y: center[1] - 4,
           width: 8,
           height: 8,
-          fills: [solidFill(parseColor(DEFAULT_SHAPE_COLOR))],
+          fills: [solidFill(parseColor(diagramShapeColor(undefined, appearance)))],
           strokes: [lineStroke(style)],
           pluginData
         }
@@ -359,18 +383,28 @@ function markerSpecs(
   return specs
 }
 
-function containerSpecs(element: MermaidSkeletonElement, index: number): MermaidSceneNodeSpec[] {
+function containerSpecs(
+  element: MermaidSkeletonElement,
+  index: number,
+  appearance: MermaidAppearance
+): MermaidSceneNodeSpec[] {
   const x = finite(element.x)
   const y = finite(element.y)
   const width = positive(element.width, 120)
   const height = positive(element.height, 64)
   const pluginData = elementPluginData(element, index)
-  const style = shapeStyle(element)
+  const style = skeletonShapeStyle(element, appearance)
   const type = element.type === 'ellipse' ? 'ELLIPSE' : 'RECTANGLE'
   const key = elementKey(element, index)
   const specs: MermaidSceneNodeSpec[] = []
+  const cornerRadius = Math.min(
+    width / 2,
+    height / 2,
+    Math.max(0, element.cornerRadius ?? (element.roundness ? Math.min(width, height) / 2 : 6))
+  )
 
   if (element.type === 'diamond') {
+    const fillColor = style.fills[0]?.color ?? parseColor(diagramShapeColor(undefined, appearance))
     specs.push(
       polygonVectorSpec(
         key,
@@ -381,11 +415,13 @@ function containerSpecs(element: MermaidSkeletonElement, index: number): Mermaid
           [x + width / 2, y + height],
           [x, y + height / 2]
         ],
-        style.fills[0].color,
+        fillColor,
         pluginData
       )
     )
+    specs[0].props.fills = style.fills
     specs[0].props.strokes = style.strokes
+    specs[0].props.blendMode = element.blendMode
   } else {
     specs.push({
       key,
@@ -396,8 +432,9 @@ function containerSpecs(element: MermaidSkeletonElement, index: number): Mermaid
         y,
         width,
         height,
-        cornerRadius: type === 'RECTANGLE' && element.roundness ? Math.min(width, height) / 2 : 6,
+        cornerRadius: type === 'RECTANGLE' ? cornerRadius : 0,
         ...style,
+        blendMode: element.blendMode,
         pluginData
       }
     })
@@ -421,41 +458,61 @@ function containerSpecs(element: MermaidSkeletonElement, index: number): Mermaid
         fontSize,
         element.label?.strokeColor || element.label?.color,
         element.label,
-        pluginData
+        pluginData,
+        undefined,
+        appearance
       )
     )
   }
   return specs
 }
 
-function standaloneTextSpec(element: MermaidSkeletonElement, index: number): MermaidSceneNodeSpec {
+function standaloneTextSpec(
+  element: MermaidSkeletonElement,
+  index: number,
+  appearance: MermaidAppearance
+): MermaidSceneNodeSpec {
   const text = element.text || ''
   const fontSize = positive(element.fontSize, 16)
   const estimated = estimateTextSize(text, fontSize)
+  const sourceWidth = positive(element.width, estimated.width)
+  const sourceHeight = positive(element.height, estimated.height)
+  const width = Math.max(sourceWidth, estimated.width + 8)
+  const height = Math.max(sourceHeight, estimated.height + 4)
+  const horizontalAlign = diagramTextAlign(element.label)
+  let xOffset = 0
+  if (horizontalAlign === 'RIGHT') xOffset = width - sourceWidth
+  else if (horizontalAlign === 'CENTER') xOffset = (width - sourceWidth) / 2
   return textSpec(
     elementKey(element, index),
     text,
     {
-      x: finite(element.x),
-      y: finite(element.y),
-      width: positive(element.width, estimated.width),
-      height: positive(element.height, estimated.height)
+      x: finite(element.x) - xOffset,
+      y: finite(element.y) - (height - sourceHeight) / 2,
+      width,
+      height
     },
     fontSize,
     element.strokeColor,
-    undefined,
+    element.label,
     elementPluginData(element, index),
-    element
+    element,
+    appearance
   )
 }
 
-function linearSpecs(element: MermaidSkeletonElement, index: number): MermaidSceneNodeSpec[] {
+function linearSpecs(
+  element: MermaidSkeletonElement,
+  index: number,
+  appearance: MermaidAppearance
+): MermaidSceneNodeSpec[] {
   const points = elementPoints(element)
   const pluginData = elementPluginData(element, index)
   const style: LineStyle = {
-    color: parseColor(diagramStrokeColor(element.strokeColor)),
+    color: parseColor(diagramStrokeColor(element.strokeColor, appearance)),
     width: positive(element.strokeWidth, 2),
-    dashed: element.strokeStyle === 'dashed' || element.strokeStyle === 'dotted'
+    dashed: element.strokeStyle === 'dashed' || element.strokeStyle === 'dotted',
+    opacity: clampedOpacity(element.opacity) * clampedOpacity(element.strokeOpacity)
   }
   const key = elementKey(element, index)
   const specs: MermaidSceneNodeSpec[] = []
@@ -474,7 +531,8 @@ function linearSpecs(element: MermaidSkeletonElement, index: number): MermaidSce
         normalizedDirection(startNext, start),
         markerKinds(element.startArrowhead, false),
         style,
-        pluginData
+        pluginData,
+        appearance
       ),
       ...markerSpecs(
         `${key}:end`,
@@ -482,7 +540,8 @@ function linearSpecs(element: MermaidSkeletonElement, index: number): MermaidSce
         normalizedDirection(endPrevious, end),
         markerKinds(element.endArrowhead, element.endArrowhead === undefined),
         style,
-        pluginData
+        pluginData,
+        appearance
       )
     )
   }
@@ -508,7 +567,9 @@ function linearSpecs(element: MermaidSkeletonElement, index: number): MermaidSce
         fontSize,
         element.label?.strokeColor,
         element.label,
-        pluginData
+        pluginData,
+        undefined,
+        appearance
       )
     )
   }
@@ -518,7 +579,8 @@ function linearSpecs(element: MermaidSkeletonElement, index: number): MermaidSce
 function svgPathMarkerSpecs(
   element: MermaidSkeletonElement,
   index: number,
-  path: MermaidSceneNodeSpec
+  path: MermaidSceneNodeSpec,
+  appearance: MermaidAppearance
 ): MermaidSceneNodeSpec[] {
   const network = path.props.vectorNetwork
   const firstSegment = network?.segments[0]
@@ -528,12 +590,15 @@ function svgPathMarkerSpecs(
   const nodeX = finite(path.props.x)
   const nodeY = finite(path.props.y)
   const pluginData = elementPluginData(element, index)
+  const pathStroke = path.props.strokes?.[0]
   const style: LineStyle = {
     color:
+      pathStroke?.color ??
       element.strokePaint?.gradientStops?.[0]?.color ??
-      parseColor(diagramStrokeColor(element.strokeColor)),
-    width: positive(element.strokeWidth, 2),
-    dashed: false
+      parseColor(diagramStrokeColor(element.strokeColor, appearance)),
+    width: pathStroke?.weight ?? positive(element.strokeWidth, 2),
+    dashed: Boolean(pathStroke?.dashPattern?.length),
+    opacity: pathStroke?.opacity ?? 1
   }
   const startVertex = network.vertices[firstSegment.start]
   const startControl = {
@@ -564,7 +629,8 @@ function svgPathMarkerSpecs(
       normalizedDirection([nodeX + startFrom.x, nodeY + startFrom.y], start),
       markerKinds(element.startArrowhead, false),
       style,
-      pluginData
+      pluginData,
+      appearance
     ),
     ...markerSpecs(
       `${path.key}:end`,
@@ -572,30 +638,36 @@ function svgPathMarkerSpecs(
       normalizedDirection([nodeX + endFrom.x, nodeY + endFrom.y], end),
       markerKinds(element.endArrowhead, false),
       style,
-      pluginData
+      pluginData,
+      appearance
     )
   )
   return specs
 }
 
-function elementSpecs(element: MermaidSkeletonElement, index: number): MermaidSceneNodeSpec[] {
+function elementSpecs(
+  element: MermaidSkeletonElement,
+  index: number,
+  appearance: MermaidAppearance
+): MermaidSceneNodeSpec[] {
   switch (element.type) {
     case 'rectangle':
     case 'ellipse':
     case 'diamond':
-      return containerSpecs(element, index)
+      return containerSpecs(element, index, appearance)
     case 'text':
-      return [standaloneTextSpec(element, index)]
+      return [standaloneTextSpec(element, index, appearance)]
     case 'line':
     case 'arrow':
-      return linearSpecs(element, index)
+      return linearSpecs(element, index, appearance)
     case 'path': {
       const spec = svgPathSpec(
         element,
         elementKey(element, index),
-        elementPluginData(element, index)
+        elementPluginData(element, index),
+        appearance
       )
-      return spec ? [spec, ...svgPathMarkerSpecs(element, index, spec)] : []
+      return spec ? [spec, ...svgPathMarkerSpecs(element, index, spec, appearance)] : []
     }
     case 'frame':
       return []
@@ -634,20 +706,198 @@ function normalizeSceneNodes(nodes: MermaidSceneNodeSpec[]): {
   }
 }
 
+function nodePluginValue(node: MermaidSceneNodeSpec, key: string): string | null {
+  return (
+    node.props.pluginData?.find((entry) => entry.pluginId === 'open-pencil' && entry.key === key)
+      ?.value ?? null
+  )
+}
+
+function nodeGroupPath(node: MermaidSceneNodeSpec): string[] {
+  const value = nodePluginValue(node, 'mermaid/group-ids')
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.every((part) => typeof part === 'string') ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function groupKind(value: string): string {
+  return (value.split('@')[0]?.split(/\s+/)[0] ?? '').toLowerCase()
+}
+
+function groupPrefix(path: string[], index: number): string {
+  return path.slice(0, index + 1).join('\u001f')
+}
+
+function semanticGroupCandidates(nodes: MermaidSceneNodeSpec[]): Map<string, string> {
+  const paths = new Map(nodes.map((node) => [node.key, nodeGroupPath(node)]))
+  const prefixCounts = new Map<string, number>()
+  const elementCounts = new Map<string, number>()
+  for (const node of nodes) {
+    const path = paths.get(node.key) ?? []
+    path.forEach((_, index) => {
+      const prefix = groupPrefix(path, index)
+      prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + 1)
+    })
+    const elementId = nodePluginValue(node, 'mermaid/element-id')
+    if (elementId) elementCounts.set(elementId, (elementCounts.get(elementId) ?? 0) + 1)
+  }
+
+  const candidates = new Map<string, string>()
+  for (const node of nodes) {
+    const path = paths.get(node.key) ?? []
+    const pathCandidateIndex = path.findIndex((segment, index) => {
+      if (STRUCTURAL_MERMAID_GROUPS.has(groupKind(segment))) return false
+      const count = prefixCounts.get(groupPrefix(path, index)) ?? 0
+      return count >= 2 && count < nodes.length
+    })
+    if (pathCandidateIndex !== -1) {
+      candidates.set(node.key, `group:${groupPrefix(path, pathCandidateIndex)}`)
+      continue
+    }
+    const elementId = nodePluginValue(node, 'mermaid/element-id')
+    if (elementId && (elementCounts.get(elementId) ?? 0) >= 2) {
+      candidates.set(node.key, `element:${elementId}`)
+    }
+  }
+  return candidates
+}
+
+function semanticGroupName(nodes: MermaidSceneNodeSpec[]): string {
+  const label = nodes.find((node) => node.type === 'TEXT')?.props.text?.trim()
+  if (label) return label.split('\n')[0]?.slice(0, 80) || 'Mermaid node'
+  return nodes[0]?.props.name?.slice(0, 80) || 'Mermaid part'
+}
+
+function groupSemanticNodes(nodes: MermaidSceneNodeSpec[]): MermaidSceneNodeSpec[] {
+  const candidates = semanticGroupCandidates(nodes)
+  const members = new Map<string, MermaidSceneNodeSpec[]>()
+  for (const node of nodes) {
+    const candidate = candidates.get(node.key)
+    if (!candidate) continue
+    const group = members.get(candidate) ?? []
+    group.push(node)
+    members.set(candidate, group)
+  }
+
+  const groupedKeys = new Set<string>()
+  const groups: MermaidSceneNodeSpec[] = []
+  const parentKeys = new Map<string, string>()
+  for (const [semanticId, groupNodes] of members) {
+    if (groupNodes.length < 2) continue
+    const x = Math.min(...groupNodes.map((node) => finite(node.props.x)))
+    const y = Math.min(...groupNodes.map((node) => finite(node.props.y)))
+    const maxX = Math.max(
+      ...groupNodes.map((node) => finite(node.props.x) + positive(node.props.width, MIN_NODE_SIZE))
+    )
+    const maxY = Math.max(
+      ...groupNodes.map((node) => finite(node.props.y) + positive(node.props.height, MIN_NODE_SIZE))
+    )
+    const key = `semantic:${groups.length + 1}`
+    groups.push({
+      key,
+      type: 'GROUP',
+      props: {
+        name: semanticGroupName(groupNodes),
+        x,
+        y,
+        width: Math.max(MIN_NODE_SIZE, maxX - x),
+        height: Math.max(MIN_NODE_SIZE, maxY - y),
+        fills: [],
+        strokes: [],
+        pluginData: [{ pluginId: 'open-pencil', key: 'mermaid/semantic-id', value: semanticId }]
+      }
+    })
+    for (const node of groupNodes) {
+      groupedKeys.add(node.key)
+      parentKeys.set(node.key, key)
+    }
+  }
+
+  return [
+    ...groups,
+    ...nodes.map((node) => {
+      const parentKey = parentKeys.get(node.key)
+      if (!parentKey || !groupedKeys.has(node.key)) return node
+      const parent = groups.find((group) => group.key === parentKey)
+      return {
+        ...node,
+        parentKey,
+        props: {
+          ...node.props,
+          x: finite(node.props.x) - finite(parent?.props.x),
+          y: finite(node.props.y) - finite(parent?.props.y)
+        }
+      }
+    })
+  ]
+}
+
+function readableTextNodes(nodes: MermaidSceneNodeSpec[]): MermaidSceneNodeSpec[] {
+  const solidBackgrounds = nodes.filter(
+    (node) =>
+      (node.type === 'ELLIPSE' ||
+        node.type === 'RECTANGLE' ||
+        (node.type === 'VECTOR' && Boolean(node.props.vectorNetwork?.regions.length))) &&
+      node.props.fills?.[0]?.type === 'SOLID' &&
+      node.props.fills[0].visible &&
+      node.props.fills[0].opacity >= 0.8 &&
+      node.props.fills[0].color.a >= 0.8
+  )
+  return nodes.map((node) => {
+    const textFill = node.type === 'TEXT' ? node.props.fills?.[0] : undefined
+    if (textFill?.type !== 'SOLID') return node
+    const centerX = finite(node.props.x) + positive(node.props.width, MIN_NODE_SIZE) / 2
+    const centerY = finite(node.props.y) + positive(node.props.height, MIN_NODE_SIZE) / 2
+    const background = solidBackgrounds
+      .filter(
+        (candidate) =>
+          centerX >= finite(candidate.props.x) &&
+          centerX <= finite(candidate.props.x) + positive(candidate.props.width, MIN_NODE_SIZE) &&
+          centerY >= finite(candidate.props.y) &&
+          centerY <= finite(candidate.props.y) + positive(candidate.props.height, MIN_NODE_SIZE)
+      )
+      .sort(
+        (left, right) =>
+          positive(left.props.width, MIN_NODE_SIZE) * positive(left.props.height, MIN_NODE_SIZE) -
+          positive(right.props.width, MIN_NODE_SIZE) * positive(right.props.height, MIN_NODE_SIZE)
+      )
+      .at(0)
+    const backgroundFill = background?.props.fills?.[0]
+    if (backgroundFill?.type !== 'SOLID') return node
+    if (colorContrast(textFill.color, backgroundFill.color) >= 4.5) return node
+    const readable = readableTextColor(backgroundFill.color)
+    return {
+      ...node,
+      props: {
+        ...node.props,
+        fills: [{ ...textFill, color: { ...readable, a: textFill.color.a } }]
+      }
+    }
+  })
+}
+
 export function createMermaidSceneSpec(diagram: MermaidDiagram): MermaidSceneSpec {
+  const appearance = diagram.appearance ?? 'dark'
   const normalized = normalizeSceneNodes(
-    diagram.elements.flatMap((element, index) => elementSpecs(element, index))
+    readableTextNodes(
+      diagram.elements.flatMap((element, index) => elementSpecs(element, index, appearance))
+    )
   )
   if (normalized.nodes.length === 0) {
     throw new Error('This Mermaid definition did not produce editable diagram nodes.')
   }
   return {
+    appearance,
     source: diagram.source,
     revision: diagram.revision,
     parser: diagram.parser,
     mode: 'editable',
     width: normalized.width,
     height: normalized.height,
-    nodes: normalized.nodes
+    nodes: groupSemanticNodes(normalized.nodes)
   }
 }

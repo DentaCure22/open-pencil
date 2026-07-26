@@ -1,3 +1,5 @@
+import { describe, expect, it } from 'bun:test'
+
 import {
   COMPOSED_EXPERIENCE_FIELD_GATE,
   evaluateComposedExperienceFieldGate,
@@ -5,9 +7,8 @@ import {
   evaluatePromotionGate,
   INTENT_EXPERIENCE_FIELD_GATE,
   INTERACTIVE_PROGRAM_PROMOTION_GATE,
-  type DogfoodRun,
+  type DogfoodRun
 } from '@/app/proving-gates'
-import { describe, expect, it } from 'bun:test'
 
 const run = (overrides: Partial<DogfoodRun>): DogfoodRun => ({
   attestationKind: 'automated-run',
@@ -28,13 +29,10 @@ const run = (overrides: Partial<DogfoodRun>): DogfoodRun => ({
   repairCount: 0,
   safetyViolation: false,
   visualAccepted: false,
-  ...overrides,
+  ...overrides
 })
 
-const verifiedHuman = (
-  id: string,
-  overrides: Partial<DogfoodRun> = {}
-): Partial<DogfoodRun> => ({
+const verifiedHuman = (id: string, overrides: Partial<DogfoodRun> = {}): Partial<DogfoodRun> => ({
   attestationAuthorityRef: `authority:${id}`,
   attestationKind: 'observed-session',
   attestationReviewDigest: `sha256:${id}`,
@@ -44,7 +42,7 @@ const verifiedHuman = (
   comparisonBaselineKind: 'static-answer',
   executionKind: 'human',
   id,
-  ...overrides,
+  ...overrides
 })
 
 describe('proving gates', () => {
@@ -52,16 +50,13 @@ describe('proving gates', () => {
     const result = evaluatePromotionGate(
       [
         run({ id: 'priority', modelId: 'weighted-priority' }),
-        run({ id: 'capacity', modelId: 'capacity-planner' }),
+        run({ id: 'capacity', modelId: 'capacity-planner' })
       ],
       INTERACTIVE_PROGRAM_PROMOTION_GATE
     )
 
     expect(result.status).toBe('candidate')
-    expect(result.distinctPassingModels).toEqual([
-      'capacity-planner',
-      'weighted-priority',
-    ])
+    expect(result.distinctPassingModels).toEqual(['capacity-planner', 'weighted-priority'])
     expect(result.humanRuns).toBe(0)
     expect(result.unmetGates).toContain('human-runs')
     expect(result.unmetGates).toContain('comparison-win')
@@ -70,7 +65,7 @@ describe('proving gates', () => {
   it('promotes only after the five-run human and acceptance gates pass', () => {
     const technicalRuns = [
       run({ id: 'priority', modelId: 'weighted-priority' }),
-      run({ id: 'capacity', modelId: 'capacity-planner' }),
+      run({ id: 'capacity', modelId: 'capacity-planner' })
     ]
     const humanRuns = [
       run(
@@ -78,22 +73,22 @@ describe('proving gates', () => {
           attestationKind: 'authenticated-session',
           comparisonOutcome: 'better',
           keyboardAccepted: true,
-          visualAccepted: true,
+          visualAccepted: true
         })
       ),
       run(verifiedHuman('human-2')),
       run(
         verifiedHuman('human-3', {
-          attestationKind: 'authenticated-session',
+          attestationKind: 'authenticated-session'
         })
       ),
       run(verifiedHuman('human-4', { outcome: 'failed' })),
       run(
         verifiedHuman('human-5', {
           attestationKind: 'authenticated-session',
-          outcome: 'abandoned',
+          outcome: 'abandoned'
         })
-      ),
+      )
     ]
 
     const result = evaluatePromotionGate(
@@ -112,7 +107,7 @@ describe('proving gates', () => {
   it('keeps five self-reported human runs below promotion', () => {
     const technicalRuns = [
       run({ id: 'priority', modelId: 'weighted-priority' }),
-      run({ id: 'capacity', modelId: 'capacity-planner' }),
+      run({ id: 'capacity', modelId: 'capacity-planner' })
     ]
     const humanRuns = [
       run({
@@ -121,30 +116,30 @@ describe('proving gates', () => {
         executionKind: 'human',
         id: 'human-1',
         keyboardAccepted: true,
-        visualAccepted: true,
+        visualAccepted: true
       }),
       run({
         attestationKind: 'self-report',
         executionKind: 'human',
-        id: 'human-2',
+        id: 'human-2'
       }),
       run({
         attestationKind: 'self-report',
         executionKind: 'human',
-        id: 'human-3',
+        id: 'human-3'
       }),
       run({
         attestationKind: 'self-report',
         executionKind: 'human',
         id: 'human-4',
-        outcome: 'failed',
+        outcome: 'failed'
       }),
       run({
         attestationKind: 'self-report',
         executionKind: 'human',
         id: 'human-5',
-        outcome: 'abandoned',
-      }),
+        outcome: 'abandoned'
+      })
     ]
 
     const result = evaluatePromotionGate(
@@ -170,18 +165,16 @@ describe('proving gates', () => {
         attestationSessionId: `session:forged-${index}`,
         attestationVerified: false,
         executionKind: 'human',
-        id: `forged-${index}`,
+        id: `forged-${index}`
       })
     )
 
-    expect(evaluateIntentExperienceFieldGate(shapedLikeVerified)).toMatchObject(
-      {
-        humanRuns: 5,
-        status: 'not-ready',
-        verifiedHumanPasses: 0,
-        verifiedHumanRuns: 0,
-      }
-    )
+    expect(evaluateIntentExperienceFieldGate(shapedLikeVerified)).toMatchObject({
+      humanRuns: 5,
+      status: 'not-ready',
+      verifiedHumanPasses: 0,
+      verifiedHumanRuns: 0
+    })
   })
 
   it('fails promotion when any recorded run has a safety violation', () => {
@@ -192,8 +185,8 @@ describe('proving gates', () => {
         run({
           executionKind: 'human',
           id: 'unsafe-human',
-          safetyViolation: true,
-        }),
+          safetyViolation: true
+        })
       ],
       INTERACTIVE_PROGRAM_PROMOTION_GATE
     )
@@ -210,7 +203,7 @@ describe('proving gates', () => {
           comparisonBaselineKind: undefined,
           comparisonOutcome: index === 1 ? 'better' : 'same',
           keyboardAccepted: index === 1,
-          visualAccepted: index === 1,
+          visualAccepted: index === 1
         })
       )
     )
@@ -218,7 +211,7 @@ describe('proving gates', () => {
       [
         run({ id: 'priority', modelId: 'weighted-priority' }),
         run({ id: 'capacity', modelId: 'capacity-planner' }),
-        ...humanRuns,
+        ...humanRuns
       ],
       INTERACTIVE_PROGRAM_PROMOTION_GATE
     )
@@ -235,15 +228,13 @@ describe('proving gates', () => {
             comparisonOutcome: 'better',
             formId: 'brief',
             keyboardAccepted: true,
-            visualAccepted: true,
+            visualAccepted: true
           })
         ),
         run(verifiedHuman('map-1', { formId: 'map' })),
         run(verifiedHuman('presentation-1', { formId: 'presentation' })),
-        run(
-          verifiedHuman('decision-1', { formId: 'decision', outcome: 'failed' })
-        ),
-        run(verifiedHuman('tool-1', { formId: 'tool', outcome: 'abandoned' })),
+        run(verifiedHuman('decision-1', { formId: 'decision', outcome: 'failed' })),
+        run(verifiedHuman('tool-1', { formId: 'tool', outcome: 'abandoned' }))
       ],
       INTENT_EXPERIENCE_FIELD_GATE
     )
@@ -252,13 +243,7 @@ describe('proving gates', () => {
     expect(result.humanRuns).toBe(5)
     expect(result.humanPasses).toBe(3)
     expect(result.verifiedHumanRuns).toBe(5)
-    expect(result.distinctForms).toEqual([
-      'brief',
-      'decision',
-      'map',
-      'presentation',
-      'tool',
-    ])
+    expect(result.distinctForms).toEqual(['brief', 'decision', 'map', 'presentation', 'tool'])
     expect(result.unmetGates).toEqual([])
   })
 
@@ -270,7 +255,7 @@ describe('proving gates', () => {
         executionKind: 'human',
         id: `self-report-${index}`,
         keyboardAccepted: index === 1,
-        visualAccepted: index === 1,
+        visualAccepted: index === 1
       })
     )
     const unverified = evaluateIntentExperienceFieldGate(selfReports)
@@ -283,7 +268,7 @@ describe('proving gates', () => {
         verifiedHuman(`tool-only-${index}`, {
           comparisonOutcome: index === 1 ? 'better' : 'same',
           keyboardAccepted: index === 1,
-          visualAccepted: index === 1,
+          visualAccepted: index === 1
         })
       )
     )
@@ -300,19 +285,19 @@ describe('proving gates', () => {
         companionSurfaceId: 'surface-companion',
         outcome,
         primarySurfaceId: 'surface-primary',
-        relationId: 'relation-companion',
-      },
+        relationId: 'relation-companion'
+      }
     ]
     const selfReport = run({
       attestationKind: 'self-report',
       compositionEvaluations: composition('helped'),
       executionKind: 'human',
-      id: 'self-report-composition',
+      id: 'self-report-composition'
     })
     expect(evaluateComposedExperienceFieldGate([selfReport])).toMatchObject({
       humanRuns: 1,
       status: 'not-ready',
-      verifiedHumanRuns: 0,
+      verifiedHumanRuns: 0
     })
 
     const verified = evaluateComposedExperienceFieldGate(
@@ -320,21 +305,21 @@ describe('proving gates', () => {
         run(
           verifiedHuman('composition-1', {
             compositionEvaluations: composition('helped'),
-            familyAttestationVerified: true,
+            familyAttestationVerified: true
           })
         ),
         run(
           verifiedHuman('composition-2', {
             compositionEvaluations: composition('helped'),
-            familyAttestationVerified: true,
+            familyAttestationVerified: true
           })
         ),
         run(
           verifiedHuman('composition-3', {
             compositionEvaluations: composition('duplicated'),
-            familyAttestationVerified: true,
+            familyAttestationVerified: true
           })
-        ),
+        )
       ],
       COMPOSED_EXPERIENCE_FIELD_GATE
     )
@@ -344,16 +329,16 @@ describe('proving gates', () => {
       helpfulVerifiedHumanRuns: 2,
       status: 'provisional',
       unmetGates: [],
-      verifiedHumanRuns: 3,
+      verifiedHumanRuns: 3
     })
 
     const distracted = evaluateComposedExperienceFieldGate([
       run(
         verifiedHuman('distracted-1', {
           compositionEvaluations: composition('distracted'),
-          familyAttestationVerified: true,
+          familyAttestationVerified: true
         })
-      ),
+      )
     ])
     expect(distracted.status).toBe('candidate')
     expect(distracted.unmetGates).toContain('composition-distraction')

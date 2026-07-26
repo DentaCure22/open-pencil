@@ -26,10 +26,6 @@ import type {
   IntentRecord,
   KnowledgeWorkspace,
   LearningReceipt,
-  LiveAppBlock,
-  LiveAppCapture,
-  LiveAppRuntime,
-  LiveAppViewport,
   ReviewObject,
   ReviewObjectKind,
   ReviewStatus,
@@ -46,7 +42,7 @@ import type {
   WorkspaceProjection,
   WorkspacePropertyValue,
   WorkspaceProvenance,
-  WorkspaceHtmlArtifactRevisionRef,
+  WorkspaceCodeObjectArtifactRevisionRef,
   WorkspaceObjectRevisionRef,
   WorkspaceRelation,
   WorkspaceView,
@@ -82,7 +78,6 @@ export type ObjectMetadataInput = {
 }
 
 export type CreateWorkspaceViewInput = {
-  experienceProjection?: WorkspaceView['experienceProjection']
   id?: string
   kind: WorkspaceViewKind
   name: string
@@ -160,7 +155,6 @@ export function createWorkspaceView(input: CreateWorkspaceViewInput): WorkspaceV
   const now = timestamp(input.now)
   return {
     createdAt: now,
-    experienceProjection: structuredClone(input.experienceProjection),
     id: input.id ?? createWorkspaceId('view'),
     kind: input.kind,
     lastWorkspaceRevision: 0,
@@ -372,47 +366,6 @@ export function createDesignArtifact(
   }
 }
 
-export type CreateLiveAppBlockInput = ObjectMetadataInput & {
-  applicationId: string
-  capture?: LiveAppCapture
-  environment: string
-  fixtureId?: string
-  liveContainerRootId?: string
-  ownerEvidenceRef?: string
-  previewVersionIds?: WorkspaceObjectId[]
-  responsiveState?: string
-  route: string
-  runtime?: LiveAppRuntime
-  scenarioId?: string
-  selectedContainerId?: string
-  sourceRevision: string
-  viewport: LiveAppViewport
-}
-
-export function createLiveAppBlock(
-  context: WorkspaceCreateContext,
-  input: CreateLiveAppBlockInput
-): LiveAppBlock {
-  return {
-    ...objectBase(context, 'live-app-block', input),
-    applicationId: input.applicationId,
-    capture: structuredClone(input.capture),
-    environment: input.environment,
-    fixtureId: input.fixtureId,
-    liveContainerRootId: input.liveContainerRootId,
-    ownerEvidenceRef: input.ownerEvidenceRef,
-    previewVersionIds: [...(input.previewVersionIds ?? [])],
-    responsiveState: input.responsiveState,
-    route: input.route,
-    runtime: structuredClone(input.runtime ?? { status: 'unavailable' }),
-    scenarioId: input.scenarioId,
-    selectedContainerId: input.selectedContainerId,
-    sourceRevision: input.sourceRevision,
-    type: 'live-app-block',
-    viewport: structuredClone(input.viewport)
-  }
-}
-
 export type CreateReviewObjectInput = ObjectMetadataInput & {
   attachedObjectIds?: WorkspaceObjectId[]
   attachedRevisions?: Record<WorkspaceObjectId, number>
@@ -498,7 +451,7 @@ export function createEvidenceManifest(
 
 export type CreateSurfaceRunInput = ObjectMetadataInput & {
   alternativesConsidered?: string[]
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   bindings?: SurfaceRun['bindings']
   evidenceManifest: WorkspaceObjectRevisionRef
   formChoice?: SurfaceRun['formChoice']
@@ -561,7 +514,7 @@ export function createSurfaceRun(
 }
 
 export type CreateDecisionReceiptInput = ObjectMetadataInput & {
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   corrections: SurfaceInteraction[]
   evidenceManifest: WorkspaceObjectRevisionRef
   intent: WorkspaceObjectRevisionRef

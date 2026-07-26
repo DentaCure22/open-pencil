@@ -3,36 +3,22 @@ import { computed } from 'vue'
 
 import Tip from '@/components/ui/Tip.vue'
 import { useEditorCommands, useI18n } from '@open-pencil/vue'
-import {
-  liveInspectorCanRedoDraft,
-  liveInspectorCanUndoDraft,
-  liveInspectorRedoDraftLabel,
-  liveInspectorUndoDraftLabel,
-  redoLiveInspectorDraft,
-  undoLiveInspectorDraft
-} from '@/app/smylr-live-inspector/session'
 
 const { commands } = useI18n()
 const { getCommand } = useEditorCommands()
 const undoCommand = getCommand('edit.undo')
 const redoCommand = getCommand('edit.redo')
-const canUndo = computed(() => liveInspectorCanUndoDraft.value || undoCommand.enabled.value)
-const canRedo = computed(() => liveInspectorCanRedoDraft.value || redoCommand.enabled.value)
-const undoLabel = computed(() =>
-  liveInspectorCanUndoDraft.value ? `Undo ${liveInspectorUndoDraftLabel.value}` : commands.value.undo
-)
-const redoLabel = computed(() =>
-  liveInspectorCanRedoDraft.value ? `Redo ${liveInspectorRedoDraftLabel.value}` : commands.value.redo
-)
+const canUndo = computed(() => undoCommand.enabled.value)
+const canRedo = computed(() => redoCommand.enabled.value)
+const undoLabel = computed(() => commands.value.undo)
+const redoLabel = computed(() => commands.value.redo)
 
 function undo() {
-  if (liveInspectorCanUndoDraft.value) undoLiveInspectorDraft()
-  else if (undoCommand.enabled.value) undoCommand.run()
+  if (undoCommand.enabled.value) undoCommand.run()
 }
 
 function redo() {
-  if (liveInspectorCanRedoDraft.value) redoLiveInspectorDraft()
-  else if (redoCommand.enabled.value) redoCommand.run()
+  if (redoCommand.enabled.value) redoCommand.run()
 }
 </script>
 

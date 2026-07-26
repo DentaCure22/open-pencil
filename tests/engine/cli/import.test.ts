@@ -178,3 +178,52 @@ test('import CLI compiles Tailwind candidates before import', async () => {
   expect(document.children[0].computedStyle.display).toBe('flex')
   expect(document.children[0].computedStyle.width).toBe('240px')
 })
+
+test('import CLI converts React TSX to native editable layers with retained source identity', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'open-pencil-import-cli-react-'))
+  const sourcePath = join(dir, 'globe.tsx')
+  const cssPath = join(dir, 'globe.css')
+  const output = join(dir, 'globe.fig')
+
+  await Bun.write(
+    sourcePath,
+    `
+      import React, { useState } from 'react'
+      export default function GlobeDashboard() {
+        const [longitude] = useState(-97)
+        return <main data-open-pencil-source-id="globe-dashboard" className="globe">
+          <button data-open-pencil-source-id="rotate" onClick={() => longitude}>Rotate</button>
+        </main>
+      }
+    `
+  )
+  await Bun.write(cssPath, '.globe { display: flex; width: 960px; height: 640px; padding: 40px; }')
+
+  const { stdout, stderr, exitCode } = await runOpenPencilCLI([
+    'import',
+    sourcePath,
+    '--css',
+    cssPath,
+    '--output',
+    output,
+    '--json'
+  ])
+
+  expect(stderr).toBe('')
+  expect(exitCode).toBe(0)
+  expect(JSON.parse(stdout)).toMatchObject({
+    format: 'fig',
+    output,
+    sourceKind: 'react',
+    rootElements: 1
+  })
+
+  const graph = await parseFigFile(new Uint8Array(await Bun.file(output).arrayBuffer()))
+  const dashboard = findNode(graph.getAllNodes(), 'globe')
+  const sourceId = dashboard?.pluginData.find(
+    (item) => item.pluginId === 'open-pencil-dom-css' && item.key === 'source-id'
+  )?.value
+  expect(dashboard?.type).toBe('FRAME')
+  expect(dashboard?.width).toBe(960)
+  expect(sourceId).toBe('globe-dashboard')
+})

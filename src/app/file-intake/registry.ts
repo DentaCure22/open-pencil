@@ -9,6 +9,12 @@ export type BoardFileIntakeAdapter = {
 export class BoardFileIntakeRegistry {
   private readonly adapters: BoardFileIntakeAdapter[] = []
 
+  registerOrReplace(adapter: BoardFileIntakeAdapter): void {
+    const index = this.adapters.findIndex((candidate) => candidate.id === adapter.id)
+    if (index === -1) this.adapters.push(adapter)
+    else this.adapters[index] = adapter
+  }
+
   register(adapter: BoardFileIntakeAdapter): () => void {
     if (this.adapters.some((candidate) => candidate.id === adapter.id)) {
       throw new Error(`Board file intake adapter is already registered: ${adapter.id}`)

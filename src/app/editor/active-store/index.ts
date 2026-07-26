@@ -1,7 +1,7 @@
 import { shallowRef, triggerRef } from 'vue'
 
 import type { EditorStore } from '@/app/editor/session'
-import { bindNarratedTraceEditor } from '@/app/narrated-trace'
+import { bindNarratedTraceEditor } from '@/app/narrated-trace/bindings'
 
 export type { EditorStore }
 

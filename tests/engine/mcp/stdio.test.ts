@@ -21,7 +21,18 @@ function createMockApp() {
   let clientWs: WebSocket | null = null
   const requests: Array<{
     command: string
-    args?: { name?: string; document_id?: string; page_id?: string; args?: Record<string, unknown> }
+    args?: {
+      name?: string
+      document_id?: string
+      page_id?: string
+      args?: Record<string, unknown>
+      mutation?: {
+        expectedRevision?: number
+        requestId?: string
+        taskId?: string
+        traceId?: string
+      }
+    }
   }> = []
 
   wss.on('connection', (ws) => {
@@ -164,6 +175,7 @@ describe('MCP stdio transport', () => {
     expect(names).toContain('get_page_tree')
     expect(names).toContain('save_file')
     expect(names).toContain('list_documents')
+    expect(names).toContain('query_trace_history')
     expect(names).toContain('get_codegen_prompt')
     const createShape = expectDefined(
       tools.find((tool) => tool.name === 'create_shape'),
@@ -171,6 +183,7 @@ describe('MCP stdio transport', () => {
     )
     expect(JSON.stringify(createShape.inputSchema)).toContain('document_id')
     expect(JSON.stringify(createShape.inputSchema)).toContain('page_id')
+    expect(JSON.stringify(createShape.inputSchema)).toContain('trace_id')
     expect(tools.length).toBeGreaterThan(30)
   })
 
@@ -196,7 +209,12 @@ describe('MCP stdio transport', () => {
       name: 'create_shape',
       arguments: {
         document_id: 'doc-1',
+        expected_revision: 42,
         page_id: 'page-1',
+        request_id: 'request-1',
+        task_id: 'worker-1',
+        trace_id: 'trace-1',
+        workspace_id: 'workspace-1',
         type: 'FRAME',
         x: 10,
         y: 20,
@@ -212,8 +230,17 @@ describe('MCP stdio transport', () => {
     )
     expect(request.args?.document_id).toBe('doc-1')
     expect(request.args?.page_id).toBe('page-1')
+    expect(request.args?.workspace_id).toBe('workspace-1')
     expect(request.args?.args?.document_id).toBeUndefined()
     expect(request.args?.args?.page_id).toBeUndefined()
+    expect(request.args?.args?.workspace_id).toBeUndefined()
+    expect(request.args?.mutation).toEqual({
+      expectedRevision: 42,
+      requestId: 'request-1',
+      taskId: 'worker-1',
+      traceId: 'trace-1'
+    })
+    expect(request.args?.args?.trace_id).toBeUndefined()
   })
 
   test('list_documents via stdio returns open documents', async () => {

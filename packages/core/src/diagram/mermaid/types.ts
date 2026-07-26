@@ -5,6 +5,7 @@ export const MERMAID_PARSER = '@excalidraw/mermaid-to-excalidraw@2.2.2'
 export const MERMAID_SVG_PARSER = 'mermaid@11.12.1/svg-native'
 
 export type MermaidParserName = typeof MERMAID_PARSER | typeof MERMAID_SVG_PARSER
+export type MermaidAppearance = 'dark' | 'light'
 
 export interface MermaidLabel {
   text?: string | null
@@ -41,12 +42,14 @@ export interface MermaidSkeletonElement {
   fillOpacity?: number
   strokeOpacity?: number
   opacity?: number
+  rotation?: number
   path?: string
   fillRule?: 'NONZERO' | 'EVENODD'
   transform?: readonly [number, number, number, number, number, number]
   points?: readonly (readonly [number, number])[]
   label?: MermaidLabel
   groupIds?: string[]
+  cornerRadius?: number
   roundness?: { type?: number }
   startArrowhead?: string | null
   endArrowhead?: string | null
@@ -61,6 +64,7 @@ export interface MermaidBinaryFile {
 }
 
 export interface MermaidDiagram {
+  appearance?: MermaidAppearance
   source: string
   revision: typeof MERMAID_DIAGRAM_REVISION
   parser: MermaidParserName
@@ -72,11 +76,13 @@ export type MermaidParser = (source: string) => Promise<unknown>
 
 export interface MermaidSceneNodeSpec {
   key: string
+  parentKey?: string
   type: NodeType
   props: Partial<SceneNode>
 }
 
 export interface MermaidSceneSpec {
+  appearance: MermaidAppearance
   source: string
   revision: typeof MERMAID_DIAGRAM_REVISION
   parser: MermaidParserName

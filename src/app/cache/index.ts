@@ -131,8 +131,8 @@ function removeLocalStorageCacheKey(key: string) {
   if (!isStorageAvailable()) return
   try {
     window.localStorage.removeItem(storageKey(key))
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn(`Local storage cache cleanup skipped for "${key}":`, error)
   }
 }
 
@@ -266,6 +266,17 @@ export async function writeCacheValue(key: string, value: unknown): Promise<void
   }
 }
 
+export async function tryWriteCacheValue(key: string, value: unknown): Promise<boolean> {
+  if (!isIndexedDbAvailable()) return false
+  try {
+    await writeIndexedDbValue(key, value)
+    return true
+  } catch (error) {
+    console.warn(`IndexedDB cache write skipped for "${key}":`, error)
+    return false
+  }
+}
+
 export async function removeCachePrefix(prefix: string): Promise<void> {
   if (isStorageAvailable()) {
     for (let i = window.localStorage.length - 1; i >= 0; i--) {
@@ -311,7 +322,7 @@ function coerceIndexedDbJsonValue<T>(
   maxAgeMs?: number
 ): JsonCacheEnvelope<T> | null {
   // Envelope written by writeCacheJson / migrate helpers.
-  if (stored && typeof stored === 'object' && 'value' in (stored as object)) {
+  if (stored && typeof stored === 'object' && 'value' in stored) {
     const envelope = stored as Partial<JsonCacheEnvelope<T>>
     if (typeof envelope.updatedAt === 'number') {
       if (maxAgeMs !== undefined && Date.now() - envelope.updatedAt > maxAgeMs) return null
@@ -380,58 +391,5 @@ export async function writeCacheJson(key: string, value: unknown): Promise<void>
       return
     }
     throw error
-  }
-}
-
-/**
- * Remove only the localStorage copy of a cache key (leave IndexedDB/Tauri alone).
- * Used when migrating oversized image payloads out of Storage.
- */
-export function removeLocalStorageCacheEntry(key: string): void {
-  removeLocalStorageCacheKey(key)
-}
-
-/**
- * Move oversized image-bearing localStorage cache keys into IndexedDB, then free
- * the Storage slot. Never deletes a payload that cannot be copied first.
- */
-export async function migrateOversizedLocalStorageCacheToIndexedDb(): Promise<void> {
-  if (!isStorageAvailable() || !isIndexedDbAvailable()) return
-
-  const victims: Array<{ storageKey: string; logicalKey: string; raw: string }> = []
-  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-    const key = window.localStorage.key(index)
-    if (!key?.startsWith(STORAGE_PREFIX)) continue
-    const logicalKey = key.slice(STORAGE_PREFIX.length)
-    if (
-      !logicalKey.startsWith('smylr-live-frame-snapshot/') &&
-      !logicalKey.startsWith('smylr-live-workspaces/') &&
-      !logicalKey.startsWith('smylr-live-workspace-preview/')
-    ) {
-      continue
-    }
-    const raw = window.localStorage.getItem(key)
-    if (!raw) continue
-    if (raw.length < LOCAL_STORAGE_JSON_SOFT_LIMIT && !raw.includes('data:image')) continue
-    victims.push({ storageKey: key, logicalKey, raw })
-  }
-
-  for (const victim of victims) {
-    try {
-      let stored: unknown = victim.raw
-      try {
-        stored = JSON.parse(victim.raw)
-      } catch {
-        // keep raw string (data URL)
-      }
-      // Don't overwrite a fresher IDB copy with a worse localStorage copy.
-      const existing = await readIndexedDbValue<unknown>(victim.logicalKey)
-      if (existing == null) {
-        await writeIndexedDbValue(victim.logicalKey, stored)
-      }
-      window.localStorage.removeItem(victim.storageKey)
-    } catch (error) {
-      console.warn(`Cache migrate skipped for "${victim.logicalKey}":`, error)
-    }
   }
 }

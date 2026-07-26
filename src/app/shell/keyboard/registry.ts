@@ -5,11 +5,9 @@ import { onScopeDispose } from 'vue'
 import { editorCommandMetadata } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
+import { codeObjectViewportInsets, isCodeObjectFrame } from '@/app/code-object/model'
 import { TOOL_SHORTCUTS } from '@/app/editor/session'
-import {
-  htmlBoardViewportInsets,
-  isHtmlBoardFrame
-} from '@/app/html-board/workspace'
+import { showTracePanel, TRACE_KEYBINDING } from '@/app/narrated-trace'
 import { isEditing } from '@/app/shell/keyboard/focus'
 import { bindSpaceHandTool } from '@/app/shell/keyboard/space-tool'
 import type {
@@ -21,6 +19,7 @@ import { appMenuTinykeysShortcut } from '@/app/shell/menu/shortcut'
 type ShortcutAction = (options: KeyboardShortcutRunOptions) => void
 
 type ShortcutDefinition = {
+  allowWhenEditing?: boolean
   id: string
   keys: string | string[]
   run: ShortcutAction
@@ -69,10 +68,14 @@ function bindToolShortcuts(bindings: KeyBindingMap, options: KeyboardShortcutRun
 }
 
 function zoomToSelection(options: KeyboardShortcutRunOptions) {
-  const containsHtmlBoard = [...options.store.state.selectedIds].some((id) =>
-    isHtmlBoardFrame(options.store.graph.getNode(id))
+  const selectedNodes = [...options.store.state.selectedIds].map((id) =>
+    options.store.graph.getNode(id)
   )
-  options.store.zoomToSelection(containsHtmlBoard ? htmlBoardViewportInsets() : undefined)
+  let viewportInsets: ReturnType<typeof codeObjectViewportInsets> | undefined
+  if (selectedNodes.some(isCodeObjectFrame)) {
+    viewportInsets = codeObjectViewportInsets()
+  }
+  options.store.zoomToSelection(viewportInsets)
 }
 
 export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
@@ -110,6 +113,12 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       run: ({ actions }) => actions.toggleUI()
     },
     { id: 'toggle-ai', keys: '$mod+KeyJ', run: ({ actions }) => actions.toggleAI() },
+    {
+      allowWhenEditing: true,
+      id: 'open-trace',
+      keys: TRACE_KEYBINDING,
+      run: showTracePanel
+    },
     {
       id: 'close-tab',
       keys: appMenuTinykeysShortcut('close') ?? '$mod+KeyW',
@@ -153,9 +162,15 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
   ]
 
   const bindings: KeyBindingMap = {}
+  const editingSafeBindings = new Set<string>()
   bindToolShortcuts(bindings, runOptions(new KeyboardEvent('keydown')))
 
   for (const shortcut of shortcuts) {
+    if (shortcut.allowWhenEditing) {
+      for (const keys of Array.isArray(shortcut.keys) ? shortcut.keys : [shortcut.keys]) {
+        editingSafeBindings.add(keys)
+      }
+    }
     bindShortcut(bindings, shortcut.keys, (event) => {
       event.preventDefault()
       shortcut.run(runOptions(event))
@@ -168,7 +183,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       Object.entries(bindings).map(([keys, handler]) => [
         keys,
         (event: KeyboardEvent) => {
-          if (shouldIgnoreShortcut(event, options)) return
+          if (shouldIgnoreShortcut(event, options) && !editingSafeBindings.has(keys)) return
           handler(event)
         }
       ])

@@ -11,7 +11,7 @@ import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
 
-function isAutomationClientActive(): boolean {
+export function isAutomationClientActive(): boolean {
   if (typeof document === 'undefined') return true
   if (document.visibilityState === 'hidden') return false
   return typeof document.hasFocus !== 'function' || document.hasFocus()

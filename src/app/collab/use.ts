@@ -5,6 +5,7 @@ import { randomIndex } from '@open-pencil/core/random'
 
 import { createFollowActions, generateRoomId } from '@/app/collab/awareness'
 import { createLocalAwarenessActions } from '@/app/collab/local-awareness'
+import type { DurableYjsHydratedHandler, DurableYjsStore } from '@/app/collab/persistence/types'
 import type { CollabRuntime } from '@/app/collab/session'
 import { DEFAULT_COLLAB_STATE, type CollabState, type RemotePeer } from '@/app/collab/types'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -15,7 +16,12 @@ export { DEFAULT_COLLAB_STATE }
 export type { CollabState, RemotePeer }
 
 type CollabActions = {
-  connect: (roomId: string) => void
+  connect: (
+    roomId: string,
+    durableStore?: DurableYjsStore,
+    onDurableReady?: DurableYjsHydratedHandler,
+    localOnly?: boolean
+  ) => void
   disconnect: () => void
   syncAllNodesToYjs: () => void
 }
@@ -77,6 +83,7 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
         broadcastAwareness,
         applyYjsToGraph,
         syncNodeToYjs,
+        syncAllNodesToYjs,
         resetFollow
       })
       return { connect, disconnect, syncAllNodesToYjs }
@@ -88,6 +95,20 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     void loadCollabActions().then((actions) => actions.connect(roomId))
   }
 
+  function connectLocalWorkspace(roomId: string, onReady?: DurableYjsHydratedHandler) {
+    void loadCollabActions().then((actions) => actions.connect(roomId, undefined, onReady, true))
+  }
+
+  function connectSharedWorkspace(
+    roomId: string,
+    durableStore: DurableYjsStore,
+    onDurableReady?: DurableYjsHydratedHandler
+  ) {
+    void loadCollabActions().then((actions) =>
+      actions.connect(roomId, durableStore, onDurableReady)
+    )
+  }
+
   function disconnect() {
     if (collabActionsPromise) {
       void collabActionsPromise.then((actions) => actions.disconnect())
@@ -95,10 +116,11 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
   }
 
   function shareCurrentDoc(): string {
+    if (state.value.connected && state.value.roomId) return state.value.roomId
     const roomId = generateRoomId()
     void loadCollabActions().then((actions) => {
       actions.connect(roomId)
-      actions.syncAllNodesToYjs()
+      return actions.syncAllNodesToYjs()
     })
     return roomId
   }
@@ -110,6 +132,8 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     remotePeers,
     followingPeer,
     connect,
+    connectLocalWorkspace,
+    connectSharedWorkspace,
     disconnect,
     shareCurrentDoc,
     updateCursor,

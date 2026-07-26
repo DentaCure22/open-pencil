@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import PanelSection from '@/components/ui/PanelSection.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -124,13 +125,7 @@ function onDocumentPointerDown(event: PointerEvent) {
   closeDropdown()
 }
 
-onMounted(() => {
-  document.addEventListener('pointerdown', onDocumentPointerDown, true)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('pointerdown', onDocumentPointerDown, true)
-})
+useEventListener(document, 'pointerdown', onDocumentPointerDown, { capture: true })
 </script>
 
 <template>

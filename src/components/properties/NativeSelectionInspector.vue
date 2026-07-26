@@ -9,6 +9,7 @@ import EffectsSection from './EffectsSection.vue'
 import ExportSection from './ExportSection.vue'
 import FillSection from './FillSection.vue'
 import LayoutSection from './LayoutSection/LayoutSection.vue'
+import ObjectGraphSection from './ObjectGraphSection.vue'
 import PositionSection from './PositionSection.vue'
 import StrokeSection from './StrokeSection.vue'
 import TypographySection from './TypographySection.vue'
@@ -20,12 +21,14 @@ const {
   compactHeader = false,
   editorStore,
   nameLabel,
+  showObjectGraph = true,
   typeLabel
 } = defineProps<{
   compactHeader?: boolean
   computedStyle?: DesignStyleDeclaration
   editorStore?: EditorStore
   nameLabel?: string
+  showObjectGraph?: boolean
   typeLabel?: string
 }>()
 
@@ -110,6 +113,7 @@ const { panels } = useI18n()
     <VariantSection v-if="node.type === 'INSTANCE'" />
 
     <PositionSection :editor-store="editorStore" />
+    <ObjectGraphSection v-if="showObjectGraph" />
     <LayoutSection :computed-style="computedStyle" />
     <AppearanceSection />
     <TypographySection v-if="node.type === 'TEXT'" />

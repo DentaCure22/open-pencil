@@ -1,8 +1,8 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type {
-  SmylrComputedAssetDefinition,
-  SmylrComputedAssetVariant
+  SmylrComponentInventoryDefinition,
+  SmylrComputedAssetDefinition
 } from '@/app/smylr-component-library/computed-catalog'
 
 export type AssetVariantAxis = {
@@ -17,9 +17,13 @@ export type SceneAssetVariant = {
   label: string
 }
 
-export type ComputedAssetVariant = SmylrComputedAssetVariant & {
+export type ComputedAssetVariant = {
   fixtureId: string
+  id: string
   kind: 'computed'
+  label: string
+  props: Record<string, string>
+  variantId: string | null
 }
 
 export type AssetVariant = SceneAssetVariant | ComputedAssetVariant
@@ -53,4 +57,20 @@ export type ComputedAsset = SmylrComputedAssetDefinition & {
   variantItems: ComputedAssetVariant[]
 }
 
-export type LocalAsset = SceneAsset | ComputedAsset
+export type InventoryAsset = Omit<SmylrComponentInventoryDefinition, 'variantAxes'> & {
+  catalogVariantAxes: string[]
+  componentId: null
+  description: string
+  docsUrl: null
+  hasConflicts: false
+  id: string
+  kind: 'inventory'
+  name: string
+  sourceLibraryKey: 'smylr-inventory'
+  variantAxes: AssetVariantAxis[]
+  variantCount: 0
+}
+
+export type InteractiveAsset = SceneAsset | ComputedAsset
+
+export type LocalAsset = InteractiveAsset | InventoryAsset

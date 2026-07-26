@@ -20,6 +20,14 @@ export { provideEditor, useEditor, EDITOR_KEY } from '#vue/editor/context'
 /** Canvas and input integration composables. */
 export { useCanvas } from '#vue/canvas/surface/use'
 export type { UseCanvasOptions } from '#vue/canvas/surface/use'
+export {
+  cancelEditorPresentationFrame,
+  scheduleEditorPresentationFrame
+} from '#vue/canvas/surface/render-loop'
+export type {
+  EditorPresentationFrame,
+  EditorPresentationFrameCallback
+} from '#vue/canvas/surface/render-loop'
 export { useCanvasInput } from '#vue/canvas/useCanvasInput'
 export { useCanvasVirtualReference } from '#vue/canvas/overlays/useCanvasVirtualReference'
 export { useTextEdit } from '#vue/canvas/text-edit/use'

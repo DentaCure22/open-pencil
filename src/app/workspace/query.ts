@@ -39,7 +39,6 @@ export type WorkspaceQuery = {
   limit?: number
   pageId?: string
   relation?: WorkspaceRelationQuery
-  route?: string
   sourceTarget?: string
   statuses?: string[]
   tags?: string[]
@@ -143,8 +142,6 @@ function titleFor(object: WorkspaceObject): string {
       return object.label ?? object.relationshipType
     case 'design-artifact':
       return object.label
-    case 'live-app-block':
-      return `${object.applicationId} ${object.route}`
     case 'review-object':
       return object.body.slice(0, 120) || object.reviewKind
   }
@@ -206,16 +203,6 @@ function searchableText(object: WorkspaceObject): string {
         object.sourceRef ?? '',
         ...Object.values(object.data).map(propertyText)
       ].join(' ')
-    case 'live-app-block':
-      return [
-        ...common,
-        object.applicationId,
-        object.environment,
-        object.route,
-        object.scenarioId ?? '',
-        object.fixtureId ?? '',
-        object.sourceRevision
-      ].join(' ')
     case 'review-object':
       return [...common, object.reviewKind, object.reviewStatus, object.body].join(' ')
   }
@@ -226,7 +213,6 @@ function statusesFor(object: WorkspaceObject): string[] {
   const statuses: string[] = [object.lifecycle]
   if (isActionLifecycleObject(object)) return [...statuses, ...actionLifecycleStatuses(object)]
   if (isExperienceObject(object)) return [...statuses, ...experienceStatuses(object)]
-  if (object.type === 'live-app-block') statuses.push(object.runtime.status)
   if (object.type === 'review-object') statuses.push(object.reviewStatus)
   if (object.type === 'design-artifact') statuses.push(object.ownership)
   return statuses
@@ -243,9 +229,6 @@ function sourceTargetsFor(object: WorkspaceObject): string[] {
     return targets.filter((target): target is string => target !== undefined)
   }
   if (object.type === 'design-artifact') targets.push(object.sourceRef)
-  if (object.type === 'live-app-block') {
-    targets.push(object.ownerEvidenceRef, object.liveContainerRootId)
-  }
   return targets.filter((target): target is string => target !== undefined)
 }
 
@@ -318,8 +301,6 @@ function matchesMetadata(object: WorkspaceObject, query: WorkspaceQuery): boolea
 }
 
 function matchesSpecializedFields(object: WorkspaceObject, query: WorkspaceQuery): boolean {
-  if (query.route && (object.type !== 'live-app-block' || object.route !== query.route))
-    return false
   if (query.sourceTarget && !sourceTargetsFor(object).includes(query.sourceTarget)) return false
   if (
     query.text &&

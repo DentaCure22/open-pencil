@@ -1,7 +1,7 @@
 import { useEventListener } from '@vueuse/core'
 import { ref, type Ref } from 'vue'
 
-import type { Editor } from '@open-pencil/core/editor'
+import type { Editor, ViewportInsets } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import {
@@ -38,7 +38,8 @@ export function useCanvasInput(
   hitTestSectionTitle: (cx: number, cy: number) => SceneNode | null,
   hitTestComponentLabel: (cx: number, cy: number) => SceneNode | null,
   hitTestFrameTitle: (cx: number, cy: number) => SceneNode | null,
-  onCursorMove?: (cx: number, cy: number) => void
+  onCursorMove?: (cx: number, cy: number) => void,
+  getViewportInsets?: () => ViewportInsets
 ) {
   const drag = ref<DragState | null>(null)
   const cursorOverride = ref<string | null>(null)
@@ -66,6 +67,7 @@ export function useCanvasInput(
 
   const { handleTextEditClick, onDblClick: onTextDblClick } = createTextEditInput({
     editor,
+    focusNode: (nodeId) => editor.zoomToNode(nodeId, getViewportInsets?.()),
     getCoords,
     hitTestInScope,
     hitTestSectionTitle,
@@ -155,6 +157,7 @@ export function useCanvasInput(
     if (!editor.state.editingTextId) canvasRef.value?.focus()
     editor.setHoveredNode(null)
     const { sx, sy, cx, cy } = getCoords(e)
+    onCursorMove?.(cx, cy)
 
     const selectedIdsBeforeMouseDown = new Set(editor.state.selectedIds)
     const clickCount = recordClick(sx, sy)

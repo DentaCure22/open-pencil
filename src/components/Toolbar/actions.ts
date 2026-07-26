@@ -14,7 +14,6 @@ import IconUngroup from '~icons/lucide/ungroup'
 import type { useEditorCommands } from '@open-pencil/vue'
 
 import type { EditorStore } from '@/app/editor/active-store'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
 
 type ToolbarActionOptions = {
@@ -36,10 +35,7 @@ export function useToolbarActions({ store, getCommand, menu }: ToolbarActionOpti
     {
       icon: IconTrash2,
       label: getCommand('selection.delete').label,
-      action: () => {
-        removeWorkspaceItemsForSelectedLiveFrames(store)
-        getCommand('selection.delete').run()
-      }
+      action: () => getCommand('selection.delete').run()
     }
   ])
 

@@ -9,18 +9,6 @@ import resizeCursorSvg from '#vue/shared/assets/resize-cursor.svg?raw'
 import rotateCursorSvg from '#vue/shared/assets/rotate-cursor.svg?raw'
 import type { CornerPosition, HandlePosition } from '#vue/shared/input/types'
 
-function isSmylrLiveAppFrame(node: SceneNode): boolean {
-  return (
-    node.name.startsWith('Live Smylr App /') ||
-    node.pluginData.some(
-      (entry) =>
-        entry.pluginId === 'smylr-production' &&
-        entry.key === 'kind' &&
-        entry.value === 'live-app-frame'
-    )
-  )
-}
-
 export function getPointerCoords(e: MouseEvent, canvas: HTMLCanvasElement | null, editor: Editor) {
   if (!canvas) return { sx: 0, sy: 0, cx: 0, cy: 0 }
   const rect = canvas.getBoundingClientRect()
@@ -190,26 +178,12 @@ export function getHitHandleByMatrix(
   const CORNER_R = HANDLE_HIT_RADIUS / zoom
 
   const rotation = getAbsoluteRotation(node, graph)
-  const corners = (['nw', 'ne', 'se', 'sw'] as const).map((handleKey) => {
-    const corner = handles[handleKey]
-    if (!isSmylrLiveAppFrame(node)) return { handleKey, p: corner }
-    const center = {
-      x: (handles.nw.x + handles.se.x) / 2,
-      y: (handles.nw.y + handles.se.y) / 2
-    }
-    const length = Math.max(Math.hypot(center.x - corner.x, center.y - corner.y), 0.01)
-    const inset = 4 / zoom
-    return {
-      handleKey,
-      p: {
-        x: corner.x + ((center.x - corner.x) / length) * inset,
-        y: corner.y + ((center.y - corner.y) / length) * inset
-      }
-    }
-  })
+  const corners = (['nw', 'ne', 'se', 'sw'] as const).map((handleKey) => ({
+    handleKey,
+    p: handles[handleKey]
+  }))
 
   for (const { handleKey, p } of corners) {
-
     const dx = cx - p.x
     const dy = cy - p.y
 

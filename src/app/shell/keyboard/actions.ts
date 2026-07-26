@@ -4,7 +4,6 @@ import type { useEditorCommands, useViewportKind } from '@open-pencil/vue'
 
 import type { EditorPanelTab } from '@/app/ai/chat/use'
 import type { EditorStore } from '@/app/editor/active-store'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 
 type KeyboardActionsOptions = {
   store: EditorStore
@@ -33,9 +32,6 @@ export function createKeyboardActions({
       else store.nodeEditDeleteSelected()
       return
     }
-    // Drop linked workspace items before the scene nodes go away, otherwise
-    // ensureWorkspaceFrames() will resurrect alternate live iframes.
-    removeWorkspaceItemsForSelectedLiveFrames(store)
     runCommand('selection.delete')
   }
 

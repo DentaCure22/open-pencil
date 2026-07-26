@@ -44,9 +44,10 @@ function onClose(e: MouseEvent, tabId: string) {
         class="group/tab flex h-full max-w-48 min-w-0 cursor-pointer items-center gap-1.5 border-r border-border px-3 text-xs transition-colors outline-none select-none focus-visible:ring-1 focus-visible:ring-accent data-[state=active]:bg-panel data-[state=active]:text-surface data-[state=inactive]:text-muted data-[state=inactive]:hover:text-surface"
         @mousedown="onMiddleClick($event, tab.id)"
       >
-        <icon-lucide-file class="size-3 shrink-0 opacity-50" />
+        <icon-lucide-panels-top-left v-if="tab.isWorkspace" class="text-accent size-3 shrink-0" />
+        <icon-lucide-file v-else class="size-3 shrink-0 opacity-50" />
         <span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
-        <Tip :label="dialogs.closeTab({ name: tab.name })">
+        <Tip v-if="!tab.isWorkspace" :label="dialogs.closeTab({ name: tab.name })">
           <button
             data-test-id="tabbar-close"
             class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded opacity-0 transition-opacity group-hover/tab:opacity-100 hover:bg-hover data-[state=active]:opacity-100"

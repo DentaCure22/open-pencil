@@ -2,6 +2,7 @@
 import { defineCommand, runMain } from 'citty'
 
 import analyze from './commands/analyze'
+import codeObject from './commands/code-object'
 import convert from './commands/convert'
 import documents from './commands/documents'
 import evalCmd from './commands/eval'
@@ -28,6 +29,7 @@ const main = defineCommand({
   },
   subCommands: {
     analyze,
+    'code-object': codeObject,
     convert,
     documents,
     eval: evalCmd,

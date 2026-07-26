@@ -4,11 +4,12 @@ import { computed } from 'vue'
 import { useInputUI } from '@/components/ui/input'
 
 interface AppInputProps {
-  type?: 'text' | 'password' | 'number' | 'search'
+  type?: 'text' | 'email' | 'password' | 'number' | 'search'
   placeholder?: string
   readonly?: boolean
   disabled?: boolean
   autofocus?: boolean
+  autocomplete?: string
   min?: number
   max?: number
   step?: number
@@ -24,6 +25,7 @@ const {
   readonly,
   disabled,
   autofocus,
+  autocomplete,
   min,
   max,
   step,
@@ -49,6 +51,7 @@ const emit = defineEmits<{
     :readonly="readonly"
     :disabled="disabled"
     :autofocus="autofocus"
+    :autocomplete="autocomplete"
     :min="min"
     :max="max"
     :step="step"

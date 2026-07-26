@@ -1,4 +1,10 @@
-import type { DesignDocument, DesignNode, DesignStyleDeclaration } from '../types'
+import type {
+  DesignDocument,
+  DesignInteraction,
+  DesignNode,
+  DesignStateBinding,
+  DesignStyleDeclaration
+} from '../types'
 
 export const Fragment = Symbol.for('open-pencil.dom-css.fragment')
 
@@ -47,7 +53,9 @@ function styleStringToDeclaration(style: string): DesignStyleDeclaration | undef
   return Object.fromEntries(entries)
 }
 
-function styleToDeclaration(style: JSXStyleInput | undefined): DesignStyleDeclaration | undefined {
+export function styleToDeclaration(
+  style: JSXStyleInput | undefined
+): DesignStyleDeclaration | undefined {
   if (typeof style === 'string') return styleStringToDeclaration(style)
   if (style) return styleObjectToDeclaration(style)
   return undefined
@@ -61,7 +69,7 @@ function attributeValue(value: unknown): string | undefined {
   return undefined
 }
 
-function propsToAttrs(props: JSXElementProps): Record<string, string> {
+export function propsToAttrs(props: JSXElementProps): Record<string, string> {
   const attrs: Record<string, string> = {}
   const classValue = props.class ?? props.className
   if (classValue) attrs.class = classValue
@@ -76,6 +84,36 @@ function propsToAttrs(props: JSXElementProps): Record<string, string> {
   }
 
   return attrs
+}
+
+export function interactionsFromProps(props: JSXElementProps): DesignInteraction[] | undefined {
+  const interactions = Object.entries(props).flatMap(([name, value]): DesignInteraction[] => {
+    if (!/^on[A-Z]/.test(name) || (typeof value !== 'function' && typeof value !== 'string')) {
+      return []
+    }
+    const handler = typeof value === 'function' ? value.name || 'anonymous' : value
+    return [{ event: name.slice(2).toLowerCase(), handler }]
+  })
+  return interactions.length > 0 ? interactions : undefined
+}
+
+export function stateBindingsFromProps(props: JSXElementProps): DesignStateBinding[] | undefined {
+  const value = props['data-open-pencil-bind-state']
+  if (typeof value !== 'string') return undefined
+  const bindings = value.split(',').flatMap((entry): DesignStateBinding[] => {
+    const [indexValue, ...fieldParts] = entry.trim().split(':')
+    const stateIndex = Number.parseInt(indexValue ?? '', 10)
+    const field = fieldParts.join(':').trim()
+    if (!Number.isSafeInteger(stateIndex) || stateIndex < 0 || !field) return []
+    return [{ field, stateIndex }]
+  })
+  return bindings.length > 0 ? bindings : undefined
+}
+
+export function sourceIdFromProps(props: JSXElementProps): string | undefined {
+  const sourceId = props['data-open-pencil-source-id'] ?? props.id ?? props.key
+  if (typeof sourceId === 'string' || typeof sourceId === 'number') return String(sourceId)
+  return undefined
 }
 
 function normalizeChild(child: JSXChild, nodes: DesignNode[]): void {
@@ -106,6 +144,9 @@ export function jsx(tag: JSXTag, props: JSXElementProps = {}): DesignNode | Desi
     tagName: tag,
     attrs: propsToAttrs(props),
     inlineStyle: styleToDeclaration(props.style),
+    interactions: interactionsFromProps(props),
+    sourceId: sourceIdFromProps(props),
+    stateBindings: stateBindingsFromProps(props),
     children: normalizeJSXChildren(props.children)
   }
 }

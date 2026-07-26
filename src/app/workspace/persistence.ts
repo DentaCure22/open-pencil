@@ -1,6 +1,5 @@
 import { applyWorkspaceMutation } from './mutation'
 import type { WorkspaceMutationEnvelope } from './operations'
-import { reconcileHydratedRuntimeTruth } from './runtime-truth'
 import { deserializeWorkspace, serializeWorkspace } from './serialization'
 import type { KnowledgeWorkspace, WorkspaceMutationOutcome } from './types'
 
@@ -93,7 +92,7 @@ export class WorkspaceRepository {
 
   async load(workspaceId: string): Promise<KnowledgeWorkspace | null> {
     const serialized = await this.persistence.load(workspaceId)
-    return serialized ? reconcileHydratedRuntimeTruth(deserializeWorkspace(serialized)) : null
+    return serialized ? deserializeWorkspace(serialized) : null
   }
 
   async mutate(

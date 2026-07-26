@@ -32,7 +32,7 @@ Open **Assets** and choose the variant-grid button beside a component set or con
 - Click a preview to open and select that exact variant on its source canvas.
 - Drag a preview onto the active Board to place it where you drop it.
 - Canvas-native variants remain linked instances of their component master.
-- Connected Smylr variants remain live, source-backed frames rather than frozen screenshots.
+- Connected Smylr variants remain live Code Object frames rather than frozen screenshots.
 
 Placing a variant is one undoable action. Opening a variant reuses its existing component canvas instead of copying the master onto another Board.
 
@@ -42,7 +42,7 @@ Open **Assets** and choose **Publish local library** to download the document's 
 
 Choose **Import library** to review added, updated, unchanged, and removed components and tokens before applying the package. Imported masters live on a dedicated library page. Later imports reconcile against their stable library identities, so existing instances keep their links and receive component updates; instances of removed masters are detached before the master is removed.
 
-Connected Smylr components stay source-backed and are not copied into a library as frozen geometry. Publish the real source library separately or create a local OpenPencil component when a portable canvas-native asset is required.
+Connected Smylr components keep their source attachment and interactive Code Object identity rather than being copied as frozen geometry. Publish the real source library separately or create a local OpenPencil component when a portable canvas-native asset is required.
 
 ## Detaching an Instance
 

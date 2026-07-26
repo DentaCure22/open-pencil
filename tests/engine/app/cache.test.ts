@@ -101,7 +101,7 @@ describe('app cache', () => {
     const storage = installLocalStorage()
     const indexedDb = installIndexedDb()
     const { readCacheJson } = await import('@/app/cache')
-    const logicalKey = 'smylr-live-workspaces/v1'
+    const logicalKey = 'workspace/session/v1'
     const storageKey = `open-pencil:cache:v1:${logicalKey}`
 
     indexedDb.set(logicalKey, { updatedAt: 100, value: { version: 'stale-idb' } })

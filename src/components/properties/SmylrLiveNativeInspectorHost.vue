@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable max-lines, open-pencil/no-large-property-section-components -- The live DOM adapter translates one selected container into the native inspector contract. */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import { buildOpenPencilClipboardHTML } from '@open-pencil/core/clipboard'
@@ -10,7 +11,7 @@ import { cloneNodeProps } from '@open-pencil/scene-graph/copy'
 import { provideEditor } from '@open-pencil/vue'
 
 import { createEditorStore } from '@/app/editor/session'
-import { smylrLiveContainerToSceneGraph } from '@/app/smylr-live-container'
+import { smylrLiveContainerToSceneGraph } from '@/app/smylr-live-container/to-scene-graph'
 import type {
   SmylrLiveContainerDocument,
   SmylrLiveContainerNode,
@@ -205,6 +206,7 @@ function matchesProvenance(token: SmylrLiveSemanticToken, provenance: SmylrLiveT
   return true
 }
 
+// eslint-disable-next-line complexity -- CSS-to-native binding aliases are intentionally explicit.
 function bindingPathsForProperty(property: string): string[] {
   if (property === 'background' || property === 'background-color') return ['fills/0/color']
   if (property === 'color') return ['fills/0/color']
@@ -281,6 +283,7 @@ function findProxyNode(graph: SceneGraph, liveId: string) {
 
 /** Live bridge payloads and scene nodes can be Vue proxies, which structuredClone rejects. */
 function cloneLiveInspectorValue<T>(value: T): T {
+  // eslint-disable-next-line unicorn/prefer-structured-clone -- Vue proxy payloads are not structured-cloneable.
   return JSON.parse(JSON.stringify(value)) as T
 }
 
@@ -690,7 +693,7 @@ function addUtilityClass(className: string) {
   const value = className.trim()
   if (!value) return
   const nextRemove = (accumulatedDraft?.remove ?? []).filter((item) => item !== value)
-  const nextAdd = new Set(accumulatedDraft?.add ?? [])
+  const nextAdd = new Set(accumulatedDraft?.add)
   if (!baseUtilityClasses.value.includes(value)) nextAdd.add(value)
   commitClassDraft([...nextAdd], nextRemove)
 }
@@ -699,7 +702,7 @@ function removeUtilityClass(className: string) {
   const value = className.trim()
   if (!value) return
   const nextAdd = (accumulatedDraft?.add ?? []).filter((item) => item !== value)
-  const nextRemove = new Set(accumulatedDraft?.remove ?? [])
+  const nextRemove = new Set(accumulatedDraft?.remove)
   if (baseUtilityClasses.value.includes(value)) nextRemove.add(value)
   commitClassDraft(nextAdd, [...nextRemove])
 }
@@ -770,6 +773,7 @@ function requestReset() {
     :editor-store="shadowStore"
     :type-label="proxyNode.type === 'TEXT' ? 'TEXT' : 'CONTAINER'"
     :name-label="node.label"
+    :show-object-graph="false"
     data-live-adapter="true"
     @pointerdown.capture="beginLiveInspectorDraftTransaction(styleTransactionKey)"
     @pointerup.capture="endLiveInspectorDraftTransaction(styleTransactionKey)"

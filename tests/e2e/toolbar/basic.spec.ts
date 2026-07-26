@@ -10,9 +10,6 @@ const editor = useEditorSetup()
 
 test('toolbar tools expose their names to assistive technology', async () => {
   await expect(editor.page.getByTestId(toolbarToolTestId('SELECT'))).toHaveAccessibleName('Move')
-  await expect(editor.page.getByTestId(toolbarToolTestId('SMYLR_CONTAINER'))).toHaveAccessibleName(
-    'Container'
-  )
   await expect(editor.page.getByTestId(toolbarToolTestId('PEN'))).toHaveAccessibleName('Pen')
   await expect(editor.page.getByTestId(toolbarToolTestId('TEXT'))).toHaveAccessibleName('Text')
   await expect(editor.page.getByTestId(toolbarToolTestId('HAND'))).toHaveAccessibleName('Hand')

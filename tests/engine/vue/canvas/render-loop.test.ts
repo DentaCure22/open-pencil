@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import type { Editor, EditorEvents } from '@open-pencil/core/editor'
 
-import { createCanvasRenderLoop } from '#vue/canvas/surface/render-loop'
+import {
+  createCanvasRenderLoop,
+  scheduleEditorPresentationFrame,
+  type EditorPresentationFrame
+} from '#vue/canvas/surface/render-loop'
 
 type EditorEventName = keyof EditorEvents
 
@@ -44,8 +48,12 @@ function createEditor() {
   const editor: TestEditor = {
     state: {
       loading: false,
+      panX: 0,
       renderVersion: 0,
-      selectedIds: new Set<string>()
+      sceneVersion: 0,
+      selectedIds: new Set<string>(),
+      panY: 0,
+      zoom: 1
     } as Editor['state'],
     onEditorEvent(event, handler) {
       const listeners = handlers.get(event) ?? new Set()
@@ -154,6 +162,45 @@ describe('canvas render loop', () => {
     }
   })
 
+  test('overlay-only events render full and overlay layers, coalescing without scene renders', () => {
+    const scheduler = createFrameScheduler()
+    try {
+      const { editor, emit } = createEditor()
+      let fullRenders = 0
+      let sceneRenders = 0
+      let overlayRenders = 0
+      createCanvasRenderLoop(editor, () => {
+        fullRenders++
+      })
+      createCanvasRenderLoop(
+        editor,
+        () => {
+          sceneRenders++
+        },
+        { layer: 'scene' }
+      )
+      createCanvasRenderLoop(
+        editor,
+        () => {
+          overlayRenders++
+        },
+        { layer: 'overlays' }
+      )
+
+      emit('overlay:requested')
+      emit('overlay:requested')
+      emit('overlay:requested')
+
+      expect(scheduler.pendingCount).toBe(1)
+      scheduler.flush()
+      expect(fullRenders).toBe(1)
+      expect(overlayRenders).toBe(1)
+      expect(sceneRenders).toBe(0)
+    } finally {
+      scheduler.restore()
+    }
+  })
+
   test('coalesces multiple canvas surfaces into one animation frame', () => {
     const scheduler = createFrameScheduler()
     try {
@@ -180,6 +227,43 @@ describe('canvas render loop', () => {
       scheduler.flush()
       expect(sceneRenders).toBe(1)
       expect(overlayRenders).toBe(1)
+    } finally {
+      scheduler.restore()
+    }
+  })
+
+  test('shares one immutable presentation frame with Board overlays', () => {
+    const scheduler = createFrameScheduler()
+    try {
+      const { editor, emit } = createEditor()
+      editor.state.panX = 120
+      editor.state.panY = 80
+      editor.state.zoom = 1.25
+      editor.state.renderVersion = 7
+      editor.state.sceneVersion = 3
+      let canvasRenders = 0
+      let presentation: EditorPresentationFrame | null = null
+
+      createCanvasRenderLoop(editor, () => {
+        canvasRenders++
+      })
+      scheduleEditorPresentationFrame(editor, (frame) => {
+        presentation = frame
+      })
+      emit('repaint:requested')
+
+      expect(scheduler.pendingCount).toBe(1)
+      scheduler.flush()
+      expect(canvasRenders).toBe(1)
+      expect(presentation).toEqual({
+        renderVersion: 7,
+        revision: 1,
+        sceneVersion: 3,
+        timestamp: 1,
+        viewport: { x: 120, y: 80, zoom: 1.25 }
+      })
+      expect(Object.isFrozen(presentation)).toBe(true)
+      expect(Object.isFrozen(presentation?.viewport)).toBe(true)
     } finally {
       scheduler.restore()
     }

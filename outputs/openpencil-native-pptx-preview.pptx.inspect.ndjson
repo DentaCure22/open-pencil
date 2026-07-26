@@ -1,0 +1,37 @@
+{"kind":"deck","id":"pr/k5qbg3","name":"Deck"}
+{"kind":"layout","layoutId":"2645efd4-38ac-4c19-8f59-f9bedbba8e83","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"f193b39a-86c5-4866-a15b-5177166daca8","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/a3teq4","slide":1,"title":"OPENPENCIL / NATIVE DECKS","textShapes":4}
+{"kind":"shape","id":"sh/gjadsneh","slide":1,"name":"accent-rule","bbox":[41.33,41.18,74,8]}
+{"kind":"textbox","id":"sh/vi1wjidw","slide":1,"name":"eyebrow","text":"OPENPENCIL / NATIVE DECKS","textPreview":"OPENPENCIL / NATIVE DECKS","textChars":25,"textLines":1,"bbox":[41.33,68,720,50]}
+{"kind":"textbox","id":"sh/uhsvqdwb","slide":1,"name":"title","text":"A PowerPoint that\nbelongs on the board","textPreview":"A PowerPoint that | belongs on the board","textChars":38,"textLines":2,"bbox":[41.33,182.55,1080,270]}
+{"kind":"textbox","id":"sh/5o3epsve","slide":1,"name":"subtitle","text":"A real .pptx example now — and the product direction for editable slides without an embedded mini-app.","textPreview":"A real .pptx example now — and the product direction for editable slides without an embedded mini-app.","textChars":102,"textLines":1,"bbox":[41.33,505,710,112]}
+{"kind":"textbox","id":"sh/4nuxwnet","slide":1,"name":"slide-number","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1184,660,54,24]}
+{"kind":"notes","id":"nt/a3teq4","slide":1,"text":""}
+{"kind":"slide","id":"sl/c8v32f","slide":2,"title":"The board owns the deck — not a mini PowerPoint window","textShapes":7}
+{"kind":"textbox","id":"sh/ulsv650n","slide":2,"name":"title","text":"The board owns the deck — not a mini PowerPoint window","textPreview":"The board owns the deck — not a mini PowerPoint window","textChars":54,"textLines":1,"bbox":[41.33,36.12,1197.33,84]}
+{"kind":"textbox","id":"sh/hojuhkje","slide":2,"name":"intro","text":"Ownership test\nIf it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.","textPreview":"Ownership test | If it feels separate, opens special chrome, or breaks normal canvas behavior, it is not finished.","textChars":112,"textLines":2,"bbox":[42.09,124,1050,94]}
+{"kind":"shape","id":"sh/gnad8fit","slide":2,"name":"card-1","bbox":[42.94,248.8,580.99,172]}
+{"kind":"textbox","id":"sh/7ihcbq1w","slide":2,"name":"card-copy-1","text":"One ordinary board object\nSelect, move, resize, duplicate, delete, undo — exactly like a frame.","textPreview":"One ordinary board object | Select, move, resize, duplicate, delete, undo — exactly like a frame.","textChars":95,"textLines":2,"bbox":[74.15,275.8,520,116]}
+{"kind":"shape","id":"sh/6h8b2l0r","slide":2,"name":"card-2","bbox":[657.68,248.8,580.99,172]}
+{"kind":"textbox","id":"sh/tkjud0j2","slide":2,"name":"card-copy-2","text":"Slides stay editable\nText, images, shapes and order are native data, not a screenshot.","textPreview":"Slides stay editable | Text, images, shapes and order are native data, not a screenshot.","textChars":86,"textLines":2,"bbox":[688.89,275.8,520,116]}
+{"kind":"shape","id":"sh/8jqt4vih","slide":2,"name":"card-3","bbox":[42.94,458.8,580.99,172]}
+{"kind":"textbox","id":"sh/juhc7q10","slide":2,"name":"card-copy-3","text":"The file stays attached\nKeep the original .pptx for round-trip export and reliable recovery.","textPreview":"The file stays attached | Keep the original .pptx for round-trip export and reliable recovery.","textChars":92,"textLines":2,"bbox":[74.15,485.8,520,116]}
+{"kind":"shape","id":"sh/yt8byl0f","slide":2,"name":"card-4","bbox":[657.68,458.8,580.99,172]}
+{"kind":"textbox","id":"sh/4byto72l","slide":2,"name":"card-copy-4","text":"No second workspace\nThe deck lives in the same project, board, history and collaboration model.","textPreview":"No second workspace | The deck lives in the same project, board, history and collaboration model.","textChars":95,"textLines":2,"bbox":[688.89,485.8,520,116]}
+{"kind":"textbox","id":"sh/5c7uxcj6","slide":2,"name":"slide-number","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1184,660,54,24]}
+{"kind":"notes","id":"nt/c8v32f","slide":2,"text":""}
+{"kind":"slide","id":"sl/mrrtek","slide":3,"title":"A clean native path replaces the embedded feeling","textShapes":8}
+{"kind":"textbox","id":"sh/x43i9c3e","slide":3,"name":"title","text":"A clean native path replaces the embedded feeling","textPreview":"A clean native path replaces the embedded feeling","textChars":49,"textLines":1,"bbox":[41.33,36.12,1197.33,84]}
+{"kind":"shape","id":"sh/a1czexk3","slide":3,"name":"timeline","bbox":[41.33,354.2,1197.33,0.03]}
+{"kind":"shape","id":"sh/v2l072lo","slide":3,"name":"milestone-dot-1","bbox":[41.33,346.58,16,16]}
+{"kind":"textbox","id":"sh/krehk725","slide":3,"name":"milestone-label-1","text":"IMPORT","textPreview":"IMPORT","textChars":6,"textLines":1,"bbox":[41.33,295,220,28]}
+{"kind":"textbox","id":"sh/5snidc3q","slide":3,"name":"milestone-copy-1","text":"Read the .pptx\nParse slides, masters, text, media and speaker notes into a stable model.","textPreview":"Read the .pptx | Parse slides, masters, text, media and speaker notes into a stable model.","textChars":88,"textLines":2,"bbox":[41.33,401.33,332,168]}
+{"kind":"shape","id":"sh/i5czihkz","slide":3,"name":"milestone-dot-2","bbox":[453.24,346.58,16,16]}
+{"kind":"textbox","id":"sh/j650b2lk","slide":3,"name":"milestone-label-2","text":"NORMALIZE","textPreview":"NORMALIZE","textChars":9,"textLines":1,"bbox":[453.24,295,220,28]}
+{"kind":"textbox","id":"sh/sve1or21","slide":3,"name":"milestone-copy-2","text":"Create native objects\nMap content into persisted board-owned slide data with an ordinary frame owner.","textPreview":"Create native objects | Map content into persisted board-owned slide data with an ordinary frame owner.","textChars":101,"textLines":2,"bbox":[453.24,401.33,332,168]}
+{"kind":"shape","id":"sh/twnihw3m","slide":3,"name":"milestone-dot-3","bbox":[865.15,346.58,16,16]}
+{"kind":"textbox","id":"sh/5sfq1gf6","slide":3,"name":"milestone-label-3","text":"WORK","textPreview":"WORK","textChars":4,"textLines":1,"bbox":[865.15,295,220,28]}
+{"kind":"textbox","id":"sh/4r698byl","slide":3,"name":"milestone-copy-3","text":"Edit on the canvas\nMove the deck, open slides, undo edits, save, reopen and export without leaving the board.","textPreview":"Edit on the canvas | Move the deck, open slides, undo edits, save, reopen and export without leaving the board.","textChars":109,"textLines":2,"bbox":[865.15,401.33,332,168]}
+{"kind":"textbox","id":"sh/3qx8z6x0","slide":3,"name":"slide-number","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1184,660,54,24]}
+{"kind":"notes","id":"nt/mrrtek","slide":3,"text":""}

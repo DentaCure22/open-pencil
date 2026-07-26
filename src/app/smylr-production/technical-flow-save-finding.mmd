@@ -1,0 +1,37 @@
+flowchart TB
+  subgraph client["UI"]
+    submit["Save finding<br/>Dental Chart"]:::client
+  end
+
+  subgraph service["Application"]
+    resolve["Resolve chart codes<br/>Conditional resolver"]:::service
+    batch["Build payload<br/>Batch conditions"]:::service
+    post["POST conditions<br/>/api/patients/:id"]:::request
+    recovery["Save failed<br/>Preserve & retry"]:::recovery
+  end
+
+  subgraph persistence["Persistence"]
+    write["Write rows<br/>Persistence adapter"]:::data
+    insert[("patient_conditions<br/>Commit rows")]:::data
+    update["Saved<br/>Patient store updated"]:::success
+  end
+
+  submit --> resolve
+  resolve --> batch
+  batch --> post
+  post --> write
+  write --> insert
+  insert --> update
+  post -.-> recovery
+  recovery -.-> batch
+
+  classDef client fill:#1d2130,stroke:#8174d8,color:#f4f5f7,stroke-width:1.75px
+  classDef service fill:#191d26,stroke:#444b5c,color:#f4f5f7,stroke-width:1.5px
+  classDef request fill:#272345,stroke:#9688ee,color:#f4f5f7,stroke-width:1.75px
+  classDef data fill:#16232c,stroke:#4f93ae,color:#f4f5f7,stroke-width:1.5px
+  classDef success fill:#153027,stroke:#45ad70,color:#f4f5f7,stroke-width:1.75px
+  classDef recovery fill:#291c21,stroke:#d75e6d,color:#f4f5f7,stroke-width:1.5px
+
+  style client fill:#171925,stroke:none,color:#d8d3ff
+  style service fill:#151820,stroke:none,color:#d8d3ff
+  style persistence fill:#131c20,stroke:none,color:#b9e6fa

@@ -51,7 +51,7 @@ export function createLocalAwarenessActions({
 
     state.value.peers = peers
     store.state.remoteCursors = remotePeersToCursors(peers, store.state.currentPageId)
-    store.requestRender()
+    store.requestOverlayRepaint()
   }
 
   function setLocalName(name: string) {

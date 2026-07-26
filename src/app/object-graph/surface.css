@@ -1,0 +1,65 @@
+.openpencil-object-graph {
+  --xy-background-color: transparent;
+  background: transparent;
+}
+
+.openpencil-object-graph .react-flow,
+.openpencil-object-graph .react-flow__pane,
+.openpencil-object-graph .react-flow__renderer,
+.openpencil-object-graph .react-flow__viewport {
+  cursor: default;
+  pointer-events: none;
+}
+
+.openpencil-object-graph .react-flow__node {
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.openpencil-object-graph .react-flow__edge-path {
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+}
+
+.openpencil-object-graph-handle {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.openpencil-object-graph-handle-dot {
+  position: absolute;
+  top: calc(50% + var(--openpencil-object-graph-port-offset-y));
+  left: calc(50% + var(--openpencil-object-graph-port-offset-x));
+  width: 10px;
+  height: 10px;
+  border: 2px solid #60a5fa;
+  border-radius: 9999px;
+  background: #111318;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.3),
+    0 0 0 3px rgb(96 165 250 / 0.14);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+}
+
+.openpencil-object-graph-connecting .openpencil-object-graph-handle,
+.openpencil-object-graph-handle:hover,
+.openpencil-object-graph-handle-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.openpencil-object-graph .react-flow__edge-interaction {
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+.openpencil-object-graph .react-flow__attribution,
+.openpencil-object-graph [data-test-id^='react-flow-edge-label-'] {
+  pointer-events: auto;
+}

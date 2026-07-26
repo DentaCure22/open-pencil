@@ -1,13 +1,26 @@
 ---
 title: Collaboration
-description: Real-time collaborative editing via P2P WebRTC — no server, no account.
+description: Fast Yjs collaboration through WebRTC with optional durable OpenPencil Cloud workspaces.
 ---
 
 # Collaboration
 
-Edit designs together in real time. Peers connect directly — no server relays your data, no account required.
+Edit designs together in real time. WebRTC keeps live interaction fast. A configured OpenPencil Cloud project adds accounts, durable database storage, cross-device recovery, and controlled workspace invites.
 
-## Sharing a Room
+## Shared Cloud Workspace
+
+When the deployment includes `VITE_OPENPENCIL_SUPABASE_URL` and `VITE_OPENPENCIL_SUPABASE_ANON_KEY`:
+
+1. Create an OpenPencil account or sign in
+2. Open the collaboration control
+3. Copy the one-time cofounder invite
+4. Send it to the person who should join the workspace
+
+The invite expires after seven days and can be accepted once. OpenPencil stores append-only Yjs updates and periodic checkpoints in its own Supabase project. Boards and project folders are part of that shared document, while IndexedDB remains the offline cache.
+
+To deploy a dedicated backend, create a new Supabase project for OpenPencil, run `bunx supabase link --project-ref <project-ref>` followed by `bunx supabase db push`, and set the two environment variables above on the OpenPencil app deployment. Do not reuse another product's Supabase project.
+
+## Account-Free P2P Rooms
 
 1. Click the share button in the top-right corner
 2. Copy the generated link (`app.openpencil.dev/share/<room-id>`)

@@ -145,6 +145,23 @@ function addSuggestion(
   })
 }
 
+function flexDirectionToken(value: string | undefined) {
+  if (value === 'column') return 'flex-col'
+  if (value === 'row') return 'flex-row'
+  return undefined
+}
+
+function flexWrapToken(value: string | undefined) {
+  if (value === 'wrap') return 'flex-wrap'
+  if (value === 'nowrap') return 'flex-nowrap'
+  return undefined
+}
+
+function shadowToken(value: string | undefined) {
+  if (value === 'none') return 'shadow-none'
+  return value ? 'shadow-sm' : undefined
+}
+
 export function buildLiveInspectorTokenSuggestions(
   node: SmylrLiveContainerNode | null | undefined
 ) {
@@ -160,21 +177,13 @@ export function buildLiveInspectorTokenSuggestions(
   addSuggestion(
     suggestions,
     knownTokens,
-    styles['flex-direction'] === 'column'
-      ? 'flex-col'
-      : styles['flex-direction'] === 'row'
-        ? 'flex-row'
-        : undefined,
+    flexDirectionToken(styles['flex-direction']),
     'flex direction'
   )
   addSuggestion(
     suggestions,
     knownTokens,
-    styles['flex-wrap'] === 'wrap'
-      ? 'flex-wrap'
-      : styles['flex-wrap'] === 'nowrap'
-        ? 'flex-nowrap'
-        : undefined,
+    flexWrapToken(styles['flex-wrap']),
     'wrap'
   )
   addSuggestion(suggestions, knownTokens, alignmentToken('items', styles['align-items']), 'align')
@@ -189,11 +198,7 @@ export function buildLiveInspectorTokenSuggestions(
   addSuggestion(
     suggestions,
     knownTokens,
-    styles['box-shadow'] === 'none'
-      ? 'shadow-none'
-      : styles['box-shadow']
-        ? 'shadow-sm'
-        : undefined,
+    shadowToken(styles['box-shadow']),
     'shadow'
   )
   addSuggestion(
@@ -215,7 +220,8 @@ export function buildLiveInspectorTokenSuggestions(
     'overflow'
   )
 
-  const paddingValues = styles.padding?.trim().split(/\s+/) ?? []
+  const padding = Reflect.get(styles, 'padding') as string | undefined
+  const paddingValues = padding?.trim().split(/\s+/) ?? []
   if (paddingValues.length === 1) {
     addSuggestion(suggestions, knownTokens, spacingToken('p', paddingValues[0]), 'padding')
   }
