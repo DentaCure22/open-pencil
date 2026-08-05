@@ -45,8 +45,9 @@ export const getPageTree = defineTool({
   params: {
     depth: {
       type: 'number',
-      description: 'Max nesting depth to return (1 = returned root nodes only). Default: unlimited',
-      min: 1
+      description: 'Max nesting depth to return (1 = returned root nodes only). Default: 2, max: 5',
+      min: 1,
+      max: 5
     },
     root_id: {
       type: 'string',
@@ -58,18 +59,19 @@ export const getPageTree = defineTool({
     }
   },
   execute: (figma, { depth, root_id, node_types }) => {
+    const boundedDepth = Math.min(depth ?? 2, 5)
     const typeFilter = node_types && node_types.length > 0 ? new Set(node_types) : undefined
 
     if (root_id !== undefined) {
       const root = figma.getNodeById(root_id)
       if (!root) return { error: `Node "${root_id}" not found` }
-      return { root: root.id, tree: nodeToTreeEntry(root, 1, depth, typeFilter) }
+      return { root: root.id, tree: nodeToTreeEntry(root, 1, boundedDepth, typeFilter) }
     }
 
     const page = figma.currentPage
     const children: TreeEntry[] = []
     for (const child of page.children) {
-      const entry = nodeToTreeEntry(child, 1, depth, typeFilter)
+      const entry = nodeToTreeEntry(child, 1, boundedDepth, typeFilter)
       if (entry) children.push(entry)
     }
     return { page: page.name, children }
@@ -79,18 +81,20 @@ export const getPageTree = defineTool({
 export const getNode = defineTool({
   name: 'get_node',
   description:
-    'Get detailed properties of a node by ID. Use depth to limit child recursion (0 = node only, 1 = direct children, etc). Default: unlimited.',
+    'Get bounded detailed properties of one node. Depth defaults to 0 and is capped at 3; use another exact call for deeper context.',
   params: {
     id: { type: 'string', description: 'Node ID', required: true },
     depth: {
       type: 'number',
-      description: 'Max depth of children to include (0 = no children). Default: unlimited'
+      description: 'Max depth of children to include (0 = no children). Default: 0, max: 3',
+      min: 0,
+      max: 3
     }
   },
   execute: (figma, { id, depth }) => {
     const node = figma.getNodeById(id)
     if (!node) return { error: `Node "${id}" not found` }
-    return nodeToResult(node, depth)
+    return nodeToResult(node, Math.min(depth ?? 0, 3))
   }
 })
 
@@ -99,6 +103,12 @@ export const findNodes = defineTool({
   description: 'Find nodes by name pattern and/or type.',
   params: {
     name: { type: 'string', description: 'Name substring to match (case-insensitive)' },
+    limit: {
+      type: 'number',
+      description: 'Maximum summaries to return. Default: 25, max: 100',
+      min: 1,
+      max: 100
+    },
     type: {
       type: 'string',
       description: 'Node type filter',
@@ -125,6 +135,12 @@ export const findNodes = defineTool({
       if (args.name && !node.name.toLowerCase().includes(args.name.toLowerCase())) return false
       return true
     })
-    return { count: matches.length, nodes: matches.map(nodeSummary) }
+    const limit = Math.min(args.limit ?? 25, 100)
+    return {
+      count: matches.length,
+      limit,
+      nodes: matches.slice(0, limit).map(nodeSummary),
+      truncated: matches.length > limit
+    }
   }
 })

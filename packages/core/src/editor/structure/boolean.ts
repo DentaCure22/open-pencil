@@ -26,8 +26,12 @@ export function booleanOperationSelected(
   const childSnapshots = childIds.map((id) => ({ id, subtree: snapshotSubtree(ctx.graph, id) }))
   const origPositions = topLevel.map((node) => ({ id: node.id, x: node.x, y: node.y }))
   const firstIndex = Math.min(...childIds.map((id) => parent.childIds.indexOf(id)))
-  const parentAbs = isTopLevel(parentId) ? { x: 0, y: 0 } : ctx.graph.getAbsolutePosition(parentId)
-  const bounds = computeAbsoluteBounds(topLevel, (id) => ctx.graph.getAbsolutePosition(id))
+  const parentAbs = isTopLevel(parentId)
+    ? { x: 0, y: 0 }
+    : ctx.graph.getAuthoritativeAbsolutePosition(parentId)
+  const bounds = computeAbsoluteBounds(topLevel, (id) =>
+    ctx.graph.getAuthoritativeAbsolutePosition(id)
+  )
 
   const booleanNode = ctx.graph.createNode('BOOLEAN_OPERATION', parentId, {
     name: operationLabel(operation),

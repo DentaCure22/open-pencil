@@ -1,0 +1,41 @@
+{
+  "schema_version": "prompt-to-board-derived-result/v2",
+  "run_id": "visible-dev-009-first-attempt",
+  "scenario_id": "DEV-MX-CO-SPARSE-001",
+  "modality_class": "code_object_interactive",
+  "difficulty_class": "single_interactive_artifact",
+  "correctness_status_v2": "pass",
+  "reliability_status_v2": "first_attempt_eventual_success",
+  "efficiency_reference_status_v2": "miss",
+  "efficiency_reference_miss_ms_v2": 8126,
+  "timeout_status_v2": "no_timeout",
+  "durable_artifact": true,
+  "independent_proof_complete": true,
+  "released_final": true,
+  "raw_events_rewritten": false,
+  "append_only_release_added": true,
+  "milestones_ms": {
+    "prompt_to_first_tool": 8216,
+    "prompt_to_durable_artifact": 135936,
+    "prompt_to_generated_final": 209538,
+    "prompt_to_visible_artifact": 243106,
+    "prompt_to_independent_proof": 337804,
+    "prompt_to_released_final": 1384071,
+    "build_interval": 127720,
+    "assurance_interval": 201868,
+    "late_policy_correction_interval": 1046267
+  },
+  "legacy_reference": {
+    "kind": "soft_reference_line",
+    "proof_deadline_at_ms": 1785359495159,
+    "proof_completed_at_ms": 1785359503285,
+    "miss_ms": 8126
+  },
+  "evidence": {
+    "event_log_sha256_after_append_only_release": "3f6d85d68a48d7635ce5ebc5597da9889be2bbc23fdc7aae17b0fa21b80a27c5",
+    "pixel_sha256": "ace3b6dbe2c1d46fc125bf53ef7f6dfef49d30e03490de316cf5e99d170a2710",
+    "semantic_review_sha256": "e223d7d7ae06102efbc71a4d07a9bb1a025a159d20a0ed965c23635cb8eb1c29",
+    "truth_audit_gate_passed": true
+  },
+  "interpretation": "Correctness passed. The legacy two-minute line is retained only as an efficiency reference, and the delayed release reflects evaluator repair rather than artifact execution time."
+}

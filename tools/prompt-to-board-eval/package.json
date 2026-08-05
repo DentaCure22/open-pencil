@@ -1,0 +1,11 @@
+{
+  "name": "@open-pencil/prompt-to-board-eval",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "canary": "bun src/cli.ts canary",
+    "campaign": "bun src/cli.ts campaign",
+    "record": "bun src/cli.ts record",
+    "test": "tsgo --noEmit -p tsconfig.json && bun test tests"
+  }
+}

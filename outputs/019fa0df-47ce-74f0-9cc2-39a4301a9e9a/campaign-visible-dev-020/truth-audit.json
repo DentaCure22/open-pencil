@@ -1,0 +1,62 @@
+{
+  "schema_version": "prompt-to-board-derived-result/v2",
+  "trial_id": "visible-dev-020",
+  "raw_events_modified": false,
+  "measurement_class": "open_ended_cold_visibility_required_development",
+  "modality": "code_object_interactive",
+  "difficulty": "compact_stateful_workflow",
+  "correctness": {
+    "status": "fail",
+    "reason": "The requested stage control worked visibly, but the agent used local React state. Reload reset Mitigation to Detection, so modality-appropriate behavior was not durable.",
+    "exact_target": "pass",
+    "authoritative_receipt": "pass",
+    "semantic_readback": "pass",
+    "durable_artifact": "pass",
+    "independent_pixels": "pass",
+    "interaction": "pass",
+    "interaction_state_reload": "fail",
+    "released_final": "pass"
+  },
+  "reliability": {
+    "first_attempt": true,
+    "eventual_build_success": true,
+    "safe_preapply_rejections": 2,
+    "failure_categories": [
+      "schema_wrong_field_action_instead_of_operation",
+      "schema_missing_source_format",
+      "volatile_state_used_for_persistent_behavior"
+    ]
+  },
+  "efficiency": {
+    "prompt_to_first_board_context_ms": 19019,
+    "prompt_to_first_build_attempt_ms": 84830,
+    "successful_build_command_ms": 288,
+    "board_build_semantic_ms": 223.4,
+    "persistence_ms": 172.3,
+    "successful_build_to_generated_final_ms": 14873,
+    "prompt_to_generated_final_ms": 179011,
+    "universal_correctness_deadline_applied": false
+  },
+  "target": {
+    "workspace_id": "workspace-44c2b737-ada8-4e45-b8d9-1d30aadf4fdc",
+    "document_id": "tab-1",
+    "content_document_id": "document-1b633407-6552-4f35-a64b-7ac3899a306d",
+    "page_id": "0:430",
+    "owner_id": "0:369",
+    "build_request_id": "ptb-dev-sparse-v1-incident-response-20260729-v1",
+    "source_hash": "sha256:f1a72b196ef98726223c222ac61dcf97b3551dbe7d5c00d2ea4daf88cd138aa6"
+  },
+  "proof_files": {
+    "initial": "visible.png",
+    "interaction": "interaction.jpg",
+    "reload": "reload.jpg"
+  },
+  "cleanup": {
+    "request_id": "cleanup-visible-dev-020-incident-workspace-v1",
+    "receipt_status": "applied",
+    "authority_revision": 349,
+    "final_page_owned_count": 0
+  },
+  "observed_product_gap": "Routine agent guidance did not put exact Code Object recipe keys and persisted state strongly enough in the startup path.",
+  "direct_fix": "The OpenPencil skill now gives the exact create header, prefers the source-file CLI path, and requires provided persisted state/setState for behavior that must survive reload."
+}

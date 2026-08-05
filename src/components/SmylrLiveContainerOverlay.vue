@@ -21,10 +21,8 @@ import {
   selectedLiveInspectorNode,
   undoLiveInspectorDraft
 } from '@/app/smylr-live-inspector/session'
-import {
-  findCurrentSmylrLiveAppFrame,
-  isSmylrLiveAppFrameNode
-} from '@/app/smylr-production/workspace'
+import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
+import SmylrLiveSpacingMeasurements from '@/components/smylr-live-container-overlay/SmylrLiveSpacingMeasurements.vue'
 import Tip from '@/components/ui/Tip.vue'
 
 type CornerHandle = 'nw' | 'ne' | 'se' | 'sw'
@@ -93,9 +91,7 @@ const displayedSize = computed(() => selectedSize.value)
 const liveFrame = computed(() => {
   const activeFrameId = liveInspectorActiveFrameId.value
   const activeFrame = activeFrameId ? store.graph.getNode(activeFrameId) : null
-  return activeFrame && isSmylrLiveAppFrameNode(activeFrame)
-    ? activeFrame
-    : findCurrentSmylrLiveAppFrame(store)
+  return activeFrame && isSmylrProductionAppCodeObjectFrame(activeFrame) ? activeFrame : null
 })
 const selectedCornerStyle = computed(() => {
   const draft = liveInspectorPatchDraft.value?.styles
@@ -164,105 +160,6 @@ const overlayLabelStyle = computed(() => {
     gap: `${4 / zoom}px`,
     padding: `${2 / zoom}px ${6 / zoom}px`
   }
-})
-const alignmentGuides = computed(() => {
-  const rect = displayedRect.value
-  const size = displayedSize.value
-  const frame = liveFrame.value
-  if (!rect || !size || !frame) return []
-  const stroke = 1 / Math.max(store.state.zoom, 0.01)
-  const common = { backgroundColor: 'var(--color-accent)', opacity: '0.38' }
-  return [
-    {
-      id: 'top',
-      style: {
-        ...common,
-        height: `${stroke}px`,
-        left: `${-rect.x}px`,
-        top: '0px',
-        width: `${frame.width}px`
-      }
-    },
-    {
-      id: 'right',
-      style: {
-        ...common,
-        height: `${frame.height}px`,
-        left: `${size.width}px`,
-        top: `${-rect.y}px`,
-        width: `${stroke}px`
-      }
-    },
-    {
-      id: 'bottom',
-      style: {
-        ...common,
-        height: `${stroke}px`,
-        left: `${-rect.x}px`,
-        top: `${size.height}px`,
-        width: `${frame.width}px`
-      }
-    },
-    {
-      id: 'left',
-      style: {
-        ...common,
-        height: `${frame.height}px`,
-        left: '0px',
-        top: `${-rect.y}px`,
-        width: `${stroke}px`
-      }
-    }
-  ]
-})
-const hoverAlignmentGuides = computed(() => {
-  const rect = hoveredLiveInspectorRect.value
-  const frame = liveFrame.value
-  if (!rect || !frame) return []
-  const stroke = 1 / Math.max(store.state.zoom, 0.01)
-  const common = { backgroundColor: 'var(--color-accent)', opacity: '0.22' }
-  return [
-    {
-      id: 'top',
-      style: {
-        ...common,
-        height: `${stroke}px`,
-        left: `${-rect.x}px`,
-        top: '0px',
-        width: `${frame.width}px`
-      }
-    },
-    {
-      id: 'right',
-      style: {
-        ...common,
-        height: `${frame.height}px`,
-        left: `${rect.width}px`,
-        top: `${-rect.y}px`,
-        width: `${stroke}px`
-      }
-    },
-    {
-      id: 'bottom',
-      style: {
-        ...common,
-        height: `${stroke}px`,
-        left: `${-rect.x}px`,
-        top: `${rect.height}px`,
-        width: `${frame.width}px`
-      }
-    },
-    {
-      id: 'left',
-      style: {
-        ...common,
-        height: `${frame.height}px`,
-        left: '0px',
-        top: `${-rect.y}px`,
-        width: `${stroke}px`
-      }
-    }
-  ]
 })
 const cornerHandleStyle = computed(() => {
   const zoom = Math.max(store.state.zoom, 0.01)
@@ -578,20 +475,20 @@ onUnmounted(() => {
     v-if="isSelectMode && displayedRect && displayedNode"
     ref="overlayRef"
     data-test-id="smylr-live-container-overlay"
-    class="pointer-events-auto absolute z-10 cursor-move active:cursor-grabbing"
+    class="pointer-events-none absolute z-10"
     :style="overlayStyle"
-    aria-label="Drag selected container to move; click to select a child"
-    @pointerdown.self="beginMove($event, true)"
   >
-    <!-- The selected body is the primary move surface. A click without a drag
-         is forwarded into the iframe so Container mode can still drill into
-         children and overlapping nodes. -->
-    <span
-      v-for="guide in alignmentGuides"
-      :key="guide.id"
-      data-test-id="smylr-live-alignment-guide"
-      class="pointer-events-none absolute"
-      :style="guide.style"
+    <SmylrLiveSpacingMeasurements
+      v-if="liveFrame && displayedSize"
+      :frame-height="liveFrame.height"
+      :frame-width="liveFrame.width"
+      :height="displayedSize.height"
+      :node="displayedNode"
+      :origin-x="previewPosition?.x ?? displayedRect.x"
+      :origin-y="previewPosition?.y ?? displayedRect.y"
+      :preview-style="liveInspectorPatchDraft?.styles"
+      :width="displayedSize.width"
+      :zoom="store.state.zoom"
     />
     <Tip label="Drag to move · drop above target · Shift-drop below">
       <div
@@ -685,13 +582,6 @@ onUnmounted(() => {
     class="pointer-events-none absolute z-20"
     :style="hoverOverlayStyle"
   >
-    <span
-      v-for="guide in hoverAlignmentGuides"
-      :key="guide.id"
-      data-test-id="smylr-live-hover-alignment-guide"
-      class="pointer-events-none absolute"
-      :style="guide.style"
-    />
     <div
       class="pointer-events-none absolute left-0 flex items-center bg-accent/75 font-medium text-white shadow-sm"
       :class="hoverLabelBelow ? 'top-full mt-1' : 'bottom-full mb-1'"

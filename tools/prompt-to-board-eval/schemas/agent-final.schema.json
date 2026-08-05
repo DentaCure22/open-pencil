@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prompt-to-Board evaluation agent final",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "request_id", "owner_id", "target", "claimed_witnesses"],
+  "properties": {
+    "status": { "enum": ["completed", "safe_stop", "error"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "request_id": { "type": ["string", "null"] },
+    "owner_id": { "type": ["string", "null"] },
+    "target": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "runtime_instance_id",
+        "workspace_id",
+        "document_id",
+        "content_document_id",
+        "page_id"
+      ],
+      "properties": {
+        "runtime_instance_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "document_id": { "type": "string", "minLength": 1 },
+        "content_document_id": { "type": "string", "minLength": 1 },
+        "page_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "claimed_witnesses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "render", "pixels", "durability"],
+      "properties": {
+        "receipt": { "type": "boolean" },
+        "render": { "type": "boolean" },
+        "pixels": { "type": "boolean" },
+        "durability": { "type": "boolean" }
+      }
+    }
+  }
+}

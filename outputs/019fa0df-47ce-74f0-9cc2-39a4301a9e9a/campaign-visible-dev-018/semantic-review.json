@@ -1,0 +1,90 @@
+{
+  "schema_version": "prompt-to-board-semantic-review/v1",
+  "review_id": "visible-dev-018-semantic-review",
+  "run_id": "visible-dev-018-first-attempt",
+  "scenario_id": "DEV-MX-LAUNCH-POPULATED-001",
+  "rubric_id": "ptb-dev-mixed-connected",
+  "rubric_version": "1.0.0",
+  "quality_passed": true,
+  "quality_grade": "pass",
+  "target": {
+    "runtime_instance_id": "runtime:48bc3dad74ee039617073361f8221b73",
+    "workspace_id": "workspace-44c2b737-ada8-4e45-b8d9-1d30aadf4fdc",
+    "document_id": "tab-1",
+    "content_document_id": "document-1b633407-6552-4f35-a64b-7ac3899a306d",
+    "page_id": "0:439"
+  },
+  "artifact": {
+    "owner_id": "0:388",
+    "name": "Launch Control — Plan to Launch",
+    "modality": "code_object",
+    "definition_id": "launch-control-area-v1",
+    "source_hash": "sha256:bc0b5538569985bbb02a8fa96ade47ce6cb2089c732cd61384b298fb7ad76332",
+    "bounds": {
+      "x": 640,
+      "y": 922,
+      "width": 872,
+      "height": 280
+    },
+    "initial_state": {
+      "risk": 42
+    },
+    "interacted_state": {
+      "risk": 47
+    },
+    "connection": {
+      "id": "object-connection:eaf70606bddd216a",
+      "source_id": "0:448",
+      "target_id": "0:388",
+      "kind": "visual",
+      "label": "drives launch plan",
+      "automatic": false
+    }
+  },
+  "checks": [
+    {
+      "name": "exact_target_and_preserved_context",
+      "passed": true,
+      "evidence": "Exact page 0:439 retained Roadmap, Operations, and Release readiness while adding Launch Control as the fourth top-level owner."
+    },
+    {
+      "name": "targeted_read_fast_path",
+      "passed": true,
+      "evidence": "The fresh agent used board read --object-ids for the three known fixture owners; it completed through one automatic context plus one targeted read with no selection change or page scan."
+    },
+    {
+      "name": "requested_content",
+      "passed": true,
+      "evidence": "Visible pixels show a five-stage Plan, Scope, Build, Validate, Launch timeline and a clearly labeled Launch risk control."
+    },
+    {
+      "name": "collision_aware_placement",
+      "passed": true,
+      "evidence": "Guarded placement recorded x=640, y=922, 872x280 with 48 Board-unit clearance and zero rejected collision candidates."
+    },
+    {
+      "name": "typed_relationship",
+      "passed": true,
+      "evidence": "A durable non-automatic visual connection links Roadmap 0:448 to Launch Control 0:388; renderer readback and pixels show the labeled edge."
+    },
+    {
+      "name": "live_interaction",
+      "passed": true,
+      "evidence": "Independent in-app browser proof entered Interact mode and increased Launch risk from 42 to 47 through the visible plus button."
+    },
+    {
+      "name": "semantic_state_readback",
+      "passed": true,
+      "evidence": "code-object inspect returned persisted state risk=47 and the expected source hash before reload."
+    },
+    {
+      "name": "durability_reload",
+      "passed": true,
+      "evidence": "After reload under runtime runtime:4f4b5202e07c3ab40c45442e2cb48beb, Launch Control, risk 47, the three fixture owners, and the labeled connection remained visible."
+    }
+  ],
+  "visual_screenshot_sha256": "2df7de0042a9eff4ddd58d653036241e380c067e2aa91076fdddc56479f21547",
+  "interaction_screenshot_sha256": "1dccce9764a384231b01499e9c51aa6e4b84a80b2cddc13090c0cf86c2a0fdcd",
+  "reload_screenshot_sha256": "357d7388b1530fae8797002789cea34bbf95d5c918ec9c204607e3fe18770c25",
+  "notes": "The generated final accurately left pixels and interaction unclaimed. Independent in-app proof completed both before release, and raw agent events were not rewritten."
+}

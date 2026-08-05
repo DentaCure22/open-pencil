@@ -1,0 +1,17 @@
+{
+  "deterministic_release": true,
+  "frozen_authority_revision": 825,
+  "natural_prompt_sha256": "e7e61bbade4ea006e48684bb0fe5b5318e68094cf49fd00af67c540d3bfd1b74",
+  "provided_recipe_sha256": null,
+  "runner_parameters_sha256": "35ffc3eee61ad7446ee0c57c0a49dec16faf554a1db7fbd22cb4d1245c4e34d7",
+  "runner_source_sha256": "68b58e46f2780dae1d71376fa909351e4cf82aae70f4fcefd9090af4f1b4bae9",
+  "target_file_sha256": "94dee2c6228b74e188598d0d5daf8826fde942a4f4340f5e4670dd2b85cfca0a",
+  "treatment": {
+    "config_id": "4e7570780ee74d634422a59b3c0189009f12b480c6f6c2648fb596f8d95132b4",
+    "full_prompt_sha256": "a5c78ee1e32c51b348563ec9df4e723d2afef80e628f3b33750cfc937401d1ba",
+    "page_id": "0:1376",
+    "request_id": "ptb-run:8b73699c7e16179e17f14d255cd1263d",
+    "run_id": "final-115-overflow-general-first-attempt",
+    "treatment": "explicit_plan_preselected_placement_cold_straight_through"
+  }
+}

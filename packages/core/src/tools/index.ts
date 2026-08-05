@@ -18,3 +18,27 @@ export {
 } from './analyze/overlaps/params'
 export { setPexelsApiKey, setUnsplashAccessKey } from './stock-photo'
 export { importSvg } from './create'
+export {
+  canonicalMemoryPeerNodes,
+  forkCanonicalObject,
+  materializeCanonicalObject,
+  type CanonicalObjectForkResult,
+  type CanonicalObjectMaterializationResult,
+  type CanonicalObjectNodeUpdater,
+  type CanonicalObjectTreeCloner,
+  type MaterializeCanonicalObjectInput
+} from './modify/memory'
+export {
+  canonicalMemoryDerivedFromId,
+  canonicalMemoryObjectId,
+  canonicalMemoryObjectPluginData,
+  canonicalMemorySourceNodeId,
+  searchBoardMemory,
+  searchMemory,
+  type BoardMemoryBoardResult,
+  type BoardMemoryObjectResult,
+  type BoardMemoryPlacement,
+  type BoardMemorySearchOptions,
+  type BoardMemorySearchResult,
+  type CanonicalMemoryObjectMetadata
+} from './read/memory'

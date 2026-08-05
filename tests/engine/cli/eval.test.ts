@@ -1,7 +1,13 @@
 import { expect, setDefaultTimeout, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+import { SceneGraph } from '@open-pencil/core'
+import { exportFigFile } from '@open-pencil/core/io/formats/fig'
+
+import evalCommand from '#cli/commands/eval'
 
 import { cliSourcePath, repoPath, requireBuiltWorkspacePackages } from '#tests/helpers/paths'
 import { heavy } from '#tests/helpers/test-utils'
@@ -12,6 +18,15 @@ setDefaultTimeout(30_000)
 
 const CLI = cliSourcePath('index.ts')
 const FIXTURE = repoPath('tests/fixtures/gold-preview.fig')
+
+async function makeHeadlessEvalFixture(): Promise<string> {
+  const graph = new SceneGraph()
+  const data = await exportFigFile(graph)
+  const directory = mkdtempSync(join(tmpdir(), 'openpencil-headless-eval-'))
+  const path = join(directory, 'headless-eval.fig')
+  writeFileSync(path, data)
+  return path
+}
 
 async function run(
   args: string[],
@@ -31,6 +46,29 @@ async function run(
 }
 
 heavy('eval CLI', () => {
+  test('requires an explicit file and exposes no live-Board target flags', async () => {
+    const omitted = await run(['eval', '--code', 'return 42'])
+    expect(omitted.exitCode).not.toBe(0)
+    expect(omitted.stderr).toContain('Missing required positional argument: FILE')
+
+    expect(evalCommand.args?.file).toMatchObject({
+      description: 'Document file path; live-app eval is disabled',
+      required: true,
+      type: 'positional'
+    })
+    const argumentNames = Object.keys(evalCommand.args ?? {})
+    expect(argumentNames).not.toContain('workspaceId')
+    expect(argumentNames).not.toContain('documentId')
+    expect(argumentNames).not.toContain('pageId')
+  })
+
+  test('keeps explicit headless file eval available after live-app eval is sealed', async () => {
+    const fixture = await makeHeadlessEvalFixture()
+    const { stdout, exitCode } = await run(['eval', fixture, '--code', 'return "headless-eval-ok"'])
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(stdout)).toBe('headless-eval-ok')
+  })
+
   test('returns page name', async () => {
     const { stdout, exitCode } = await run([
       'eval',

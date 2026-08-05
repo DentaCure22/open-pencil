@@ -10,6 +10,7 @@ import {
   useEditorStore
 } from '@/app/editor/active-store'
 import { loadFont } from '@/app/editor/fonts'
+import { createEditorHistoryDelegation } from '@/app/editor/session/history'
 import {
   createEditorComputedRefs,
   createEditorStoreModules,
@@ -45,6 +46,7 @@ export function createEditorStore(initialGraph?: SceneGraph) {
   const { selectedNodes, selectedNode, layerTree } = createEditorComputedRefs(editor, state)
 
   const modules = createEditorStoreModules(editor, graph, state, io, viewportSize)
+  const historyDelegation = createEditorHistoryDelegation()
 
   // ─── Public API ───────────────────────────────────────────────
   // Spread all core Editor methods, then override getters and add app-specific.
@@ -57,7 +59,14 @@ export function createEditorStore(initialGraph?: SceneGraph) {
     layerTree,
 
     // App-specific overrides and additions
-    ...modules
+    ...modules,
+    bindHistoryDelegate: historyDelegation.bind,
+    redoAction: () => {
+      if (!historyDelegation.run('redo')) editor.redoAction()
+    },
+    undoAction: () => {
+      if (!historyDelegation.run('undo')) editor.undoAction()
+    }
   }
 
   defineEditorStoreAccessors(store, editor)

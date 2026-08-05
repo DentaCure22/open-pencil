@@ -1,0 +1,44 @@
+[
+  {
+    "campaign_roster_id": "a26d95dae0cbf507813d3c01bd32207bcf868b1f229dc3217a5946354bd41135",
+    "config_id": "c9cd52aea1c4ec2caa4f6d2db54f4eda83e4fa93d1502e4bb2983daa6a63f1c7",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/001-parallel-082a-linked-recovery-2/events.jsonl",
+    "order": 0,
+    "run_id": "parallel-082a-linked-recovery-2",
+    "scenario_id": "DEV-PARALLEL-082-A-RECOVERY-2",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/001-parallel-082a-linked-recovery-2/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb364-9f0c-75c0-9fb5-6df869a305dc"
+  },
+  {
+    "campaign_roster_id": "a26d95dae0cbf507813d3c01bd32207bcf868b1f229dc3217a5946354bd41135",
+    "config_id": "8552ac64244997630efc83423ab429d798f6967089cc46bdd70a85ff4a37aae1",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/002-parallel-082b-linked-recovery-2/events.jsonl",
+    "order": 1,
+    "run_id": "parallel-082b-linked-recovery-2",
+    "scenario_id": "DEV-PARALLEL-082-B-RECOVERY-2",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/002-parallel-082b-linked-recovery-2/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb364-9f49-7cd3-834a-224f1f3df9c1"
+  },
+  {
+    "campaign_roster_id": "a26d95dae0cbf507813d3c01bd32207bcf868b1f229dc3217a5946354bd41135",
+    "config_id": "4c1fe2d1222d3917e9cedb92e50ec7cef2e64774aab4089e671db0ed53cae8c5",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/003-parallel-082c-linked-recovery-2/events.jsonl",
+    "order": 2,
+    "run_id": "parallel-082c-linked-recovery-2",
+    "scenario_id": "DEV-PARALLEL-082-C-RECOVERY-2",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-082-recovery-2/003-parallel-082c-linked-recovery-2/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb364-9f4b-7c52-bc78-b3404a889b9d"
+  }
+]

@@ -1,0 +1,520 @@
+import { computed, ref, shallowRef } from 'vue'
+
+import { IS_BROWSER } from '@open-pencil/core/constants'
+import { resolveTraceSpokenTurn } from '@open-pencil/core/rpc'
+
+import type { EditorStore } from '@/app/editor/session'
+import { readOpenPencilWorkspaceIdentity } from '@/app/workspace-document/identity'
+
+import { saveNarratedTraceRecord } from './history'
+import { scrubNarratedTraceQueryReceiptForMicTurns } from './retrieval'
+import { narratedTraceRuntimeTabBindingForStore } from './runtime-binding'
+import { narratedTraceSession } from './state'
+import type { NarratedTraceScope, NarratedTraceSession } from './types'
+
+const MIC_LANGUAGE = 'en-US'
+const MIC_RESTART_DELAY_MS = 250
+const MIC_TURN_RETENTION_MS = 15 * 60_000
+
+export type NarratedTraceMicPhase =
+  | 'checking'
+  | 'consent'
+  | 'denied'
+  | 'error'
+  | 'idle'
+  | 'listening'
+  | 'no-speech'
+  | 'unsupported'
+
+export type NarratedTraceMicLocality = 'browser-service' | 'local'
+
+export type NarratedTraceMicScope = NarratedTraceScope & {
+  workspaceId: string
+}
+
+export type NarratedTraceMicTurn = {
+  endedAt: string
+  endedAtEpochMs: number
+  endedAtMonotonicMs: number
+  expiresAtEpochMs: number
+  id: string
+  runtimeTabBindingId: string
+  scope: NarratedTraceMicScope
+  sequence: number
+  startedAt: string
+  startedAtEpochMs: number
+  startedAtMonotonicMs: number
+  text: string
+  timeOriginEpochMs: number
+}
+
+export type NarratedTraceMicTurnSelector = {
+  latest?: boolean
+  runtimeTabBindingId?: string
+  scope?: NarratedTraceScope
+  text?: string
+  turnId?: string
+}
+
+export type NarratedTraceMicTurnResolution =
+  | {
+      candidates: NarratedTraceMicTurn[]
+      reason: 'ambiguous_spoken_turn'
+      status: 'ambiguous'
+    }
+  | {
+      reason:
+        | 'invalid_spoken_turn_selector'
+        | 'spoken_turn_runtime_binding_unavailable'
+        | 'spoken_turn_scope_unavailable'
+      status: 'error'
+    }
+  | {
+      reason: 'spoken_turn_not_found'
+      status: 'empty'
+    }
+  | {
+      status: 'matched'
+      turn: NarratedTraceMicTurn
+    }
+
+type ClockSample = {
+  epochMs: number
+  monotonicMs: number
+  timeOriginEpochMs: number
+}
+
+export const narratedTraceMicPhase = ref<NarratedTraceMicPhase>('idle')
+export const narratedTraceMicLocality = ref<NarratedTraceMicLocality>('browser-service')
+export const narratedTraceMicError = ref<string | null>(null)
+export const narratedTraceMicInterimText = ref('')
+export const narratedTraceMicTurns = shallowRef<NarratedTraceMicTurn[]>([])
+
+export const narratedTraceMicDisclosure = computed(() =>
+  narratedTraceMicLocality.value === 'local'
+    ? 'Speech recognition stays on until you stop it. OpenPencil stores each transcript for 15 minutes, not audio.'
+    : 'Chrome may process speech over the network while the microphone is on. OpenPencil stores each transcript for 15 minutes, not audio.'
+)
+
+let pendingScope: NarratedTraceMicScope | null = null
+let pendingRuntimeTabBindingId: string | null = null
+let recognition: SpeechRecognition | null = null
+let recognitionRestartTimer: ReturnType<typeof setTimeout> | null = null
+let retentionTimer: ReturnType<typeof setTimeout> | null = null
+let sequence = 0
+let speechStartedAt: ClockSample | null = null
+let recognitionStartedAt: ClockSample | null = null
+let stopRequested = false
+let terminalRecognitionFailure = false
+
+function recognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (!IS_BROWSER) return null
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null
+}
+
+function exactScopeForStore(store: EditorStore): NarratedTraceMicScope | null {
+  const identity = readOpenPencilWorkspaceIdentity(store.graph)
+  const pageId = store.state.currentPageId
+  if (!identity || !pageId) return null
+  const page = store.graph.getNode(pageId)
+  return {
+    documentId: identity.documentId,
+    documentName: identity.documentName,
+    pageId,
+    pageName: page?.name,
+    workspaceId: identity.workspaceId
+  }
+}
+
+function sameExactScope(
+  left: NarratedTraceScope | null | undefined,
+  right: NarratedTraceScope | null | undefined
+) {
+  if (!left?.workspaceId || !right?.workspaceId) return false
+  return (
+    left.workspaceId === right.workspaceId &&
+    left.documentId === right.documentId &&
+    left.pageId === right.pageId
+  )
+}
+
+function clockSample(): ClockSample | null {
+  if (!IS_BROWSER) return null
+  const monotonicMs = globalThis.performance.now()
+  const timeOriginEpochMs = globalThis.performance.timeOrigin
+  if (!Number.isFinite(monotonicMs) || !Number.isFinite(timeOriginEpochMs)) return null
+  return {
+    epochMs: timeOriginEpochMs + monotonicMs,
+    monotonicMs,
+    timeOriginEpochMs
+  }
+}
+
+function clearRecognitionRestartTimer() {
+  if (recognitionRestartTimer) clearTimeout(recognitionRestartTimer)
+  recognitionRestartTimer = null
+}
+
+function clearRecognition() {
+  clearRecognitionRestartTimer()
+  recognition = null
+  pendingScope = null
+  pendingRuntimeTabBindingId = null
+  speechStartedAt = null
+  recognitionStartedAt = null
+  stopRequested = false
+  terminalRecognitionFailure = false
+  narratedTraceMicInterimText.value = ''
+}
+
+function scheduleRetention() {
+  if (retentionTimer) clearTimeout(retentionTimer)
+  retentionTimer = null
+  const nextExpiry = narratedTraceMicTurns.value.reduce(
+    (earliest, turn) => Math.min(earliest, turn.expiresAtEpochMs),
+    Number.POSITIVE_INFINITY
+  )
+  if (!Number.isFinite(nextExpiry)) return
+  retentionTimer = setTimeout(
+    () => {
+      retentionTimer = null
+      pruneNarratedTraceMicTurns()
+    },
+    Math.max(0, nextExpiry - Date.now())
+  )
+}
+
+function addTurn(turn: NarratedTraceMicTurn) {
+  narratedTraceMicTurns.value = [...narratedTraceMicTurns.value, turn]
+  scheduleRetention()
+}
+
+function sessionSpokenTurns(
+  session: NarratedTraceSession,
+  turns: readonly NarratedTraceMicTurn[]
+): NarratedTraceMicTurn[] {
+  if (!session.scope?.workspaceId) return []
+  const startedAt = Date.parse(session.startedAt)
+  if (!Number.isFinite(startedAt)) return []
+  return turns.filter(
+    (turn) => sameExactScope(turn.scope, session.scope) && turn.endedAtEpochMs >= startedAt
+  )
+}
+
+function finalizeTurn(store: EditorStore, text: string) {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  const start = speechStartedAt ?? recognitionStartedAt
+  const end = clockSample()
+  const currentScope = exactScopeForStore(store)
+  const currentRuntimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store)
+  if (
+    !compact ||
+    !start ||
+    !end ||
+    !pendingScope ||
+    !pendingRuntimeTabBindingId ||
+    !sameExactScope(pendingScope, currentScope) ||
+    pendingRuntimeTabBindingId !== currentRuntimeTabBindingId
+  ) {
+    narratedTraceMicPhase.value = 'error'
+    narratedTraceMicError.value =
+      currentScope && currentRuntimeTabBindingId
+        ? 'The spoken turn could not be aligned to the current runtime and Trace clock.'
+        : 'The Board or runtime tab changed before the spoken turn finished.'
+    return false
+  }
+
+  sequence += 1
+  const turn: NarratedTraceMicTurn = {
+    endedAt: new Date(end.epochMs).toISOString(),
+    endedAtEpochMs: end.epochMs,
+    endedAtMonotonicMs: end.monotonicMs,
+    expiresAtEpochMs: Date.now() + MIC_TURN_RETENTION_MS,
+    id: `spoken-turn-${globalThis.crypto.randomUUID()}`,
+    runtimeTabBindingId: pendingRuntimeTabBindingId,
+    scope: structuredClone(pendingScope),
+    sequence,
+    startedAt: new Date(start.epochMs).toISOString(),
+    startedAtEpochMs: start.epochMs,
+    startedAtMonotonicMs: start.monotonicMs,
+    text: compact,
+    timeOriginEpochMs: start.timeOriginEpochMs
+  }
+  addTurn(turn)
+  const traceSession = narratedTraceSession.value
+  const spokenTurns = traceSession
+    ? sessionSpokenTurns(traceSession, narratedTraceMicTurns.value)
+    : []
+  if (traceSession && spokenTurns.length > 0) {
+    void saveNarratedTraceRecord(traceSession, spokenTurns).catch((error: unknown) => {
+      console.warn(
+        '[Narrated Trace] Spoken turn persistence failed:',
+        error instanceof Error ? error.message : error
+      )
+    })
+  }
+  speechStartedAt = null
+  recognitionStartedAt = end
+  narratedTraceMicInterimText.value = ''
+  narratedTraceMicError.value = null
+  return true
+}
+
+function recognitionErrorMessage(event: SpeechRecognitionErrorEvent) {
+  if (event.error === 'not-allowed') {
+    return {
+      message: 'Microphone access was denied. Typed Chat remains available.',
+      phase: 'denied' as const
+    }
+  }
+  if (event.error === 'service-not-allowed') {
+    return {
+      message:
+        'The browser speech recognition service is unavailable. Typed Chat remains available.',
+      phase: 'error' as const
+    }
+  }
+  if (event.error === 'no-speech') {
+    return {
+      message: 'No speech detected yet. The microphone is still on.',
+      phase: 'listening' as const
+    }
+  }
+  return {
+    message: `Speech recognition stopped: ${event.message || event.error}`,
+    phase: 'error' as const
+  }
+}
+
+export function pruneNarratedTraceMicTurns(nowEpochMs = Date.now()) {
+  const expiredTurnIds = narratedTraceMicTurns.value
+    .filter((turn) => turn.expiresAtEpochMs <= nowEpochMs)
+    .map((turn) => turn.id)
+  narratedTraceMicTurns.value = narratedTraceMicTurns.value.filter(
+    (turn) => turn.expiresAtEpochMs > nowEpochMs
+  )
+  scrubNarratedTraceQueryReceiptForMicTurns(expiredTurnIds)
+  scheduleRetention()
+}
+
+export function clearNarratedTraceMicTurns() {
+  narratedTraceMicTurns.value = []
+  scrubNarratedTraceQueryReceiptForMicTurns()
+  if (retentionTimer) clearTimeout(retentionTimer)
+  retentionTimer = null
+}
+
+export function removeNarratedTraceMicTurn(turnId: string) {
+  narratedTraceMicTurns.value = narratedTraceMicTurns.value.filter((turn) => turn.id !== turnId)
+  scrubNarratedTraceQueryReceiptForMicTurns([turnId])
+  scheduleRetention()
+}
+
+export function clearNarratedTraceMicTurnsOutsideScope(scope: NarratedTraceScope) {
+  const removedTurnIds = narratedTraceMicTurns.value
+    .filter((turn) => !sameExactScope(turn.scope, scope))
+    .map((turn) => turn.id)
+  narratedTraceMicTurns.value = narratedTraceMicTurns.value.filter((turn) =>
+    sameExactScope(turn.scope, scope)
+  )
+  scrubNarratedTraceQueryReceiptForMicTurns(removedTurnIds)
+  scheduleRetention()
+}
+
+export async function prepareNarratedTraceMic(store: EditorStore) {
+  if (narratedTraceMicPhase.value === 'listening') return false
+  narratedTraceMicError.value = null
+  narratedTraceMicPhase.value = 'checking'
+  pendingScope = exactScopeForStore(store)
+  pendingRuntimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store) ?? null
+  if (!pendingScope || !pendingRuntimeTabBindingId) {
+    pendingScope = null
+    pendingRuntimeTabBindingId = null
+    narratedTraceMicPhase.value = 'error'
+    narratedTraceMicError.value =
+      'Mic-linked Trace requires an exact runtime, document tab, workspace, content document, and Board.'
+    return false
+  }
+
+  const constructor = recognitionConstructor()
+  if (!constructor) {
+    narratedTraceMicPhase.value = 'unsupported'
+    narratedTraceMicError.value = 'Speech recognition is unavailable. Typed Chat remains available.'
+    return false
+  }
+
+  narratedTraceMicLocality.value = 'browser-service'
+  if (constructor.available) {
+    try {
+      const availability = await constructor.available({
+        langs: [MIC_LANGUAGE],
+        processLocally: true
+      })
+      if (availability === 'available') narratedTraceMicLocality.value = 'local'
+    } catch {
+      narratedTraceMicLocality.value = 'browser-service'
+    }
+  }
+  narratedTraceMicPhase.value = 'consent'
+  return true
+}
+
+export function cancelNarratedTraceMicConsent() {
+  if (narratedTraceMicPhase.value !== 'consent') return
+  pendingScope = null
+  pendingRuntimeTabBindingId = null
+  narratedTraceMicError.value = null
+  narratedTraceMicPhase.value = 'idle'
+}
+
+export function startNarratedTraceMic(store: EditorStore) {
+  if (narratedTraceMicPhase.value !== 'consent' || !pendingScope || !pendingRuntimeTabBindingId) {
+    return false
+  }
+  const currentScope = exactScopeForStore(store)
+  const currentRuntimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store)
+  if (
+    !sameExactScope(pendingScope, currentScope) ||
+    pendingRuntimeTabBindingId !== currentRuntimeTabBindingId
+  ) {
+    narratedTraceMicPhase.value = 'error'
+    narratedTraceMicError.value =
+      'The Board or runtime tab changed before microphone consent completed.'
+    pendingScope = null
+    pendingRuntimeTabBindingId = null
+    return false
+  }
+
+  const constructor = recognitionConstructor()
+  const clock = clockSample()
+  if (!constructor || !clock) {
+    narratedTraceMicPhase.value = 'unsupported'
+    narratedTraceMicError.value = 'Speech recognition or its monotonic clock is unavailable.'
+    return false
+  }
+
+  const next = new constructor()
+  next.continuous = true
+  next.interimResults = true
+  next.lang = MIC_LANGUAGE
+  next.maxAlternatives = 1
+  next.processLocally = narratedTraceMicLocality.value === 'local'
+
+  recognitionStartedAt = clock
+  speechStartedAt = null
+  stopRequested = false
+  terminalRecognitionFailure = false
+  recognition = next
+  narratedTraceMicInterimText.value = ''
+  narratedTraceMicError.value = null
+  narratedTraceMicPhase.value = 'listening'
+
+  next.addEventListener('speechstart', () => {
+    if (recognition !== next) return
+    speechStartedAt ??= clockSample()
+    narratedTraceMicError.value = null
+  })
+  next.onresult = (event) => {
+    if (recognition !== next) return
+    const interim: string[] = []
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index]
+      const transcript = result[0]?.transcript.trim() ?? ''
+      if (!transcript) continue
+      if (result.isFinal) {
+        if (finalizeTurn(store, transcript)) continue
+        terminalRecognitionFailure = true
+        try {
+          next.abort()
+        } catch {
+          clearRecognition()
+        }
+        return
+      }
+      interim.push(transcript)
+    }
+    narratedTraceMicInterimText.value = interim.join(' ')
+  }
+  next.onerror = (event) => {
+    if (recognition !== next || (stopRequested && event.error === 'aborted')) return
+    const failure = recognitionErrorMessage(event)
+    narratedTraceMicPhase.value = failure.phase
+    narratedTraceMicError.value = failure.message
+    terminalRecognitionFailure = failure.phase !== 'listening'
+  }
+  next.onend = () => {
+    if (recognition !== next) return
+    if (stopRequested || terminalRecognitionFailure) {
+      clearRecognition()
+      return
+    }
+    recognitionStartedAt = clockSample()
+    speechStartedAt = null
+    recognitionRestartTimer = setTimeout(() => {
+      recognitionRestartTimer = null
+      if (recognition !== next || stopRequested || terminalRecognitionFailure) return
+      try {
+        next.start()
+      } catch (error) {
+        narratedTraceMicPhase.value = 'error'
+        narratedTraceMicError.value =
+          error instanceof Error ? error.message : 'Speech recognition could not restart.'
+        clearRecognition()
+      }
+    }, MIC_RESTART_DELAY_MS)
+  }
+
+  try {
+    next.start()
+    return true
+  } catch (error) {
+    narratedTraceMicPhase.value = 'error'
+    narratedTraceMicError.value =
+      error instanceof Error ? error.message : 'Speech recognition could not start.'
+    clearRecognition()
+    return false
+  }
+}
+
+export function stopNarratedTraceMic() {
+  if (narratedTraceMicPhase.value !== 'listening' || !recognition) return
+  stopRequested = true
+  clearRecognitionRestartTimer()
+  narratedTraceMicInterimText.value = ''
+  narratedTraceMicError.value = null
+  narratedTraceMicPhase.value = 'idle'
+  try {
+    recognition.stop()
+  } catch {
+    try {
+      recognition.abort()
+    } catch (error) {
+      console.warn('Narrated Trace microphone could not abort after Stop:', error)
+    }
+    clearRecognition()
+  }
+}
+
+export function disposeNarratedTraceMic() {
+  if (recognition) {
+    stopRequested = true
+    terminalRecognitionFailure = true
+    try {
+      recognition.abort()
+    } catch (error) {
+      console.warn('Narrated Trace microphone could not abort during teardown:', error)
+    }
+  }
+  clearRecognition()
+  clearNarratedTraceMicTurns()
+  narratedTraceMicError.value = null
+  narratedTraceMicPhase.value = 'idle'
+}
+
+export function resolveNarratedTraceMicTurn(
+  selector: NarratedTraceMicTurnSelector,
+  turns: readonly NarratedTraceMicTurn[] = narratedTraceMicTurns.value,
+  nowEpochMs = Date.now()
+): NarratedTraceMicTurnResolution {
+  return resolveTraceSpokenTurn(selector, turns, { nowEpochMs }) as NarratedTraceMicTurnResolution
+}

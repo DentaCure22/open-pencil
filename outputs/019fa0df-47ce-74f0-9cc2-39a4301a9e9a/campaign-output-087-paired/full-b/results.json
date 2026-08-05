@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "cf8f973d2807573c3af732063ac6bb8fbfa911aff7ef0be40f8d8ae4d3fe5182",
+    "config_id": "179ab31419ffd195b42b3eaee8541015fd326c669ff79319231283490eade2bf",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-output-087-paired/full-b/001-output-087-full-b-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "output-087-full-b-first-attempt",
+    "scenario_id": "DEV-OUTPUT-087-FULL-B",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-output-087-paired/full-b/001-output-087-full-b-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb3bf-8ecd-7f30-a450-e53587cc1190"
+  }
+]

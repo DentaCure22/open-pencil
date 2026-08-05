@@ -1,4 +1,6 @@
-if (import.meta.env.DEV) {
+// React Grab installs a page-level pointer overlay. Keep it opt-in so normal
+// development sessions preserve direct canvas interaction.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('react-grab')) {
   void import('react-grab')
 }
 
@@ -8,7 +10,6 @@ import { createApp } from 'vue'
 import './app.css'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { preloadFonts } from '@/app/editor/fonts'
-import { canonicalSmylrOpenPencilUrlFor } from '@/app/smylr-live-inspector/frame-origin'
 import { IS_BROWSER, IS_TAURI } from '@/constants'
 
 import App from './App.vue'
@@ -18,16 +19,9 @@ declare const __SMYLR_OPENPENCIL_EMBED__: boolean | undefined
 
 // Smylr /open-pencil embed: never register a service worker (stale caches).
 const smylrEmbed = __SMYLR_OPENPENCIL_EMBED__ !== undefined && __SMYLR_OPENPENCIL_EMBED__
-const canonicalOpenPencilUrl =
-  smylrEmbed && IS_BROWSER ? canonicalSmylrOpenPencilUrlFor(window.location.href) : null
-
-if (canonicalOpenPencilUrl && canonicalOpenPencilUrl !== window.location.href) {
-  window.location.replace(canonicalOpenPencilUrl)
-} else {
-  preloadFonts()
-  const head = createHead()
-  createApp(App).use(router).use(head).mount('#app')
-}
+preloadFonts()
+const head = createHead()
+createApp(App).use(router).use(head).mount('#app')
 
 if (smylrEmbed && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   void navigator.serviceWorker.getRegistrations().then((regs) => {

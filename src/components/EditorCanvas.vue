@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from 'vue'
+import { computed, ref, type Component } from 'vue'
 import {
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_X,
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_Y
@@ -21,39 +21,30 @@ import {
   useTextEdit
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
+import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useAssetVariantDrop } from '@/app/editor/assets/drag'
 import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaboration-awareness'
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
-import { isHtmlBoardFrame } from '@/app/html-board/workspace'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
-import { mediaEvidenceSource } from '@/app/media-evidence/source'
-import { sourceObjectSource } from '@/app/source-object/source'
-import { spatialMediaSource } from '@/app/spatial-media/source'
-import {
-  clearLiveInspectorSelection,
-  liveInspectorActiveFrameId,
-  liveInspectorPendingSelectedId,
-  liveInspectorSelectedId,
-  liveInspectorSelectionEpoch
-} from '@/app/smylr-live-inspector/session'
-import {
-  findCurrentSmylrLiveAppFrame,
-  isSmylrLiveAppFrameNode
-} from '@/app/smylr-production/workspace'
+import { isSmylrFlowPageNode } from '@/app/smylr-production/workspace'
 import IconLucidePanelBottom from '~icons/lucide/panel-bottom'
 import IconLucidePanelLeft from '~icons/lucide/panel-left'
 import IconLucidePanelRight from '~icons/lucide/panel-right'
 import IconLucidePanelTop from '~icons/lucide/panel-top'
 import AnimatedDitherBackground from './canvas/AnimatedDitherBackground.vue'
+import BoardExperienceRuntimeHost from './canvas/BoardExperienceRuntimeHost.vue'
 import CanvasMenu from './canvas/CanvasMenu.vue'
-import HtmlBoardEmbeds from './canvas/HtmlBoardEmbeds.vue'
+import CodeObjectOverlays from './canvas/CodeObjectOverlays.vue'
+import ContainerNavigationStatus from './canvas/ContainerNavigationStatus.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
+import MarkdownDocumentOverlays from './canvas/MarkdownDocumentOverlays.vue'
+import MermaidSvgOverlays from './canvas/MermaidSvgOverlays.vue'
+import ObjectGraphRuntimeHost from './canvas/ObjectGraphRuntimeHost.vue'
 import NarratedTraceAnnotationOverlay from './narrated-trace/NarratedTraceAnnotationOverlay.vue'
 import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
-import SmylrLiveAppEmbed from './canvas/SmylrLiveAppEmbed.vue'
-import SmylrPooledLiveAppEmbeds from './canvas/SmylrPooledLiveAppEmbeds.vue'
 import SourceObjectOverlays from './canvas/SourceObjectOverlays.vue'
 import ScrubInput from './inputs/ScrubInput.vue'
 
@@ -68,12 +59,16 @@ const collab = useCollabInjected()
 const canvasAreaRef = ref<HTMLDivElement | null>(null)
 const sceneCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const usesQuietCanvasBackground = computed(() =>
+  isSmylrFlowPageNode(store.graph.getNode(store.state.currentPageId))
+)
 
 const { updateCursor } = useCanvasCollaborationAwareness(store, collab)
 const { selectAtContextPoint } = createCanvasContextSelection(canvasRef, store)
 
 useCanvas(sceneCanvasRef, store, {
   layer: 'scene',
+  preserveDrawingBuffer: true,
   showRulers: false,
   onReady: fadeOutGlobalLoader
 })
@@ -81,7 +76,8 @@ const { hitTestSectionTitle, hitTestComponentLabel, hitTestFrameTitle } = useCan
   canvasRef,
   store,
   {
-    layer: 'overlays'
+    layer: 'overlays',
+    ownsSelectionChrome: (nodeId) => isCodeObjectFrame(store.graph.getNode(nodeId))
   }
 )
 const {
@@ -96,7 +92,8 @@ const {
   hitTestSectionTitle,
   hitTestComponentLabel,
   hitTestFrameTitle,
-  updateCursor
+  updateCursor,
+  editorViewportInsets
 )
 
 useTextEdit(canvasRef, store)
@@ -136,57 +133,6 @@ const paddingEditorIcon = computed(() => {
 })
 
 const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.value))
-
-function clearLiveContainerHighlight() {
-  if (!liveInspectorSelectedId.value && !liveInspectorPendingSelectedId.value) return
-  clearLiveInspectorSelection()
-}
-
-function claimLiveFrameSelection() {
-  const id = liveInspectorSelectedId.value ?? liveInspectorPendingSelectedId.value
-  if (!id) return
-  const activeFrameId = liveInspectorActiveFrameId.value
-  const activeFrame = activeFrameId ? store.graph.getNode(activeFrameId) : null
-  const liveFrame =
-    activeFrame && isSmylrLiveAppFrameNode(activeFrame)
-      ? activeFrame
-      : findCurrentSmylrLiveAppFrame(store)
-  if (!liveFrame) return
-  // Always select the live frame so Design shows the live inspector even after a
-  // native pasted node was selected (same live id no longer silently no-ops).
-  if (store.state.selectedIds.size !== 1 || !store.state.selectedIds.has(liveFrame.id)) {
-    store.select([liveFrame.id])
-  }
-  requestAnimationFrame(() => canvasRef.value?.focus({ preventScroll: true }))
-}
-
-watch(
-  [liveInspectorSelectedId, liveInspectorPendingSelectedId, liveInspectorSelectionEpoch],
-  () => {
-    claimLiveFrameSelection()
-  }
-)
-
-const prefersNativeHitTarget = computed(() =>
-  [...store.state.selectedIds].some((id) => {
-    const node = store.graph.getNode(id)
-    return Boolean(
-      node &&
-      !isSmylrLiveAppFrameNode(node) &&
-      !isHtmlBoardFrame(node) &&
-      !mediaEvidenceSource(node) &&
-      !sourceObjectSource(node) &&
-      !spatialMediaSource(node)
-    )
-  })
-)
-// Interaction canvas sits under the live iframe (z-5) for live select hits falling through
-// pe-none, and rises above it when a native pasted node needs hit-testing.
-const interactionCanvasClass = computed(() =>
-  prefersNativeHitTarget.value
-    ? 'absolute inset-0 z-[6] block size-full touch-none outline-none'
-    : 'absolute inset-0 z-[2] block size-full touch-none outline-none'
-)
 </script>
 
 <template>
@@ -205,28 +151,33 @@ const interactionCanvasClass = computed(() =>
         @dragover="onAssetVariantDragOver"
         @drop="onAssetVariantDrop"
       >
-        <!-- Scene stays transparent so the dither can sit behind native objects; live iframe is z-[5]. -->
+        <!-- Scene stays transparent so the dither can sit behind native objects. -->
         <canvas
           ref="sceneCanvasRef"
           data-test-id="scene-canvas-element"
           aria-hidden="true"
           class="pointer-events-none absolute inset-0 z-[1] size-full outline-none"
         />
-        <AnimatedDitherBackground :presentation="ditherPresentation" />
+        <AnimatedDitherBackground
+          :presentation="ditherPresentation"
+          :quiet="usesQuietCanvasBackground"
+        />
         <canvas
           ref="canvasRef"
           data-test-id="canvas-element"
           tabindex="-1"
           :style="{ cursor }"
-          :class="interactionCanvasClass"
-          @pointerdown="clearLiveContainerHighlight"
+          class="absolute inset-0 z-[2] block size-full touch-none outline-none"
         />
         <MediaEvidenceOverlays />
         <SourceObjectOverlays />
-        <SmylrLiveAppEmbed />
-        <SmylrPooledLiveAppEmbeds />
+        <MarkdownDocumentOverlays />
+        <MermaidSvgOverlays />
+        <CodeObjectOverlays />
+        <BoardExperienceRuntimeHost />
+        <ObjectGraphRuntimeHost />
+        <ContainerNavigationStatus />
         <SpatialMediaOverlays />
-        <HtmlBoardEmbeds />
         <NarratedTraceAnnotationOverlay />
         <Transition
           enter-active-class="transition-opacity duration-150"

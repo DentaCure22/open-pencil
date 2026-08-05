@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "51fbdf5f3af335f2ce3e41413bd763d14b0bc0fb21d017f530a48ba3b7e66a9d",
+    "config_id": "14b5e90bbafd5f5470bde2113765e4f05111e3372e1cf30b80e8cc8e58955264",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-088-recovery/001-parallel-088c-linked-recovery-1/events.jsonl",
+    "order": 0,
+    "run_id": "parallel-088c-linked-recovery-1",
+    "scenario_id": "DEV-PARALLEL-088-C-RECOVERY-1",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-parallel-088-recovery/001-parallel-088c-linked-recovery-1/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb3d4-902b-7f11-a9fc-1c5b33a81f30"
+  }
+]

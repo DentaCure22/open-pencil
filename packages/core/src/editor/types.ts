@@ -17,7 +17,6 @@ import type { TextEditor } from '#core/text/editor'
 
 export type Tool =
   | 'SELECT'
-  | 'SMYLR_CONTAINER'
   | 'FRAME'
   | 'SECTION'
   | 'RECTANGLE'
@@ -91,8 +90,10 @@ export interface EditorState {
 export interface EditorEvents extends SceneGraphEvents {
   'render:requested': (versions: { renderVersion: number; sceneVersion: number }) => void
   'repaint:requested': (versions: { renderVersion: number; sceneVersion: number }) => void
+  'overlay:requested': (versions: { renderVersion: number; sceneVersion: number }) => void
   'graph:replaced': (graph: SceneGraph) => void
   'selection:changed': (selectedIds: string[], previousIds: string[]) => void
+  'hover:changed': (nodeId: string | null, previousNodeId: string | null) => void
   'tool:changed': (tool: Tool, previousTool: Tool) => void
   'page:changed': (pageId: string, previousPageId: string) => void
   'viewport:changed': (
@@ -123,6 +124,7 @@ export interface EditorContext {
   getTextEditor: () => TextEditor | null
   requestRender: () => void
   requestRepaint: () => void
+  requestOverlayRepaint: () => void
   emitEditorEvent: <K extends EditorEventName>(
     event: K,
     ...args: Parameters<EditorEvents[K]>

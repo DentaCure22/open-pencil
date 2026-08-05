@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { usePreferredReducedMotion } from '@vueuse/core'
 import { createDitheredWaves } from 'ditherwave/vanilla'
 import { onMounted, onUnmounted, useTemplateRef, watch } from 'vue'
 
@@ -9,12 +8,15 @@ import { useAppTheme } from '@/app/shell/theme'
 
 type DitherPresentation = 'overlay' | 'surface'
 
-const { presentation = 'surface' } = defineProps<{
+const DITHER_MAX_FPS = 15
+const DITHER_PIXEL_RATIO = 0.5
+
+const { presentation = 'surface', quiet = false } = defineProps<{
   presentation?: DitherPresentation
+  quiet?: boolean
 }>()
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
-const reducedMotion = usePreferredReducedMotion()
 const { resolvedTheme } = useAppTheme()
 
 let waves: DitheredWavesHandle | null = null
@@ -43,19 +45,17 @@ onMounted(() => {
     mode: 'bayer',
     matrixSize: 8,
     waveSpeed: 0.035,
-    pixelSize: 3,
-    disableAnimation: reducedMotion.value === 'reduce',
+    pixelSize: 1,
+    disableAnimation: false,
     enableMouseInteraction: false,
-    pixelRatio: 1,
+    maxFps: DITHER_MAX_FPS,
+    pixelRatio: DITHER_PIXEL_RATIO,
     ...themeOptions(resolvedTheme.value)
   })
 })
 
-watch([resolvedTheme, reducedMotion], ([theme, motion]) => {
-  waves?.setOptions({
-    ...themeOptions(theme),
-    disableAnimation: motion === 'reduce'
-  })
+watch(resolvedTheme, (theme) => {
+  waves?.setOptions(themeOptions(theme))
 })
 
 onUnmounted(() => {
@@ -69,16 +69,20 @@ onUnmounted(() => {
     class="pointer-events-none absolute inset-0 overflow-hidden forced-colors:hidden"
     :class="presentation === 'surface' ? 'z-[3] bg-canvas' : 'z-0 bg-transparent'"
     data-test-id="animated-dither-background"
+    data-animation="continuous"
+    :data-max-fps="DITHER_MAX_FPS"
     :data-presentation="presentation"
     aria-hidden="true"
   >
     <canvas
       ref="canvas"
-      class="block size-full"
+      class="block size-full [image-rendering:pixelated]"
       :class="
-        presentation === 'surface'
-          ? 'opacity-[0.22] [[data-theme=dark]_&]:opacity-[0.62]'
-          : 'opacity-10 [[data-theme=dark]_&]:opacity-[0.19]'
+        quiet
+          ? 'opacity-[0.015] [[data-theme=dark]_&]:opacity-[0.03]'
+          : presentation === 'surface'
+            ? 'opacity-[0.22] [[data-theme=dark]_&]:opacity-[0.62]'
+            : 'opacity-10 [[data-theme=dark]_&]:opacity-[0.19]'
       "
     />
     <div

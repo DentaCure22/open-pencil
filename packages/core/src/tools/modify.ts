@@ -1,6 +1,16 @@
 export { setEffects } from './modify/effects'
 export { setMinMax, setOpacity, setRadius, setRotation } from './modify/geometry'
 export { setConstraints, setLayout, setLayoutChild } from './modify/layout'
+export {
+  canonicalMemoryPeerNodes,
+  forkCanonicalObject,
+  materializeCanonicalObject,
+  type CanonicalObjectForkResult,
+  type CanonicalObjectMaterializationResult,
+  type CanonicalObjectNodeUpdater,
+  type CanonicalObjectTreeCloner,
+  type MaterializeCanonicalObjectInput
+} from './modify/memory'
 export { setFill, setImageFill, setStroke } from './modify/paint'
 export { setBlend, setLocked, setStrokeAlign, setVisible } from './modify/state'
 export { setFont, setFontRange, setText, setTextProperties, setTextResize } from './modify/text'

@@ -13,7 +13,10 @@ import {
   FLASH_OVERSHOOT,
   FLASH_RELEASE_MS,
   LAYOUT_INDICATOR_STROKE,
-  MARQUEE_FILL_ALPHA
+  MARQUEE_CORNER_RADIUS,
+  MARQUEE_FILL_ALPHA,
+  MARQUEE_STROKE_ALPHA,
+  MARQUEE_STROKE_WIDTH
 } from '#core/constants'
 
 export function drawSnapGuides(r: SkiaRenderer, canvas: Canvas, guides?: SnapGuide[]): void {
@@ -42,10 +45,15 @@ export function drawMarquee(r: SkiaRenderer, canvas: Canvas, marquee?: Rect | nu
   const x2 = (marquee.x + marquee.width) * r.zoom + r.panX
   const y2 = (marquee.y + marquee.height) * r.zoom + r.panY
   const rect = r.ck.LTRBRect(x1, y1, x2, y2)
+  const roundedRect = r.ck.RRectXY(rect, MARQUEE_CORNER_RADIUS, MARQUEE_CORNER_RADIUS)
 
   r.auxFill.setColor(r.selColor(MARQUEE_FILL_ALPHA))
-  canvas.drawRect(rect, r.auxFill)
-  canvas.drawRect(rect, r.selectionPaint)
+  canvas.drawRRect(roundedRect, r.auxFill)
+
+  r.auxStroke.setStrokeWidth(MARQUEE_STROKE_WIDTH)
+  r.auxStroke.setColor(r.selColor(MARQUEE_STROKE_ALPHA))
+  r.auxStroke.setPathEffect(null)
+  canvas.drawRRect(roundedRect, r.auxStroke)
 }
 
 export function drawFlashes(r: SkiaRenderer, canvas: Canvas, graph: SceneGraph): void {

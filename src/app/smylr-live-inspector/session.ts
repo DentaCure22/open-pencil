@@ -1,4 +1,7 @@
+/* eslint-disable max-lines -- Security validation, session state, and preview history share one protocol boundary. */
 import { computed, ref, shallowRef } from 'vue'
+
+import { IS_BROWSER } from '@/constants'
 
 import { readCacheJson, writeCacheJson } from '../cache'
 import type {
@@ -13,7 +16,9 @@ import { type LiveInspectorPatchDraft, type LiveInspectorTokenPatch } from './pa
 export const SMYLR_OPENPENCIL_INSPECTOR_MESSAGE = 'SMYLR_OPENPENCIL_INSPECTOR_V1'
 
 export type SmylrOpenPencilInspectorAction =
+  | 'exit-interact'
   | 'hover'
+  | 'interaction-start'
   | 'mode'
   | 'ready'
   | 'select'
@@ -41,6 +46,7 @@ export type SmylrOpenPencilInspectorMessage = {
     width: number
   }
   route?: string
+  runtimeInstanceId?: string
   selectedId?: string
   selectedRect?: SmylrLiveContainerRect
 }
@@ -53,10 +59,12 @@ export type SmylrOpenPencilInspectorCommand = {
     | 'request-tree'
     | 'select-at-point'
     | 'select-node'
+    | 'set-runtime-activity'
     | 'set-interaction-mode'
   kind: typeof SMYLR_OPENPENCIL_INSPECTOR_MESSAGE
   mode?: LiveInspectorInteractionMode
   nodeId?: string
+  runtimeActivity?: 'active' | 'passive'
   x?: number
   y?: number
   styles?: Record<string, string>
@@ -74,7 +82,7 @@ export const liveInspectorAuthHref = ref<string | null>(null)
 export const liveInspectorAuthStatus = ref<LiveInspectorAuthStatus>('unknown')
 export const liveInspectorFrameSrc = ref<string | null>(null)
 export const liveInspectorHoveredId = ref<string | null>(null)
-export const liveInspectorInteractionMode = ref<LiveInspectorInteractionMode>('interact')
+export const liveInspectorInteractionMode = ref<LiveInspectorInteractionMode>('frame')
 export const liveInspectorPatchDrafts = shallowRef<Map<string, LiveInspectorPatchDraft>>(new Map())
 type LiveInspectorDraftHistoryEntry = {
   label: string
@@ -117,11 +125,19 @@ export const liveInspectorPatchDraft = computed(() => {
   const selectedId = liveInspectorSelectedId.value
   return selectedId ? (liveInspectorPatchDrafts.value.get(selectedId) ?? null) : null
 })
+export type LiveInspectorDirectCommandDispatcher = (
+  command: Omit<SmylrOpenPencilInspectorCommand, 'kind'>
+) => boolean
+const liveInspectorDirectCommandTarget = shallowRef<{
+  dispatch: LiveInspectorDirectCommandDispatcher
+  frameId: string
+} | null>(null)
 const liveInspectorCommandTarget = shallowRef<{
   origin: string
   target: Window
 } | null>(null)
 let liveInspectorPreviewReturnMode: LiveInspectorInteractionMode = 'select'
+let requestedLiveInspectorInteractionMode: LiveInspectorInteractionMode = 'frame'
 let restoredDraftRoute: string | null = null
 let pendingDraftReplay = false
 let pendingRestoredDrafts: LiveInspectorPatchDraft[] = []
@@ -224,12 +240,9 @@ function remapRestoredDraft(draft: LiveInspectorPatchDraft, document: SmylrLiveC
     if (sourceKey && sourceIdentity(node.source) === sourceKey) sourceMatches.push(node)
     if (draft.note && node.label === draft.note) labelMatches.push(node)
   })
-  const match =
-    sourceMatches.length === 1
-      ? sourceMatches[0]
-      : labelMatches.length === 1
-        ? labelMatches[0]
-        : null
+  let match: SmylrLiveContainerNode | null = null
+  if (sourceMatches.length === 1) match = sourceMatches[0] ?? null
+  else if (labelMatches.length === 1) match = labelMatches[0] ?? null
   return match
     ? copyLiveInspectorPatchDraft({
         ...draft,
@@ -262,12 +275,38 @@ const MAX_INSPECTOR_PAGE_FACE_DATA_URL_LENGTH = 5_000_000
 const MAX_INSPECTOR_PAGES = 32
 
 const INSPECTOR_MESSAGE_KEYS = {
-  hover: new Set(['action', 'document', 'hoveredId', 'kind', 'selectedId', 'selectedRect']),
-  mode: new Set(['action', 'kind', 'mode']),
-  ready: new Set(['action', 'auth', 'document', 'kind', 'mode', 'route']),
-  select: new Set(['action', 'document', 'hoveredId', 'kind', 'selectedId', 'selectedRect']),
-  snapshot: new Set(['action', 'kind', 'pageFace']),
-  tree: new Set(['action', 'document', 'hoveredId', 'kind', 'selectedId', 'selectedRect'])
+  'exit-interact': new Set(['action', 'kind', 'runtimeInstanceId']),
+  hover: new Set([
+    'action',
+    'document',
+    'hoveredId',
+    'kind',
+    'runtimeInstanceId',
+    'selectedId',
+    'selectedRect'
+  ]),
+  'interaction-start': new Set(['action', 'kind', 'runtimeInstanceId']),
+  mode: new Set(['action', 'kind', 'mode', 'runtimeInstanceId']),
+  ready: new Set(['action', 'auth', 'document', 'kind', 'mode', 'route', 'runtimeInstanceId']),
+  select: new Set([
+    'action',
+    'document',
+    'hoveredId',
+    'kind',
+    'runtimeInstanceId',
+    'selectedId',
+    'selectedRect'
+  ]),
+  snapshot: new Set(['action', 'kind', 'pageFace', 'runtimeInstanceId']),
+  tree: new Set([
+    'action',
+    'document',
+    'hoveredId',
+    'kind',
+    'runtimeInstanceId',
+    'selectedId',
+    'selectedRect'
+  ])
 } satisfies Record<SmylrOpenPencilInspectorAction, Set<string>>
 
 type ClearLiveInspectorDocumentOptions = {
@@ -729,6 +768,7 @@ function isLiveContainerPage(value: unknown) {
   )
 }
 
+// eslint-disable-next-line complexity -- Keep packet bounds auditable in one validator.
 function isLiveContainerDocument(value: unknown): value is SmylrLiveContainerDocument {
   if (!isRecord(value)) return false
   if (
@@ -781,7 +821,9 @@ function isLiveContainerDocument(value: unknown): value is SmylrLiveContainerDoc
 
 function isInspectorAction(value: unknown): value is SmylrOpenPencilInspectorAction {
   return (
+    value === 'exit-interact' ||
     value === 'hover' ||
+    value === 'interaction-start' ||
     value === 'mode' ||
     value === 'ready' ||
     value === 'select' ||
@@ -790,6 +832,7 @@ function isInspectorAction(value: unknown): value is SmylrOpenPencilInspectorAct
   )
 }
 
+// eslint-disable-next-line complexity -- Protocol actions deliberately validate distinct payloads.
 export function isSmylrOpenPencilInspectorMessage(
   value: unknown
 ): value is SmylrOpenPencilInspectorMessage {
@@ -802,6 +845,10 @@ export function isSmylrOpenPencilInspectorMessage(
     return false
   }
 
+  if (value.runtimeInstanceId !== undefined && !isBoundedString(value.runtimeInstanceId, 128)) {
+    return false
+  }
+  if (value.action === 'exit-interact' || value.action === 'interaction-start') return true
   if (value.action === 'mode') return isLiveInspectorInteractionMode(value.mode)
   if (value.action === 'snapshot') return isLiveContainerPageFace(value.pageFace)
   if (value.action === 'ready') {
@@ -865,14 +912,18 @@ function receiveLiveInspectorDocument(message: SmylrOpenPencilInspectorMessage) 
   setLiveInspectorRoute(document.route)
 }
 
+// eslint-disable-next-line complexity -- One reducer preserves ordering across packet action variants.
 export function receiveLiveInspectorMessage(message: SmylrOpenPencilInspectorMessage) {
   if (message.auth?.href) liveInspectorAuthHref.value = message.auth.href
   if (message.auth?.status) liveInspectorAuthStatus.value = message.auth.status
-  // The parent editor owns the active tool during iframe startup. A `ready`
-  // packet reports the iframe's local default and must not silently switch a
-  // freshly selected Container tool back to Interact. Only an explicit mode
-  // acknowledgement may update the shared editor state.
-  if (message.action === 'mode' && message.mode) {
+  // The parent editor owns the active tool. Accept only the acknowledgement
+  // for its latest request so a delayed iframe packet cannot reactivate an
+  // earlier mode after the user has moved on.
+  if (
+    message.action === 'mode' &&
+    message.mode &&
+    message.mode === requestedLiveInspectorInteractionMode
+  ) {
     liveInspectorInteractionMode.value = message.mode
   }
   if (message.route) setLiveInspectorRoute(message.route)
@@ -941,6 +992,7 @@ export function reloadLiveInspectorFrame() {
 }
 
 export function setLiveInspectorInteractionMode(mode: LiveInspectorInteractionMode) {
+  requestedLiveInspectorInteractionMode = mode
   liveInspectorInteractionMode.value = mode
   postLiveInspectorCommand({ action: 'set-interaction-mode', mode })
 }
@@ -1196,9 +1248,23 @@ export function setLiveInspectorCommandTarget(target: Window | null, targetOrigi
   }
 }
 
+export function setLiveInspectorDirectCommandTarget(
+  frameId: string,
+  dispatch: LiveInspectorDirectCommandDispatcher | null
+) {
+  if (!dispatch) {
+    if (liveInspectorDirectCommandTarget.value?.frameId === frameId) {
+      liveInspectorDirectCommandTarget.value = null
+    }
+    return
+  }
+  liveInspectorDirectCommandTarget.value = { dispatch, frameId }
+}
+
 function mountedLiveInspectorCommandTarget() {
-  const frame = globalThis.document?.querySelector<HTMLIFrameElement>(
-    '[data-test-id="smylr-production-frame"]'
+  if (!IS_BROWSER) return null
+  const frame = document.querySelector<HTMLIFrameElement>(
+    '[data-test-id="smylr-trusted-web-app-frame"]'
   )
   // A flow canvas can keep its pooled runtime active beside the current-page
   // iframe. Only let the mounted current-page iframe override the registered
@@ -1212,7 +1278,7 @@ function mountedLiveInspectorCommandTarget() {
   }
   const target = frame?.contentWindow ?? null
   const source = frame?.getAttribute('src')
-  const parentHref = globalThis.window?.location.href
+  const parentHref = window.location.href
   if (!target || !source || !parentHref) return null
 
   try {
@@ -1224,6 +1290,14 @@ function mountedLiveInspectorCommandTarget() {
 }
 
 export function postLiveInspectorCommand(command: Omit<SmylrOpenPencilInspectorCommand, 'kind'>) {
+  const directTarget = liveInspectorDirectCommandTarget.value
+  if (directTarget?.frameId === liveInspectorActiveFrameId.value) {
+    try {
+      return directTarget.dispatch(command)
+    } catch {
+      return false
+    }
+  }
   const mountedTarget = mountedLiveInspectorCommandTarget()
   if (mountedTarget) liveInspectorCommandTarget.value = mountedTarget
   const target = mountedTarget ?? liveInspectorCommandTarget.value
@@ -1237,7 +1311,7 @@ export function postLiveInspectorCommand(command: Omit<SmylrOpenPencilInspectorC
     // The production Smylr iframe is deliberately same-origin. Dispatching in
     // that window avoids browser/proxy cases where postMessage is silently
     // dropped, while the iframe's normal source + origin validation still runs.
-    if (typeof window !== 'undefined' && target.origin === window.location.origin) {
+    if (IS_BROWSER && target.origin === window.location.origin) {
       const directCommand = (
         target.target as Window & {
           __smylrOpenPencilCommand?: (command: typeof data) => void

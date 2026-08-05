@@ -74,7 +74,7 @@ export function installBasicNodeProxyAccessors(
     },
     absoluteTransform: {
       get(this: ProxyThis): [[number, number, number], [number, number, number]] {
-        const pos = graph(this, internals).getAbsolutePosition(nodeId(this, internals))
+        const pos = graph(this, internals).getAuthoritativeAbsolutePosition(nodeId(this, internals))
         return [
           [1, 0, pos.x],
           [0, 1, pos.y]
@@ -83,12 +83,12 @@ export function installBasicNodeProxyAccessors(
     },
     absoluteBoundingBox: {
       get(this: ProxyThis): Rect {
-        return graph(this, internals).getAbsoluteBounds(nodeId(this, internals))
+        return graph(this, internals).getAuthoritativeAbsoluteBounds(nodeId(this, internals))
       }
     },
     absoluteRenderBounds: {
       get(this: ProxyThis): Rect {
-        return graph(this, internals).getAbsoluteBounds(nodeId(this, internals))
+        return graph(this, internals).getAuthoritativeAbsoluteBounds(nodeId(this, internals))
       }
     }
   })

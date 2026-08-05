@@ -1,0 +1,130 @@
+{
+  "contract": "board-build-plan/v1",
+  "artifacts": [
+    {
+      "alias": "command",
+      "recipe": {
+        "kind": "native_card",
+        "name": "10-Minute Outage Brief",
+        "title": "CITYWIDE OUTAGE · 10-MIN BRIEF",
+        "body": "Objective: protect life safety, stabilize the grid, and publish one trusted operating picture.\n0–2 min: status · 2–6 min: blockers · 6–10 min: decisions.",
+        "placement": { "target": { "kind": "auto" } }
+      }
+    },
+    {
+      "alias": "incident_commander",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Role · Incident Commander",
+        "title": "ROLE · INCIDENT COMMANDER",
+        "body": "Owns priorities and cross-agency tradeoffs.\nNow: confirm life-safety objective and operational period.",
+        "placement": {
+          "anchor": { "alias": "command" },
+          "target": { "kind": "relative", "direction": "down" },
+          "preferred_directions": ["down"],
+          "clearance": 180
+        }
+      }
+    },
+    {
+      "alias": "operations",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Role · Grid Operations",
+        "title": "ROLE · GRID OPERATIONS",
+        "body": "Owns isolation, switching, crews, and restoration estimates.\nReport: affected substations and next safe action.",
+        "placement": {
+          "anchor": { "alias": "incident_commander" },
+          "target": { "kind": "relative", "direction": "down" },
+          "preferred_directions": ["down"],
+          "clearance": 180
+        }
+      }
+    },
+    {
+      "alias": "public_info",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Role · Public Information",
+        "title": "ROLE · PUBLIC INFORMATION",
+        "body": "Owns public guidance and rumor control.\nReport: approved message, channels, and next update time.",
+        "placement": {
+          "anchor": { "alias": "operations" },
+          "target": { "kind": "relative", "direction": "down" },
+          "preferred_directions": ["down"],
+          "clearance": 180
+        }
+      }
+    },
+    {
+      "alias": "grid_problem",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Active · Grid Instability",
+        "title": "ACTIVE · GRID INSTABILITY",
+        "body": "Unknown fault boundary; restoration estimate not yet defensible.\nNeed: isolate fault and validate switching path.",
+        "placement": {
+          "anchor": { "alias": "command" },
+          "target": { "kind": "relative", "direction": "right" },
+          "preferred_directions": ["right"],
+          "clearance": 260
+        }
+      }
+    },
+    {
+      "alias": "facilities_problem",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Active · Critical Facilities",
+        "title": "ACTIVE · CRITICAL FACILITIES",
+        "body": "Hospitals, water pumping, transit, and shelters are on mixed backup power.\nNeed: rank sites by endurance and consequence.",
+        "placement": {
+          "anchor": { "alias": "grid_problem" },
+          "target": { "kind": "relative", "direction": "down" },
+          "preferred_directions": ["down"],
+          "clearance": 180
+        }
+      }
+    },
+    {
+      "alias": "restoration_decision",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Decision · Restoration Priority",
+        "title": "DECISION DUE · RESTORATION PRIORITY",
+        "body": "Choose the first restoration corridor.\nDue: minute 6 · Owner: Incident Commander · Inputs: safe path + facility endurance.",
+        "placement": {
+          "anchor": { "alias": "grid_problem" },
+          "target": { "kind": "relative", "direction": "right" },
+          "preferred_directions": ["right"],
+          "clearance": 260
+        }
+      }
+    },
+    {
+      "alias": "advisory_decision",
+      "recipe": {
+        "kind": "native_card",
+        "name": "Decision · Public Advisory",
+        "title": "DECISION DUE · PUBLIC ADVISORY",
+        "body": "Approve duration language, safety actions, and next update time.\nDue: minute 8 · Owner: Incident Commander · Publisher: Public Information.",
+        "placement": {
+          "anchor": { "alias": "restoration_decision" },
+          "target": { "kind": "relative", "direction": "down" },
+          "preferred_directions": ["down"],
+          "clearance": 180
+        }
+      }
+    }
+  ],
+  "connections": [
+    { "source": { "alias": "command" }, "target": { "alias": "incident_commander" }, "kind": "visual", "label": "sets objective" },
+    { "source": { "alias": "incident_commander" }, "target": { "alias": "operations" }, "kind": "action", "label": "directs operations" },
+    { "source": { "alias": "incident_commander" }, "target": { "alias": "public_info" }, "kind": "action", "label": "authorizes message" },
+    { "source": { "alias": "operations" }, "target": { "alias": "grid_problem" }, "kind": "data", "label": "validates fault boundary" },
+    { "source": { "alias": "facilities_problem" }, "target": { "alias": "restoration_decision" }, "kind": "data", "label": "supplies endurance risk" },
+    { "source": { "alias": "grid_problem" }, "target": { "alias": "restoration_decision" }, "kind": "data", "label": "supplies safe path" },
+    { "source": { "alias": "restoration_decision" }, "target": { "alias": "advisory_decision" }, "kind": "data", "label": "sets duration language" },
+    { "source": { "alias": "public_info" }, "target": { "alias": "advisory_decision" }, "kind": "action", "label": "publishes approved advisory" }
+  ]
+}

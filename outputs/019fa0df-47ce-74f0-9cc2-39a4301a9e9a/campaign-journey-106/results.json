@@ -1,0 +1,18 @@
+[
+  {
+    "board_request_id": "ptb-run:9b207289aedc0d5c533654facd64df06",
+    "campaign_roster_id": "39c3a4f559e94cc4741de96f89451e86f497dea2a7f556c37e869a20dd4483db",
+    "config_id": "4f2e0c83aaa6dab2dbdc37e30901146a5a572a55523fcd94945a5c5a50b166d2",
+    "error": null,
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-journey-106/001-journey-106-process-flow-first-attempt/events.jsonl",
+    "exit_code": 0,
+    "order": 0,
+    "resume_thread_id": null,
+    "run_id": "journey-106-process-flow-first-attempt",
+    "scenario_id": "DEV-JOURNEY-106",
+    "status": "recorded",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-journey-106/001-journey-106-process-flow-first-attempt/stderr.log",
+    "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-journey-106/001-journey-106-process-flow-first-attempt/telemetry-v1.json",
+    "thread_id": "019fb4b6-8de5-7370-92ea-692b26853fbb"
+  }
+]

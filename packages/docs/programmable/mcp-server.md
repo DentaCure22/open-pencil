@@ -9,6 +9,10 @@ OpenPencil includes an MCP (Model Context Protocol) server that lets AI coding t
 
 Two transports: **stdio** for MCP clients, **HTTP** for browser extensions and scripts.
 
+The app does not launch or connect to this server. Normal local Board and Trace persistence is
+separate from MCP. The live editor bridge is disabled for now; external MCP clients can still use
+persisted Board authority and standalone-file tools.
+
 ## Install
 
 ```sh
@@ -17,7 +21,8 @@ npm install -g @open-pencil/mcp
 
 ## Stdio (Claude Code, Cursor, etc.)
 
-The stdio server connects to the running OpenPencil app via WebSocket (port 7601). Make sure the desktop app is open with a document loaded.
+The stdio bridge connects through the standalone HTTP server. The live editor WebSocket bridge is
+disabled for now, so use persisted Board targets or standalone files.
 
 ### Claude Code
 
@@ -69,6 +74,7 @@ Add to your MCP config (for example `.cursor/mcp.json`):
 Or run from source without installing:
 
 ::: code-group
+
 ```json [Bun]
 {
   "mcpServers": {
@@ -79,6 +85,7 @@ Or run from source without installing:
   }
 }
 ```
+
 ```json [Node.js]
 {
   "mcpServers": {
@@ -89,6 +96,7 @@ Or run from source without installing:
   }
 }
 ```
+
 :::
 
 ## HTTP
@@ -116,15 +124,104 @@ Server starts on port 7600 (override with `PORT` env var). Endpoints:
 
 ## Workflow
 
-1. **Discover targets** — call `list_documents` first when more than one document or page may be open. It returns stable `document_id` and page IDs.
-2. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas. These return target metadata for the opened or created document.
-3. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
-4. **Create** — `create_shape`, `render` (JSX)
-5. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
-6. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
-7. **Save** — `save_file` to write back to `.fig`
+### Normal Board automation
 
-Most tools accept optional `document_id` and `page_id` fields. Pass them explicitly for agent workflows instead of relying on the visible active tab/page. `create_page` only creates a page; call `switch_page` separately when the workflow should change the active page.
+The MCP server continues to expose lower-level design and standalone-file tools. For normal
+persisted Board work, agents use the public Board CLI facade:
+
+| Need                                 | Command         |
+| ------------------------------------ | --------------- |
+| Find an unknown Board                | `board search`  |
+| Create an explicitly requested Board | `board create`  |
+| Apply one complete Board outcome     | `board build`   |
+| Reveal a saved result on request     | `board present` |
+
+`board build` accepts one `board-build-request/v1` through `--request`:
+
+```json
+{
+  "contract": "board-build-request/v1",
+  "target": {
+    "workspace_id": "workspace-id",
+    "content_document_id": "content-document-id",
+    "document_id": "document-id",
+    "page_id": "board-page-id"
+  },
+  "request_id": "stable-logical-request-id",
+  "intent": "Describe the complete desired Board outcome",
+  "plan": {
+    "contract": "board-build-plan/v1",
+    "artifacts": [
+      {
+        "alias": "status",
+        "recipe": {
+          "kind": "native_card",
+          "title": "Status",
+          "body": "Ready",
+          "placement": { "target": { "kind": "auto" } }
+        }
+      }
+    ],
+    "connections": []
+  }
+}
+```
+
+The plan may combine native artifacts, Mermaid, Code Objects, semantic composition, object
+operations, and meaningful Object Graph connections in one atomic transaction. Use
+`--request-file` only when the complete request is too large for practical shell quoting.
+
+Runtime IDs, context tokens, expected revisions, fresh-context handshakes, fingerprints, retries,
+authority preparation, persistence, and Undo stay inside OpenPencil. Do not sequence diagnostic MCP
+operations to prepare a normal Board mutation.
+
+Trace remains optional read-only context. Local coding agents normally read the bounded adjacent
+`trace-context.json` directly, check its status and expiry, and follow its exact IDs into
+`workspace.json`. External CLI/MCP callers can still add `--latest-gesture` or one exact
+`--gesture-id` to a build command. Use `board present` only when the user asks to reveal the saved
+result in a connected editor; it is not required for persistence.
+
+### Standalone file and primitive editing
+
+Use the lower-level MCP tools when the user explicitly asks to inspect or edit a standalone `.fig`
+file, or when working below the persisted Board workflow:
+
+1. **Discover targets** — call `list_documents`.
+2. **Open** — use `open_file` or `new_document` for the explicit standalone file workflow.
+3. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`.
+4. **Create** — `create_shape`, `render` (JSX).
+5. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`.
+6. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`.
+7. **Save** — `save_file` to write back to `.fig`.
+
+These tools are not a substitute for the public Board facade. Normal persisted Board changes belong
+in one `board-build-request/v1`; OpenPencil prepares and validates authority internally.
+
+### Mermaid flow boards
+
+For Product Maps, technical flows, journeys, and state diagrams, include a `native_diagram`
+artifact with complete Mermaid source inside the request's `board-build-plan/v1`. OpenPencil
+handles placement, native node generation, connections, persistence, and Undo as part of the same
+`board build`.
+
+Use an optional semantic placement hint only when the user asks for a relationship such as “below
+this object” or “near the traced region.” Placement never carries authority. To redraw an existing
+diagram, target its exact owner in the plan so its identity and position can be preserved.
+
+### Code Objects on Boards
+
+Use one Code Object when the requested result is app-like, stateful, or interactive. Put the
+`code_object` recipe and complete authored TSX inside an artifact in the same
+`board-build-plan/v1`; use `--request-file` only when that complete request is too large for the
+shell.
+
+Code Object TSX is trusted in-process code, not a security sandbox. Static ambient-capability checks
+are defense in depth, not confinement. Run only source authored for the user's request; external or
+untrusted content belongs behind the product's sandboxed embed boundary.
+
+Refinement should target the exact existing owner in the plan so OpenPencil can preserve identity,
+state, geometry, metadata, and Object Graph connections. Runtime selection, current source and
+revision checks, persistence, and replay remain internal to the Board builder.
 
 ## AI Agent Skill
 
@@ -140,158 +237,160 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [sk
 
 ### Document
 
-| Tool | Description |
-|------|-------------|
-| `open_file` | Open a `.fig` file for editing |
-| `save_file` | Save the current document to a `.fig` file |
-| `new_document` | Create a new empty document |
+| Tool             | Description                                  |
+| ---------------- | -------------------------------------------- |
+| `open_file`      | Open a `.fig` file for editing               |
+| `save_file`      | Save the current document to a `.fig` file   |
+| `new_document`   | Create a new empty document                  |
 | `list_documents` | List open app documents/tabs and their pages |
 
 ### Read
 
-| Tool | Description |
-|------|-------------|
-| `get_selection` | Get currently selected nodes |
-| `get_page_tree` | Get the full node tree of the current page |
-| `get_current_page` | Get the current page name and ID |
-| `get_node` | Get detailed properties of a node by ID |
-| `find_nodes` | Find nodes by name pattern and/or type |
-| `get_components` | List all components in the document |
-| `list_pages` | List all pages |
-| `list_variables` | List design variables |
-| `list_collections` | List variable collections |
-| `list_fonts` | List fonts used in the current page |
-| `page_bounds` | Get bounding box of all objects on the current page |
-| `node_bounds` | Get bounding box of a node |
-| `node_ancestors` | Get ancestor chain of a node |
-| `node_children` | Get direct children of a node |
-| `node_tree` | Get the subtree rooted at a node |
-| `node_bindings` | Get variable bindings on a node |
+| Tool                 | Description                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `get_selection`      | Get currently selected nodes                                                           |
+| `get_page_tree`      | Get the full node tree of the current page                                             |
+| `get_current_page`   | Get the current page name and ID                                                       |
+| `get_node`           | Get detailed properties of a node by ID                                                |
+| `find_nodes`         | Find nodes by name pattern and/or type                                                 |
+| `get_components`     | List all components in the document                                                    |
+| `list_pages`         | List all pages                                                                         |
+| `list_variables`     | List design variables                                                                  |
+| `list_collections`   | List variable collections                                                              |
+| `list_fonts`         | List fonts used in the current page                                                    |
+| `page_bounds`        | Get bounding box of all objects on the current page                                    |
+| `node_bounds`        | Get bounding box of a node                                                             |
+| `node_ancestors`     | Get ancestor chain of a node                                                           |
+| `node_children`      | Get direct children of a node                                                          |
+| `node_tree`          | Get the subtree rooted at a node                                                       |
+| `node_bindings`      | Get variable bindings on a node                                                        |
+| `get_mermaid_source` | Read retained Mermaid source, stable frame identity, bounds, and reconciliation status |
 
 ### Create
 
-| Tool | Description |
-|------|-------------|
-| `create_shape` | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
-| `create_vector` | Create a vector node from a path string |
-| `create_slice` | Create an export slice |
-| `create_page` | Create a new page |
-| `render` | Render JSX to design nodes — create entire component trees in one call |
-| `create_component` | Convert a frame/group into a component |
-| `create_instance` | Create an instance of a component |
-| `node_to_component` | Convert an existing node into a component in-place |
+| Tool                     | Description                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `create_shape`           | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
+| `create_vector`          | Create a vector node from a path string                                                        |
+| `create_slice`           | Create an export slice                                                                         |
+| `create_page`            | Create a new page                                                                              |
+| `render`                 | Render JSX to design nodes — create entire component trees in one call                         |
+| `create_component`       | Convert a frame/group into a component                                                         |
+| `create_instance`        | Create an instance of a component                                                              |
+| `node_to_component`      | Convert an existing node into a component in-place                                             |
+| `insert_mermaid_diagram` | Create or update one source-retaining Mermaid SVG frame on an ordinary Board                   |
 
 ### Modify
 
-| Tool | Description |
-|------|-------------|
-| `set_fill` | Set fill color (hex) |
-| `set_stroke` | Set stroke color, weight, alignment |
-| `set_effects` | Add shadow or blur effects |
-| `update_node` | Update position, size, opacity, corner radius, text, font |
-| `set_layout` | Set auto-layout (flexbox) — direction, spacing, padding, alignment |
-| `set_constraints` | Set resize constraints |
-| `set_rotation` | Set rotation angle in degrees |
-| `set_opacity` | Set opacity (0–1) |
-| `set_radius` | Set corner radius (uniform or per-corner) |
-| `set_minmax` | Set min/max width and height constraints |
-| `set_text` | Set text content of a `TEXT` node |
-| `set_font` | Set font family and weight |
-| `set_font_range` | Set font properties on a character range |
-| `set_text_resize` | Set text auto-resize mode (fixed/auto-width/auto-height) |
-| `set_visible` | Show or hide a node |
-| `set_blend` | Set blend mode |
-| `set_locked` | Lock or unlock a node |
-| `set_stroke_align` | Set stroke alignment (inside/center/outside) |
+| Tool                  | Description                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
+| `set_fill`            | Set fill color (hex)                                                       |
+| `set_stroke`          | Set stroke color, weight, alignment                                        |
+| `set_effects`         | Add shadow or blur effects                                                 |
+| `update_node`         | Update position, size, opacity, corner radius, text, font                  |
+| `set_layout`          | Set auto-layout (flexbox) — direction, spacing, padding, alignment         |
+| `set_constraints`     | Set resize constraints                                                     |
+| `set_rotation`        | Set rotation angle in degrees                                              |
+| `set_opacity`         | Set opacity (0–1)                                                          |
+| `set_radius`          | Set corner radius (uniform or per-corner)                                  |
+| `set_minmax`          | Set min/max width and height constraints                                   |
+| `set_text`            | Set text content of a `TEXT` node                                          |
+| `set_font`            | Set font family and weight                                                 |
+| `set_font_range`      | Set font properties on a character range                                   |
+| `set_text_resize`     | Set text auto-resize mode (fixed/auto-width/auto-height)                   |
+| `set_visible`         | Show or hide a node                                                        |
+| `set_blend`           | Set blend mode                                                             |
+| `set_locked`          | Lock or unlock a node                                                      |
+| `set_stroke_align`    | Set stroke alignment (inside/center/outside)                               |
 | `set_text_properties` | Set text layout: alignment, auto-resize, text case, decoration, truncation |
-| `set_layout_child` | Configure auto-layout child: sizing, grow, alignment, absolute positioning |
-| `node_move` | Move a node to a new position |
-| `node_resize` | Resize a node |
-| `node_replace_with` | Replace a node with another node |
-| `arrange` | Align or distribute selected nodes |
+| `set_layout_child`    | Configure auto-layout child: sizing, grow, alignment, absolute positioning |
+| `node_move`           | Move a node to a new position                                              |
+| `node_resize`         | Resize a node                                                              |
+| `node_replace_with`   | Replace a node with another node                                           |
+| `arrange`             | Align or distribute selected nodes                                         |
 
 ### Structure
 
-| Tool | Description |
-|------|-------------|
-| `delete_node` | Delete a node |
-| `clone_node` | Duplicate a node |
-| `rename_node` | Rename a node |
-| `reparent_node` | Move a node into a different parent |
-| `select_nodes` | Select nodes by ID |
-| `group_nodes` | Group nodes |
-| `ungroup_node` | Ungroup a group |
-| `flatten_nodes` | Flatten nodes into a single vector |
-| `boolean_union` | Boolean union of two or more nodes |
-| `boolean_subtract` | Boolean subtraction |
-| `boolean_intersect` | Boolean intersection |
-| `boolean_exclude` | Boolean exclusion |
+| Tool                | Description                         |
+| ------------------- | ----------------------------------- |
+| `delete_node`       | Delete a node                       |
+| `clone_node`        | Duplicate a node                    |
+| `rename_node`       | Rename a node                       |
+| `reparent_node`     | Move a node into a different parent |
+| `select_nodes`      | Select nodes by ID                  |
+| `group_nodes`       | Group nodes                         |
+| `ungroup_node`      | Ungroup a group                     |
+| `flatten_nodes`     | Flatten nodes into a single vector  |
+| `boolean_union`     | Boolean union of two or more nodes  |
+| `boolean_subtract`  | Boolean subtraction                 |
+| `boolean_intersect` | Boolean intersection                |
+| `boolean_exclude`   | Boolean exclusion                   |
 
 ### Vector Path
 
-| Tool | Description |
-|------|-------------|
-| `path_get` | Get the path data of a vector node |
-| `path_set` | Set the path data of a vector node |
-| `path_scale` | Scale a vector path |
-| `path_flip` | Flip a vector path horizontally or vertically |
-| `path_move` | Translate a vector path |
+| Tool         | Description                                   |
+| ------------ | --------------------------------------------- |
+| `path_get`   | Get the path data of a vector node            |
+| `path_set`   | Set the path data of a vector node            |
+| `path_scale` | Scale a vector path                           |
+| `path_flip`  | Flip a vector path horizontally or vertically |
+| `path_move`  | Translate a vector path                       |
 
 ### Export
 
-| Tool | Description |
-|------|-------------|
+| Tool           | Description                                                          |
+| -------------- | -------------------------------------------------------------------- |
 | `export_image` | Export nodes as PNG, JPG, or WEBP. Returns base64-encoded image data |
-| `export_svg` | Export nodes as SVG markup |
+| `export_svg`   | Export nodes as SVG markup                                           |
 
 ### Viewport
 
-| Tool | Description |
-|------|-------------|
-| `viewport_get` | Get current viewport position and zoom level |
-| `viewport_set` | Set viewport position and zoom |
-| `viewport_zoom_to_fit` | Zoom viewport to fit specified nodes |
+| Tool                   | Description                                  |
+| ---------------------- | -------------------------------------------- |
+| `viewport_get`         | Get current viewport position and zoom level |
+| `viewport_set`         | Set viewport position and zoom               |
+| `viewport_zoom_to_fit` | Zoom viewport to fit specified nodes         |
 
 ### Variables
 
-| Tool | Description |
-|------|-------------|
-| `get_variable` | Get a variable by ID or name |
-| `find_variables` | Find variables by name pattern or type |
-| `create_variable` | Create a new variable in a collection |
-| `set_variable` | Set a variable value in a mode |
-| `delete_variable` | Delete a variable |
-| `bind_variable` | Bind a variable to a node property |
-| `get_collection` | Get a variable collection by ID or name |
-| `create_collection` | Create a new variable collection |
-| `delete_collection` | Delete a variable collection |
+| Tool                | Description                             |
+| ------------------- | --------------------------------------- |
+| `get_variable`      | Get a variable by ID or name            |
+| `find_variables`    | Find variables by name pattern or type  |
+| `create_variable`   | Create a new variable in a collection   |
+| `set_variable`      | Set a variable value in a mode          |
+| `delete_variable`   | Delete a variable                       |
+| `bind_variable`     | Bind a variable to a node property      |
+| `get_collection`    | Get a variable collection by ID or name |
+| `create_collection` | Create a new variable collection        |
+| `delete_collection` | Delete a variable collection            |
 
 ### Analyze
 
-| Tool | Description |
-|------|-------------|
-| `analyze_colors` | Analyze color palette usage across the document |
-| `analyze_typography` | Analyze font/size/weight distribution |
-| `analyze_spacing` | Analyze gap and padding values |
-| `analyze_clusters` | Detect repeated patterns (potential components) |
+| Tool                 | Description                                     |
+| -------------------- | ----------------------------------------------- |
+| `analyze_colors`     | Analyze color palette usage across the document |
+| `analyze_typography` | Analyze font/size/weight distribution           |
+| `analyze_spacing`    | Analyze gap and padding values                  |
+| `analyze_clusters`   | Detect repeated patterns (potential components) |
 
 ### Diff
 
-| Tool | Description |
-|------|-------------|
-| `diff_create` | Create a snapshot of the current document state |
-| `diff_show` | Show differences between the current state and a snapshot |
+| Tool          | Description                                               |
+| ------------- | --------------------------------------------------------- |
+| `diff_create` | Create a snapshot of the current document state           |
+| `diff_show`   | Show differences between the current state and a snapshot |
 
 ### Navigation
 
-| Tool | Description |
-|------|-------------|
+| Tool          | Description                    |
+| ------------- | ------------------------------ |
 | `switch_page` | Switch to a page by name or ID |
 
 ### Escape Hatch
 
-| Tool | Description |
-|------|-------------|
+| Tool   | Description                                          |
+| ------ | ---------------------------------------------------- |
 | `eval` | Execute JavaScript with full Figma Plugin API access |
 
 Note: `eval` is available over stdio, but disabled in HTTP mode for security.

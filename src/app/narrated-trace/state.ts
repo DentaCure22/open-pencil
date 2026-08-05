@@ -1,13 +1,14 @@
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref, shallowRef } from 'vue'
 
-import { readCacheJson, removeCacheEntry, writeCacheJson } from '@/app/cache'
-
+import { compactNarratedTraceSession } from './compaction'
 import { buildNarratedContextMarkdown } from './context'
 import {
   compactNarratedTraceTitle,
   deleteNarratedTraceRecord,
   loadNarratedTraceHistory,
+  narratedTraceHistory,
+  narratedTraceHistoryLoaded,
   readNarratedTraceRecord,
   renameNarratedTraceRecord,
   saveNarratedTraceRecord
@@ -18,16 +19,15 @@ import type {
   NarratedTraceEvidence,
   NarratedTraceEvent,
   NarratedTraceEventInput,
+  NarratedTraceScope,
   NarratedTraceSession,
-  NarratedTraceStatus,
-  NarratedTraceViewMode
+  NarratedTraceStatus
 } from './types'
 
-const CURRENT_SESSION_CACHE_KEY = 'narrated-trace/current-session'
 const DEFAULT_COALESCE_WINDOW_MS = 500
+const PERSIST_DEBOUNCE_MS = 100
 
 export const narratedTraceStatus = ref<NarratedTraceStatus>('idle')
-export const narratedTraceViewMode = ref<NarratedTraceViewMode>('timeline')
 export const narratedTraceElapsedMs = ref(0)
 export const narratedTraceError = ref<string | null>(null)
 export const narratedTraceInterimText = ref('')
@@ -36,18 +36,18 @@ export const narratedTraceSession = shallowRef<NarratedTraceSession | null>(null
 let clockStartedAt = 0
 let clockAccumulatedMs = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
-let fallbackId = 0
 const coalescedEvents = new Map<string, { eventId: string; updatedAtMs: number }>()
 
 function monotonicNow(): number {
-  return globalThis.performance?.now() ?? Date.now()
+  return globalThis.performance.now()
 }
 
 function createId(prefix: string): string {
-  const uuid = globalThis.crypto?.randomUUID?.()
-  if (uuid) return `${prefix}-${uuid}`
-  fallbackId += 1
-  return `${prefix}-${Date.now()}-${fallbackId}`
+  return `${prefix}-${globalThis.crypto.randomUUID()}`
+}
+
+function hasNarratedTraceSession() {
+  return narratedTraceSession.value !== null
 }
 
 function updateClock() {
@@ -71,14 +71,18 @@ function stopClock() {
 }
 
 function schedulePersist() {
+  const session = narratedTraceSession.value
+  if (!session) return
   if (persistTimer) clearTimeout(persistTimer)
   persistTimer = setTimeout(() => {
     persistTimer = null
-    const session = narratedTraceSession.value
-    if (!session) return
-    void writeCacheJson(CURRENT_SESSION_CACHE_KEY, session)
-    if (narratedTraceStatus.value === 'review') void saveNarratedTraceRecord(session)
-  }, 150)
+    void saveNarratedTraceRecord(session).catch((error: unknown) => {
+      console.warn(
+        '[Narrated Trace] Canonical session persistence failed:',
+        error instanceof Error ? error.message : error
+      )
+    })
+  }, PERSIST_DEBOUNCE_MS)
 }
 
 function replaceSession(session: NarratedTraceSession) {
@@ -125,19 +129,19 @@ function updateContextEntry(
   })
 }
 
-export function beginNarratedTraceSession() {
+export function beginNarratedTraceSession(scope?: NarratedTraceScope) {
   stopClock()
   coalescedEvents.clear()
   clockAccumulatedMs = 0
   narratedTraceElapsedMs.value = 0
   narratedTraceError.value = null
   narratedTraceInterimText.value = ''
-  narratedTraceViewMode.value = 'timeline'
   narratedTraceSession.value = {
     contextDraft: [],
     durationMs: 0,
     events: [],
     id: createId('trace'),
+    scope: scope ? structuredClone(scope) : undefined,
     startedAt: new Date().toISOString()
   }
   narratedTraceStatus.value = 'recording'
@@ -198,10 +202,11 @@ export function appendNarratedTraceEvent(
           ? joinCoalescedText(existing.text, input.text)
           : (input.text ?? existing.text)
       }
-      replaceSession({
+      const nextSession = {
         ...session,
         events: session.events.map((event) => (event.id === existing.id ? nextEvent : event))
-      })
+      }
+      replaceSession(nextSession)
       coalescedEvents.set(coalesceKey, { eventId: existing.id, updatedAtMs: atMs })
       return existing.id
     }
@@ -212,7 +217,7 @@ export function appendNarratedTraceEvent(
     atMs,
     id: createId('event')
   }
-  replaceSession({
+  const nextSession = compactNarratedTraceSession({
     ...session,
     contextDraft: [
       ...session.contextDraft,
@@ -221,6 +226,7 @@ export function appendNarratedTraceEvent(
     durationMs: Math.max(session.durationMs, atMs),
     events: [...session.events, event]
   })
+  replaceSession(nextSession)
   if (coalesceKey) {
     coalescedEvents.set(coalesceKey, { eventId: event.id, updatedAtMs: atMs })
   }
@@ -240,7 +246,20 @@ export function attachNarratedTraceEvidence(eventId: string, evidence: NarratedT
   if (!session || !session.events.some((event) => event.id === eventId)) return
   replaceSession({
     ...session,
-    events: session.events.map((event) => (event.id === eventId ? { ...event, evidence } : event))
+    events: session.events.map((event) =>
+      event.id === eventId ? { ...event, evidence, evidenceStatus: 'ready' } : event
+    )
+  })
+}
+
+export function markNarratedTraceEvidenceFailed(eventId: string) {
+  const session = narratedTraceSession.value
+  if (!session || !session.events.some((event) => event.id === eventId)) return
+  replaceSession({
+    ...session,
+    events: session.events.map((event) =>
+      event.id === eventId ? { ...event, evidenceStatus: 'failed' } : event
+    )
   })
 }
 
@@ -294,37 +313,35 @@ export const narratedTraceContextMarkdown = computed(() =>
   buildNarratedContextMarkdown(narratedTraceSession.value)
 )
 
-export async function openNarratedTraceRecord(sessionId: string) {
+async function loadNarratedTraceRecord(sessionId: string) {
   if (narratedTraceStatus.value === 'recording' || narratedTraceStatus.value === 'paused') {
-    return false
+    return null
   }
   const session = await readNarratedTraceRecord(sessionId)
-  if (!session) return false
+  if (!session) return null
   stopClock()
   coalescedEvents.clear()
-  narratedTraceSession.value = session
-  narratedTraceElapsedMs.value = session.durationMs
+  const compacted = compactNarratedTraceSession(session)
+  narratedTraceSession.value = compacted
+  narratedTraceElapsedMs.value = compacted.durationMs
+  return compacted
+}
+
+export async function openNarratedTraceRecord(sessionId: string) {
+  const session = await loadNarratedTraceRecord(sessionId)
+  if (!session) return false
   narratedTraceStatus.value = 'review'
-  narratedTraceViewMode.value = 'timeline'
   schedulePersist()
   return true
 }
 
 export async function continueNarratedTraceRecord(sessionId: string) {
-  if (narratedTraceStatus.value === 'recording' || narratedTraceStatus.value === 'paused') {
-    return false
-  }
-  const session = await readNarratedTraceRecord(sessionId)
+  const session = await loadNarratedTraceRecord(sessionId)
   if (!session) return false
-  stopClock()
-  coalescedEvents.clear()
-  narratedTraceSession.value = session
-  narratedTraceElapsedMs.value = session.durationMs
   clockAccumulatedMs = session.durationMs
   narratedTraceError.value = null
   narratedTraceInterimText.value = ''
   narratedTraceStatus.value = 'recording'
-  narratedTraceViewMode.value = 'timeline'
   startClock()
   schedulePersist()
   return true
@@ -334,24 +351,28 @@ export async function removeNarratedTraceRecord(sessionId: string) {
   const isCurrent = narratedTraceSession.value?.id === sessionId
   await deleteNarratedTraceRecord(sessionId)
   if (!isCurrent) return
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = null
   stopClock()
   coalescedEvents.clear()
   narratedTraceSession.value = null
   narratedTraceElapsedMs.value = 0
   narratedTraceStatus.value = 'idle'
-  narratedTraceViewMode.value = 'history'
-  await removeCacheEntry(CURRENT_SESSION_CACHE_KEY)
 }
 
 export async function restoreNarratedTraceSession() {
-  if (narratedTraceSession.value) return
-  const cached = await readCacheJson<NarratedTraceSession>(CURRENT_SESSION_CACHE_KEY)
-  if (narratedTraceSession.value) return
-  if (!cached || !Array.isArray(cached.events) || !Array.isArray(cached.contextDraft)) return
-  narratedTraceSession.value = cached
-  narratedTraceElapsedMs.value = cached.durationMs
+  if (hasNarratedTraceSession()) return
+  const records = narratedTraceHistoryLoaded.value
+    ? narratedTraceHistory.value
+    : await loadNarratedTraceHistory()
+  if (records.length === 0) return
+  const latest = records[0]
+  const persisted = await readNarratedTraceRecord(latest.id)
+  if (hasNarratedTraceSession() || !persisted) return
+  const compacted = compactNarratedTraceSession(persisted)
+  narratedTraceSession.value = compacted
+  narratedTraceElapsedMs.value = compacted.durationMs
   narratedTraceStatus.value = 'review'
-  void saveNarratedTraceRecord(cached)
 }
 
 async function restoreNarratedTraceState() {

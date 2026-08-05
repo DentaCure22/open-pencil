@@ -21,12 +21,29 @@ function createMockApp() {
   let clientWs: WebSocket | null = null
   const requests: Array<{
     command: string
-    args?: { name?: string; document_id?: string; page_id?: string; args?: Record<string, unknown> }
+    args?: {
+      name?: string
+      document_id?: string
+      page_id?: string
+      args?: Record<string, unknown>
+      mutation?: {
+        expectedRevision?: number
+        requestId?: string
+        taskId?: string
+        traceId?: string
+      }
+    }
   }> = []
 
   wss.on('connection', (ws) => {
     clientWs = ws
-    ws.send(JSON.stringify({ type: 'register', token: 'mock-token' }))
+    ws.send(
+      JSON.stringify({
+        type: 'register',
+        token: 'mock-token',
+        runtime_instance_id: 'runtime:stdio-test'
+      })
+    )
 
     ws.on('message', async (raw) => {
       const msg = JSON.parse(String(raw)) as {
@@ -139,6 +156,18 @@ function textContent(content: unknown): string {
   ).text
 }
 
+function guardedMutationArgs(graph: SceneGraph, requestId: string) {
+  return {
+    content_document_id: graph.rootId,
+    document_id: 'doc-1',
+    expected_revision: 0,
+    page_id: graph.getPages()[0].id,
+    request_id: requestId,
+    runtime_instance_id: 'runtime:stdio-test',
+    workspace_id: 'workspace:stdio-test'
+  }
+}
+
 describe('MCP stdio transport', () => {
   let app: ReturnType<typeof createMockApp>
   let client: Client
@@ -164,6 +193,7 @@ describe('MCP stdio transport', () => {
     expect(names).toContain('get_page_tree')
     expect(names).toContain('save_file')
     expect(names).toContain('list_documents')
+    expect(names).toContain('query_trace_history')
     expect(names).toContain('get_codegen_prompt')
     const createShape = expectDefined(
       tools.find((tool) => tool.name === 'create_shape'),
@@ -171,13 +201,22 @@ describe('MCP stdio transport', () => {
     )
     expect(JSON.stringify(createShape.inputSchema)).toContain('document_id')
     expect(JSON.stringify(createShape.inputSchema)).toContain('page_id')
+    expect(JSON.stringify(createShape.inputSchema)).toContain('trace_id')
     expect(tools.length).toBeGreaterThan(30)
   })
 
   test('create_shape via stdio creates a node', async () => {
     const result = await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 10, y: 20, width: 200, height: 100, name: 'StdioFrame' }
+      arguments: {
+        ...guardedMutationArgs(app.graph, 'request:stdio-frame'),
+        type: 'FRAME',
+        x: 10,
+        y: 20,
+        width: 200,
+        height: 100,
+        name: 'StdioFrame'
+      }
     })
     expect(result.isError).not.toBe(true)
     const data = JSON.parse(textContent(result.content)) as {
@@ -195,8 +234,15 @@ describe('MCP stdio transport', () => {
     const result = await client.callTool({
       name: 'create_shape',
       arguments: {
+        content_document_id: 'content-document-1',
         document_id: 'doc-1',
+        expected_revision: 42,
         page_id: 'page-1',
+        request_id: 'request-1',
+        runtime_instance_id: 'runtime:stdio-test',
+        task_id: 'worker-1',
+        trace_id: 'trace-1',
+        workspace_id: 'workspace-1',
         type: 'FRAME',
         x: 10,
         y: 20,
@@ -211,9 +257,20 @@ describe('MCP stdio transport', () => {
       'tool request'
     )
     expect(request.args?.document_id).toBe('doc-1')
+    expect(request.args?.content_document_id).toBe('content-document-1')
     expect(request.args?.page_id).toBe('page-1')
+    expect(request.args?.workspace_id).toBe('workspace-1')
     expect(request.args?.args?.document_id).toBeUndefined()
+    expect(request.args?.args?.content_document_id).toBeUndefined()
     expect(request.args?.args?.page_id).toBeUndefined()
+    expect(request.args?.args?.workspace_id).toBeUndefined()
+    expect(request.args?.mutation).toEqual({
+      expectedRevision: 42,
+      requestId: 'request-1',
+      taskId: 'worker-1',
+      traceId: 'trace-1'
+    })
+    expect(request.args?.args?.trace_id).toBeUndefined()
   })
 
   test('list_documents via stdio returns open documents', async () => {
@@ -243,13 +300,26 @@ describe('MCP stdio transport', () => {
   test('delete_node via stdio removes a node', async () => {
     const create = await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'RECTANGLE', x: 0, y: 0, width: 50, height: 50 }
+      arguments: {
+        ...guardedMutationArgs(app.graph, 'request:stdio-delete-fixture'),
+        type: 'RECTANGLE',
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50
+      }
     })
     const { id } = JSON.parse(textContent(create.content)) as { id: string }
 
     expect(app.graph.getNode(id)).toBeDefined()
 
-    await client.callTool({ name: 'delete_node', arguments: { id } })
+    await client.callTool({
+      name: 'delete_node',
+      arguments: {
+        ...guardedMutationArgs(app.graph, 'request:stdio-delete'),
+        id
+      }
+    })
 
     expect(app.graph.getNode(id)).toBeUndefined()
   })
@@ -265,7 +335,14 @@ describe('MCP stdio transport', () => {
 
     await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 0, y: 0, width: 100, height: 100 }
+      arguments: {
+        ...guardedMutationArgs(app.graph, 'request:stdio-stderr'),
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
     })
 
     const allStderr = stderrChunks.join('')

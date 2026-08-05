@@ -1,0 +1,40 @@
+{
+  "manifest_id": "prompt-to-board-journey-106",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "cooling-center-process-flow",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "journey-106"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_text",
+        "native_card",
+        "object_connection"
+      ],
+      "prompt": "On this empty disposable Board, build an editable process titled 'Cooling Center Heat Alert Response.' Show four ordered steps: Detect alert, Activate site, Serve residents, and Close and review. Arrange them in a readable two-column grid. Connect each consecutive step with a visible arrow labeled 'Next.' Use native editable cards; no Mermaid or Code Object.",
+      "rubric": {
+        "rubric_id": "ptb-dev-process-flow",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-JOURNEY-106",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB JOURNEY-106 — Cooling Response",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

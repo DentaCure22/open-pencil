@@ -3,6 +3,7 @@ import {
   isSmylrProductionDocumentGraph,
   saveSmylrProductionDocument
 } from '@/app/smylr-production/document-state'
+import { OPENPENCIL_WORKSPACE_DOCUMENT_NAME } from '@/app/workspace-document/identity'
 
 export type DocumentPersistenceReadiness = {
   durable: boolean
@@ -21,7 +22,7 @@ export function getDocumentPersistenceReadiness(store: EditorStore): DocumentPer
       ready: true,
       reason: null,
       requiredAction: null,
-      targetLabel: 'Smylr Production Canvas cache'
+      targetLabel: `${OPENPENCIL_WORKSPACE_DOCUMENT_NAME} cache`
     }
   }
 

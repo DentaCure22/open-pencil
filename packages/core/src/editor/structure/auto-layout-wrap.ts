@@ -20,9 +20,13 @@ export function wrapInAutoLayout(
   const prevSelection = new Set(ctx.state.selectedIds)
   const origPositions = selectedNodes.map((n) => ({ id: n.id, x: n.x, y: n.y, parentId }))
 
-  const bounds = computeAbsoluteBounds(selectedNodes, (id) => ctx.graph.getAbsolutePosition(id))
+  const bounds = computeAbsoluteBounds(selectedNodes, (id) =>
+    ctx.graph.getAuthoritativeAbsolutePosition(id)
+  )
 
-  const parentAbs = isTopLevel(parentId) ? { x: 0, y: 0 } : ctx.graph.getAbsolutePosition(parentId)
+  const parentAbs = isTopLevel(parentId)
+    ? { x: 0, y: 0 }
+    : ctx.graph.getAuthoritativeAbsolutePosition(parentId)
 
   const direction: LayoutMode =
     selectedNodes.length <= 1 || bounds.height > bounds.width ? 'VERTICAL' : 'HORIZONTAL'
@@ -43,7 +47,7 @@ export function wrapInAutoLayout(
   const frameId = frame.id
 
   const sortedIds = selectedNodes
-    .map((n) => ({ id: n.id, pos: ctx.graph.getAbsolutePosition(n.id) }))
+    .map((n) => ({ id: n.id, pos: ctx.graph.getAuthoritativeAbsolutePosition(n.id) }))
     .sort((a, b) => a.pos.y - b.pos.y || a.pos.x - b.pos.x)
     .map((n) => n.id)
 

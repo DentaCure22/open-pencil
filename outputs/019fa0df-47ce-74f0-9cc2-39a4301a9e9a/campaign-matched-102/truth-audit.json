@@ -1,0 +1,37 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 0,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 2,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [],
+  "gate_passed": true,
+  "observations": [
+    {
+      "discrepancies": [],
+      "event_count": 20,
+      "result_status": "recorded",
+      "run_id": "matched-102a-explicit-plan-first-attempt",
+      "state": "recorded",
+      "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-102/001-matched-102a-explicit-plan-first-attempt/telemetry-v1.json"
+    },
+    {
+      "discrepancies": [],
+      "event_count": 16,
+      "result_status": "recorded",
+      "run_id": "matched-102b-provided-recipe-first-attempt",
+      "state": "recorded",
+      "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-102/002-matched-102b-provided-recipe-first-attempt/telemetry-v1.json"
+    }
+  ],
+  "results_total": 2,
+  "roster_id": "5838c43d8da79a41329d315c308097e79cb278902f20bcef66a6af03952323bb",
+  "scheduled_total": 2,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 2
+}

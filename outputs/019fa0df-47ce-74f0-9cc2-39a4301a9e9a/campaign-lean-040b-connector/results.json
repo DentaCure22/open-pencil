@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "ea13c3420bb9c268266f9037c1b0e7cec7653657b6cfae2cfcb38dee1dd8e83e",
+    "config_id": "406f740446c83ffaba9b056eb9a967e649f64000909936bb0033fda55ba53956",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-040b-connector/001-lean-040b-connector/events.jsonl",
+    "order": 0,
+    "run_id": "lean-040b-connector",
+    "scenario_id": "FAST-DEV-040B",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-040b-connector/001-lean-040b-connector/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb101-88e3-7741-bc00-508fcad15a1c"
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "board_request_id": "ptb-run:bb971ee43d0bc0a5a3bd74e6e0baab9a",
+    "campaign_roster_id": "6dcb59b34fdcdd188df760c1a279ba84fd5c5fccfe69230a9e3c15b50a97b682",
+    "config_id": "2e2c5c09ad35fc58fa76f22a38d85f296db8ac88e7b432c35834d4c434de8158",
+    "error": null,
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-109/001-matched-109-explicit-plan-first-attempt/events.jsonl",
+    "exit_code": 0,
+    "order": 0,
+    "resume_thread_id": null,
+    "run_id": "matched-109-explicit-plan-first-attempt",
+    "scenario_id": "DEV-MATCHED-109",
+    "status": "recorded",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-109/001-matched-109-explicit-plan-first-attempt/stderr.log",
+    "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-109/001-matched-109-explicit-plan-first-attempt/telemetry-v1.json",
+    "thread_id": "019fb505-e8a0-7cd1-ad62-c691cd0ab1ec"
+  }
+]

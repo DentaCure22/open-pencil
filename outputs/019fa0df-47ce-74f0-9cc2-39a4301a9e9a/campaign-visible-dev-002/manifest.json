@@ -1,0 +1,38 @@
+{
+  "manifest_id": "prompt-to-board-development-matrix-v1",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "ptb-dev-native-structured-sparse-v1",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-matrix-brief-2026-07-29"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card",
+        "native_text"
+      ],
+      "prompt": "Capture this decision so the team can scan it later: launch the desktop beta first; offline reliability is the blocker; next actions are finish recovery testing, publish the support guide, and schedule the rollout review.",
+      "rubric": {
+        "rubric_id": "ptb-dev-native-structured",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-MX-NS-SPARSE-001",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "fixture_ref": "ptb-dev-sparse-v1",
+        "kind": "exact_fixture",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "required"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

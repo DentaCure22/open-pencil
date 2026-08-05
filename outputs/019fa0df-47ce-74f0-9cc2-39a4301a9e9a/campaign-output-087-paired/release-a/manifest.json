@@ -1,0 +1,38 @@
+{
+  "manifest_id": "prompt-to-board-output-development-087-release-a",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "parallel-081-dev-parallel-081-a",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-output-mode-087-paired-replicas"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card"
+      ],
+      "prompt": "Build a polished, editable portfolio brief for an ocean-cleanup nonprofit deciding how to allocate its next $2 million. Compare three credible programs, show impact, cost, execution risk, the recommended mix, explicit decision rules, and three first-week actions. Make it easy for a board member to scan and debate; use native OpenPencil artifacts rather than one flattened diagram.",
+      "rubric": {
+        "rubric_id": "ptb-dev-native-decision-brief",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-OUTPUT-087-RELEASE-A",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB COMPACT-087-A — Ocean Cleanup Portfolio",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

@@ -1,0 +1,24 @@
+{
+  "review_id": "visible-dev-001-semantic-review",
+  "reviewed_by": "codex-independent-reviewer",
+  "artifact_owner_id": "0:369",
+  "screenshot_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-visible-dev-001/visible-dev-001.png",
+  "observed": {
+    "title": "Desktop beta launch",
+    "decision": "Launch the desktop beta first.",
+    "blocker": "Offline reliability.",
+    "next_actions": [
+      "Finish recovery testing",
+      "Publish the support guide",
+      "Schedule the rollout review"
+    ],
+    "one_editable_structured_artifact": true,
+    "extra_connector_diagram_or_code_object": false,
+    "visible_readable_unclipped": true,
+    "material_overlap": false
+  },
+  "rubric_id": "ptb-dev-native-structured",
+  "rubric_version": "1.0.0",
+  "quality_grade": "pass",
+  "quality_passed": true
+}

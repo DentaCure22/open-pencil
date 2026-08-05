@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, provide, ref, useAttrs, watch } from 'vue'
+import { computed, onUnmounted, provide, ref, useAttrs, watch } from 'vue'
 import {
   TreeItem,
   TreeVirtualizer,
@@ -16,10 +16,13 @@ import {
 } from '@open-pencil/vue'
 import type { LayerDragInstruction, LayerNode } from '@open-pencil/vue'
 import { useEditorStore } from '@/app/editor/active-store'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
+import { createCodeObjectLayerTreeBridge, isCodeObjectLayerId } from '@/app/code-object/inspector'
 import {
   bumpLiveLayerTreeVersion,
   createSmylrLiveLayerTreeBridge,
-  fromLiveLayerId
+  fromLiveLayerId,
+  isLiveLayerId
 } from '@/app/smylr-live-inspector/layer-bridge'
 import {
   liveInspectorDocument,
@@ -30,21 +33,6 @@ import {
 import CanvasMenu from '../canvas/CanvasMenu.vue'
 import LayerTreeNodeRow from './LayerTreeNodeRow.vue'
 import LayerTreeRenameRow from './LayerTreeRenameRow.vue'
-
-// One layers system: design graph + live app containers (virtual children).
-const liveLayerBridge = createSmylrLiveLayerTreeBridge()
-provide(LAYER_TREE_HOST_BRIDGE_KEY, liveLayerBridge)
-// Rebuild on stable root or selection identity changes. A selected descendant
-// can replace the captured path while the page root id stays unchanged.
-watch(
-  () =>
-    [
-      liveInspectorDocument.value?.tree?.id ?? null,
-      liveInspectorSelectedId.value,
-      liveInspectorPendingSelectedId.value
-    ] as const,
-  () => bumpLiveLayerTreeVersion()
-)
 
 interface LayerTreeRootActions {
   collapseAll: () => void
@@ -67,6 +55,41 @@ const VISIBLE_BASELINE_LEVEL = 4
 const attrs = useAttrs()
 const emit = defineEmits<{ toolsOpened: [] }>()
 const store = useEditorStore()
+const codeObjectLayerBridge = createCodeObjectLayerTreeBridge()
+const smylrLiveLayerBridge = createSmylrLiveLayerTreeBridge()
+provide(LAYER_TREE_HOST_BRIDGE_KEY, {
+  getVirtualChildren: (node) =>
+    smylrLiveLayerBridge.getVirtualChildren?.(node) ??
+    codeObjectLayerBridge.getVirtualChildren?.(node),
+  isVirtualId: (id) =>
+    smylrLiveLayerBridge.isVirtualId?.(id) === true ||
+    codeObjectLayerBridge.isVirtualId?.(id) === true,
+  selectVirtual: (id) => {
+    if (isLiveLayerId(id)) smylrLiveLayerBridge.selectVirtual?.(id)
+    else codeObjectLayerBridge.selectVirtual?.(id)
+  },
+  version: computed(
+    () =>
+      Number(smylrLiveLayerBridge.version?.value ?? 0) * 100_000 +
+      Number(codeObjectLayerBridge.version?.value ?? 0)
+  ),
+  virtualSelectedIds: computed(
+    () =>
+      new Set([
+        ...(smylrLiveLayerBridge.virtualSelectedIds?.value ?? []),
+        ...(codeObjectLayerBridge.virtualSelectedIds?.value ?? [])
+      ])
+  )
+})
+watch(
+  () =>
+    [
+      liveInspectorDocument.value?.tree.id ?? null,
+      liveInspectorSelectedId.value,
+      liveInspectorPendingSelectedId.value
+    ] as const,
+  bumpLiveLayerTreeVersion
+)
 const layerFilter = ref('')
 const showTreeTools = ref(false)
 const layersScrollRef = ref<HTMLElement | null>(null)
@@ -82,8 +105,7 @@ const renameControls = {
 function onLayerRightClick(e: MouseEvent) {
   const row = (e.target as HTMLElement).closest<HTMLElement>('[data-node-id]')
   if (!row?.dataset.nodeId) return
-  // Live (virtual) rows use their own selection path — skip scene select.
-  if (row.dataset.nodeId.startsWith('live:')) return
+  if (isCodeObjectLayerId(row.dataset.nodeId) || isLiveLayerId(row.dataset.nodeId)) return
   if (!store.state.selectedIds.has(row.dataset.nodeId)) store.select([row.dataset.nodeId])
 }
 
@@ -93,8 +115,19 @@ function isAdditiveSelect(e: CustomEvent): boolean {
 }
 
 function onTreeSelect(e: CustomEvent, id: string, select: (id: string, additive: boolean) => void) {
+  const mouseEvent = e.detail?.originalEvent as MouseEvent | undefined
+  const additive = isAdditiveSelect(e)
   e.preventDefault()
-  select(id, isAdditiveSelect(e))
+  select(id, additive)
+  if (
+    mouseEvent?.type === 'click' &&
+    mouseEvent.button === 0 &&
+    !additive &&
+    !isCodeObjectLayerId(id) &&
+    !isLiveLayerId(id)
+  ) {
+    store.zoomToNode(id, editorViewportInsets())
+  }
 }
 
 function hoverLayer(layerId: string) {
@@ -158,7 +191,12 @@ function closeTreeTools() {
   showTreeTools.value = false
 }
 
-defineExpose({ closeTreeTools })
+function revealNode(nodeId: string) {
+  layerFilter.value = ''
+  store.select([nodeId])
+}
+
+defineExpose({ closeTreeTools, revealNode })
 
 function chrome(scope: Omit<LayerTreeSlotScope, 'actions'>) {
   return {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { computeAllLayouts, SceneGraph, setTextMeasurer } from '@open-pencil/core'
+import { estimateTextSize } from '@open-pencil/core/layout'
 
 import { createEditorStore } from '@/app/editor/session'
 
@@ -9,6 +10,26 @@ import { autoFrame, loadFixtureGraph, pageId, rect } from '#tests/helpers/layout
 import { HEAVY_TEST_TIMEOUT_MS } from '#tests/helpers/test-utils'
 
 describe('text measurement', () => {
+  test('fallback measurement counts explicit hard lines without inflating one-line text', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    const singleLine = graph.createNode('TEXT', page, {
+      fontSize: 14,
+      lineHeight: 20,
+      text: '• QA',
+      textAutoResize: 'NONE'
+    })
+    const multiline = graph.createNode('TEXT', page, {
+      fontSize: 14,
+      lineHeight: 20,
+      text: '• QA\n• Docs\n• Rollout',
+      textAutoResize: 'NONE'
+    })
+
+    expect(estimateTextSize(singleLine, 272).height).toBe(20)
+    expect(estimateTextSize(multiline, 272).height).toBe(60)
+  })
+
   test('derived text layout preserves imported auto-layout text bounds during measurement', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)

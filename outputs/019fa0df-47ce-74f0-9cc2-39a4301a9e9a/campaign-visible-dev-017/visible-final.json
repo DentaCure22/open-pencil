@@ -1,0 +1,8 @@
+{
+  "finalText": "Done — the exact Board now has:\n\n- An interactive **Incident Command** area (`0:369`) below the Release map.\n- Status summary, S1–S4 severity control, and **Acknowledge → Assess → Contain → Communicate → Recover** flow.\n- A visible labeled connection from **Release readiness** (`0:466`) to the new area.\n\nOpenPencil confirmed durable persistence, object readback, rendered connector, and both endpoints visible. Manual severity interaction and Undo/Redo were not exercised.\n\n### Recap\n\n- Target: page `0:439`, document `document-1b633407-6552-4f35-a64b-7ac3899a306d`\n- Connection: `object-connection:b64b698721093bcf`\n- Existing work was preserved with 48 px clearance.\n\n",
+  "generatedAtMs": 1785365217301,
+  "originalProofDeadlineAtMs": 1785368817421,
+  "releasedAfterOriginalDeadlineMs": 0,
+  "releasedAtMs": 1785365503580,
+  "safetyTimeoutMs": 3600000
+}

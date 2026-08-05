@@ -1,0 +1,95 @@
+{
+  "contract": "board-build-plan/v1",
+  "artifacts": [
+    {
+      "alias": "title",
+      "recipe": {
+        "kind": "native_text",
+        "text": "ABYSS-7  •  DEEP-SEA MISSION COMMAND",
+        "placement": { "target": { "kind": "auto" } }
+      }
+    },
+    {
+      "alias": "status",
+      "recipe": {
+        "kind": "native_card",
+        "title": "🟢 Vehicle Status — GO",
+        "body": "Depth rating 6,000 m\nBattery 87%  •  O₂ 94%\nThrusters 6/6  •  Comms nominal\nCrew: 2  •  Surface link locked"
+      }
+    },
+    {
+      "alias": "objective",
+      "recipe": {
+        "kind": "native_card",
+        "title": "Mission Objective",
+        "body": "Survey the Black Smoker field\nCollect 3 vent-fluid samples\nReturn with ≥30% battery reserve"
+      }
+    },
+    {
+      "alias": "abort",
+      "recipe": {
+        "kind": "native_card",
+        "title": "🔴 Abort Criteria",
+        "body": "ABORT if any trigger occurs:\n• Hull alarm or active leak\n• O₂ <70% or battery <35%\n• Comms lost >90 seconds\n• Two thrusters offline"
+      }
+    },
+    {
+      "alias": "phase1",
+      "recipe": {
+        "kind": "native_card",
+        "title": "01  DESCEND",
+        "body": "T+00–45 min  •  0 → 3,200 m\nHold 0.8 m/s; sonar sweep every 500 m\nGate: pressure + comms check"
+      }
+    },
+    {
+      "alias": "phase2",
+      "recipe": {
+        "kind": "native_card",
+        "title": "02  SURVEY + SAMPLE",
+        "body": "T+45–105 min  •  Vent field\nMap north transect; collect A/B/C\nGate: depart at 45% battery"
+      }
+    },
+    {
+      "alias": "phase3",
+      "recipe": {
+        "kind": "native_card",
+        "title": "03  ASCEND",
+        "body": "T+105–155 min  •  Surface\nClear plume; rise at 0.9 m/s\nGate: beacon on at 200 m"
+      }
+    },
+    {
+      "alias": "risks",
+      "recipe": {
+        "kind": "native_card",
+        "title": "⚠ Major Risks",
+        "body": "HIGH  Plume turbulence — stay leeward\nMED   Tether snag — keep 15 m clearance\nMED   Acoustic dropout — 90 s abort clock\nLOW   Sample arm jam — skip slot, continue"
+      }
+    },
+    {
+      "alias": "decision",
+      "recipe": {
+        "kind": "native_card",
+        "title": "Command Rule",
+        "body": "Safety gate beats mission goal.\nAt every phase boundary: confirm hull, power, oxygen, propulsion, and comms before proceeding."
+      }
+    }
+  ],
+  "connections": [
+    { "kind": "data", "label": "authorizes", "source": { "alias": "status" }, "target": { "alias": "phase1" } },
+    { "kind": "visual", "label": "then", "source": { "alias": "phase1" }, "target": { "alias": "phase2" } },
+    { "kind": "visual", "label": "then", "source": { "alias": "phase2" }, "target": { "alias": "phase3" } },
+    { "kind": "data", "label": "constrains", "source": { "alias": "risks" }, "target": { "alias": "abort" } },
+    { "kind": "action", "label": "overrides", "source": { "alias": "abort" }, "target": { "alias": "phase2" } },
+    { "kind": "visual", "label": "governs", "source": { "alias": "decision" }, "target": { "alias": "phase3" } }
+  ],
+  "layout": {
+    "kind": "grid",
+    "anchor": { "alias": "title" },
+    "members": ["status", "objective", "abort", "phase1", "phase2", "phase3", "risks", "decision"],
+    "columns": 3,
+    "column_gap": 56,
+    "row_gap": 56,
+    "align": "start",
+    "placement": { "clearance": 72, "preferred_directions": ["below"] }
+  }
+}

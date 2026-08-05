@@ -1,0 +1,48 @@
+{
+  "failures": [
+    "missing_authoritative_result",
+    "missing_exact_target",
+    "missing_receipt",
+    "missing_durability_confirmation"
+  ],
+  "metadata": {
+    "expected_outcome": "artifact_success",
+    "prompt": "Create one native card on the exact OpenPencil Board using one command only.",
+    "requirements": {
+      "durability": true,
+      "pixel_witness": false,
+      "receipt": true,
+      "recovery": false,
+      "render_acknowledgement": false,
+      "visual_quality": false
+    },
+    "run_id": "lean-cold-002",
+    "scenario_id": "lean-headless-native-card"
+  },
+  "milestones": {
+    "authoritative_result_at_ms": null,
+    "durability_confirmed_at_ms": null,
+    "final_response_observed_at_ms": 1785346190303,
+    "first_tool_started_at_ms": 1785346184125,
+    "pixel_witness_at_ms": null,
+    "prompt_dispatched_at_ms": 1785346174343,
+    "render_acknowledged_at_ms": null
+  },
+  "schema_version": "prompt-to-board-eval-summary/v2",
+  "target": null,
+  "timings_ms": {
+    "command_execution_total": 0,
+    "prompt_to_authoritative": null,
+    "prompt_to_final": 15960,
+    "prompt_to_first_tool": 9782,
+    "prompt_to_visible": null
+  },
+  "valid": false,
+  "witnesses": {
+    "durability": false,
+    "pixel": false,
+    "receipt": false,
+    "render": false,
+    "visual_quality": false
+  }
+}

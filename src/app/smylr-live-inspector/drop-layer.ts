@@ -48,15 +48,7 @@ function deepestDropTarget(
 
   // Later DOM siblings normally paint above earlier siblings.
   for (const child of [...(node.children ?? [])].reverse()) {
-    const match = deepestDropTarget(
-      child,
-      x,
-      y,
-      selectedId,
-      excludedIds,
-      absoluteX,
-      absoluteY
-    )
+    const match = deepestDropTarget(child, x, y, selectedId, excludedIds, absoluteX, absoluteY)
     if (match) return match
   }
   return excludedIds.has(node.id) ? null : node

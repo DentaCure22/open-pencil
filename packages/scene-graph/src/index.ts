@@ -1,4 +1,5 @@
 export * from './images'
+export * from './object-graph'
 export * from './snap'
 export * from './export-scale'
 export * from './coordinate'
@@ -7,6 +8,7 @@ export { default as TransformMatrix } from './matrix'
 export type { Mat3 } from './matrix'
 export { UndoManager, type UndoEntry, type UndoManagerOptions } from './undo'
 export { cloneSceneNode } from './copy'
+export type { HitTestOptions } from './hit-test'
 
 import { omit } from 'es-toolkit/object'
 import { createNanoEvents } from 'nanoevents'
@@ -19,15 +21,16 @@ import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
 import { updateNodePreview } from './preview'
 import { clearEditedSourceMetadata } from './source-metadata'
 import { TEXT_PICTURE_KEYS } from './text-picture'
+import * as Traversal from './traversal'
 import * as Variables from './variables'
 import { normalizeVectorNetwork } from './vector-network'
 
-export type { GUID, Color } from './primitives'
+export type { GUID, Color, Rect, Vector } from './primitives'
 export * from './types'
 
 import type { Emitter } from 'nanoevents'
 
-import { getAbsolutePosition } from './coordinate'
+import { getAbsolutePosition, getAuthoritativeAbsolutePosition } from './coordinate'
 import type { Color, Rect, Vector } from './primitives'
 import type {
   DocumentColorSpace,
@@ -80,6 +83,7 @@ export class SceneGraph {
   documentColorSpace: DocumentColorSpace = 'display-p3'
   readonly emitter: Emitter<SceneGraphEvents> = createNanoEvents()
   private absPosCache = new Map<string, Vector>()
+  private presentationPositions = new Map<string, Vector>()
   private previewMutationDepth = 0
   private sourceMetadataPreservationDepth = 0
   positionPreviewVersion = 0
@@ -108,6 +112,9 @@ export class SceneGraph {
   getAllNodes(): Iterable<SceneNode> {
     return this.nodes.values()
   }
+  getDescendants(nodeId: string): Iterable<SceneNode> {
+    return Traversal.getDescendants(this.nodes, nodeId)
+  }
   getNode(id: string): SceneNode | undefined {
     return this.nodes.get(id)
   }
@@ -116,22 +123,7 @@ export class SceneGraph {
   }
 
   countDescendants(nodeId: string): number {
-    const node = this.nodes.get(nodeId)
-    if (!node) return 0
-    let count = 0
-    const stack = [...node.childIds]
-    while (stack.length > 0) {
-      const id = stack.pop()
-      if (id === undefined) break
-      count++
-      const child = this.nodes.get(id)
-      if (child) {
-        for (const childId of child.childIds) {
-          stack.push(childId)
-        }
-      }
-    }
-    return count
+    return Traversal.countDescendants(this.nodes, nodeId)
   }
   addVariable(variable: Variable): void {
     Variables.addVariable(this, variable)
@@ -241,6 +233,42 @@ export class SceneGraph {
     this.absPosCache.clear()
   }
 
+  getPresentedNodePosition(id: string): Vector {
+    const presented = this.presentationPositions.get(id)
+    if (presented) return presented
+    const node = this.nodes.get(id)
+    return node ? { x: node.x, y: node.y } : { x: 0, y: 0 }
+  }
+
+  hasNodePositionPresentations(): boolean {
+    return this.presentationPositions.size > 0
+  }
+
+  setNodePositionPresentation(id: string, position: Vector): void {
+    const node = this.nodes.get(id)
+    if (!node) return
+    const current = this.presentationPositions.get(id)
+    if (current?.x === position.x && current.y === position.y) return
+    this.presentationPositions.set(id, { ...position })
+    this.positionPreviewVersion++
+    this.clearAbsPosCache()
+    this.emitter.emit('node:previewUpdated', id, { x: position.x, y: position.y })
+  }
+
+  clearNodePositionPresentation(id: string): void {
+    const node = this.nodes.get(id)
+    if (!node || !this.presentationPositions.delete(id)) return
+    this.positionPreviewVersion++
+    this.clearAbsPosCache()
+    this.emitter.emit('node:previewUpdated', id, { x: node.x, y: node.y })
+  }
+
+  clearNodePositionPresentations(): void {
+    for (const id of this.presentationPositions.keys()) {
+      this.clearNodePositionPresentation(id)
+    }
+  }
+
   getAbsolutePosition(id: string): Vector {
     const cached = this.absPosCache.get(id)
     if (cached) return cached
@@ -251,6 +279,22 @@ export class SceneGraph {
     const result = getAbsolutePosition(node, this)
     this.absPosCache.set(id, result)
     return result
+  }
+
+  getAuthoritativeAbsolutePosition(id: string): Vector {
+    const node = this.getNode(id)
+    return node ? getAuthoritativeAbsolutePosition(node, this) : { x: 0, y: 0 }
+  }
+
+  getAuthoritativeAbsoluteBounds(id: string): Rect {
+    const pos = this.getAuthoritativeAbsolutePosition(id)
+    const node = this.nodes.get(id)
+    return {
+      x: pos.x,
+      y: pos.y,
+      width: node?.width ?? 0,
+      height: node?.height ?? 0
+    }
   }
 
   getAbsoluteBounds(id: string): Rect {
@@ -358,7 +402,7 @@ export class SceneGraph {
     }
   }
   updateNodePositionPreview(id: string, x: number, y: number): void {
-    this.updateNodePreview(id, { x, y })
+    this.setNodePositionPresentation(id, { x, y })
   }
   updateNodePreview(id: string, changes: Partial<SceneNode>): void {
     const appliedChanges = updateNodePreview(this, id, changes)
@@ -426,12 +470,12 @@ export class SceneGraph {
     const oldParentId = node.parentId
     this.absPosCache.clear()
 
-    const absPos = this.getAbsolutePosition(nodeId)
+    const absPos = this.getAuthoritativeAbsolutePosition(nodeId)
     const newParentNode = this.nodes.get(newParentId)
     const newParentAbs =
       newParentId === this.rootId || newParentNode?.type === 'CANVAS'
         ? { x: 0, y: 0 }
-        : this.getAbsolutePosition(newParentId)
+        : this.getAuthoritativeAbsolutePosition(newParentId)
 
     if (oldParent) {
       oldParent.childIds = oldParent.childIds.filter((cid) => cid !== nodeId)
@@ -444,6 +488,7 @@ export class SceneGraph {
     node.y = absPos.y - newParentAbs.y
 
     this.emitter.emit('node:reparented', nodeId, oldParentId, newParentId)
+    this.clearNodePositionPresentation(nodeId)
   }
 
   reorderChild(nodeId: string, parentId: string, insertIndex: number): void {
@@ -473,6 +518,7 @@ export class SceneGraph {
     newParent.childIds.splice(idx, 0, nodeId)
 
     this.emitter.emit('node:reordered', nodeId, parentId, idx)
+    this.clearNodePositionPresentation(nodeId)
   }
 
   insertChildAt(childId: string, parentId: string, index: number): void {
@@ -488,6 +534,7 @@ export class SceneGraph {
     if (node) node.parentId = parentId
     this.clearAbsPosCache()
     this.emitter.emit('node:reordered', childId, parentId, index)
+    this.clearNodePositionPresentation(childId)
   }
 
   deleteNode(id: string): void {
@@ -508,16 +555,28 @@ export class SceneGraph {
     if (node.type === 'INSTANCE' && node.componentId) {
       this.instanceIndex.get(node.componentId)?.delete(id)
     }
+    this.presentationPositions.delete(id)
+    this.clearAbsPosCache()
     this.nodes.delete(id)
     this.emitter.emit('node:deleted', id)
   }
 
-  hitTest(px: number, py: number, scopeId?: string): SceneNode | null {
-    return HitTest.hitTest(this, px, py, scopeId)
+  hitTest(
+    px: number,
+    py: number,
+    scopeId?: string,
+    options?: HitTest.HitTestOptions
+  ): SceneNode | null {
+    return HitTest.hitTest(this, px, py, scopeId, options)
   }
 
-  hitTestDeep(px: number, py: number, scopeId?: string): SceneNode | null {
-    return HitTest.hitTestDeep(this, px, py, scopeId)
+  hitTestDeep(
+    px: number,
+    py: number,
+    scopeId?: string,
+    options?: HitTest.HitTestOptions
+  ): SceneNode | null {
+    return HitTest.hitTestDeep(this, px, py, scopeId, options)
   }
 
   hitTestFrame(

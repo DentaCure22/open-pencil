@@ -4,10 +4,16 @@ import { placeMediaEvidenceFiles } from '@/app/media-evidence/intake'
 import { placeSourceObjectFiles, SOURCE_OBJECT_SIZE } from '@/app/source-object/intake'
 
 import { classifyBoardFile } from './classify'
+import { officeFileIntakeAdapter } from './office'
+import { pdfFileIntakeAdapter } from './pdf'
+import { presentationFileIntakeAdapter } from './presentation'
 import { boardFileIntakeRegistry, type BoardFileIntakeAdapter } from './registry'
 import { spatialMediaFileIntakeAdapter } from './spatial-media'
 
-boardFileIntakeRegistry.register(spatialMediaFileIntakeAdapter)
+boardFileIntakeRegistry.registerOrReplace(spatialMediaFileIntakeAdapter)
+boardFileIntakeRegistry.registerOrReplace(pdfFileIntakeAdapter)
+boardFileIntakeRegistry.registerOrReplace(officeFileIntakeAdapter)
+boardFileIntakeRegistry.registerOrReplace(presentationFileIntakeAdapter)
 
 export type FileIntakeResult = {
   ids: string[]

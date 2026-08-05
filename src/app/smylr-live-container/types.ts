@@ -1,4 +1,5 @@
 import type { DesignStyleDeclaration } from '@open-pencil/dom-css'
+import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 export type SmylrLiveContainerOwner = {
   componentName?: string
@@ -39,12 +40,7 @@ export type SmylrLiveTokenProvenance = {
   utility?: string
 }
 
-export type SmylrLiveContainerRect = {
-  height: number
-  width: number
-  x: number
-  y: number
-}
+export type SmylrLiveContainerRect = Rect
 
 export type SmylrLiveContainerNode = {
   attrs?: Record<string, string>

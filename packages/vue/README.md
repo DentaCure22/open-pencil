@@ -11,6 +11,13 @@ Headless Vue 3 SDK for building OpenPencil-powered editors.
 
 The SDK is headless by design: it provides logic and structure, while your app owns styling and product-specific UI.
 
+Services and non-component renderers can avoid loading the component barrel:
+
+```ts
+import { dialogMessages } from '@open-pencil/vue/i18n'
+import { scheduleEditorPresentationFrame } from '@open-pencil/vue/presentation'
+```
+
 ## Install
 
 ```bash
@@ -26,7 +33,7 @@ import { provideEditor } from '@open-pencil/vue'
 
 const editor = createEditor({
   width: 1200,
-  height: 800,
+  height: 800
 })
 
 editor.createShape('RECTANGLE', 100, 100, 200, 150)

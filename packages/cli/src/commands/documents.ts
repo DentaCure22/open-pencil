@@ -6,7 +6,7 @@ import { rpc } from '#cli/app-client'
 import { bold, entity, fmtList, kv, printError } from '#cli/format'
 
 export default defineCommand({
-  meta: { description: 'List open documents in the running app' },
+  meta: { description: 'List available local workspaces and open documents' },
   args: {
     json: { type: 'boolean', description: 'Output as JSON' }
   },
@@ -21,15 +21,22 @@ export default defineCommand({
       }
 
       console.log('')
-      console.log(bold(`  ${documents.length} open document${documents.length !== 1 ? 's' : ''}`))
+      console.log(
+        bold(`  ${documents.length} available document${documents.length !== 1 ? 's' : ''}`)
+      )
       console.log('')
       console.log(
         fmtList(
           documents.map((doc) => ({
-            header: `${entity('document', doc.name, doc.id)}${doc.active ? ' [active]' : ''}`,
+            header: `${entity(doc.kind, doc.name, doc.id)}${doc.active ? ' [active]' : ''}`,
             details: {
+              ...(doc.workspace_id ? { workspace: doc.workspace_id } : {}),
+              content_document: doc.content_document_id,
               ...(doc.path ? { path: doc.path } : {}),
-              current: `${doc.current_page_name} (${doc.current_page_id})`,
+              current:
+                doc.current_page_id && doc.current_page_name
+                  ? `${doc.current_page_name} (${doc.current_page_id})`
+                  : 'not open (choose an exact page ID)',
               pages: doc.pages.map((page) => `${page.name} (${page.id})`).join(', ')
             }
           })),
@@ -37,7 +44,12 @@ export default defineCommand({
         )
       )
       console.log('')
-      console.log(kv('target flags', '--document-id <id> --page-id <id>'))
+      console.log(
+        kv(
+          'Trace target flags',
+          '--workspace-id <id> --document-id <tab-id> --content-document-id <id> --page-id <id>'
+        )
+      )
       console.log('')
     } catch (error) {
       printError(error)

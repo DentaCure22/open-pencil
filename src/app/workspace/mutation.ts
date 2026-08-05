@@ -1,5 +1,4 @@
 import { WorkspaceDomainError } from './errors'
-import { advanceExperienceProjectionViewRefs } from './experience-projection-revisions'
 import { createWorkspaceId } from './id'
 import type {
   ArchiveObjectOperation,
@@ -11,7 +10,6 @@ import type {
   RemoveProjectionOperation,
   RestoreObjectOperation,
   SetProjectionOperation,
-  SetRuntimeOwnerOperation,
   UpdateObjectOperation,
   UpdateViewOperation,
   WorkspaceMutationEnvelope,
@@ -22,7 +20,6 @@ import { rememberMutationReceipt, replayReceipt, requestFingerprint } from './re
 import { validateKnowledgeWorkspace } from './serialization'
 import type {
   KnowledgeWorkspace,
-  LiveAppBlock,
   WorkspaceMutationOutcome,
   WorkspaceObject,
   WorkspaceRelation,
@@ -86,20 +83,6 @@ function validateObjectScope(workspace: KnowledgeWorkspace, object: WorkspaceObj
 
 function stampObject(object: WorkspaceObject, now: string): WorkspaceObject {
   return { ...structuredClone(object), revision: object.revision + 1, updatedAt: now }
-}
-
-function recordAdvancedExperienceViews(
-  workspace: KnowledgeWorkspace,
-  surface: Extract<WorkspaceObject, { type: 'surface-run' }>,
-  now: string,
-  summary: MutableSummary
-): void {
-  for (const viewId of advanceExperienceProjectionViewRefs(workspace, surface, now)) {
-    summary.affected.add(viewId)
-    summary.operations.push(
-      `Advanced experience view ${viewId} to surface ${surface.id}@${surface.revision}`
-    )
-  }
 }
 
 function updateCollectionMembership(
@@ -202,9 +185,6 @@ function updateObject(
   )
   validateObjectScope(workspace, updated)
   workspace.objects[current.id] = updated
-  if (updated.type === 'surface-run') {
-    recordAdvancedExperienceViews(workspace, updated, now, summary)
-  }
   summary.affected.add(current.id)
   summary.operations.push(`Updated ${current.type} ${current.id}`)
 }
@@ -234,9 +214,6 @@ function setObjectLifecycle(
     now
   )
   workspace.objects[object.id] = next
-  if (next.type === 'surface-run') {
-    recordAdvancedExperienceViews(workspace, next, now, summary)
-  }
   summary.affected.add(object.id)
   if (archive) summary.archived.add(object.id)
   summary.operations.push(`${archive ? 'Archived' : 'Restored'} ${object.type} ${object.id}`)
@@ -417,58 +394,6 @@ function disconnectRelation(
   summary.operations.push(`Disconnected relation ${relation.id}`)
 }
 
-function inactiveRuntimeStatus(block: LiveAppBlock): LiveAppBlock['runtime']['status'] {
-  if (block.runtime.status === 'preview') return 'preview'
-  if (block.capture)
-    return block.capture.sourceRevision === block.sourceRevision ? 'captured' : 'stale'
-  return 'unavailable'
-}
-
-function setRuntimeOwner(
-  workspace: KnowledgeWorkspace,
-  operation: SetRuntimeOwnerOperation,
-  now: string,
-  summary: MutableSummary
-): void {
-  const previousId = workspace.activeRuntimeBlockId
-  if (previousId && previousId !== operation.blockId) {
-    const previous = requireObject(workspace, previousId)
-    if (previous.type === 'live-app-block') {
-      workspace.objects[previous.id] = stampObject(
-        { ...previous, runtime: { ...previous.runtime, status: inactiveRuntimeStatus(previous) } },
-        now
-      )
-      summary.affected.add(previous.id)
-    }
-  }
-  if (operation.blockId === null) {
-    workspace.activeRuntimeBlockId = undefined
-    summary.operations.push('Released the shared live runtime')
-    return
-  }
-  const object = requireObject(workspace, operation.blockId)
-  requireWorkspaceObjectMutable(object)
-  if (object.type !== 'live-app-block') {
-    throw new WorkspaceDomainError('validation_failed', `${object.id} is not a Live App Block`)
-  }
-  if (!operation.handshakeAt) {
-    throw new WorkspaceDomainError(
-      'validation_failed',
-      'a successful handshake timestamp is required before a block can claim Live'
-    )
-  }
-  workspace.objects[object.id] = stampObject(
-    {
-      ...object,
-      runtime: { error: undefined, lastHandshakeAt: operation.handshakeAt, status: 'live' }
-    },
-    now
-  )
-  workspace.activeRuntimeBlockId = object.id
-  summary.affected.add(object.id)
-  summary.operations.push(`Assigned the shared live runtime to ${object.id}`)
-}
-
 function applyOperation(
   workspace: KnowledgeWorkspace,
   operation: WorkspaceOperation,
@@ -504,9 +429,6 @@ function applyOperation(
       return
     case 'disconnect-relation':
       disconnectRelation(workspace, operation, now, summary)
-      return
-    case 'set-runtime-owner':
-      setRuntimeOwner(workspace, operation, now, summary)
   }
 }
 

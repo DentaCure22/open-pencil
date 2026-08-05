@@ -6,14 +6,22 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 import {
   appendNarratedTraceEvent,
   attachNarratedTraceEvidence,
+  beginNarratedTraceSession,
   captureNarratedTraceEvidence,
   createNarratedTraceCanvasInk,
+  finishNarratedTraceSession,
+  markNarratedTraceEvidenceFailed,
+  narratedTraceAnchorForScreenPoints,
   narratedTraceAnnotationTool,
   narratedTraceCanvasInkProjections,
   narratedTraceElapsedMs,
   narratedTracePointsPath,
+  readNarratedTraceRuntimeTabIdentity,
+  narratedTraceScopeForStore,
   narratedTraceSmoothPointsPath,
   narratedTraceSession,
+  narratedTraceStatus,
+  resolveNarratedTraceSceneTargets,
   setNarratedTraceAnnotationTool
 } from '@/app/narrated-trace'
 import { useEditorStore } from '@/app/editor/active-store'
@@ -23,14 +31,6 @@ import type {
   NarratedTracePoint,
   NarratedTraceTarget
 } from '@/app/narrated-trace'
-import {
-  findLiveInspectorNode,
-  liveInspectorActiveFrameId,
-  liveInspectorDocument,
-  liveInspectorRoute,
-  liveInspectorSelectedId,
-  liveInspectorSelectedRect
-} from '@/app/smylr-live-inspector/session'
 
 type FocusDraft = {
   pointerId: number
@@ -145,65 +145,15 @@ function paddedCaptureBounds(bounds: Rect, padding: number, area: HTMLElement) {
   }
 }
 
-function intersects(first: Rect, second: Rect) {
-  return (
-    first.x < second.x + second.width &&
-    first.x + first.width > second.x &&
-    first.y < second.y + second.height &&
-    first.y + first.height > second.y
-  )
-}
-
-function selectedTargetBounds(area: HTMLElement) {
-  const selected = liveInspectorSelectedRect.value
-  if (!selected) return null
-  const frameId = liveInspectorActiveFrameId.value
-  const iframe =
-    (frameId
-      ? area.querySelector<HTMLIFrameElement>(`iframe[data-live-frame-id="${CSS.escape(frameId)}"]`)
-      : null) ?? area.querySelector<HTMLIFrameElement>('iframe')
-  if (!iframe) return null
-  const areaBounds = area.getBoundingClientRect()
-  const frameBounds = iframe.getBoundingClientRect()
-  return {
-    height: selected.height,
-    width: selected.width,
-    x: frameBounds.left - areaBounds.left + selected.x,
-    y: frameBounds.top - areaBounds.top + selected.y
-  }
-}
-
-function targetForRegion(region: Rect, area: HTMLElement): NarratedTraceTarget {
-  const document = liveInspectorDocument.value
-  const selectedId = liveInspectorSelectedId.value
-  const node = selectedId ? findLiveInspectorNode(document?.tree, selectedId) : null
-  const selectedBounds = selectedTargetBounds(area)
-  const hitsSelected = Boolean(selectedBounds && intersects(region, selectedBounds))
-  if (document && selectedId && node && selectedBounds && hitsSelected) {
-    return {
-      bounds: selectedBounds,
-      frameId: liveInspectorActiveFrameId.value ?? undefined,
-      name: node.label,
-      path: [document.title, node.label],
-      route: liveInspectorRoute.value ?? document.route,
-      stableId: node.id
-    }
-  }
-  return {
+function targetForRegion(region: Rect) {
+  const resolution = resolveNarratedTraceSceneTargets(store, region)
+  const target: NarratedTraceTarget = resolution.target ?? {
     bounds: region,
     name: 'Canvas area',
     path: ['Canvas', 'Intent annotation'],
     stableId: `canvas:${Math.round(region.x)}:${Math.round(region.y)}`
   }
-}
-
-function evidenceBoundsForTarget(
-  target: NarratedTraceTarget,
-  fallbackRegion: Rect,
-  area: HTMLElement
-) {
-  if (!target.bounds || target.stableId.startsWith('canvas:')) return fallbackRegion
-  return paddedCaptureBounds(target.bounds, 36, area)
+  return { ...resolution, target }
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -250,6 +200,13 @@ function onPointerMove(event: PointerEvent) {
   scheduleFocusAnimation()
 }
 
+function beginGestureTrace() {
+  if (narratedTraceStatus.value === 'recording') return false
+  if (narratedTraceStatus.value === 'paused') return false
+  beginNarratedTraceSession(narratedTraceScopeForStore(store))
+  return true
+}
+
 async function finishStroke() {
   const stroke = currentStroke.value
   const area = root.value?.parentElement
@@ -257,27 +214,50 @@ async function finishStroke() {
   if (!stroke || stroke.points.length < 2 || !area) return
   const canvasInk = createNarratedTraceCanvasInk(store, stroke)
   if (!canvasInk) return
+  const ownsGestureTrace = beginGestureTrace()
   const atMs = narratedTraceElapsedMs.value
   const cropBounds = paddedCaptureBounds(stroke.bounds, 20, area)
   const target = canvasInk.target
+  const anchor = narratedTraceAnchorForScreenPoints(store, stroke.points)
+  const resolution = resolveNarratedTraceSceneTargets(store, cropBounds)
+  const runtimeIdentity = readNarratedTraceRuntimeTabIdentity(store)
   const eventId = appendNarratedTraceEvent({
+    anchor,
     atMs,
+    evidenceStatus: 'pending',
+    gesture: {
+      candidateCount: resolution.candidateCount,
+      candidates: resolution.candidates,
+      candidatesTruncated: resolution.candidatesTruncated,
+      ...(runtimeIdentity ? { documentTabId: runtimeIdentity.documentTabId } : {}),
+      kind: 'ink',
+      pagePoints: stroke.points.map((point) => store.screenToCanvas(point.x, point.y)),
+      ...(resolution.target ? { primaryTargetId: resolution.target.stableId } : {}),
+      ...(runtimeIdentity ? { runtimeInstanceId: runtimeIdentity.runtimeInstanceId } : {}),
+      screenBounds: structuredClone(stroke.bounds),
+      screenPoints: structuredClone(stroke.points)
+    },
     ink: stroke,
     kind: 'ink',
     label: 'Drew an editable intent stroke',
     target
   })
   const sessionId = narratedTraceSession.value?.id
-  if (!eventId || !sessionId) return
-  const evidence = await captureNarratedTraceEvidence({
-    annotation: { ...stroke, kind: 'ink' },
-    area,
-    capturedAtMs: atMs,
-    cropBounds,
-    sessionId,
-    target
-  })
-  if (evidence) attachNarratedTraceEvidence(eventId, evidence)
+  try {
+    if (!eventId || !sessionId) return
+    const evidence = await captureNarratedTraceEvidence({
+      annotation: { ...stroke, kind: 'ink' },
+      area,
+      capturedAtMs: atMs,
+      cropBounds,
+      sessionId,
+      target
+    })
+    if (evidence) attachNarratedTraceEvidence(eventId, evidence)
+    else markNarratedTraceEvidenceFailed(eventId)
+  } finally {
+    if (ownsGestureTrace) finishNarratedTraceSession()
+  }
 }
 
 async function finishFocus() {
@@ -291,12 +271,36 @@ async function finishFocus() {
   const points = focus.points.map(({ pressure, x, y }) => ({ pressure, x, y }))
   const bounds = boundsForPoints(points, FOCUS_AURA_WIDTH / 2)
   const region = paddedCaptureBounds(bounds, 24, area)
-  const target = targetForRegion(region, area)
-  const cropBounds = evidenceBoundsForTarget(target, region, area)
+  const resolution = targetForRegion(region)
+  const target = resolution.target
+  const anchor = narratedTraceAnchorForScreenPoints(
+    store,
+    points,
+    target.stableId.startsWith('canvas:') ? undefined : target.bounds
+  )
+  const cropBounds = region
+  const ownsGestureTrace = beginGestureTrace()
   const atMs = narratedTraceElapsedMs.value
+  const runtimeIdentity = readNarratedTraceRuntimeTabIdentity(store)
   const eventId = appendNarratedTraceEvent(
     {
+      anchor,
       atMs,
+      evidenceStatus: 'pending',
+      gesture: {
+        candidateCount: resolution.candidateCount,
+        candidates: resolution.candidates,
+        candidatesTruncated: resolution.candidatesTruncated,
+        ...(runtimeIdentity ? { documentTabId: runtimeIdentity.documentTabId } : {}),
+        kind: 'focus',
+        pagePoints: points.map((point) => store.screenToCanvas(point.x, point.y)),
+        ...(resolution.target.stableId.startsWith('canvas:')
+          ? {}
+          : { primaryTargetId: resolution.target.stableId }),
+        ...(runtimeIdentity ? { runtimeInstanceId: runtimeIdentity.runtimeInstanceId } : {}),
+        screenBounds: bounds,
+        screenPoints: points
+      },
       kind: 'screenshot',
       label: `Highlighted ${target.name}`,
       target
@@ -328,11 +332,15 @@ async function finishFocus() {
     { id: `focus-${Math.round(focus.points[0]?.atMs ?? focusClock.value)}`, points: focus.points }
   ]
   scheduleFocusAnimation()
-  setNarratedTraceAnnotationTool('none')
 
-  if (!eventId || !evidencePromise) return
-  const evidence = await evidencePromise
-  if (evidence) attachNarratedTraceEvidence(eventId, evidence)
+  try {
+    if (!eventId || !evidencePromise) return
+    const evidence = await evidencePromise
+    if (evidence) attachNarratedTraceEvidence(eventId, evidence)
+    else markNarratedTraceEvidenceFailed(eventId)
+  } finally {
+    if (ownsGestureTrace) finishNarratedTraceSession()
+  }
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -370,6 +378,7 @@ onUnmounted(() => {
     ref="root"
     data-test-id="narrated-trace-annotation-overlay"
     data-narrated-trace-overlay="true"
+    data-html2canvas-ignore="true"
     class="absolute inset-0 z-40 touch-none"
     :class="canAnnotate ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'"
     :data-tool="narratedTraceAnnotationTool"

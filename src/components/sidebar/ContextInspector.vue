@@ -2,18 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
+import { objectGraphConnectionForSelection } from '@open-pencil/scene-graph'
 import { useSceneComputed, useSelectionState } from '@open-pencil/vue'
 
 import { useAIChat } from '@/app/ai/chat/use'
+import { isCodeObjectFrame } from '@/app/code-object/model'
 import { isMermaidDiagramNode } from '@/app/diagram/mermaid/selection'
 import { useEditorStore } from '@/app/editor/active-store'
-import { isHtmlBoardFrame } from '@/app/html-board/workspace'
+import { objectGraphConnectionName } from '@/app/object-graph'
+import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
 import { selectedSourceDocument } from '@/app/source-document/workspace'
-import { displayNameForLiveNode } from '@/app/smylr-live-inspector/layer-bridge'
-import {
-  liveInspectorSelectionEpoch,
-  selectedLiveInspectorNode
-} from '@/app/smylr-live-inspector/session'
 import CodePanel from '@/components/CodePanel.vue'
 import DesignPanel from '@/components/DesignPanel.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -28,32 +26,54 @@ const emit = defineEmits<{ close: [] }>()
 
 const store = useEditorStore()
 const { activeTab } = useAIChat()
-const { selectedNode, selectedCount } = useSelectionState()
+const { selectedIds, selectedNode, selectedCount } = useSelectionState()
 const contextTab = ref<ContextTab>('design')
 
-const htmlBoardSelected = useSceneComputed(() => {
-  void store.state.sceneVersion
-  const ids = [...store.state.selectedIds]
-  return ids.length === 1 && isHtmlBoardFrame(store.graph.getNode(ids[0]))
-})
 const sourceDocumentSelected = useSceneComputed(() => {
   void store.state.sceneVersion
   return Boolean(selectedSourceDocument(store))
+})
+const codeSelectionVisible = useSceneComputed(() => {
+  const ids = [...store.state.selectedIds]
+  if (ids.length !== 1) return false
+  const node = store.graph.getNode(ids[0])
+  return isCodeObjectFrame(node) || Boolean(selectedSourceDocument(store))
 })
 const mermaidDiagramSelected = useSceneComputed(() => {
   void store.state.sceneVersion
   const ids = [...store.state.selectedIds]
   return ids.length > 0 && ids.every((id) => isMermaidDiagramNode(store.graph.getNode(id)))
 })
+const smylrProductionSelected = useSceneComputed(() => {
+  void store.state.sceneVersion
+  const ids = [...store.state.selectedIds]
+  return ids.length === 1 && isSmylrProductionAppCodeObjectFrame(store.graph.getNode(ids[0]))
+})
 const codeTabVisible = computed(
-  () => (showCodeTab || sourceDocumentSelected.value) && !mermaidDiagramSelected.value
+  () =>
+    showCodeTab &&
+    codeSelectionVisible.value &&
+    !mermaidDiagramSelected.value &&
+    !smylrProductionSelected.value
 )
-const codeTabLabel = computed(() => (sourceDocumentSelected.value ? 'Source' : 'HTML'))
+const contextHeaderVisible = computed(
+  () => !smylrProductionSelected.value && (showCodeTab || sourceDocumentSelected.value)
+)
+const codeTabLabel = computed(() => (sourceDocumentSelected.value ? 'Source' : 'Code'))
+const selectedConnection = useSceneComputed(() => {
+  void store.state.sceneVersion
+  return objectGraphConnectionForSelection(
+    store.graph,
+    store.state.currentPageId,
+    selectedIds.value
+  )
+})
 
 const selectionLabel = computed(() => {
-  const liveNode = selectedLiveInspectorNode.value
-  if (liveNode) return displayNameForLiveNode(liveNode)
   if (selectedCount.value > 1) return `${selectedCount.value} selected`
+  if (selectedConnection.value) {
+    return objectGraphConnectionName(store.graph, selectedConnection.value)
+  }
   return selectedNode.value?.name || selectedNode.value?.type || 'Design'
 })
 function setContextTab(tab: ContextTab) {
@@ -74,16 +94,15 @@ watch(
 watch(
   mermaidDiagramSelected,
   (selected) => {
-    if (selected && activeTab.value !== 'trace') setContextTab('design')
+    if (selected) setContextTab('design')
   },
   { immediate: true }
 )
 
 watch(
-  htmlBoardSelected,
-  (selected) => {
-    if (!selected || !showCodeTab || activeTab.value === 'trace') return
-    setContextTab('code')
+  codeTabVisible,
+  (visible) => {
+    if (!visible && contextTab.value === 'code') setContextTab('design')
   },
   { immediate: true }
 )
@@ -91,15 +110,11 @@ watch(
 watch(
   sourceDocumentSelected,
   (selected) => {
-    if (!selected || activeTab.value === 'trace') return
+    if (!selected) return
     setContextTab('code')
   },
   { immediate: true }
 )
-
-watch(liveInspectorSelectionEpoch, () => {
-  if (activeTab.value !== 'trace') setContextTab('design')
-})
 </script>
 
 <template>
@@ -110,7 +125,7 @@ watch(liveInspectorSelectionEpoch, () => {
   >
     <TabsRoot v-model="contextTab" class="flex min-h-0 flex-1 flex-col">
       <div
-        v-if="showCodeTab || sourceDocumentSelected"
+        v-if="contextHeaderVisible"
         data-test-id="sidebar-context-header"
         class="flex h-10 shrink-0 items-center gap-1 px-2"
       >

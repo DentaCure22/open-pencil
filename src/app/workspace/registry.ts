@@ -2,7 +2,6 @@ import { WorkspaceDomainError } from './errors'
 import { createKnowledgeWorkspace } from './factories'
 import { applyWorkspaceMutation } from './mutation'
 import type { WorkspaceMutationEnvelope } from './operations'
-import { reconcileHydratedRuntimeTruth } from './runtime-truth'
 import { deserializeWorkspace, serializeWorkspace } from './serialization'
 import type { KnowledgeWorkspace, WorkspaceMutationOutcome } from './types'
 
@@ -66,20 +65,6 @@ export class WorkspaceRegistry {
         `knowledge workspace for document ${documentId}, page ${pageId}`
       )
     }
-    const claimsSharedRuntime = envelope.operations.some(
-      (operation) => operation.type === 'set-runtime-owner' && operation.blockId !== null
-    )
-    if (claimsSharedRuntime) {
-      const otherOwner = this.list().find(
-        (candidate) => candidate.id !== workspace.id && candidate.activeRuntimeBlockId
-      )
-      if (otherOwner) {
-        throw new WorkspaceDomainError(
-          'validation_failed',
-          `shared live runtime is already owned by ${otherOwner.activeRuntimeBlockId}; release it before assigning another owner`
-        )
-      }
-    }
     const outcome = applyWorkspaceMutation(workspace, envelope)
     if (!envelope.dryRun) this.replace(outcome.workspace)
     return outcome
@@ -112,9 +97,7 @@ export class WorkspaceRegistry {
         'workspace registry workspaces must be an array'
       )
     }
-    const hydrated = workspaces.map((workspace) =>
-      reconcileHydratedRuntimeTruth(deserializeWorkspace(JSON.stringify(workspace)))
-    )
+    const hydrated = workspaces.map((workspace) => deserializeWorkspace(JSON.stringify(workspace)))
     this.clear()
     hydrated.forEach((workspace) => this.replace(workspace))
   }

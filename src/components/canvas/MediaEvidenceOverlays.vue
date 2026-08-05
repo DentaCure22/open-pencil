@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
 import {
   mediaEvidenceSource,
@@ -24,22 +25,12 @@ const store = useEditorStore()
 const assetUrls = shallowRef<Record<string, string>>({})
 const viewerStates = shallowRef<Record<string, ViewerState>>({})
 
-function belongsToCurrentPage(node: SceneNode): boolean {
-  let current: SceneNode | undefined = node
-  while (current.parentId) {
-    if (current.parentId === store.state.currentPageId) return true
-    current = store.graph.getNode(current.parentId)
-    if (!current) return false
-  }
-  return false
-}
-
 const items = computed<MediaEvidenceItem[]>(() => {
   void store.state.sceneVersion
   void store.state.currentPageId
   const result: MediaEvidenceItem[] = []
-  for (const node of store.graph.getAllNodes()) {
-    if (!node.visible || !belongsToCurrentPage(node)) continue
+  for (const node of store.graph.getDescendants(store.state.currentPageId)) {
+    if (!node.visible || isCodeObjectFrame(node)) continue
     const source = mediaEvidenceSource(node)
     if (!source) continue
     const bytes = store.graph.images.get(source.assetHash)

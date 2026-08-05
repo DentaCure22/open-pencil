@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "name": "Open Pencil",
+  "color": "",
+  "dockState": {
+    "zones": {
+      "left": {
+        "position": "left",
+        "visible": false,
+        "size": 260,
+        "layout": null
+      },
+      "right": {
+        "position": "right",
+        "visible": false,
+        "size": 260,
+        "layout": null
+      },
+      "bottom": {
+        "position": "bottom",
+        "visible": false,
+        "size": 240,
+        "layout": null
+      },
+      "center": {
+        "position": "center",
+        "visible": true,
+        "size": 0,
+        "layout": {
+          "type": "tabs",
+          "id": "b3a4d0c6-1290-4d40-9049-10f5c58d4116",
+          "panelIds": [
+            "cc31da2a-2577-424c-9883-56ec3d79e249"
+          ],
+          "activeIndex": 0
+        }
+      }
+    }
+  },
+  "panels": {
+    "a25888ea-47c9-4df1-8e18-cb09cd2a22bc": {
+      "type": "browser",
+      "title": "Google",
+      "tabs": [
+        {
+          "id": "509f1819-3218-44db-82a1-5baa1330aa9a",
+          "url": "https://www.google.com/",
+          "title": "Google",
+          "favicon": "https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico"
+        }
+      ],
+      "activeTabId": "509f1819-3218-44db-82a1-5baa1330aa9a"
+    },
+    "95f3acb6-f6d9-457c-8fe6-9a6c2deb3c45": {
+      "type": "agent",
+      "title": "Agent 1"
+    },
+    "cc31da2a-2577-424c-9883-56ec3d79e249": {
+      "type": "canvas",
+      "title": "Canvas"
+    }
+  },
+  "canvases": {
+    "cc31da2a-2577-424c-9883-56ec3d79e249": {
+      "id": "cc31da2a-2577-424c-9883-56ec3d79e249",
+      "canvasNodes": {
+        "201bf459-0996-4acd-b1ef-f3ed62231986": {
+          "id": "201bf459-0996-4acd-b1ef-f3ed62231986",
+          "origin": {
+            "x": -2981.0000000000005,
+            "y": -883.3333333333334
+          },
+          "size": {
+            "width": 1393.3333333333348,
+            "height": 1156.666666666667
+          },
+          "zOrder": 16,
+          "creationIndex": 0,
+          "animationState": "idle",
+          "dockLayout": {
+            "type": "tabs",
+            "id": "3af18da6-fa57-4306-9046-3012fcb60914",
+            "panelIds": [
+              "a25888ea-47c9-4df1-8e18-cb09cd2a22bc"
+            ],
+            "activeIndex": 0
+          }
+        },
+        "893baa99-1310-49ea-a77b-07d695318ab1": {
+          "id": "893baa99-1310-49ea-a77b-07d695318ab1",
+          "origin": {
+            "x": -4576.666666666667,
+            "y": -880
+          },
+          "size": {
+            "width": 1393.3333333333348,
+            "height": 900
+          },
+          "zOrder": 13,
+          "creationIndex": 1,
+          "animationState": "idle",
+          "dockLayout": {
+            "type": "tabs",
+            "id": "82ca1822-363e-4dc5-b25e-34ed7aa5287f",
+            "panelIds": [
+              "95f3acb6-f6d9-457c-8fe6-9a6c2deb3c45"
+            ],
+            "activeIndex": 0
+          }
+        }
+      },
+      "zoomLevel": 0.3,
+      "viewportOffset": {
+        "x": 1636.921031910102,
+        "y": 772.6887308233688
+      }
+    }
+  }
+}

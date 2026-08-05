@@ -1,64 +1,163 @@
-import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
+import { classifyRpcExecutionSurface } from '@open-pencil/core/rpc'
 
-const HEALTH_URL = `http://127.0.0.1:${AUTOMATION_HTTP_PORT}/health`
-const RPC_URL = `http://127.0.0.1:${AUTOMATION_HTTP_PORT}/rpc`
+import type { AppRpcEnvelope, AppRpcTarget } from '#cli/app-rpc-types'
+import { localAuthorityRpcEnvelope } from '#cli/local-authority-client'
 
-let cachedToken: string | null = null
+export type { AppRpcEnvelope, AppRpcTarget } from '#cli/app-rpc-types'
 
-export async function getAppToken(): Promise<string> {
-  if (cachedToken) return cachedToken
-  const res = await fetch(HEALTH_URL).catch(() => null)
-  if (!res || !res.ok) {
-    throw new Error(
-      `Could not connect to OpenPencil app on localhost:${AUTOMATION_HTTP_PORT}.\n` +
-        'Is the app running? Start it with: bun run tauri dev'
-    )
-  }
-  const data = (await res.json()) as { status: string; token?: string }
-  if (data.status !== 'ok' || !data.token) {
-    throw new Error(
-      'OpenPencil app is running but no document is open.\n' +
-        'Open a document in the app, or provide a .fig file path.'
-    )
-  }
-  cachedToken = data.token
-  return cachedToken
+// Keep retries limited to durable named targets so semantic mistakes still fail immediately.
+const NAMED_TARGET_RETRY_DELAYS_MS = [250, 500, 1000, 2000, 3000, 5000, 8000] as const
+
+type RpcArgs = { [key: string]: unknown }
+
+type RawAppRpcResponse<T> = {
+  error?: string
+  ok?: boolean
+  result?: T
+  target?: AppRpcTarget
+  [key: string]: unknown
 }
 
-async function doRpc<T>(token: string, command: string, args: unknown): Promise<T> {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ command, args })
-  })
+type DurableAppTarget = { kind: 'document'; value: string } | { kind: 'workspace'; value: string }
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: `HTTP ${res.status}` }))) as {
-      error?: string
-      ok?: boolean
-    }
-    throw new Error(body.error ?? `RPC failed: HTTP ${res.status}`)
+function isRpcArgs(value: unknown): value is RpcArgs {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function durableAppTarget(args: unknown): DurableAppTarget | undefined {
+  if (!isRpcArgs(args)) return undefined
+  if (typeof args.workspace_id === 'string' && args.workspace_id.trim()) {
+    return { kind: 'workspace', value: args.workspace_id.trim() }
   }
+  if (typeof args.document_name === 'string' && args.document_name.trim()) {
+    return { kind: 'document', value: args.document_name.trim() }
+  }
+  return undefined
+}
 
-  const body = (await res.json()) as { ok?: boolean; result?: T; error?: string }
-  if (body.ok === false) throw new Error(body.error ?? 'RPC failed')
-  return body.result as T
+function isRetryableDurableTargetError(error: unknown, target: DurableAppTarget): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  const missingTarget =
+    target.kind === 'workspace'
+      ? `Workspace "${target.value}" not found`
+      : `Document named "${target.value}" not found`
+  return [
+    'Active OpenPencil client changed',
+    'Browser disconnected',
+    'Could not connect to OpenPencil app',
+    missingTarget,
+    'OpenPencil app is not connected',
+    'OpenPencil app is running but no document is open'
+  ].some((fragment) => message.includes(fragment))
+}
+
+export function isRetryableNamedTargetError(error: unknown, documentName: string): boolean {
+  return isRetryableDurableTargetError(error, { kind: 'document', value: documentName })
+}
+
+export function isRetryableWorkspaceTargetError(error: unknown, workspaceId: string): boolean {
+  return isRetryableDurableTargetError(error, { kind: 'workspace', value: workspaceId })
+}
+
+function retryDelay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs)
+  })
+}
+
+export async function getAppToken(): Promise<string> {
+  throw liveRuntimeDisabledError()
+}
+
+export function directOrNestedRpcResult<T>(body: RawAppRpcResponse<T>): T {
+  if (body.result !== undefined) return body.result
+  const { error: _error, ok: _ok, result: _result, target: _target, ...direct } = body
+  return direct as T
+}
+
+function liveRuntimeDisabledError(): Error {
+  return new Error(
+    'live_runtime_disabled: live-app RPC is disabled. Use a persisted Board target or a file path.'
+  )
+}
+
+async function rpcOnce<T>(command: string, args: unknown): Promise<T> {
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return (await localAuthorityRpcEnvelope<T>(command, args)).result
+  }
+  throw liveRuntimeDisabledError()
+}
+
+async function directRpcOnce<T>(command: string, args: unknown): Promise<T> {
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return (await localAuthorityRpcEnvelope<T>(command, args)).result
+  }
+  throw liveRuntimeDisabledError()
+}
+
+async function rpcEnvelopeOnce<T>(command: string, args: unknown): Promise<AppRpcEnvelope<T>> {
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return localAuthorityRpcEnvelope<T>(command, args)
+  }
+  throw liveRuntimeDisabledError()
+}
+
+async function withDurableTargetRetry<T>(args: unknown, request: () => Promise<T>): Promise<T> {
+  const durableTarget = durableAppTarget(args)
+  async function attempt(retryIndex: number): Promise<T> {
+    try {
+      return await request()
+    } catch (error) {
+      if (
+        !durableTarget ||
+        retryIndex >= NAMED_TARGET_RETRY_DELAYS_MS.length ||
+        !isRetryableDurableTargetError(error, durableTarget)
+      ) {
+        throw error
+      }
+      await retryDelay(NAMED_TARGET_RETRY_DELAYS_MS[retryIndex])
+      return attempt(retryIndex + 1)
+    }
+  }
+  return attempt(0)
 }
 
 export async function rpc<T = unknown>(command: string, args: unknown = {}): Promise<T> {
-  let token = await getAppToken()
-  try {
-    return await doRpc<T>(token, command, args)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!message.includes('Unauthorized')) throw error
-    cachedToken = null
-    token = await getAppToken()
-    return doRpc<T>(token, command, args)
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return rpcOnce<T>(command, args)
   }
+  return withDurableTargetRetry(args, () => rpcOnce<T>(command, args))
+}
+
+export async function rpcDirect<T = unknown>(command: string, args: unknown = {}): Promise<T> {
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return directRpcOnce<T>(command, args)
+  }
+  return withDurableTargetRetry(args, () => directRpcOnce<T>(command, args))
+}
+
+export async function rpcEnvelope<T = unknown>(
+  command: string,
+  args: unknown = {}
+): Promise<AppRpcEnvelope<T>> {
+  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
+    return rpcEnvelopeOnce<T>(command, args)
+  }
+  return withDurableTargetRetry(args, () => rpcEnvelopeOnce<T>(command, args))
+}
+
+export async function rpcEnvelopeExact<T = unknown>(
+  command: string,
+  args: unknown = {}
+): Promise<AppRpcEnvelope<T>> {
+  return rpcEnvelopeOnce<T>(command, args)
+}
+
+export async function rpcEnvelopeLiveExact<T = unknown>(
+  _command: string,
+  _args: unknown = {}
+): Promise<AppRpcEnvelope<T>> {
+  throw liveRuntimeDisabledError()
 }
 
 export function isAppMode(file?: string): boolean {

@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "dc91c3299db7f2da4c234b793c0a1db29c9d4cda9fc01780be0fd97ac7915358",
+    "config_id": "a33b0a17f2c6dd672c23d8724de2820a97f8e922cb8b1e080aa5e8e21f6a7cf7",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-flow-053/001-flow-053-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "flow-053-first-attempt",
+    "scenario_id": "FLOW-053",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-flow-053/001-flow-053-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb1c8-37d4-79f1-8d86-e4906c18f49d"
+  }
+]

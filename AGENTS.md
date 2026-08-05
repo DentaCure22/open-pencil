@@ -14,7 +14,7 @@ Bun workspace packages:
 - `packages/fig` — `@open-pencil/fig`: publishable `.fig` package shell and low-level smoke/test boundary. Production SceneGraph `.fig` policy still lives mostly in core while this package grows.
 - `packages/core` — `@open-pencil/core`: renderer, layout, editor core, Figma API, tools, clipboard, vector conversion, and app/CLI-facing document I/O. Depends on scene-graph/pen/kiwi but keeps browser DOM out of core.
 - `packages/dom-css` — `@open-pencil/dom-css`: DOM/CSS projection layer for HTML/CSS/JSX/Tailwind compatibility. Owns DesignDOM types and browser/headless CSS runtime adapters; keeps DOM/CSS parser dependencies out of core.
-- `packages/vue` — `@open-pencil/vue`: headless Vue 3 SDK (Reka UI-style) for building custom OpenPencil-powered editor shells and embedded editing surfaces. Renderless components and composables. The app is one consumer of the SDK.
+- `packages/vue` — `@open-pencil/vue`: headless Vue 3 SDK (Reka UI-style) for building custom OpenPencil-powered editor shells and embedded editing surfaces. Renderless components and composables. The app is one consumer of the SDK. Component-free services use the targeted `/i18n` and `/presentation` subpaths instead of evaluating the component barrel.
 - `packages/cli` — `@open-pencil/cli`: headless CLI for .fig inspection, export, linting. Uses `citty` + `agentfmt`.
 - `packages/mcp` — `@open-pencil/mcp`: MCP server for AI coding tools. Stdio + HTTP (Hono). Reuses core tools.
 - `packages/docs` — `@open-pencil/docs`: published VitePress documentation site. Run with `bun run docs:dev`.
@@ -120,12 +120,31 @@ Release commits are the exception: keep using `Release v0.x.y`.
 
 ## Tools (AI / MCP / CLI)
 
+- The canonical local Board is the plain document JSON at
+  `~/.openpencil/local-workspace-authority-v1/workspace.json`. Coding agents may edit its exact
+  `[id, node]` entries directly; the local authority derives revisions, bounded JSON history, and
+  open-editor synchronization. `workspace-state.json` is implementation bookkeeping and SQLite is
+  reserved for indexed Trace history. CLI and MCP are optional adapters, not required mutation
+  authority for direct local Board edits.
+- When the user points, circles, or says “this” or “these,” read the adjacent bounded
+  `trace-context.json` directly. The user's words are the intent; Trace supplies only exact referents.
+  Reject expired or `ambiguous` context, follow its object IDs into `workspace.json`, and open its PNG
+  path only when visual evidence is needed. Never edit this derived file or treat CLI/MCP Trace history
+  as the routine context path.
+- A direct Mermaid creation uses one source-backed `FRAME` with finite geometry and
+  `mermaid/source` plugin data. The Board renders Mermaid's SVG at runtime; there are no generated
+  native children or headless browser materialization. Rewriting the source preserves the frame's
+  identity, position, size, and sibling order.
 - Framework-agnostic tool operations live under `packages/core/src/tools/**` as `ToolDef` objects. Domains include read, create, modify, structure, variables, vector, analyze, describe, codegen, stock-photo, and helpers. Check the existing domain folder before adding a new file.
 - `schema.ts` defines `ToolDef`, `defineTool()`, and shared result helpers. Each tool has a name, description, typed params, and an `execute(figma: FigmaAPI, args)` function.
 - Registries (`registry*.ts`) assemble tool sets. Add new tools to the appropriate registry so AI chat, MCP, and CLI eval paths can see them.
 - AI adapter (`packages/core/src/tools/ai-adapter.ts`) converts ToolDefs to Vercel AI tools with valibot schemas. `src/app/ai/tools/index.ts` is a thin app wire that creates `FigmaAPI` from the active editor.
 - CLI commands in `packages/cli/src/commands/**` are not generated from ToolDefs; they own CLI UX, pagination, and agentfmt formatting. The `eval` command exposes ToolDef operations through `FigmaAPI`.
 - MCP server code lives in `packages/mcp/src/server.ts`. MCP-only tools such as `open_file`, `new_document`, `save_file`, and `get_codegen_prompt` are registered there because they need server filesystem access or are not scene-graph tools.
+- OpenPencil must not auto-launch the MCP HTTP/WebSocket server. Vite development starts only the
+  narrow local workspace authority on port 7602 for canonical Board, revision, navigation, and Trace
+  persistence. The editor may connect to an already-running standalone MCP server on 7600/7601, but
+  absence of that optional server is normal and must stay quiet.
 - `open_file` and `new_document` are only registered when `OPENPENCIL_MCP_ROOT` is set. Export tools can write files under that root when given a `path`.
 - Core codegen prompts live as markdown under `packages/core/src/tools/prompts/`; app chat/ACP prompts live under `src/app/ai/**` markdown files.
 - `FigmaAPI` (`packages/core/src/figma-api/`) is the execution target for tools and CLI eval. It is Figma Plugin API compatible and uses Symbols for hidden internals.
@@ -221,6 +240,49 @@ Self-review checklist:
 ## Rendering
 
 - Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM
+- Trusted app-like board content uses one **Code Object** contract under `src/app/code-object/`:
+  an ordinary persisted `FRAME` owns its editable source or app descriptor, name, serializable
+  properties/state, attachments, Design/Interact, transforms, undo, duplication, connectors, and
+  persistence. Presets insert that same frame-owned contract; renderer subtypes are implementation
+  choices, not scene-node or product object types. Authored TypeScript/TSX uses one ReactDOM root.
+  A first-party full program may use a frame-bound **trusted-web-app** iframe so its native auth,
+  router, portals, and internal scrolling remain source-owned; never reconstruct that program's
+  DOM in OpenPencil. Trusted iframe instances stay bound to one frame and mount generation, use a
+  bounded volatile resident pool, expose semantic Layers only for the Board-selected frame, and
+  keep per-frame route/scroll checkpoints under the source app's origin rather than Board JSON or
+  Undo. External/untrusted websites remain sandboxed embeds. Mermaid persists one source-backed
+  frame and renders Mermaid's SVG without generated native child nodes. Keep
+  `src/app/live-react-surface/` read-compatibility only.
+- Cross-object behavior uses one **Object Graph** contract under `src/app/object-graph/`. Any ordinary
+  native object or Code Object frame may opt into the Graph capability and become an endpoint in a
+  typed `visual`, `data`, or `action` connection. React Flow is a transparent interaction and edge
+  layer on the ordinary Board: it aligns handles with the existing CanvasKit objects and shares the
+  Board viewport instead of rendering cards, a second canvas, a minimap, or a separate camera.
+  CanvasKit, Code Object DOM surfaces, and React Flow must publish from the shared
+  `scheduleEditorPresentationFrame()` clock; never add an Object Graph-local animation frame for
+  geometry or viewport projection.
+  There is no separate Graph tool or mode. Normal OpenPencil selection and transforms remain active;
+  a selected graph-enabled object exposes connection handles in place. Removing it from the graph
+  removes only its Graph capability, not the object.
+  Connections persist as typed page-owned records with stable IDs, not hidden SceneNodes or Layers;
+  React Flow derives its built-in Bézier route from the live endpoint geometry. Connection selection
+  and every React Flow interaction must dispatch to normal editor actions so OpenPencil remains the
+  only authority for Board nodes, selection, transforms, persistence, permissions, and Undo/Redo.
+  Use the upstream React Flow handle and edge presentation: no custom arrow, badge, kind color,
+  shadow, obstacle router, or size-dependent chrome. The Board camera remains the shared viewport;
+  a larger invisible handle hit target is allowed without changing the official visible handle.
+  Never introduce a second graph store.
+- Page-wide coordinated behavior uses one **Board Experience** contract under
+  `src/app/board-experience/`: an ordinary `CANVAS` may persist one experience definition while
+  OpenPencil owns the single page coordinator and event loop. The experience must compose ordinary
+  native objects or Code Object frames for every meaningful visible piece; it must not paint a
+  parallel non-selectable HUD, lane, tool, or app surface over the Board. Created components keep
+  normal selection, transforms, undo/redo, duplication, and persistence. Code Objects and Board
+  Experiences both issue bounded actions through `src/app/board-permissions/`; neither may create a
+  second editor store or hidden mutable board runtime. Board Permissions validates page, target,
+  ownership, create/delete, and field-scoped update access automatically for each operation; callers
+  never issue or revoke permission grants. A Board Experience owns one internal component session
+  only for lifecycle and transient cleanup. Meaningful user actions use normal history.
 - `renderVersion` vs `sceneVersion`: `renderVersion` = canvas repaint (pan/zoom/hover); `sceneVersion` = scene graph mutations. UI that only cares about graph data should avoid watching repaint-only state; use editor events for incremental surfaces such as the layer tree.
 - `requestRender()` bumps both counters; `requestRepaint()` bumps only `renderVersion`
 - `renderNow()` is only for surface recreation and font loading (need immediate draw)

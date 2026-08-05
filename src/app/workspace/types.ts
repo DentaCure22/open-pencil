@@ -10,7 +10,6 @@ export type WorkspaceViewId = string
 export type WorkspaceLifecycle = 'active' | 'archived'
 export type WorkspaceMutationScope = 'workspace-metadata'
 export type WorkspaceViewKind = 'document' | 'canvas' | 'graph' | 'atlas' | 'review'
-export type ExperienceProjectionPurpose = 'focus' | 'compare' | 'knowledge' | 'review'
 
 export type WorkspacePoint = Vector
 export type WorkspaceGeometry = WorkspacePoint & {
@@ -225,51 +224,6 @@ export type DesignArtifact = WorkspaceObjectBase & {
   type: 'design-artifact'
 }
 
-export type LiveAppRuntimeStatus =
-  | 'live'
-  | 'captured'
-  | 'preview'
-  | 'stale'
-  | 'illustrative-preview'
-  | 'loading'
-  | 'auth-required'
-  | 'unavailable'
-export type LiveAppViewport = {
-  deviceScaleFactor?: number
-  height: number
-  name?: string
-  width: number
-}
-export type LiveAppCapture = {
-  assetRef: string
-  capturedAt: string
-  maskedFieldIds: string[]
-  provenance: 'runtime' | 'import' | 'illustrative'
-  sourceRevision: string
-}
-export type LiveAppRuntime = {
-  error?: string
-  lastHandshakeAt?: string
-  status: LiveAppRuntimeStatus
-}
-export type LiveAppBlock = WorkspaceObjectBase & {
-  applicationId: string
-  capture?: LiveAppCapture
-  environment: string
-  fixtureId?: string
-  liveContainerRootId?: string
-  ownerEvidenceRef?: string
-  previewVersionIds: WorkspaceObjectId[]
-  responsiveState?: string
-  route: string
-  runtime: LiveAppRuntime
-  scenarioId?: string
-  selectedContainerId?: string
-  sourceRevision: string
-  type: 'live-app-block'
-  viewport: LiveAppViewport
-}
-
 export type ReviewObjectKind =
   | 'comment'
   | 'question'
@@ -300,17 +254,21 @@ export type WorkspaceObjectRevisionRef = {
   objectId: WorkspaceObjectId
   revision: number
 }
-export type WorkspaceHtmlArtifactRevisionRef = {
+export type WorkspaceCodeObjectArtifactRevisionRef = {
   artifactId: string
   boardId: string
   boardRevision: number
   boardSchemaVersion: number
-  kind: 'html-board'
+  kind: 'code-object'
   sourceHash: string
 }
 export type EvidenceTruthScope = 'fixture' | 'captured' | 'last-known' | 'live' | 'derived'
 export type EvidenceFreshnessStatus = 'current' | 'stale' | 'unknown'
-export type EvidenceProviderKind = 'captured-input' | 'connector' | 'live-app' | 'workspace-object'
+export type EvidenceProviderKind =
+  | 'captured-input'
+  | 'code-object'
+  | 'connector'
+  | 'workspace-object'
 export type EvidenceProviderCapabilities = {
   capturedContentRead: boolean
   externalWrites: false
@@ -444,7 +402,7 @@ export type SurfaceMode = {
   viewId?: WorkspaceViewId
 }
 export type SurfaceRun = WorkspaceObjectBase & {
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   capabilities: {
     externalWrites: false
     networkAccess: false
@@ -509,7 +467,7 @@ export type ExperienceFamilyRelationRef = {
   revision: number
 }
 type ExperienceFamilyMemberBaseV1 = {
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   formKind: SurfaceRun['form']['kind']
   instanceId: string
   rendererId: string
@@ -541,7 +499,7 @@ export type ResolvedExperienceFamilyV1 = {
   surfaceCount: number
 }
 export type DecisionReceipt = WorkspaceObjectBase & {
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   corrections: SurfaceInteraction[]
   evidenceManifest: WorkspaceObjectRevisionRef
   immutable: true
@@ -570,7 +528,7 @@ export type LearningAttestationKind =
   | 'self-report'
 export type ObservedSessionDataPolicy = 'phi-free-declared-v1'
 export type ObservedSessionTarget = {
-  artifact: WorkspaceHtmlArtifactRevisionRef
+  artifact: WorkspaceCodeObjectArtifactRevisionRef
   evidenceManifest: WorkspaceObjectRevisionRef
   intent: WorkspaceObjectRevisionRef
   surfaceRun: WorkspaceObjectRevisionRef
@@ -827,7 +785,6 @@ export type WorkspaceObject =
   | GraphNode
   | GraphEdge
   | DesignArtifact
-  | LiveAppBlock
   | ReviewObject
   | IntentRecord
   | EvidenceManifest
@@ -858,11 +815,6 @@ export type WorkspaceRelation = {
 export type WorkspaceView = {
   archivedAt?: string
   createdAt: string
-  experienceProjection?: {
-    purpose: ExperienceProjectionPurpose
-    rendererViewId?: string
-    rootSurface: WorkspaceObjectRevisionRef
-  }
   id: WorkspaceViewId
   kind: WorkspaceViewKind
   lastWorkspaceRevision: number
@@ -888,7 +840,6 @@ export type WorkspaceMutationReceipt = {
   warnings: string[]
 }
 export type KnowledgeWorkspace = {
-  activeRuntimeBlockId?: WorkspaceObjectId
   createdAt: string
   createdBy?: string
   documentId: string

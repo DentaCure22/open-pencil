@@ -2,16 +2,18 @@ import { describe, test, expect } from 'bun:test'
 
 import * as Y from 'yjs'
 
+import { contentSourcePluginData } from '@open-pencil/core/io'
 import type { Fill, GeometryPath, SceneNode } from '@open-pencil/scene-graph'
 import { SceneGraph } from '@open-pencil/scene-graph'
 import { nodeVisualBounds } from '@open-pencil/scene-graph/geometry'
+import { assetReference } from '@open-pencil/scene-graph/images'
 
 import {
   createYjsGraphSync,
   registerYjsObservers,
   syncNodePropsToYMap,
   yNodeToProps
-} from '@/app/collab/yjs-sync'
+} from '@/app/collab/yjs'
 import { createEditorStore } from '@/app/editor/session'
 
 import { expectDefined, getNodeOrThrow } from '#tests/helpers/assert'
@@ -53,6 +55,8 @@ type SyncedStores = ReturnType<typeof createSyncedStores>
 function createSyncedStores() {
   const hostStore = createEditorStore(new SceneGraph())
   const peerStore = createEditorStore(new SceneGraph())
+  hostStore.setViewportSize(1200, 800)
+  peerStore.setViewportSize(1200, 800)
   const hostDoc = new Y.Doc()
   const peerDoc = new Y.Doc()
   const hostNodes = hostDoc.getMap<Y.Map<unknown>>('nodes')
@@ -277,6 +281,29 @@ describe('collab yjs-sync', () => {
       expect(
         Array.from(expectDefined(peerStore.graph.images.get(imageHash), 'peer image'))
       ).toEqual([9, 8, 7])
+    })
+  })
+
+  test('content source references sync original file bytes', () => {
+    withSyncedStores(({ hostStore, peerStore, hostSync }) => {
+      const hostPage = firstPage(hostStore.graph)
+      const assetHash = 'pptx-source-hash'
+      const frame = hostStore.graph.createNode('FRAME', hostPage.id, {
+        pluginData: contentSourcePluginData({
+          fileName: 'review.pptx',
+          format: 'pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          revision: 1,
+          source: assetReference(assetHash)
+        })
+      })
+      hostStore.graph.images.set(assetHash, new Uint8Array([80, 75, 3, 4, 9, 8, 7]))
+
+      hostSync.syncNodeToYjs(frame.id)
+
+      expect(
+        Array.from(expectDefined(peerStore.graph.images.get(assetHash), 'peer source bytes'))
+      ).toEqual([80, 75, 3, 4, 9, 8, 7])
     })
   })
 

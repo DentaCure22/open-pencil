@@ -2,7 +2,7 @@ import type { SceneGraph, SceneNode } from './index'
 import Matrix, { type Mat3 } from './matrix'
 import type { Vector } from './primitives'
 
-export function getWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {
+function worldMatrix(node: SceneNode, graph: SceneGraph, presented: boolean): Mat3 {
   const chain: SceneNode[] = []
   let current: SceneNode | undefined = node
 
@@ -15,11 +15,25 @@ export function getWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {
   let matrix = Matrix.identity()
 
   for (const n of chain) {
-    const local = getNodeLocalMatrix(n)
+    const local = getNodeLocalMatrix(n, presented ? graph.getPresentedNodePosition(n.id) : n)
     matrix = Matrix.multiply(matrix, local)
   }
 
   return matrix
+}
+
+export function getWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {
+  return worldMatrix(node, graph, true)
+}
+
+export function getAuthoritativeWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {
+  return worldMatrix(node, graph, false)
+}
+
+export function getAuthoritativeAbsolutePosition(node: SceneNode, graph: SceneGraph): Vector {
+  const matrix = getAuthoritativeWorldMatrix(node, graph)
+  const [x, y] = Matrix.mapPoints(matrix, [0, 0])
+  return { x, y }
 }
 
 export function getAbsolutePosition(node: SceneNode, graph: SceneGraph): Vector {
@@ -100,7 +114,7 @@ export function getAbsolutePositionFull(node: SceneNode, graph: SceneGraph) {
     centerY
   }
 }
-export function getNodeLocalMatrix(n: SceneNode) {
+export function getNodeLocalMatrix(n: SceneNode, position: Vector = n) {
   const rad = (n.rotation * Math.PI) / 180
 
   const cx = n.width / 2
@@ -112,7 +126,7 @@ export function getNodeLocalMatrix(n: SceneNode) {
   let m = Matrix.identity()
 
   // local translation (relative to parent)
-  m = Matrix.multiply(m, Matrix.translated(n.x, n.y))
+  m = Matrix.multiply(m, Matrix.translated(position.x, position.y))
 
   // pivot to center
   m = Matrix.multiply(m, Matrix.translated(cx, cy))

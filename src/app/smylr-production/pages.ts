@@ -1,8 +1,4 @@
-export type SmylrProductionPageGroup =
-  | 'Clinical'
-  | 'Front Desk'
-  | 'Operations'
-  | 'System'
+export type SmylrProductionPageGroup = 'Clinical' | 'Front Desk' | 'Operations' | 'System'
 
 export type SmylrProductionPage = {
   group: SmylrProductionPageGroup
@@ -16,93 +12,89 @@ export const SMYLR_PRODUCTION_PAGES: SmylrProductionPage[] = [
     group: 'Clinical',
     id: 'dental-chart',
     label: 'Dental Chart',
-    route: '/dental-chart',
-  },
-  {
-    group: 'Clinical',
-    id: 'dental-imaging',
-    label: 'Dental Imaging',
-    route: '/dental-imaging',
+    route: '/dental-chart'
   },
   {
     group: 'Clinical',
     id: 'health-chart',
     label: 'Health Chart',
-    route: '/health-chart',
+    route: '/health-chart'
   },
   {
     group: 'Clinical',
     id: 'treatment-plan',
     label: 'Treatment Plan',
-    route: '/treatment-plan',
+    route: '/treatment-plan'
   },
   {
     group: 'Front Desk',
     id: 'home',
     label: 'Home',
-    route: '/home',
+    route: '/home'
   },
   {
     group: 'Front Desk',
     id: 'calendar',
     label: 'Calendar',
-    route: '/calendar',
+    route: '/calendar'
   },
   {
     group: 'Front Desk',
     id: 'patients',
     label: 'Patients',
-    route: '/patients',
+    route: '/patients'
   },
   {
     group: 'Front Desk',
     id: 'patient-admin',
     label: 'Patient Admin',
-    route: '/patient-admin',
+    route: '/patient-admin'
   },
   {
     group: 'Operations',
     id: 'patient-communications',
     label: 'Patient Comms',
-    route: '/patient-communications',
+    route: '/patient-communications'
   },
   {
     group: 'Operations',
     id: 'tasks',
     label: 'Tasks',
-    route: '/tasks',
+    route: '/tasks'
   },
   {
     group: 'Operations',
     id: 'rcm',
     label: 'RCM',
-    route: '/rcm',
+    route: '/rcm'
   },
   {
     group: 'Operations',
     id: 'analytics',
     label: 'Analytics',
-    route: '/practice-analytics',
+    route: '/practice-analytics'
   },
   {
     group: 'System',
     id: 'settings',
     label: 'Settings',
-    route: '/settings',
+    route: '/settings'
   },
   {
     group: 'System',
     id: 'users',
     label: 'Users',
-    route: '/users',
-  },
+    route: '/users'
+  }
 ]
+
+export const SMYLR_RETIRED_PRODUCTION_PAGE_IDS = new Set(['dental-imaging'])
 
 export const SMYLR_PRODUCTION_PAGE_GROUPS: SmylrProductionPageGroup[] = [
   'Clinical',
   'Front Desk',
   'Operations',
-  'System',
+  'System'
 ]
 
 export function smylrProductionPageById(id: string | undefined) {

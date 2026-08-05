@@ -1,13 +1,19 @@
-import type { NarratedTraceEvent, NarratedTraceEventKind } from './types'
+import { narratedTracePointsPath } from './annotation'
+import type { NarratedTraceEvent, NarratedTraceEventKind, NarratedTraceRow } from './types'
 
-const SUPPORTING_EVENT_KINDS = new Set<NarratedTraceEventKind>(['selection', 'tool', 'viewport'])
+const SUPPORTING_EVENT_KINDS = new Set<NarratedTraceEventKind>([
+  'selection',
+  'sync',
+  'tool',
+  'viewport'
+])
 
 export function isNarratedTraceSupportingEvent(event: NarratedTraceEvent): boolean {
   return SUPPORTING_EVENT_KINDS.has(event.kind)
 }
 
 function targetName(event: NarratedTraceEvent, fallback: string) {
-  return event.target?.name?.trim() || fallback
+  return event.target?.name.trim() || fallback
 }
 
 function outcomePhrase(event: NarratedTraceEvent) {
@@ -51,4 +57,24 @@ export function buildNarratedTraceReviewSummary(events: NarratedTraceEvent[]): s
   return `${first}, ${lowerFirst(second)}, and ${outcomes.length - 2} more key ${
     outcomes.length - 2 === 1 ? 'moment' : 'moments'
   }.`
+}
+
+export function narratedTraceEvidenceAnnotationPath(row: NarratedTraceRow): string {
+  const evidence = row.event.evidence
+  if (!evidence || !Array.isArray(evidence.annotation.points)) return ''
+  if (evidence.annotation.points.length === 1) {
+    const point = evidence.annotation.points[0]
+    const x = point.x - evidence.cropBounds.x
+    const y = point.y - evidence.cropBounds.y
+    const radius = Math.max(3, evidence.annotation.strokeWidth * 2)
+    return [
+      `M ${(x - radius).toFixed(2)} ${y.toFixed(2)}`,
+      `a ${radius} ${radius} 0 1 0 ${radius * 2} 0`,
+      `a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`
+    ].join(' ')
+  }
+  return narratedTracePointsPath(evidence.annotation.points, {
+    x: evidence.cropBounds.x,
+    y: evidence.cropBounds.y
+  })
 }

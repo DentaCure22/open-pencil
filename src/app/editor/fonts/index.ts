@@ -12,7 +12,7 @@ import {
   type WebFontProviderId
 } from '@open-pencil/core/text'
 import type { SceneGraph } from '@open-pencil/scene-graph'
-import { dialogMessages } from '@open-pencil/vue'
+import { dialogMessages } from '@open-pencil/vue/i18n'
 
 import {
   clearDownloadedFontCache as clearTauriDownloadedFontCache,

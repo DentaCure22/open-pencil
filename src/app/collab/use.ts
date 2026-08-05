@@ -5,6 +5,7 @@ import { randomIndex } from '@open-pencil/core/random'
 
 import { createFollowActions, generateRoomId } from '@/app/collab/awareness'
 import { createLocalAwarenessActions } from '@/app/collab/local-awareness'
+import type { DurableYjsHydratedHandler, DurableYjsStore } from '@/app/collab/persistence/types'
 import type { CollabRuntime } from '@/app/collab/session'
 import { DEFAULT_COLLAB_STATE, type CollabState, type RemotePeer } from '@/app/collab/types'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -15,8 +16,15 @@ export { DEFAULT_COLLAB_STATE }
 export type { CollabState, RemotePeer }
 
 type CollabActions = {
-  connect: (roomId: string) => void
+  connect: (
+    roomId: string,
+    durableStore?: DurableYjsStore,
+    onDurableReady?: DurableYjsHydratedHandler,
+    localOnly?: boolean,
+    seedLocalWorkspace?: boolean
+  ) => void
   disconnect: () => void
+  syncGraphReplacementToYjs: () => void
   syncAllNodesToYjs: () => void
 }
 
@@ -55,11 +63,18 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
   function loadCollabActions() {
     collabActionsPromise ??= Promise.all([
       import('@/app/collab/session'),
-      import('@/app/collab/yjs-sync')
+      import('@/app/collab/yjs')
     ]).then(([session, yjsSync]) => {
       runtime = session.createCollabRuntime()
       const activeRuntime = runtime
-      const { syncNodeToYjs, syncAllNodesToYjs, applyYjsToGraph } = yjsSync.createYjsGraphSync({
+      const {
+        syncNodeToYjs,
+        syncAllNodesToYjs,
+        syncGraphReplacementToYjs,
+        migrateObjectGraphRecordsToYjs,
+        applyYjsToGraph,
+        applyYjsObjectGraphToGraph
+      } = yjsSync.createYjsGraphSync({
         getStore: getActiveStore,
         getYdoc: () => activeRuntime.ydoc,
         getYnodes: () => activeRuntime.ynodes,
@@ -76,10 +91,13 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
         tickFollow,
         broadcastAwareness,
         applyYjsToGraph,
+        applyYjsObjectGraphToGraph,
         syncNodeToYjs,
+        syncAllNodesToYjs,
+        migrateObjectGraphRecordsToYjs,
         resetFollow
       })
-      return { connect, disconnect, syncAllNodesToYjs }
+      return { connect, disconnect, syncAllNodesToYjs, syncGraphReplacementToYjs }
     })
     return collabActionsPromise
   }
@@ -88,17 +106,43 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     void loadCollabActions().then((actions) => actions.connect(roomId))
   }
 
+  function connectLocalWorkspace(
+    roomId: string,
+    onReady?: DurableYjsHydratedHandler,
+    seedLocalWorkspace = true
+  ) {
+    void loadCollabActions().then((actions) =>
+      actions.connect(roomId, undefined, onReady, true, seedLocalWorkspace)
+    )
+  }
+
+  function connectSharedWorkspace(
+    roomId: string,
+    durableStore: DurableYjsStore,
+    onDurableReady?: DurableYjsHydratedHandler
+  ) {
+    void loadCollabActions().then((actions) =>
+      actions.connect(roomId, durableStore, onDurableReady)
+    )
+  }
+
   function disconnect() {
     if (collabActionsPromise) {
       void collabActionsPromise.then((actions) => actions.disconnect())
     }
   }
 
+  function publishGraphReplacement() {
+    if (!collabActionsPromise) return
+    void collabActionsPromise.then((actions) => actions.syncGraphReplacementToYjs())
+  }
+
   function shareCurrentDoc(): string {
+    if (state.value.connected && state.value.roomId) return state.value.roomId
     const roomId = generateRoomId()
     void loadCollabActions().then((actions) => {
       actions.connect(roomId)
-      actions.syncAllNodesToYjs()
+      return actions.syncAllNodesToYjs()
     })
     return roomId
   }
@@ -110,7 +154,10 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     remotePeers,
     followingPeer,
     connect,
+    connectLocalWorkspace,
+    connectSharedWorkspace,
     disconnect,
+    publishGraphReplacement,
     shareCurrentDoc,
     updateCursor,
     updateSelection,

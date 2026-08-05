@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { Editor } from '@open-pencil/core/editor'
+import { contentSourcePluginData } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
@@ -26,6 +27,7 @@ function frame(overrides: Partial<SceneNode> = {}): SceneNode {
     paddingRight: 20,
     paddingBottom: 20,
     paddingLeft: 20,
+    pluginData: [],
     ...overrides
   } as SceneNode
 }
@@ -45,16 +47,18 @@ function child(id: string, y: number, height: number): SceneNode {
     height,
     rotation: 0,
     layoutMode: 'NONE',
-    layoutPositioning: 'AUTO'
+    layoutPositioning: 'AUTO',
+    pluginData: []
   } as SceneNode
 }
 
-function editor() {
+function editor(frameOverrides: Partial<SceneNode> = {}, additionalNodes: SceneNode[] = []) {
   const nodes = new Map<string, SceneNode>([
-    ['frame', frame()],
+    ['frame', frame(frameOverrides)],
     ['title', child('title', 20, 32)],
     ['body', child('body', 60, 48)],
-    ['bar', child('bar', 116, 12)]
+    ['bar', child('bar', 116, 12)],
+    ...additionalNodes.map((node): [string, SceneNode] => [node.id, node])
   ])
 
   return {
@@ -109,5 +113,30 @@ describe('auto-layout hover resolver', () => {
 
   test('falls back to frame hover inside empty selected areas', () => {
     expect(resolveAutoLayoutHover(240, 235, editor())).toMatchObject({ kind: 'frame' })
+  })
+
+  test('hides layout guides within a source-backed Markdown document', () => {
+    const markdownDocument = frame({
+      id: 'markdown-document',
+      childIds: ['frame'],
+      parentId: 'page',
+      pluginData: contentSourcePluginData({
+        fileName: 'notes.md',
+        format: 'markdown',
+        mimeType: 'text/markdown',
+        revision: 1,
+        source: '# Notes'
+      }),
+      x: 0,
+      y: 0
+    })
+
+    expect(
+      resolveAutoLayoutHover(
+        240,
+        156,
+        editor({ parentId: markdownDocument.id }, [markdownDocument])
+      )
+    ).toBeNull()
   })
 })

@@ -81,6 +81,9 @@ export function createCanvasSurfaceManager({
 
   function renderNow() {
     if (!state.renderer || isDestroyed()) return
+    const selectionChromeOwnerIds = options?.ownsSelectionChrome
+      ? new Set([...editor.state.selectedIds].filter(options.ownsSelectionChrome))
+      : undefined
     state.renderer.renderFromEditorState(
       editor.state,
       editor.graph,
@@ -88,7 +91,8 @@ export function createCanvasSurfaceManager({
       canvasRef.value?.clientWidth ?? 0,
       canvasRef.value?.clientHeight ?? 0,
       shouldShowRulers(),
-      options?.layer ?? 'full'
+      options?.layer ?? 'full',
+      selectionChromeOwnerIds
     )
     renderLoop.markRendered()
     clearSceneBackingRenderTimer()

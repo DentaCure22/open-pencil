@@ -2,13 +2,9 @@
 import { useClipboard } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 
+import { createCodeObject, createUserCodeObjectDocument } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
-import { createHtmlBoardFrame } from '@/app/html-board/workspace'
-import {
-  selectedSourceDocument,
-  sourceDocumentViewportInsets,
-  updateSourceDocument
-} from '@/app/source-document/workspace'
+import { selectedSourceDocument, updateSourceDocument } from '@/app/source-document/workspace'
 import AppTextButton from '@/components/ui/AppTextButton.vue'
 
 const store = useEditorStore()
@@ -29,7 +25,10 @@ const signature = computed(() => {
 const documentId = computed(() => document.value?.node.id ?? '')
 const dirty = computed(() => draft.value !== saved.value)
 const lineCount = computed(() => draft.value.split('\n').length)
-const canOpenLiveView = computed(() => document.value?.source.format === 'html' && !dirty.value)
+const canMigrateToCodeObject = computed(() => {
+  const format = document.value?.source.format
+  return (format === 'jsx' || format === 'tsx') && !dirty.value
+})
 
 watch(
   signature,
@@ -70,13 +69,26 @@ function copySource() {
   copy(draft.value)
 }
 
-function openLiveView() {
+function createMigratedCodeObject() {
   const current = document.value
-  if (!current || current.source.format !== 'html' || dirty.value) return
-  createHtmlBoardFrame(store, current.source.source, '', '', {
-    frameName: `${current.node.name} · Live View`
+  if (!current || !canMigrateToCodeObject.value) return
+  const name = current.node.name.replace(/\.(jsx|tsx)$/i, '') || 'Code Object'
+  const created = createCodeObject(store, {
+    cornerRadius: 12,
+    document: createUserCodeObjectDocument({
+      definitionId: `legacy.${current.node.id}`,
+      name,
+      props: {},
+      source: current.source.source,
+      state: {}
+    }),
+    height: 520,
+    name,
+    width: 720,
+    x: current.node.x + current.node.width + 120,
+    y: current.node.y
   })
-  requestAnimationFrame(() => store.zoomToSelection(sourceDocumentViewportInsets()))
+  store.select([created.id])
 }
 </script>
 
@@ -90,7 +102,7 @@ function openLiveView() {
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-[12px] font-semibold text-surface">Source document</span>
+            <span class="text-[12px] font-semibold text-surface">Legacy source record</span>
             <span
               data-test-id="source-document-format"
               class="rounded bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-violet-200 uppercase"
@@ -115,7 +127,7 @@ function openLiveView() {
         </AppTextButton>
       </div>
       <p class="mt-2 text-[9.5px] leading-4 text-muted/70">
-        Exact source is stored on the canvas document, independently from any rendered view.
+        Preserved for existing boards. New JSX/TSX files open directly as Code Objects.
       </p>
     </div>
 
@@ -166,27 +178,27 @@ function openLiveView() {
       </div>
 
       <AppTextButton
-        v-if="document.source.format === 'html'"
-        data-test-id="source-document-live-view"
+        v-if="document.source.format === 'jsx' || document.source.format === 'tsx'"
+        data-test-id="source-document-migrate-code-object"
         :ui="{
           base: [
             'mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-[7px] px-2 text-[10px] font-medium',
-            canOpenLiveView
+            canMigrateToCodeObject
               ? 'bg-white/[0.055] text-surface hover:bg-white/[0.085]'
               : 'cursor-not-allowed bg-white/[0.025] text-muted/40'
           ].join(' ')
         }"
-        @click="openLiveView"
+        @click="createMigratedCodeObject"
       >
-        <icon-lucide-play class="size-3" />
-        Open optional Live View
+        <icon-lucide-box class="size-3" />
+        Create Code Object
       </AppTextButton>
       <p
         v-else
         data-test-id="source-document-runtime-boundary"
         class="mt-2 rounded-[7px] bg-white/[0.035] px-2 py-2 text-[9.5px] leading-4 text-muted/70"
       >
-        JSX/TSX stays source-only in Phase 1. OpenPencil does not evaluate arbitrary component code.
+        HTML stays attached source only. Interactive content uses Code Objects.
       </p>
       <p
         v-if="message"

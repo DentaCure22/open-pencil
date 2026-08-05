@@ -74,6 +74,7 @@ export {
   mergeSourceReconciliationPluginData,
   readSourceReconciliation,
   sourceReconciliationPluginData,
+  sourceSceneContentsSignature,
   sourceSceneSignature,
   type SourceReconciliationMetadata,
   type SourceReconciliationResult,

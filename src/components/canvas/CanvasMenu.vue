@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -128,12 +127,7 @@ function contextCommandIcon(id: EditorCommandId | undefined): Component | undefi
       data-test-id="context-delete"
       :class="cls.item"
       :disabled="!hasSelection"
-      @select="
-        () => {
-          removeWorkspaceItemsForSelectedLiveFrames(store)
-          getCommand('selection.delete').run()
-        }
-      "
+      @select="getCommand('selection.delete').run()"
     >
       <span>{{ getCommand('selection.delete').label }}</span
       ><AppShortcutText>{{ editorCommandMetadata('selection.delete').shortcut }}</AppShortcutText>

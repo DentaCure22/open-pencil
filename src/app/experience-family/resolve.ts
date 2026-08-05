@@ -3,15 +3,16 @@ import {
   type KnowledgeWorkspace,
   type SurfaceRun,
   type WorkspaceObject,
-  type WorkspaceObjectRevisionRef,
+  type WorkspaceObjectRevisionRef
 } from '@/app/workspace'
+
 import type {
   ExperienceFamilyMemberV1,
   ExperienceFamilyRelationRef,
   PrimaryExperienceFamilyMemberV1,
   ResolvedExperienceFamilyV1,
   ResolveExperienceFamilyOptions,
-  SupportExperienceFamilyMemberV1,
+  SupportExperienceFamilyMemberV1
 } from './types'
 
 type CompositionLineage = NonNullable<SurfaceRun['formChoice']['composition']>
@@ -31,12 +32,9 @@ function exactSurface(
   workspace: KnowledgeWorkspace,
   reference: WorkspaceObjectRevisionRef
 ): SurfaceRun {
-  const object = workspace.objects[reference.objectId] as
-    WorkspaceObject | undefined
+  const object = workspace.objects[reference.objectId] as WorkspaceObject | undefined
   if (object?.type !== 'surface-run') {
-    reconstructionConflict(
-      `composition root surface ${reference.objectId} is unavailable`
-    )
+    reconstructionConflict(`composition root surface ${reference.objectId} is unavailable`)
   }
   if (object.revision !== reference.revision) {
     reconstructionConflict(
@@ -44,9 +42,7 @@ function exactSurface(
     )
   }
   if (object.lifecycle !== 'active' || object.workspaceId !== workspace.id) {
-    reconstructionConflict(
-      `composition root surface ${reference.objectId} is outside active scope`
-    )
+    reconstructionConflict(`composition root surface ${reference.objectId} is outside active scope`)
   }
   return object
 }
@@ -56,8 +52,7 @@ function exactLineageObject(
   reference: WorkspaceObjectRevisionRef,
   type: 'evidence-manifest' | 'intent-record'
 ): void {
-  const object = workspace.objects[reference.objectId] as
-    WorkspaceObject | undefined
+  const object = workspace.objects[reference.objectId] as WorkspaceObject | undefined
   if (
     object?.type !== type ||
     object.revision !== reference.revision ||
@@ -73,9 +68,7 @@ function exactLineageObject(
 function compositionLineage(surface: SurfaceRun): CompositionLineage {
   const composition = surface.formChoice.composition
   if (!composition) {
-    reconstructionConflict(
-      `surface ${surface.id} has no exact composition-family lineage`
-    )
+    reconstructionConflict(`surface ${surface.id} has no exact composition-family lineage`)
   }
   if (
     !composition.id.trim() ||
@@ -91,9 +84,7 @@ function compositionLineage(surface: SurfaceRun): CompositionLineage {
     (composition.role === 'primary' && composition.surfaceIndex !== 0) ||
     (composition.role === 'support' && composition.surfaceIndex === 0)
   ) {
-    reconstructionConflict(
-      `surface ${surface.id} has invalid composition-family lineage`
-    )
+    reconstructionConflict(`surface ${surface.id} has invalid composition-family lineage`)
   }
   return composition
 }
@@ -119,18 +110,14 @@ function familySurfaces(
   const instanceIds = new Set<string>()
   for (const surface of surfaces) {
     if (surface.workspaceId !== workspace.id) {
-      reconstructionConflict(
-        `composition surface ${surface.id} has mismatched workspace scope`
-      )
+      reconstructionConflict(`composition surface ${surface.id} has mismatched workspace scope`)
     }
     const composition = compositionLineage(surface)
     if (
       composition.recipeDigest !== rootComposition.recipeDigest ||
       composition.surfaceCount !== rootComposition.surfaceCount
     ) {
-      reconstructionConflict(
-        `composition surface ${surface.id} conflicts with the family recipe`
-      )
+      reconstructionConflict(`composition surface ${surface.id} conflicts with the family recipe`)
     }
     if (indices.has(composition.surfaceIndex)) {
       reconstructionConflict(
@@ -143,14 +130,10 @@ function familySurfaces(
       )
     }
     if (!sameReference(surface.intent, root.intent)) {
-      reconstructionConflict(
-        `composition surface ${surface.id} has conflicting intent lineage`
-      )
+      reconstructionConflict(`composition surface ${surface.id} has conflicting intent lineage`)
     }
     if (!sameReference(surface.evidenceManifest, root.evidenceManifest)) {
-      reconstructionConflict(
-        `composition surface ${surface.id} has conflicting evidence lineage`
-      )
+      reconstructionConflict(`composition surface ${surface.id} has conflicting evidence lineage`)
     }
     indices.add(composition.surfaceIndex)
     instanceIds.add(composition.instanceId)
@@ -158,19 +141,13 @@ function familySurfaces(
 
   for (let index = 0; index < rootComposition.surfaceCount; index += 1) {
     if (!indices.has(index)) {
-      reconstructionConflict(
-        `composition ${rootComposition.id} is missing surface index ${index}`
-      )
+      reconstructionConflict(`composition ${rootComposition.id} is missing surface index ${index}`)
     }
   }
   const ordered = surfaces.toSorted(
-    (left, right) =>
-      compositionLineage(left).surfaceIndex -
-      compositionLineage(right).surfaceIndex
+    (left, right) => compositionLineage(left).surfaceIndex - compositionLineage(right).surfaceIndex
   )
-  const primaries = ordered.filter(
-    (surface) => compositionLineage(surface).role === 'primary'
-  )
+  const primaries = ordered.filter((surface) => compositionLineage(surface).role === 'primary')
   if (primaries.length !== 1 || primaries[0]?.id !== root.id) {
     reconstructionConflict(
       `composition ${rootComposition.id} must resolve one exact primary root surface`
@@ -209,10 +186,7 @@ function exactSupportRelation(
   return { relationId: relation.id, revision: relation.revision }
 }
 
-function assertArtifact(
-  surface: SurfaceRun,
-  options: ResolveExperienceFamilyOptions
-): void {
+function assertArtifact(surface: SurfaceRun, options: ResolveExperienceFamilyOptions): void {
   const artifact = surface.artifact
   if (
     !artifact.artifactId.trim() ||
@@ -223,15 +197,11 @@ function assertArtifact(
     !Number.isInteger(artifact.boardSchemaVersion) ||
     artifact.boardSchemaVersion < 1
   ) {
-    reconstructionConflict(
-      `composition surface ${surface.id} has an invalid board artifact`
-    )
+    reconstructionConflict(`composition surface ${surface.id} has an invalid board artifact`)
   }
   if (!options.requireMaterializedBoards) return
   if (!options.graph) {
-    reconstructionConflict(
-      'materialized composition-family resolution requires a scene graph'
-    )
+    reconstructionConflict('materialized composition-family resolution requires a scene graph')
   }
   if (!options.graph.getNode(artifact.boardId)) {
     reconstructionConflict(
@@ -240,14 +210,10 @@ function assertArtifact(
   }
 }
 
-function primaryMemberFor(
-  surface: SurfaceRun
-): PrimaryExperienceFamilyMemberV1 {
+function primaryMemberFor(surface: SurfaceRun): PrimaryExperienceFamilyMemberV1 {
   const composition = compositionLineage(surface)
   if (composition.role !== 'primary') {
-    reconstructionConflict(
-      `composition surface ${surface.id} is not a primary member`
-    )
+    reconstructionConflict(`composition surface ${surface.id} is not a primary member`)
   }
   return {
     artifact: structuredClone(surface.artifact),
@@ -256,7 +222,7 @@ function primaryMemberFor(
     rendererId: surface.rendererId,
     role: 'primary',
     surfaceIndex: composition.surfaceIndex,
-    surfaceRun: { objectId: surface.id, revision: surface.revision },
+    surfaceRun: { objectId: surface.id, revision: surface.revision }
   }
 }
 
@@ -266,9 +232,7 @@ function supportMemberFor(
 ): SupportExperienceFamilyMemberV1 {
   const composition = compositionLineage(surface)
   if (composition.role !== 'support') {
-    reconstructionConflict(
-      `composition surface ${surface.id} is not a support member`
-    )
+    reconstructionConflict(`composition surface ${surface.id} is not a support member`)
   }
   return {
     artifact: structuredClone(surface.artifact),
@@ -278,13 +242,11 @@ function supportMemberFor(
     rendererId: surface.rendererId,
     role: 'support',
     surfaceIndex: composition.surfaceIndex,
-    surfaceRun: { objectId: surface.id, revision: surface.revision },
+    surfaceRun: { objectId: surface.id, revision: surface.revision }
   }
 }
 
-function familyDigest(
-  value: Omit<ResolvedExperienceFamilyV1, 'familyDigest'>
-): string {
+function familyDigest(value: Omit<ResolvedExperienceFamilyV1, 'familyDigest'>): string {
   const source = JSON.stringify(value)
   let hash = 0x811c9dc5
   for (let index = 0; index < source.length; index += 1) {
@@ -301,13 +263,8 @@ export function resolveExperienceFamily(
 ): ResolvedExperienceFamilyV1 {
   const root = exactSurface(workspace, rootSurfaceRef)
   const rootComposition = compositionLineage(root)
-  if (
-    rootComposition.role !== 'primary' ||
-    rootComposition.surfaceIndex !== 0
-  ) {
-    reconstructionConflict(
-      `surface ${root.id} is not the exact composition-family primary`
-    )
+  if (rootComposition.role !== 'primary' || rootComposition.surfaceIndex !== 0) {
+    reconstructionConflict(`surface ${root.id} is not the exact composition-family primary`)
   }
   exactLineageObject(workspace, root.intent, 'intent-record')
   exactLineageObject(workspace, root.evidenceManifest, 'evidence-manifest')
@@ -319,15 +276,10 @@ export function resolveExperienceFamily(
   const supports = surfaces
     .slice(1)
     .map((surface) =>
-      supportMemberFor(
-        surface,
-        exactSupportRelation(workspace, primarySurface, surface)
-      )
+      supportMemberFor(surface, exactSupportRelation(workspace, primarySurface, surface))
     )
   if (supports.length !== rootComposition.surfaceCount - 1) {
-    reconstructionConflict(
-      `composition ${rootComposition.id} has invalid support membership`
-    )
+    reconstructionConflict(`composition ${rootComposition.id} has invalid support membership`)
   }
   const members: ExperienceFamilyMemberV1[] = [primary, ...supports]
   const relations = supports.map((support) => ({ ...support.relation }))
@@ -342,7 +294,7 @@ export function resolveExperienceFamily(
     relations,
     schemaVersion: 1,
     supports,
-    surfaceCount: rootComposition.surfaceCount,
+    surfaceCount: rootComposition.surfaceCount
   }
   return { ...snapshot, familyDigest: familyDigest(snapshot) }
 }

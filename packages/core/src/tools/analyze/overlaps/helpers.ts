@@ -1,5 +1,5 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
-import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import { getAuthoritativeWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import {
   clipPolygon,
   effectOverflow,
@@ -229,7 +229,7 @@ const EMPTY_BOUNDS: VisualBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 }
  * including nested rotations.
  */
 function nodeWorldCorners(node: SceneNode, graph: SceneGraph): Vector[] {
-  const matrix = getWorldMatrix(node, graph)
+  const matrix = getAuthoritativeWorldMatrix(node, graph)
   const pts = Matrix.mapPoints(matrix, [
     0,
     0,
@@ -273,7 +273,7 @@ function aabbFromCorners(corners: Vector[]): VisualBounds {
  * text-decoration overflow (approximate: adds to canvas maxY).
  */
 function computeNodeVisualBounds(node: SceneNode, graph: SceneGraph): VisualBounds {
-  const matrix = getWorldMatrix(node, graph)
+  const matrix = getAuthoritativeWorldMatrix(node, graph)
   // Expand the local rectangle by the stroke overflow *before* transforming
   // through the world matrix. Expanding the already-rotated AABB by `stroke`
   // underestimates the stroked bounds for rotated nodes (the true stroked AABB

@@ -14,7 +14,6 @@ import {
   type WorkViewMovementReceipt,
   type WorkViewSnapshot
 } from '../flow-state'
-import { workspacePluginValue } from '../workspace-ui/projection'
 
 const CACHE_KEY = 'smylr-production/view-state'
 const PLUGIN_ID = 'smylr-production'
@@ -147,14 +146,9 @@ async function readStoredViewMemory(): Promise<WorkViewMemory> {
 
 export function smylrProductionPageView(node: SceneNode | null | undefined) {
   if (node?.type !== 'CANVAS') return null
-  const experiencePurpose = workspacePluginValue(node, 'experiencePurpose')
-  const experienceBasePageId = workspacePluginValue(node, 'basePageId')
-  if (experiencePurpose && experienceBasePageId) {
-    return { kind: `experience-${experiencePurpose}`, pageId: experienceBasePageId }
-  }
   const kind = pluginValue(node, 'kind')
   const pageId = pluginValue(node, 'pageId')
-  return kind && pageId ? { kind, pageId } : null
+  return kind && pageId ? { kind, pageId } : { kind: 'ordinary-board', pageId: node.id }
 }
 
 export function captureSmylrProductionView(store: EditorStore): SmylrProductionViewState | null {

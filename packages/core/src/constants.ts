@@ -78,7 +78,10 @@ export const SIZE_PILL_HEIGHT = 18
 export const SIZE_PILL_RADIUS = 4
 export const SIZE_PILL_TEXT_OFFSET_Y = 13
 
-export const MARQUEE_FILL_ALPHA = 0.08
+export const MARQUEE_CORNER_RADIUS = 4
+export const MARQUEE_FILL_ALPHA = 0.06
+export const MARQUEE_STROKE_ALPHA = 0.9
+export const MARQUEE_STROKE_WIDTH = 1
 export const SELECTION_DASH_ALPHA = 0.6
 export const DROP_HIGHLIGHT_ALPHA = 0.8
 export const DROP_HIGHLIGHT_STROKE = 2
@@ -335,9 +338,6 @@ export const AI_PROVIDERS: AIProviderDef[] = [
 
 export const DEFAULT_AI_PROVIDER: AIProviderID = 'openrouter'
 export const DEFAULT_AI_MODEL = AI_PROVIDERS[0].defaultModel
-
-export const AUTOMATION_HTTP_PORT = 7600
-export const AUTOMATION_WS_PORT = 7601
 
 export const GOOGLE_FONTS_API_KEY = 'AIzaSyD1tYDR_dUEiV-Tw1vksEhZbUytgKW5pc8'
 

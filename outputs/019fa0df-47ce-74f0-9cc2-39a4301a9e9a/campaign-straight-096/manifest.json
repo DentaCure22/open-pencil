@@ -1,0 +1,38 @@
+{
+  "manifest_id": "prompt-to-board-straight-development-096",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "straight-096-orbital-communications-brief",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-batch-096-straight-through"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card"
+      ],
+      "prompt": "On this empty disposable Board, build one polished satellite-communications pass brief titled “Orbital Window.” State the recommended contact window, the elevation, weather, antenna, and power assumptions, three go/no-go checks, one fallback trigger, the owner, and the first action. Keep the result concise and easy to scan.",
+      "rubric": {
+        "rubric_id": "ptb-dev-native-single-decision-brief",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-STRAIGHT-096-A",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB STRAIGHT-096 — Orbital Window",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

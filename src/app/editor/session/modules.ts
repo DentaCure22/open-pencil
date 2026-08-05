@@ -7,13 +7,15 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 import { createDocumentExportActions } from '@/app/document/export'
 import { createDocumentIOActions } from '@/app/document/io'
 import type { ViewportSize } from '@/app/document/io/types'
+import { createContainerNavigation } from '@/app/editor/container-navigation'
 import { createFlashActions } from '@/app/editor/flash'
 import { createMobileClipboardActions } from '@/app/editor/mobile-clipboard'
 import { createPenActions } from '@/app/editor/pen'
 import { createProfilerActions } from '@/app/editor/profiler'
 import type { AppEditorState } from '@/app/editor/session/types'
 import { createVectorEditActions } from '@/app/editor/vector-edit'
-import { createSmylrLiveContainerOpenActions } from '@/app/smylr-live-container'
+import { createObjectGraphCoordinator } from '@/app/object-graph/coordinator'
+import { createObjectGraphNavigation } from '@/app/object-graph/navigation'
 
 export function defineEditorStoreAccessors(store: object, editor: Editor) {
   Object.defineProperties(store, {
@@ -66,13 +68,11 @@ export function createEditorStoreModules(
   const vectorEdit = createVectorEditActions(editor, graph, state)
   const documentIO = createDocumentIOActions(editor, state, viewportSize)
   const documentExport = createDocumentExportActions(editor, state, io, documentIO.downloadBlob)
-  const smylrLiveContainer = createSmylrLiveContainerOpenActions({
-    editor,
-    fitCurrentPageToViewport: documentIO.fitCurrentPageToViewport,
-    state
-  })
   const mobileClipboard = createMobileClipboardActions(editor, state)
   const profiler = createProfilerActions(editor)
+  const objectGraph = createObjectGraphCoordinator(editor, state)
+  const objectGraphNavigation = createObjectGraphNavigation(editor)
+  const containerNavigation = createContainerNavigation(editor)
 
   return {
     ...flash,
@@ -81,6 +81,7 @@ export function createEditorStoreModules(
     openFigFile: documentIO.openFigFile,
     openDOMFile: documentIO.openDOMFile,
     importDOMText: documentIO.importDOMText,
+    importReactText: documentIO.importReactText,
     setViewportSize: documentIO.setViewportSize,
     fitCurrentPageToViewport: documentIO.fitCurrentPageToViewport,
     saveFigFile: documentIO.saveFigFile,
@@ -89,14 +90,17 @@ export function createEditorStoreModules(
     getWritableDocumentSource: documentIO.getWritableDocumentSource,
     persistWritableDocumentSource: documentIO.persistWritableDocumentSource,
     setDocumentSource: documentIO.setDocumentSource,
-    openSmylrLiveContainerClipboardDocument:
-      smylrLiveContainer.openSmylrLiveContainerClipboardDocument,
-    openSmylrLiveContainerDocument: smylrLiveContainer.openSmylrLiveContainerDocument,
-    openSampleSmylrLiveContainerDocument: smylrLiveContainer.openSampleSmylrLiveContainerDocument,
-    getSmylrLiveContainerDocument: smylrLiveContainer.getSmylrLiveContainerDocument,
     setPlannedFilePath: documentIO.setPlannedFilePath,
     startWatchingCurrentFile: documentIO.startWatchingCurrentFile,
-    dispose: documentIO.disposeDocumentIO,
+    dispose: () => {
+      containerNavigation.dispose()
+      objectGraphNavigation.dispose()
+      objectGraph.dispose()
+      documentIO.disposeDocumentIO()
+    },
+    containerNavigation,
+    objectGraph,
+    objectGraphNavigation,
     ...documentExport,
     ...mobileClipboard,
     ...profiler

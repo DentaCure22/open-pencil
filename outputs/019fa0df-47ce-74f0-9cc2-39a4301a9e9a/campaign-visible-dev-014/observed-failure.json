@@ -1,0 +1,41 @@
+{
+  "schema_version": "prompt-to-board-observed-failure/v1",
+  "run_id": "visible-dev-014-first-attempt",
+  "scenario_id": "DEV-MX-MC-SPARSE-001",
+  "correctness_status": "fail",
+  "reliability_status": "first_attempt_failed",
+  "timeout_status": "no_timeout",
+  "failure_class": "mixed_composition_collapsed_into_one_code_object",
+  "observed": {
+    "artifact_visible": true,
+    "owner_id": "0:385",
+    "implementation_interaction_status": "pass",
+    "initial_capacity": 24,
+    "visible_capacity_after_two_clicks": 26,
+    "persisted_capacity_after_interaction": 26,
+    "reload_capacity": 26,
+    "top_level_artifact_count": 1,
+    "typed_object_graph_connection_count": 0
+  },
+  "timings_ms": {
+    "prompt_to_first_tool": 7980,
+    "prompt_to_first_board_tool": 82815,
+    "prompt_to_durable": 83072,
+    "prompt_to_generated_final": 107944,
+    "prompt_to_first_visible_capture": 167774,
+    "prompt_to_interaction_capture": 192774,
+    "prompt_to_reload_capture": 251774
+  },
+  "evidence": {
+    "initial_screenshot_path": "visible-dev-014.png",
+    "initial_screenshot_sha256": "833fafcdc0408a397e63a48f6b89f1ce97efc13ec831eadcb223f5071a9dbd40",
+    "interaction_screenshot_path": "visible-dev-014-interaction.png",
+    "interaction_screenshot_sha256": "678b1e1edad40deeaa335875697107933ed691ce0445ca123bcb0b41195a32dc",
+    "reload_screenshot_path": "visible-dev-014-reload.png",
+    "reload_screenshot_sha256": "8dcfecf499d6bc4f200aa3c080502fe191ecd6176a36b6a3ff9924cbce1ceb9b",
+    "source_hash": "sha256:705bd0f9fa0ef046906a63a069af2bd25e49535fb461ebe19150dfca4507517c"
+  },
+  "cause": "The fresh agent correctly adopted robust controls and proved 24 to 26 state persistence across reload, but collapsed Must, Should, Could, relationships, and the capacity control into one frame. The frozen mixed-connected rubric requires meaningful independent Board objects and typed Object Graph connections between them.",
+  "smallest_direct_fix": "Make the development prompt explicit that the summaries and control must remain independently selectable Board objects with visible typed relationships. The prior natural-language prompt did not state that hidden composition requirement clearly enough.",
+  "raw_events_rewritten": false
+}

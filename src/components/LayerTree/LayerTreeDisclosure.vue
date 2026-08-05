@@ -13,6 +13,7 @@ const emit = defineEmits<{
   <button
     v-if="visible"
     type="button"
+    data-test-id="layers-item-disclosure"
     class="flex w-4 shrink-0 cursor-pointer items-center justify-center text-muted transition-transform hover:text-surface"
     :class="expanded ? 'rotate-90' : 'rotate-0'"
     @click.stop="emit('toggle')"

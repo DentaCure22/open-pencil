@@ -13,7 +13,7 @@ import { registerKeyboardShortcuts } from '@/app/shell/keyboard/registry'
 import { openFileDialog } from '@/app/shell/menu/use'
 import { closeTab, createTab, activeTab as activeTabRef } from '@/app/tabs'
 
-export function useKeyboard() {
+export function useKeyboard(enabled: () => boolean = () => true) {
   const { activeTab } = useAIChat()
   const store = useEditorStore()
   const { isMobile } = useViewportKind()
@@ -23,10 +23,11 @@ export function useKeyboard() {
 
   const actions = createKeyboardActions({ store, activeTab, isMobile, runCommand })
 
-  bindEditorClipboard(store)
-  bindNudgeKeys(store)
+  bindEditorClipboard(store, enabled)
+  bindNudgeKeys(store, enabled)
 
   registerKeyboardShortcuts({
+    enabled,
     inputFocused,
     store,
     runCommand,

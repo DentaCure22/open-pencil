@@ -7,6 +7,7 @@ import {
   SIDEBAR_WORKSPACE_PLUGIN_ID,
   createSidebarBoard,
   createSidebarPage,
+  hasMoreOrganizedSidebarHierarchy,
   moveSidebarBoard,
   moveSidebarPage,
   orderedSidebarBoards,
@@ -15,7 +16,6 @@ import {
   resolveSidebarWorkspace,
   sidebarWorkspacePluginData
 } from '@/app/sidebar-workspace/tree'
-import { ensureWorkspaceProjectionPage } from '@/app/workspace-ui/projection'
 
 function persist(
   graph: SceneGraph,
@@ -91,40 +91,58 @@ describe('sidebar Project and Board workspace', () => {
     )
   })
 
-  test('keeps generated projection pages out of authored navigation and removes stale entries', () => {
+  test('prefers the same boards in a more organized local hierarchy during cloud migration', () => {
     const graph = new SceneGraph()
-    const basePage = graph.getPages()[0]
-    if (!basePage) throw new Error('missing scene page')
-    const initial = resolveSidebarWorkspace(graph).workspace
-    const derived = ensureWorkspaceProjectionPage(graph, {
-      basePageId: basePage.id,
-      basePageName: basePage.name,
-      kind: 'review',
-      purpose: 'review',
-      viewId: 'view-review-generated',
-      workspaceId: 'workspace-generated'
-    })
-    const staleLogicalPageId = `sidebar-page:${derived.id}`
-    persist(graph, {
-      ...initial,
-      boards: [
-        ...initial.boards,
-        {
-          label: 'Version review',
-          order: 0,
-          pageId: derived.id,
-          parentPageId: staleLogicalPageId
-        }
-      ],
-      pages: [
-        ...initial.pages,
-        { id: staleLogicalPageId, name: derived.name, order: 1, parentId: null }
-      ]
-    })
+    const flat = resolveSidebarWorkspace(graph).workspace
+    const root = orderedSidebarPages(flat, null)[0]
+    if (!root) throw new Error('missing root page')
+    const nested = createSidebarPage(flat, { name: 'Product Screens', parentId: root.id }).workspace
 
+    expect(hasMoreOrganizedSidebarHierarchy(nested, flat)).toBe(true)
+    expect(hasMoreOrganizedSidebarHierarchy(flat, nested)).toBe(false)
+
+    const extraBoard = graph.addPage('Cloud-only board')
+    const cloudWithExtraBoard = createSidebarBoard(flat, {
+      pageId: extraBoard.id,
+      parentPageId: root.id
+    })
+    expect(hasMoreOrganizedSidebarHierarchy(nested, cloudWithExtraBoard)).toBe(false)
+  })
+
+  test('removes an orphaned generated Project after its scene Board is deleted', () => {
+    const graph = new SceneGraph()
+    const originalPage = graph.getPages()[0]
+    if (!originalPage) throw new Error('missing scene page')
+    const initial = resolveSidebarWorkspace(graph).workspace
+    const orphanedProjectId = `sidebar-page:${originalPage.id}`
+    persist(graph, initial)
+
+    graph.deleteNode(originalPage.id)
+    const replacement = graph.addPage('Replacement')
     const resolved = resolveSidebarWorkspace(graph).workspace
-    expect(resolved.boards.map((board) => board.pageId)).toEqual([basePage.id])
-    expect(resolved.pages.some((page) => page.id === staleLogicalPageId)).toBe(false)
+
+    expect(resolved.pages.some((page) => page.id === orphanedProjectId)).toBe(false)
+    expect(resolved.boards.some((board) => board.pageId === replacement.id)).toBe(true)
+  })
+
+  test('keeps nested Projects when removing their orphaned generated parent', () => {
+    const graph = new SceneGraph()
+    const originalPage = graph.getPages()[0]
+    if (!originalPage) throw new Error('missing scene page')
+    const initial = resolveSidebarWorkspace(graph).workspace
+    const orphanedProjectId = `sidebar-page:${originalPage.id}`
+    const nested = createSidebarPage(initial, {
+      name: 'Research',
+      parentId: orphanedProjectId
+    })
+    persist(graph, nested.workspace)
+
+    graph.deleteNode(originalPage.id)
+    graph.addPage('Replacement')
+    const resolved = resolveSidebarWorkspace(graph).workspace
+
+    expect(resolved.pages.some((page) => page.id === orphanedProjectId)).toBe(false)
+    expect(resolved.pages.find((page) => page.id === nested.page.id)?.parentId).toBeNull()
   })
 
   test('allows unlimited boards under one Project and moves them between Projects', () => {

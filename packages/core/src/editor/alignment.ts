@@ -42,7 +42,9 @@ function alignMultipleNodes(
   align: 'min' | 'center' | 'max'
 ) {
   const absPositions = new Map<string, Vector>()
-  for (const n of nodes) absPositions.set(n.id, ctx.graph.getAbsolutePosition(n.id))
+  for (const n of nodes) {
+    absPositions.set(n.id, ctx.graph.getAuthoritativeAbsolutePosition(n.id))
+  }
 
   const getPos = (id: string) => absPositions.get(id) ?? { x: 0, y: 0 }
   const b = computeAbsoluteBounds(nodes, getPos)
@@ -54,7 +56,9 @@ function alignMultipleNodes(
   for (const n of nodes) {
     const abs = absPositions.get(n.id)
     if (!abs) continue
-    const parentAbs = n.parentId ? ctx.graph.getAbsolutePosition(n.parentId) : { x: 0, y: 0 }
+    const parentAbs = n.parentId
+      ? ctx.graph.getAuthoritativeAbsolutePosition(n.parentId)
+      : { x: 0, y: 0 }
 
     if (axis === 'horizontal') {
       const target = computeAlignTarget(minX, maxX, n.width, align)

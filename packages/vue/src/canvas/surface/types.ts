@@ -5,6 +5,10 @@ export type CanvasRenderLayer = 'full' | 'scene' | 'overlays'
 
 export interface UseCanvasOptions {
   /**
+   * Returns true when a selected node has a product-owned selection overlay.
+   */
+  ownsSelectionChrome?: (nodeId: string) => boolean
+  /**
    * Selects which render layer this canvas owns.
    */
   layer?: CanvasRenderLayer

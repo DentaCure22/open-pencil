@@ -36,7 +36,7 @@ export function computeContentBounds(graph: SceneGraph, nodeIds: string[]) {
   return computeDescendantVisualBounds(
     nodeIds,
     (id) => graph.getNode(id),
-    (id) => graph.getAbsolutePosition(id)
+    (id) => graph.getAuthoritativeAbsolutePosition(id)
   )
 }
 
@@ -249,10 +249,12 @@ export function renderNodesToImage(
   const extracted = extractExportGraph(graph, { scope: 'selection', nodeIds })
   if (!extracted.pageId) return null
 
-  const renderGraph = nodeIds.some((nodeId) => nodeNeedsSceneBackdrop(graph, nodeId))
-    ? graph
-    : extracted.graph
-  const renderPageId = renderGraph === graph ? pageId : extracted.pageId
+  const backdropPage = nodeIds.some((nodeId) => nodeNeedsSceneBackdrop(graph, nodeId))
+    ? extractExportGraph(graph, { scope: 'page', pageId })
+    : null
+  const renderGraph = backdropPage?.graph ?? extracted.graph
+  const renderPageId = backdropPage?.pageId ?? extracted.pageId
+  if (!renderPageId) return null
 
   const quality = options.quality ?? (options.format === 'PNG' ? 100 : 90)
   return renderToSurface(
@@ -293,11 +295,24 @@ export function renderThumbnail(
 
   const scale = Math.min(width / contentW, height / contentH, 2)
 
-  return renderToSurface(ck, renderer, graph, pageId, width, height, 'PNG', 100, (canvas) => {
-    canvas.clear(ck.Color4f(renderer.pageColor.r, renderer.pageColor.g, renderer.pageColor.b, 1))
-    const offsetX = (width - contentW * scale) / 2 - bounds.minX * scale
-    const offsetY = (height - contentH * scale) / 2 - bounds.minY * scale
-    canvas.translate(offsetX, offsetY)
-    canvas.scale(scale, scale)
-  })
+  const extracted = extractExportGraph(graph, { scope: 'page', pageId })
+  if (!extracted.pageId) return null
+
+  return renderToSurface(
+    ck,
+    renderer,
+    extracted.graph,
+    extracted.pageId,
+    width,
+    height,
+    'PNG',
+    100,
+    (canvas) => {
+      canvas.clear(ck.Color4f(renderer.pageColor.r, renderer.pageColor.g, renderer.pageColor.b, 1))
+      const offsetX = (width - contentW * scale) / 2 - bounds.minX * scale
+      const offsetY = (height - contentH * scale) / 2 - bounds.minY * scale
+      canvas.translate(offsetX, offsetY)
+      canvas.scale(scale, scale)
+    }
+  )
 }

@@ -30,6 +30,23 @@ describe('hitTest', () => {
     expect(graph.hitTest(100, 100, pageId(graph))).toBeNull()
   })
 
+  test('frame can opt into bounds hit testing for a projected surface', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      name: 'Projected Surface',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 200,
+      fills: []
+    })
+    expect(
+      graph.hitTest(100, 100, pageId(graph), {
+        isBoundsHitTarget: (node) => node.id === frame.id
+      })?.id
+    ).toBe(frame.id)
+  })
+
   test('frame with visible fill is hittable', () => {
     const graph = new SceneGraph()
     const frame = graph.createNode('FRAME', pageId(graph), {

@@ -1,0 +1,41 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 0,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 1,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [
+    {
+      "code": "terminal_event_mismatch",
+      "detail": "Recorded result requires either one generated model final or one verified straight-through release; observed message=3, post_build_message=2, pending=0, release=0, raw_close=1, error=1.",
+      "run_id": "final-115-overflow-general-first-attempt"
+    }
+  ],
+  "gate_passed": false,
+  "observations": [
+    {
+      "discrepancies": [
+        {
+          "code": "terminal_event_mismatch",
+          "detail": "Recorded result requires either one generated model final or one verified straight-through release; observed message=3, post_build_message=2, pending=0, release=0, raw_close=1, error=1.",
+          "run_id": "final-115-overflow-general-first-attempt"
+        }
+      ],
+      "event_count": 22,
+      "result_status": "recorded",
+      "run_id": "final-115-overflow-general-first-attempt",
+      "state": "recorded",
+      "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-final-115/001-final-115-overflow-general-first-attempt/telemetry-v1.json"
+    }
+  ],
+  "results_total": 1,
+  "roster_id": "d42b67469166022aef0ec2bd290747c2cbe4a36d31d78e95ba9fb7a0effbb8d3",
+  "scheduled_total": 1,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 1
+}

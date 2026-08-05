@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "79189a60ef579a10c0b3596223f289826fe857e5f0ba1809615de4b2f385df5e",
+    "config_id": "5d5add75af207f409843088fc65cdea47f4e3d10d4a782c32617cb7f2d1f1104",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-visible-dev-017/001-visible-dev-017-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "visible-dev-017-first-attempt",
+    "scenario_id": "DEV-MX-MC-POPULATED-001",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-visible-dev-017/001-visible-dev-017-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "pending_proof",
+    "thread_id": "019fb00d-3272-76f1-b0f0-c663b84fd267"
+  }
+]

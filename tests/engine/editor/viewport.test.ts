@@ -5,6 +5,27 @@ import { SceneGraph } from '@open-pencil/scene-graph'
 import { createEditor } from '#core/editor'
 
 describe('viewport fitting', () => {
+  test('accepts an atomic controlled viewport update', () => {
+    const graph = new SceneGraph()
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ height: 700, width: 1000 }),
+      skipInitialGraphSetup: true
+    })
+    let changed = 0
+    let previousZoom = 0
+    editor.onEditorEvent('viewport:changed', (_next, previous) => {
+      changed++
+      previousZoom = previous.zoom
+    })
+
+    editor.setViewport({ panX: 120, panY: -45, zoom: 512 })
+
+    expect(editor.state).toMatchObject({ panX: 120, panY: -45, zoom: 256 })
+    expect(changed).toBe(1)
+    expect(previousZoom).toBe(1)
+  })
+
   test('centers content inside the unobstructed viewport insets', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
@@ -34,6 +55,95 @@ describe('viewport fitting', () => {
     expect(bottom).toBeLessThan(600)
     expect((left + right) / 2).toBeCloseTo(550)
     expect((top + bottom) / 2).toBeCloseTo(325)
+  })
+
+  test('keeps selected descendant text readable when fitting a large diagram', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    const diagram = graph.createNode('GROUP', page.id, {
+      x: 0,
+      y: 0,
+      width: 2400,
+      height: 400
+    })
+    graph.createNode('TEXT', diagram.id, {
+      x: 0,
+      y: 0,
+      width: 140,
+      height: 24,
+      text: 'Readable label',
+      fontSize: 14
+    })
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ width: 1000, height: 700 }),
+      skipInitialGraphSetup: true
+    })
+    editor.select([diagram.id])
+
+    editor.zoomToReadableSelection(11)
+
+    expect(editor.state.zoom * 14).toBeGreaterThanOrEqual(11)
+  })
+
+  test('reveals an offscreen node with the minimum pan while preserving zoom', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    const frame = graph.createNode('FRAME', page.id, {
+      height: 160,
+      width: 240,
+      x: 1400,
+      y: 760
+    })
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ width: 1000, height: 700 }),
+      skipInitialGraphSetup: true
+    })
+    editor.setViewport({ panX: 0, panY: 0, zoom: 1.25 })
+
+    expect(editor.revealNode(frame.id, { bottom: 50, left: 200, right: 100, top: 50 })).toBe(true)
+
+    const left = frame.x * editor.state.zoom + editor.state.panX
+    const right = (frame.x + frame.width) * editor.state.zoom + editor.state.panX
+    const top = frame.y * editor.state.zoom + editor.state.panY
+    const bottom = (frame.y + frame.height) * editor.state.zoom + editor.state.panY
+    expect(editor.state.zoom).toBe(1.25)
+    expect(left).toBeGreaterThanOrEqual(248)
+    expect(right).toBeLessThanOrEqual(852)
+    expect(top).toBeGreaterThanOrEqual(98)
+    expect(bottom).toBeLessThanOrEqual(602)
+
+    const viewport = {
+      panX: editor.state.panX,
+      panY: editor.state.panY,
+      zoom: editor.state.zoom
+    }
+    expect(editor.revealNode(frame.id, { bottom: 50, left: 200, right: 100, top: 50 })).toBe(true)
+    expect(editor.state).toMatchObject(viewport)
+  })
+
+  test('fits an oversized node when it cannot be revealed at the current zoom', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    if (!page) throw new Error('Expected a page')
+    const frame = graph.createNode('FRAME', page.id, {
+      height: 1200,
+      width: 1800,
+      x: 200,
+      y: 100
+    })
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ width: 1000, height: 700 }),
+      skipInitialGraphSetup: true
+    })
+    editor.setViewport({ panX: 0, panY: 0, zoom: 1.5 })
+
+    expect(editor.revealNode(frame.id)).toBe(true)
+    expect(editor.state.zoom).toBeLessThan(1.5)
   })
 
   test('fits an unseen page and restores its focal point when chrome changes', async () => {

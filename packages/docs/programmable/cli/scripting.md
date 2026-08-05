@@ -65,15 +65,22 @@ openpencil eval design.fig -c "figma.currentPage.name = 'Updated'" -o updated.fi
 cat transform.js | openpencil eval design.fig --stdin --write
 ```
 
-## Live app mode
+## Live and persisted Board automation
 
-Omit the file path to run against the currently open document in the desktop app:
+Live-app `eval` is disabled. Use the guarded Board namespace for exact-target automation:
 
 ```sh
-openpencil eval -c "return figma.currentPage.name"
+openpencil board list --limit 10 --json
+openpencil board context --workspace-id <workspace> --page-id <page> --json
+openpencil board search "prior pricing work" --limit 10 --json
+openpencil board create --name "Agent Sandbox" --request-id <stable-id> --json
 ```
 
-The desktop app must be running with a document open.
+Persisted local authority supports list, context, page creation, and exact saved-target resolution
+without an open editor. `board create` automatically uses the sole persisted workspace/document;
+optional target flags pin and validate it, and ambiguity fails before mutation. An authority-pinned
+`board open` queues a short-lived exact page switch for
+the next matching editor; it does not require or imply pixel proof.
 
 ## Output
 

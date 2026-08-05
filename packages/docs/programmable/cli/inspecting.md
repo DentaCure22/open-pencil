@@ -5,14 +5,17 @@ description: Browse node trees, search by name or type, and dig into properties 
 
 # Inspecting Files
 
-The CLI lets you explore design documents without opening the editor. Every command also works on the live app — just omit the file argument.
+The CLI lets you explore design documents without opening the editor. Guarded live or persisted
+Board automation uses `openpencil board` with exact target identity.
 
 ::: tip Install
+
 ```sh
 npm install -g @open-pencil/cli
 # or
 brew install open-pencil/tap/open-pencil
 ```
+
 :::
 
 ## Document Info
@@ -139,18 +142,35 @@ List design variables and their collections:
 openpencil variables design.fig
 ```
 
-## Live App Mode
+## Live and persisted Board discovery
 
-When the desktop app is running, omit the file argument — the CLI connects via RPC and operates on the live canvas:
+Use the canonical Board namespace to discover exact identity and acquire guarded context:
 
 ```sh
-openpencil documents         # list open document/page IDs
-openpencil tree              # inspect the active live document
-openpencil tree --document-id tab-123 --page-id 0:1
-openpencil eval --document-id tab-123 --page-id 0:1 -c "..."
+openpencil board list --json
+openpencil board context --workspace-id workspace-123 --page-id 0:1 --json
 ```
 
-Use `openpencil documents --json` in agent workflows, then pass `--document-id` and `--page-id` explicitly instead of relying on the visible active tab/page.
+Persisted local authority can answer both commands without an open editor. `board open` queues a
+short-lived exact page switch when the matching editor is not registered, and the editor consumes
+only the newest pending intent once it is available.
+`eval` is file-only and never targets a live Board.
+
+The complete guarded namespace is:
+
+```text
+openpencil board list|create|open|context|build|edit|connect|read|present|verify
+```
+
+Use `board build` for typed artifact creation/refinement. `board present` and live navigation require an editor runtime;
+persisted authority may support durable list, context, create, build, connect, read, and verify
+operations according to the capabilities returned by `board context`. `board edit` supports guarded
+top-level native-object update, move, resize, duplicate, and delete with exact target identity,
+revision checks, stable request receipts, and replay. Legacy `boards`, `documents`, `board change`,
+and `code-object upsert` commands remain callable compatibility aliases but do not appear in normal
+help. Board rename/duplicate/delete and Board history commands remain intentionally absent until
+they have guarded receipts, exact-target validation, and normal Undo/Redo verification; raw `eval`
+is not their fallback.
 
 ## Lint Designs
 

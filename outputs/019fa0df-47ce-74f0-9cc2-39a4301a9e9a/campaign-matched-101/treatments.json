@@ -1,0 +1,25 @@
+{
+  "frozen_authority_revision": 795,
+  "natural_prompt_sha256": "eb968450421f15eb323f51678c891bc5358fe373cc7b06f8f5c0c212867e4bf0",
+  "recipe_schema_sha256": "34245008c568fc37de653955e94fb6078de0827a7378e9caf9bd7d3906b91a91",
+  "treatments": [
+    {
+      "config_id": "a195f0c3e02b4eaab76a07bc201fd51bd433b4100ff26d74bab3528675694962",
+      "execution_contract_sha256": "d6909f977ce5ad9640e1f969b25811666d95134e038b92bc12176a79060d9475",
+      "full_prompt_sha256": "f879938faebcf54b716e5fab18480ee32495828f0696205100359cc87f336835",
+      "page_id": "0:3318",
+      "request_id": "ptb-run:8b1cb482e8ada7780f1c0405a6ebdbb7",
+      "run_id": "matched-101a-explicit-plan-first-attempt",
+      "treatment": "explicit_plan_cold"
+    },
+    {
+      "config_id": "cba81ef2dcafd5df2fa11fcacf693777c864f879831ff022b3b0f1d2979d630a",
+      "execution_contract_sha256": "64aba3b536a41e7aff343ab617b41fb49d12683d9c701bd679985d9035aa7f3a",
+      "full_prompt_sha256": "4974521fdc052653caa119517f16dc222a32f652670fd71d66d0f0c584a4d166",
+      "page_id": "0:3327",
+      "request_id": "ptb-run:87e388b8e983ecd10eb227e7e49336dd",
+      "run_id": "matched-101b-provided-recipe-first-attempt",
+      "treatment": "provided_recipe_cold"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "manifest_id": "prompt-to-board-production-smoke-104",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "smoke-104-repair-cafe-brief-grid",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "production-path-smoke-104"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_text",
+        "native_card"
+      ],
+      "prompt": "On this empty disposable Board, build a clear editable one-page brief for a fictional Saturday Sunset Park Repair Café. Add one heading plus three concise cards titled Purpose, Saturday Plan, and Team & Risks. Include concrete details: repair small appliances, bicycles, and textiles for 60 residents; volunteer setup at 09:00, public repairs from 10:00–14:00, and cleanup at 14:15; staff with one coordinator, three station leads, and eight repair volunteers; provide tool kits, power strips, spare parts, tags, and safety glasses; and mitigate overloaded power, unrepairable items, and volunteer gaps with circuit checks, honest intake triage, and cross-trained floaters. Use a readable three-column grid. Do not add connectors or a Code Object.",
+      "rubric": {
+        "rubric_id": "ptb-dev-repair-cafe-brief-grid",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-SMOKE-104",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB SMOKE-104 — Recipe Release",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

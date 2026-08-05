@@ -1,0 +1,42 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 0,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 3,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [],
+  "gate_passed": true,
+  "observations": [
+    {
+      "discrepancies": [],
+      "event_count": 18,
+      "result_status": "recorded",
+      "run_id": "fast-dev-035a-first-attempt",
+      "state": "recorded"
+    },
+    {
+      "discrepancies": [],
+      "event_count": 17,
+      "result_status": "recorded",
+      "run_id": "fast-dev-035b-first-attempt",
+      "state": "recorded"
+    },
+    {
+      "discrepancies": [],
+      "event_count": 21,
+      "result_status": "recorded",
+      "run_id": "fast-dev-035c-first-attempt",
+      "state": "recorded"
+    }
+  ],
+  "results_total": 3,
+  "roster_id": "54fffd770ad7d6c043269aabb94cc0581a25940e7907211cfebfce3a7d6f4071",
+  "scheduled_total": 3,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 3
+}

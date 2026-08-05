@@ -2,10 +2,19 @@ import type { Editor } from '@open-pencil/core/editor'
 import { computeSelectionBounds, computeSnap } from '@open-pencil/scene-graph'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import type { DragMove } from '#vue/shared/input/types'
+export type MoveSnapOriginal = {
+  parentId: string
+  x: number
+  y: number
+}
+
+export type MoveSnapInput = {
+  movingIds?: ReadonlySet<string>
+  originals: ReadonlyMap<string, MoveSnapOriginal>
+}
 
 export function applyMoveSnap(
-  d: DragMove,
+  d: MoveSnapInput,
   dx: number,
   dy: number,
   editor: Editor
@@ -14,9 +23,9 @@ export function applyMoveSnap(
   for (const [id, orig] of d.originals) {
     const node = editor.graph.getNode(id)
     if (node) {
-      const abs = editor.graph.getAbsolutePosition(id)
+      const abs = editor.graph.getAuthoritativeAbsolutePosition(id)
       const parentAbs = node.parentId
-        ? editor.graph.getAbsolutePosition(node.parentId)
+        ? editor.graph.getAuthoritativeAbsolutePosition(node.parentId)
         : { x: 0, y: 0 }
       selectedNodes.push({
         ...node,
@@ -34,7 +43,7 @@ export function applyMoveSnap(
   const parentId = firstNode?.parentId ?? editor.state.currentPageId
   const siblings = editor.graph.getChildren(parentId)
   const parentAbs = !editor.isTopLevel(parentId)
-    ? editor.graph.getAbsolutePosition(parentId)
+    ? editor.graph.getAuthoritativeAbsolutePosition(parentId)
     : { x: 0, y: 0 }
   const absTargets = siblings.map((node) => ({
     ...node,
@@ -47,7 +56,8 @@ export function applyMoveSnap(
     width: bounds.width,
     height: bounds.height
   }
-  const snap = computeSnap(editor.state.selectedIds, absBounds, absTargets)
+  const movingIds = d.movingIds ? new Set(d.movingIds) : editor.state.selectedIds
+  const snap = computeSnap(movingIds, absBounds, absTargets)
   editor.setSnapGuides(snap.guides)
   return { dx: dx + snap.dx, dy: dy + snap.dy }
 }

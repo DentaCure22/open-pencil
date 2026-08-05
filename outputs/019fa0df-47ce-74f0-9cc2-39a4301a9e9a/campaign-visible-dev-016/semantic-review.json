@@ -1,0 +1,113 @@
+{
+  "schema_version": "prompt-to-board-semantic-review/v1",
+  "review_id": "visible-dev-016-semantic-review",
+  "run_id": "visible-dev-016-first-attempt",
+  "scenario_id": "DEV-MX-MC-SPARSE-001",
+  "rubric_id": "ptb-dev-mixed-connected",
+  "rubric_version": "1.0.0",
+  "quality_passed": true,
+  "quality_grade": "pass",
+  "target": {
+    "runtime_instance_id": "runtime:8901d0fb165f6d8890034c17ca63901d",
+    "workspace_id": "workspace-44c2b737-ada8-4e45-b8d9-1d30aadf4fdc",
+    "document_id": "tab-1",
+    "content_document_id": "document-1b633407-6552-4f35-a64b-7ac3899a306d",
+    "page_id": "0:430"
+  },
+  "artifact": {
+    "owners": [
+      {
+        "id": "0:369",
+        "name": "Must",
+        "modality": "native_card"
+      },
+      {
+        "id": "0:372",
+        "name": "Should",
+        "modality": "native_card"
+      },
+      {
+        "id": "0:387",
+        "name": "Could",
+        "modality": "native_card"
+      },
+      {
+        "id": "0:393",
+        "name": "Sprint Capacity",
+        "modality": "code_object",
+        "definition_id": "sprint-planning-capacity-control-v1",
+        "source_hash": "sha256:34159eaeaa3699a9d19f6531940c465e99a17d009fcbf18e4ab9dcb8518a4924",
+        "initial_state": {
+          "capacity": 24
+        },
+        "interacted_state": {
+          "capacity": 26
+        }
+      }
+    ],
+    "connections": [
+      {
+        "id": "object-connection:39068ff7c4786551",
+        "source_id": "0:369",
+        "target_id": "0:372",
+        "kind": "data",
+        "label": "constrains · data",
+        "automatic": false
+      },
+      {
+        "id": "object-connection:185f3107abc55c8f",
+        "source_id": "0:369",
+        "target_id": "0:387",
+        "kind": "data",
+        "label": "constrains · data",
+        "automatic": false
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "exact_target_and_independent_owners",
+      "passed": true,
+      "evidence": "Exact page 0:430 contains four separate top-level owners after creation and after a hard browser reload."
+    },
+    {
+      "name": "requested_mixed_modalities",
+      "passed": true,
+      "evidence": "Must, Should, and Could are ordinary native cards while Sprint Capacity is a separate stateful TSX Code Object."
+    },
+    {
+      "name": "typed_relationships",
+      "passed": true,
+      "evidence": "Applied durable receipts record two non-automatic data connections from Must to Should and Must to Could; both labeled arrows are visible in the final group screenshot and remain rendered after reload."
+    },
+    {
+      "name": "final_group_presentation",
+      "passed": true,
+      "evidence": "The first-attempt agent invoked board present --fresh-context for all four owner IDs; the resulting screenshot frames all four pieces and both relationship labels together."
+    },
+    {
+      "name": "live_interaction",
+      "passed": true,
+      "evidence": "Independent browser proof entered Interact mode and clicked Increase capacity once, changing the visible control and slider from 24 to 26."
+    },
+    {
+      "name": "semantic_state_readback",
+      "passed": true,
+      "evidence": "code-object inspect returned persisted state capacity=26 and source hash sha256:34159eaeaa3699a9d19f6531940c465e99a17d009fcbf18e4ab9dcb8518a4924."
+    },
+    {
+      "name": "durability_reload",
+      "passed": true,
+      "evidence": "After browser reload the writer runtime changed to runtime:298a470467570fb86acb2b2cfdb1ed4b, but exact page 0:430 still contained the four owners, both connector labels, and capacity=26."
+    },
+    {
+      "name": "failure_and_recovery_integrity",
+      "passed": true,
+      "evidence": "The oversized placement refusal, stale connector attempt, and initially unreadable connector label remain in the append-only event stream; the agent recovered without replacing the first attempt."
+    }
+  ],
+  "visual_screenshot_sha256": "aea9c0b4d0c4d624e2af348931452d9b0a4341f4b89543304205f023719dce41",
+  "interaction_screenshot_sha256": "17d240d45a8420664c1e681c7500074d241432302a20b50e160e6d83ceca7f56",
+  "reload_screenshot_sha256": "5c32190a942f870222f8d15cb5502c9a376e15c615184c0ba98c3ce5817159cf",
+  "notes": "Generated final text honestly reported that independent browser proof was still pending. The evaluator completed that proof before release; raw agent events and final text were not rewritten."
+}

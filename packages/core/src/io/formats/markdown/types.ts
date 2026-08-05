@@ -1,6 +1,7 @@
 import type { MermaidSceneSpec } from '#core/diagram'
 
 export type MarkdownSourceMode = 'markdown' | 'mdx' | 'plain-text'
+export type MarkdownRepresentation = 'native' | 'source'
 
 export interface MarkdownImageAsset {
   data: Uint8Array
@@ -13,6 +14,7 @@ export interface MarkdownImportOptions {
   fileName?: string
   mimeType?: string
   createMermaidScene?: (source: string) => Promise<MermaidSceneSpec>
+  representation?: MarkdownRepresentation
   resolveImage?: (source: string) => Promise<MarkdownImageAsset | null>
   sourceMode?: MarkdownSourceMode
 }

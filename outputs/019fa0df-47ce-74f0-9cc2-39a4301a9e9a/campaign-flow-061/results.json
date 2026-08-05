@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "ab0ac4c4735651a32e873828e4a494b8db9508c93e5b5cd04b5d4a0ac5334a09",
+    "config_id": "81293634109d45e8fecb16cf9a4160140f112403bfe4be5335750103af3f8762",
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-flow-061/001-flow-061-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "flow-061-first-attempt",
+    "scenario_id": "FLOW-061",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-flow-061/001-flow-061-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb20f-807b-7a82-8767-7009e91c6d83"
+  }
+]

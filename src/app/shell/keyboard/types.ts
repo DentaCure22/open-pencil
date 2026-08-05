@@ -15,6 +15,7 @@ export type KeyboardShortcutActions = {
 }
 
 export type KeyboardShortcutOptions = {
+  enabled: () => boolean
   inputFocused: ComputedRef<boolean>
   store: EditorStore
   runCommand: ReturnType<typeof useEditorCommands>['runCommand']

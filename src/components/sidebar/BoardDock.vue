@@ -234,14 +234,6 @@ const rootProjects = computed(() => {
   ]
 })
 
-function collectProjectBoards(pageId: string): SidebarWorkspaceBoard[] {
-  const boards = [...orderedSidebarBoards(workspace.value, pageId)]
-  for (const child of orderedSidebarPages(workspace.value, pageId)) {
-    boards.push(...collectProjectBoards(child.id))
-  }
-  return boards
-}
-
 function projectNameForBoard(board: SwitcherBoard) {
   const workspaceBoard = boardById.value.get(board.pageId)
   return workspaceBoard ? pageById.value.get(workspaceBoard.parentPageId)?.name : undefined
@@ -270,20 +262,26 @@ const switcherRecentBoards = computed(() => {
     })
     .slice(0, RECENT_SWITCHER_LIMIT)
 })
-const switcherProjects = computed<BoardSwitcherProject[]>(() =>
-  rootProjects.value.map((page) => ({
-    boards: collectProjectBoards(page.id).map(switcherItem),
+function switcherProject(page: SidebarWorkspacePage): BoardSwitcherProject {
+  return {
+    boards: orderedSidebarBoards(workspace.value, page.id).map(switcherItem),
+    children: orderedSidebarPages(workspace.value, page.id).map(switcherProject),
     id: page.id,
     name: page.name
-  }))
+  }
+}
+
+const switcherProjects = computed<BoardSwitcherProject[]>(() =>
+  rootProjects.value.map(switcherProject)
 )
 const dockMetrics = computed<DockMetrics>(() => {
-  const itemCount = visibleDockBoards.value.length + 1
-  const gapCount = Math.max(itemCount - 1, 0)
-  const dividerCount = (dockSections.value.length > 1 ? 1 : 0) + (itemCount > 1 ? 1 : 0)
+  const shellItemCount = visibleDockBoards.value.length + 1
+  const gapCount = Math.max(visibleDockBoards.value.length - 1, 0)
+  const dividerCount =
+    (dockSections.value.length > 1 ? 1 : 0) + (visibleDockBoards.value.length > 0 ? 1 : 0)
   const dividerWidth = dividerCount * DOCK_PREFERRED_DIVIDER_WIDTH
   const preferredWidth =
-    itemCount * DOCK_PREFERRED_TILE_SIZE +
+    shellItemCount * DOCK_PREFERRED_TILE_SIZE +
     gapCount * DOCK_PREFERRED_GAP +
     DOCK_PREFERRED_PADDING * 2 +
     dividerWidth
@@ -300,7 +298,7 @@ const dockMetrics = computed<DockMetrics>(() => {
     dotGap: scaledDockMetric(3, scale, 1.5),
     dotSize: scaledDockMetric(4, scale, 2),
     gap: scaledDockMetric(DOCK_PREFERRED_GAP, scale, 1),
-    glyphSize: scaledDockMetric(16, scale, 7),
+    glyphSize: scaledDockMetric(18, scale, 8),
     iconRadius: scaledDockMetric(8, scale, 4),
     iconSize: scaledDockMetric(36, scale, 13),
     padding: scaledDockMetric(DOCK_PREFERRED_PADDING, scale, 2),
@@ -460,6 +458,10 @@ function enterManageMode() {
   browserMode.value = 'manage'
 }
 
+function closeProjectBrowser() {
+  projectBrowserOpen.value = false
+}
+
 async function createBoardFromSwitcher() {
   const parentPageId = currentWorkspaceBoard.value?.parentPageId ?? rootProjects.value[0]?.id
   enterManageMode()
@@ -490,13 +492,14 @@ async function openBoardById(boardPageId: string) {
   >
     <div
       data-test-id="board-dock-shell"
+      data-dock-layout="unified"
       :data-dock-icon-radius="dockMetrics.iconRadius"
       :data-dock-padding="dockMetrics.padding"
       :data-dock-scale="dockMetrics.scale.toFixed(3)"
       :data-dock-shell-radius="dockMetrics.shellRadius"
       :data-dock-tile-size="dockMetrics.tileSize"
       :style="dockStyle"
-      class="border-chrome-border bg-chrome shadow-chrome flex max-w-[calc(100vw-24px)] items-center rounded-[var(--dock-shell-radius)] border p-[var(--dock-padding)] backdrop-blur-2xl transition-[padding,border-radius] duration-150"
+      class="dock-shell border-chrome-border bg-chrome flex max-w-[calc(100vw-24px)] items-center rounded-[var(--dock-shell-radius)] border p-[var(--dock-padding)] backdrop-blur-2xl transition-[padding,border-radius] duration-150"
     >
       <template v-for="(section, sectionIndex) in dockSections" :key="section.id">
         <span
@@ -537,16 +540,16 @@ async function openBoardById(boardPageId: string) {
                   />
                   <span
                     data-test-id="board-dock-board-tile"
-                    class="border-border/70 bg-chrome-detail group-hover/dock-item:border-border group-hover/dock-item:bg-hover flex size-[var(--dock-icon-size)] items-center justify-center rounded-[var(--dock-icon-radius)] border transition-[width,height,border-color,background-color,border-radius] duration-150"
+                    class="group-hover/dock-item:border-border/70 group-hover/dock-item:bg-hover flex size-[var(--dock-icon-size)] items-center justify-center rounded-[var(--dock-icon-radius)] border border-transparent bg-transparent transition-[width,height,border-color,background-color,border-radius] duration-150"
                   >
                     <BoardIcon
                       :icon="board.icon"
                       :data-board-icon="board.icon ?? 'canvas'"
-                      class="size-[var(--dock-glyph-size)] stroke-[1.6]"
+                      class="size-[var(--dock-glyph-size)] stroke-[1.6] opacity-80"
                     />
                   </span>
                   <span
-                    v-if="isBoardOpen(board.pageId)"
+                    v-if="isBoardOpen(board.pageId) && visibleDockBoards.length > 1"
                     class="absolute bottom-0 left-1/2 size-[var(--dock-dot-size)] -translate-x-1/2 translate-y-[calc(100%+var(--dock-dot-gap))] rounded-full bg-violet-300"
                     aria-hidden="true"
                   />
@@ -596,7 +599,8 @@ async function openBoardById(boardPageId: string) {
       <span
         v-if="visibleDockBoards.length"
         data-test-id="board-dock-utility-divider"
-        class="bg-border/70 mx-[var(--dock-divider-margin)] h-[var(--dock-divider-height)] w-px"
+        aria-hidden="true"
+        class="bg-border/60 mx-[var(--dock-divider-margin)] h-[var(--dock-divider-height)] w-px self-center"
       />
 
       <PopoverRoot v-model:open="projectBrowserOpen">
@@ -604,6 +608,7 @@ async function openBoardById(boardPageId: string) {
           <button
             type="button"
             data-test-id="board-dock-more"
+            data-dock-group="workspace"
             aria-label="Workspace"
             class="group/dock-item flex size-[var(--dock-tile-size)] shrink-0 items-center justify-center rounded-[var(--dock-button-radius)] text-muted transition-[width,height,color,border-radius] duration-150 hover:text-surface"
           >
@@ -612,7 +617,9 @@ async function openBoardById(boardPageId: string) {
                 data-test-id="board-dock-more-tile"
                 class="group-hover/dock-item:border-border/70 group-hover/dock-item:bg-hover flex size-[var(--dock-icon-size)] items-center justify-center rounded-[var(--dock-icon-radius)] border border-transparent bg-transparent transition-[width,height,border-color,background-color,border-radius] duration-150"
               >
-                <icon-lucide-library class="size-[var(--dock-glyph-size)] stroke-[1.55]" />
+                <icon-lucide-library
+                  class="size-[var(--dock-glyph-size)] stroke-[1.55] opacity-80"
+                />
               </span>
             </Tip>
           </button>
@@ -633,6 +640,7 @@ async function openBoardById(boardPageId: string) {
             side="top"
             align="center"
             :side-offset="10"
+            @keydown.esc.capture.stop.prevent="closeProjectBrowser"
           >
             <div
               data-test-id="board-switcher-header"
@@ -702,3 +710,9 @@ async function openBoardById(boardPageId: string) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.dock-shell {
+  filter: drop-shadow(0 12px 28px rgb(0 0 0 / 0.28));
+}
+</style>

@@ -1,0 +1,29 @@
+{
+  "schema_version": "prompt-to-board-observed-failure/v1",
+  "run_id": "visible-dev-011-first-attempt",
+  "scenario_id": "DEV-MX-MC-SPARSE-001",
+  "correctness_status": "unproven",
+  "reliability_status": "first_attempt_failed",
+  "timeout_status": "no_timeout",
+  "failure_class": "instrumentation_hidden_by_cli_wrapper",
+  "observed": {
+    "artifact_visible": true,
+    "owner_id": "0:370",
+    "openpencil_result_event_count": 0,
+    "render_acknowledged_event_count": 0,
+    "durability_confirmed_event_count": 0,
+    "command_exit_codes": [0, 0, 0, 0, 0, 0, 0, 127, 0, 1, 0, 0, 0, 0]
+  },
+  "timings_ms": {
+    "prompt_to_first_tool": 7509,
+    "prompt_to_first_recognized_board_tool": 128247,
+    "prompt_to_generated_final": 188489
+  },
+  "evidence": {
+    "screenshot_path": "visible-dev-011-observed.png",
+    "screenshot_sha256": "f9fd57495a26762d7074fddb44dc281fbe1f8a64abb86f507111554d7c979bdb"
+  },
+  "cause": "The agent wrapped the direct OpenPencil CLI in Node to embed TSX source. The Board mutation completed, but the recorder could not classify or project the nested command's structured receipt, presentation, and durability output.",
+  "smallest_direct_fix": "Use the direct board build --source-file Code Object path so the command remains semantically classified and its JSON proof is projected.",
+  "raw_events_rewritten": false
+}

@@ -1,47 +1,59 @@
 import { watch } from 'vue'
 
-import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import type { SmylrLiveContainerNode } from '@/app/smylr-live-container/types'
-import type { LiveInspectorPatchDraft } from '@/app/smylr-live-inspector/patch'
-import {
-  findLiveInspectorNode,
-  liveInspectorActiveFrameId,
-  liveInspectorDocument,
-  liveInspectorPatchDrafts,
-  liveInspectorRoute,
-  liveInspectorSelectedId,
-  liveInspectorSelectedRect,
-  liveInspectorSelectionEpoch
-} from '@/app/smylr-live-inspector/session'
+import type { EditorStore } from '@/app/editor/session'
 
+import { changesForNarratedTraceNodeUpdate } from './activity'
+import { narratedTraceAnnotationTool } from './annotation'
 import { isNarratedTraceCanvasInkNode } from './canvas-ink'
-import { appendNarratedTraceEvent, narratedTraceStatus } from './state'
-import type { NarratedTraceChange, NarratedTraceTarget, NarratedTraceViewport } from './types'
+import { narratedTraceScopeForStore } from './scope'
+import {
+  appendNarratedTraceEvent,
+  beginNarratedTraceSession,
+  finishNarratedTraceSession,
+  narratedTraceSession,
+  narratedTraceStatus
+} from './state'
+import { narratedTraceAnchorForCanvasPoint } from './target'
+import type {
+  NarratedTraceAppendOptions,
+  NarratedTraceChange,
+  NarratedTraceEventInput,
+  NarratedTraceScope,
+  NarratedTraceTarget
+} from './types'
 
 type StopBinding = () => void
 
-let stops: StopBinding[] = []
-let nodeSnapshots = new Map<string, SceneNode>()
-let previousLiveDrafts = new Map<string, LiveInspectorPatchDraft>()
-
-function copyLiveDrafts(source: Map<string, LiveInspectorPatchDraft>) {
-  return new Map(
-    [...source].map(([id, draft]) => [
-      id,
-      {
-        ...draft,
-        add: [...draft.add],
-        remove: [...draft.remove],
-        source: draft.source ? structuredClone(draft.source) : undefined,
-        styles: draft.styles ? { ...draft.styles } : undefined
-      }
-    ])
-  )
+type PendingTargetActivity = {
+  changes: Map<string, NarratedTraceChange>
+  scope: NarratedTraceScope
+  target: NarratedTraceTarget
+  timer: ReturnType<typeof setTimeout>
 }
 
-function snapshotGraph(editor: Editor) {
+type PendingCreation = {
+  intentConfirmed: boolean
+  scope: NarratedTraceScope
+  timer: ReturnType<typeof setTimeout>
+}
+
+const ACTIVITY_SESSION_IDLE_MS = 900
+const COMPLETED_EDIT_IDLE_MS = 650
+const SELECTION_COALESCE_MS = 1200
+
+let stops: StopBinding[] = []
+let nodeSnapshots = new Map<string, SceneNode>()
+let pendingNodeActivities = new Map<string, PendingTargetActivity>()
+let pendingCreations = new Map<string, PendingCreation>()
+let ownedActivitySessionId: string | null = null
+let activitySessionTimer: ReturnType<typeof setTimeout> | null = null
+let lastSelectionKey = ''
+let lastSelectionAt = 0
+let lastSelectedNodeIds = new Set<string>()
+
+function snapshotGraph(editor: EditorStore) {
   nodeSnapshots = new Map([...editor.graph.nodes].map(([id, node]) => [id, structuredClone(node)]))
 }
 
@@ -49,7 +61,7 @@ function routeForNode(node: SceneNode): string | undefined {
   return node.pluginData.find((entry) => entry.key === 'route')?.value
 }
 
-function sceneNodePath(editor: Editor, node: SceneNode): string[] {
+function sceneNodePath(editor: EditorStore, node: SceneNode): string[] {
   const path: string[] = []
   let current: SceneNode | undefined = node
   let depth = 0
@@ -61,9 +73,12 @@ function sceneNodePath(editor: Editor, node: SceneNode): string[] {
   return path
 }
 
-function sceneNodeTarget(editor: Editor, node: SceneNode): NarratedTraceTarget {
+function sceneNodeTarget(editor: EditorStore, node: SceneNode): NarratedTraceTarget {
+  const liveNode = editor.graph.getNode(node.id)
   return {
-    bounds: { height: node.height, width: node.width, x: node.x, y: node.y },
+    bounds: liveNode
+      ? editor.graph.getAbsoluteBounds(node.id)
+      : { height: node.height, width: node.width, x: node.x, y: node.y },
     name: node.name || node.type,
     path: sceneNodePath(editor, node),
     route: routeForNode(node),
@@ -71,159 +86,231 @@ function sceneNodeTarget(editor: Editor, node: SceneNode): NarratedTraceTarget {
   }
 }
 
-function liveNodePath(
-  root: SmylrLiveContainerNode,
-  targetId: string,
-  ancestors: string[] = []
-): string[] | null {
-  const path = [...ancestors, root.label]
-  if (root.id === targetId) return path
-  for (const child of root.children ?? []) {
-    const childPath = liveNodePath(child, targetId, path)
-    if (childPath) return childPath
+function selectionAnchor(editor: EditorStore, target: NarratedTraceTarget) {
+  const { cursorCanvasX, cursorCanvasY } = editor.state
+  const bounds = target.bounds
+  if (
+    target.frameId ||
+    typeof cursorCanvasX !== 'number' ||
+    typeof cursorCanvasY !== 'number' ||
+    !Number.isFinite(cursorCanvasX) ||
+    !Number.isFinite(cursorCanvasY) ||
+    !bounds ||
+    cursorCanvasX < bounds.x ||
+    cursorCanvasY < bounds.y ||
+    cursorCanvasX > bounds.x + bounds.width ||
+    cursorCanvasY > bounds.y + bounds.height
+  ) {
+    return undefined
   }
-  return null
+  return narratedTraceAnchorForCanvasPoint(editor, { x: cursorCanvasX, y: cursorCanvasY }, bounds)
 }
 
-function liveNodeTarget(nodeId: string): NarratedTraceTarget | null {
-  const document = liveInspectorDocument.value
-  const node = findLiveInspectorNode(document?.tree, nodeId)
-  if (!document || !node) return null
-  const rect =
-    liveInspectorSelectedId.value === nodeId ? liveInspectorSelectedRect.value : node.rect
-  return {
-    bounds: rect ? { height: rect.height, width: rect.width, x: rect.x, y: rect.y } : undefined,
-    frameId: liveInspectorActiveFrameId.value ?? undefined,
-    name: node.label,
-    path: liveNodePath(document.tree, nodeId) ?? [node.label],
-    route: liveInspectorRoute.value ?? document.route,
-    stableId: node.id
+function sameScope(left: NarratedTraceScope | undefined, right: NarratedTraceScope) {
+  return (
+    left?.documentId === right.documentId &&
+    left.pageId === right.pageId &&
+    left.workspaceId === right.workspaceId
+  )
+}
+
+function finishOwnedActivitySession() {
+  if (activitySessionTimer) clearTimeout(activitySessionTimer)
+  activitySessionTimer = null
+  if (
+    ownedActivitySessionId &&
+    narratedTraceSession.value?.id === ownedActivitySessionId &&
+    narratedTraceStatus.value === 'recording'
+  ) {
+    finishNarratedTraceSession()
+  }
+  ownedActivitySessionId = null
+}
+
+function scheduleActivitySessionFinish() {
+  if (!ownedActivitySessionId) return
+  if (activitySessionTimer) clearTimeout(activitySessionTimer)
+  activitySessionTimer = setTimeout(finishOwnedActivitySession, ACTIVITY_SESSION_IDLE_MS)
+}
+
+function ensureActivitySession(scope: NarratedTraceScope) {
+  const currentSession = narratedTraceSession.value
+  if (narratedTraceStatus.value === 'paused') return false
+  if (narratedTraceStatus.value === 'recording') {
+    if (ownedActivitySessionId && currentSession?.id === ownedActivitySessionId) {
+      if (sameScope(currentSession.scope, scope)) return true
+      finishOwnedActivitySession()
+    } else {
+      return sameScope(currentSession?.scope, scope)
+    }
+  }
+  beginNarratedTraceSession(scope)
+  ownedActivitySessionId = narratedTraceSession.value?.id ?? null
+  return ownedActivitySessionId !== null
+}
+
+function recordActivity(
+  scope: NarratedTraceScope,
+  event: NarratedTraceEventInput,
+  options: NarratedTraceAppendOptions = {}
+) {
+  if (!ensureActivitySession(scope)) return null
+  const eventId = appendNarratedTraceEvent(event, options)
+  scheduleActivitySessionFinish()
+  return eventId
+}
+
+function mergeChanges(existing: Map<string, NarratedTraceChange>, incoming: NarratedTraceChange[]) {
+  for (const change of incoming) {
+    const previous = existing.get(change.property)
+    existing.set(change.property, {
+      ...change,
+      before: previous?.before ?? change.before
+    })
   }
 }
 
-function traceValue(value: unknown): string | undefined {
-  if (value === undefined) return undefined
-  if (value === null) return 'null'
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return String(value)
-  }
-  try {
-    const serialized = JSON.stringify(value)
-    return serialized.length > 500 ? `${serialized.slice(0, 497)}...` : serialized
-  } catch {
-    return String(value)
-  }
-}
-
-function changesForNodeUpdate(
-  previous: SceneNode | undefined,
-  changes: Partial<SceneNode>
-): NarratedTraceChange[] {
-  return (Object.keys(changes) as Array<keyof SceneNode>).flatMap((property) => {
-    if (property === 'pluginData') return []
-    const after = traceValue(changes[property])
-    const before = traceValue(previous?.[property])
-    if (after === before) return []
-    return [{ after, before, property: String(property) }]
+function flushNodeActivity(nodeId: string) {
+  const pending = pendingNodeActivities.get(nodeId)
+  if (!pending) return
+  pendingNodeActivities.delete(nodeId)
+  const changes = [...pending.changes.values()].filter((change) => change.before !== change.after)
+  if (changes.length === 0) return
+  recordActivity(pending.scope, {
+    changes,
+    kind: 'edit',
+    label: `Edited ${pending.target.name}`,
+    target: pending.target
   })
 }
 
-function livePatchValues(draft: LiveInspectorPatchDraft | undefined): Map<string, string> {
-  const values = new Map(Object.entries(draft?.styles ?? {}))
-  if (draft) {
-    if (draft.add.length > 0) values.set('tokens.add', draft.add.join(' '))
-    if (draft.remove.length > 0) values.set('tokens.remove', draft.remove.join(' '))
-  }
-  return values
+function queueNodeActivity(
+  editor: EditorStore,
+  node: SceneNode,
+  changes: NarratedTraceChange[],
+  scope = narratedTraceScopeForStore(editor)
+) {
+  if (changes.length === 0 || isNarratedTraceCanvasInkNode(node)) return
+  const existing = pendingNodeActivities.get(node.id)
+  if (existing) clearTimeout(existing.timer)
+  const merged = existing?.changes ?? new Map<string, NarratedTraceChange>()
+  mergeChanges(merged, changes)
+  pendingNodeActivities.set(node.id, {
+    changes: merged,
+    scope,
+    target: sceneNodeTarget(editor, node),
+    timer: setTimeout(() => flushNodeActivity(node.id), COMPLETED_EDIT_IDLE_MS)
+  })
 }
 
-function livePatchChanges(
-  before: LiveInspectorPatchDraft | undefined,
-  after: LiveInspectorPatchDraft | undefined
-): NarratedTraceChange[] {
-  const beforeValues = livePatchValues(before)
-  const afterValues = livePatchValues(after)
-  const properties = new Set([...beforeValues.keys(), ...afterValues.keys()])
-  return [...properties]
-    .filter((property) => beforeValues.get(property) !== afterValues.get(property))
-    .map((property) => ({
-      after: afterValues.get(property),
-      before: beforeValues.get(property),
-      property
-    }))
+function flushCreation(editor: EditorStore, nodeId: string) {
+  const pending = pendingCreations.get(nodeId)
+  if (!pending) return
+  pendingCreations.delete(nodeId)
+  const node = editor.graph.getNode(nodeId)
+  if (!pending.intentConfirmed || !node || isNarratedTraceCanvasInkNode(node)) return
+  const target = sceneNodeTarget(editor, node)
+  recordActivity(pending.scope, {
+    kind: 'shape',
+    label: `Created ${target.name}`,
+    target
+  })
 }
 
-function recordLiveDraftMutations(nextDrafts: Map<string, LiveInspectorPatchDraft>) {
-  const nodeIds = new Set([...previousLiveDrafts.keys(), ...nextDrafts.keys()])
-  for (const nodeId of nodeIds) {
-    const changes = livePatchChanges(previousLiveDrafts.get(nodeId), nextDrafts.get(nodeId))
-    if (changes.length === 0) continue
-    const target = liveNodeTarget(nodeId)
-    appendNarratedTraceEvent(
-      {
-        changes,
-        kind: 'edit',
-        label: `Edited ${target?.name ?? nodeId}`,
-        target: target ?? undefined
-      },
-      { coalesceKey: `live-edit:${nodeId}`, coalesceWindowMs: 750 }
-    )
-  }
+function queueCreation(editor: EditorStore, node: SceneNode) {
+  if (editor.state.loading || isNarratedTraceCanvasInkNode(node)) return
+  const existing = pendingCreations.get(node.id)
+  if (existing) clearTimeout(existing.timer)
+  pendingCreations.set(node.id, {
+    intentConfirmed: existing?.intentConfirmed ?? editor.state.selectedIds.has(node.id),
+    scope: narratedTraceScopeForStore(editor),
+    timer: setTimeout(() => flushCreation(editor, node.id), COMPLETED_EDIT_IDLE_MS)
+  })
 }
 
-function bindEditorEvents(editor: Editor) {
+function recordSelection(editor: EditorStore, target: NarratedTraceTarget) {
+  const scope = narratedTraceScopeForStore(editor)
+  const key = [
+    scope.workspaceId ?? '',
+    scope.documentId,
+    scope.pageId,
+    target.frameId ?? '',
+    target.stableId
+  ].join(':')
+  const now = Date.now()
+  if (key === lastSelectionKey && now - lastSelectionAt <= SELECTION_COALESCE_MS) return
+  lastSelectionKey = key
+  lastSelectionAt = now
+  const anchor = selectionAnchor(editor, target)
+  recordActivity(
+    scope,
+    {
+      ...(anchor ? { anchor } : {}),
+      kind: 'selection',
+      label: `Selected ${target.name}`,
+      target
+    },
+    { coalesceKey: `selection:${key}`, coalesceWindowMs: SELECTION_COALESCE_MS }
+  )
+}
+
+function bindEditorEvents(editor: EditorStore) {
   stops.push(
     editor.onEditorEvent('selection:changed', (selectedIds) => {
-      if (
-        narratedTraceStatus.value !== 'recording' ||
-        (editor.state.activeTool === 'SMYLR_CONTAINER' && liveInspectorSelectedId.value)
-      ) {
-        return
+      lastSelectedNodeIds = new Set(selectedIds)
+      for (const selectedId of selectedIds) {
+        const pendingCreation = pendingCreations.get(selectedId)
+        if (pendingCreation) pendingCreation.intentConfirmed = true
       }
+      if (editor.state.loading) return
       const node = selectedIds.length === 1 ? editor.graph.getNode(selectedIds[0]) : undefined
       if (!node || isNarratedTraceCanvasInkNode(node)) return
-      const target = sceneNodeTarget(editor, node)
-      appendNarratedTraceEvent({
-        kind: 'selection',
-        label: `Selected ${target.name}`,
-        target
-      })
+      recordSelection(editor, sceneNodeTarget(editor, node))
     }),
     editor.onEditorEvent('node:created', (node) => {
       nodeSnapshots.set(node.id, structuredClone(node))
-      if (narratedTraceStatus.value !== 'recording' || isNarratedTraceCanvasInkNode(node)) return
-      const target = sceneNodeTarget(editor, node)
-      appendNarratedTraceEvent({
-        kind: 'shape',
-        label: `Created ${target.name}`,
-        target
-      })
+      queueCreation(editor, node)
     }),
     editor.onEditorEvent('node:updated', (id, changes) => {
       const previous = nodeSnapshots.get(id)
       const current = editor.graph.getNode(id)
       if (current) nodeSnapshots.set(id, structuredClone(current))
-      if (narratedTraceStatus.value !== 'recording' || !current) return
-      const recordedChanges = changesForNodeUpdate(previous, changes)
-      if (recordedChanges.length === 0) return
-      const properties = recordedChanges.map((change) => change.property).sort()
-      const target = sceneNodeTarget(editor, current)
-      appendNarratedTraceEvent(
-        {
-          changes: recordedChanges,
-          kind: 'edit',
-          label: `Edited ${target.name}`,
-          target
-        },
-        { coalesceKey: `node-edit:${id}:${properties.join(',')}`, coalesceWindowMs: 750 }
-      )
+      if (!current || editor.state.loading) return
+      const pendingCreation = pendingCreations.get(id)
+      if (pendingCreation) {
+        clearTimeout(pendingCreation.timer)
+        pendingCreations.set(id, {
+          ...pendingCreation,
+          timer: setTimeout(() => flushCreation(editor, id), COMPLETED_EDIT_IDLE_MS)
+        })
+        return
+      }
+      if (!lastSelectedNodeIds.has(id)) return
+      queueNodeActivity(editor, current, changesForNarratedTraceNodeUpdate(previous, changes))
     }),
     editor.onEditorEvent('node:deleted', (id) => {
       const previous = nodeSnapshots.get(id)
       nodeSnapshots.delete(id)
-      if (narratedTraceStatus.value !== 'recording' || !previous) return
-      appendNarratedTraceEvent({
+      const pendingCreation = pendingCreations.get(id)
+      if (pendingCreation) {
+        clearTimeout(pendingCreation.timer)
+        pendingCreations.delete(id)
+        return
+      }
+      const pendingActivity = pendingNodeActivities.get(id)
+      if (pendingActivity) {
+        clearTimeout(pendingActivity.timer)
+        pendingNodeActivities.delete(id)
+      }
+      if (
+        editor.state.loading ||
+        !lastSelectedNodeIds.has(id) ||
+        !previous ||
+        isNarratedTraceCanvasInkNode(previous)
+      ) {
+        return
+      }
+      recordActivity(narratedTraceScopeForStore(editor), {
         kind: 'edit',
         label: `Deleted ${previous.name || previous.type}`,
         target: sceneNodeTarget(editor, previous)
@@ -231,76 +318,56 @@ function bindEditorEvents(editor: Editor) {
     }),
     editor.onEditorEvent('node:reparented', (nodeId, oldParentId, newParentId) => {
       const node = editor.graph.getNode(nodeId)
-      if (node) nodeSnapshots.set(nodeId, structuredClone(node))
-      if (!node || narratedTraceStatus.value !== 'recording') return
-      appendNarratedTraceEvent({
-        changes: [{ after: newParentId, before: oldParentId ?? undefined, property: 'parentId' }],
-        kind: 'edit',
-        label: `Moved ${node.name || node.type} to another container`,
-        target: sceneNodeTarget(editor, node)
-      })
-    }),
-    editor.onEditorEvent('viewport:changed', (viewport) => {
-      const nextViewport: NarratedTraceViewport = viewport
-      appendNarratedTraceEvent(
-        { kind: 'viewport', label: 'Changed canvas view', viewport: nextViewport },
-        { coalesceKey: 'viewport', coalesceWindowMs: 900 }
-      )
-    }),
-    editor.onEditorEvent('page:changed', (pageId, previousPageId) => {
-      if (narratedTraceStatus.value !== 'recording') return
-      const page = editor.graph.getNode(pageId)
-      const previousPage = editor.graph.getNode(previousPageId)
-      appendNarratedTraceEvent({
-        changes: [
-          {
-            after: page?.name ?? pageId,
-            before: previousPage?.name ?? previousPageId,
-            property: 'page'
-          }
-        ],
-        kind: 'navigation',
-        label: `Opened ${page?.name ?? 'page'}`,
-        target: page ? sceneNodeTarget(editor, page) : undefined
-      })
+      if (!node || editor.state.loading || !lastSelectedNodeIds.has(nodeId)) return
+      nodeSnapshots.set(nodeId, structuredClone(node))
+      queueNodeActivity(editor, node, [
+        { after: newParentId, before: oldParentId ?? undefined, property: 'parentId' }
+      ])
     }),
     editor.onEditorEvent('tool:changed', (tool, previousTool) => {
-      if (narratedTraceStatus.value !== 'recording') return
-      appendNarratedTraceEvent({
+      if (editor.state.loading) return
+      recordActivity(narratedTraceScopeForStore(editor), {
         changes: [{ after: tool, before: previousTool, property: 'tool' }],
         kind: 'tool',
-        label: `Switched to ${tool}`
+        label: `Activated ${tool}`
       })
     }),
-    editor.onEditorEvent('graph:replaced', () => snapshotGraph(editor))
+    editor.onEditorEvent('graph:replaced', () => {
+      for (const pending of pendingNodeActivities.values()) clearTimeout(pending.timer)
+      for (const pending of pendingCreations.values()) clearTimeout(pending.timer)
+      pendingNodeActivities = new Map()
+      pendingCreations = new Map()
+      snapshotGraph(editor)
+    })
   )
 }
 
-export function bindNarratedTraceEditor(editor: Editor) {
+function clearPendingActivities() {
+  for (const pending of pendingNodeActivities.values()) clearTimeout(pending.timer)
+  for (const pending of pendingCreations.values()) clearTimeout(pending.timer)
+  pendingNodeActivities = new Map()
+  pendingCreations = new Map()
+}
+
+export function bindNarratedTraceEditor(editor: EditorStore) {
   for (const stop of stops) stop()
   stops = []
+  finishOwnedActivitySession()
+  clearPendingActivities()
   snapshotGraph(editor)
-  previousLiveDrafts = copyLiveDrafts(liveInspectorPatchDrafts.value)
+  lastSelectionKey = ''
+  lastSelectionAt = 0
+  lastSelectedNodeIds = new Set(editor.state.selectedIds)
 
   bindEditorEvents(editor)
   stops.push(
-    watch(narratedTraceStatus, (status, previousStatus) => {
-      if (status === 'recording' && previousStatus !== 'recording') snapshotGraph(editor)
-    }),
-    watch(liveInspectorSelectionEpoch, () => {
-      if (narratedTraceStatus.value !== 'recording') return
-      const nodeId = liveInspectorSelectedId.value
-      const target = nodeId ? liveNodeTarget(nodeId) : null
-      if (!target) return
-      appendNarratedTraceEvent({
-        kind: 'selection',
-        label: `C-selected ${target.name}`,
-        target
+    watch(narratedTraceAnnotationTool, (tool, previousTool) => {
+      if (tool === 'none' || editor.state.loading) return
+      recordActivity(narratedTraceScopeForStore(editor), {
+        changes: [{ after: tool, before: previousTool, property: 'traceTool' }],
+        kind: 'tool',
+        label: `Activated Trace ${tool === 'ink' ? 'Ink' : 'Focus'}`
       })
-    }),
-    watch(liveInspectorPatchDrafts, (nextDrafts) => {
-      if (narratedTraceStatus.value === 'recording') recordLiveDraftMutations(nextDrafts)
-      previousLiveDrafts = copyLiveDrafts(nextDrafts)
     })
   )
 }

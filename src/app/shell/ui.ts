@@ -26,6 +26,13 @@ const toasts = ref<Toast[]>([])
 let nextId = 0
 let errorHandlersInitialized = false
 
+export function isBenignResizeObserverError(message: string): boolean {
+  return (
+    message === 'ResizeObserver loop limit exceeded' ||
+    message === 'ResizeObserver loop completed with undelivered notifications.'
+  )
+}
+
 function push(message: string, variant: ToastVariant) {
   // Dedupe: if the same message+variant is already visible, increment
   // its repeat count instead of stacking a duplicate. Prevents the
@@ -64,6 +71,10 @@ function setupGlobalErrorHandler() {
   errorHandlersInitialized = true
 
   useEventListener(window, 'error', (e) => {
+    if (isBenignResizeObserverError(e.message)) {
+      e.preventDefault()
+      return
+    }
     error(e.message || 'An unexpected error occurred')
   })
   useEventListener(window, 'unhandledrejection', (e) => {

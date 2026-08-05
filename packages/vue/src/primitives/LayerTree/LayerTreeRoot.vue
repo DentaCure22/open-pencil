@@ -2,6 +2,8 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { TreeRoot } from 'reka-ui'
 
+import { isObjectGraphConnectionNode } from '@open-pencil/scene-graph'
+
 import { useEditor } from '#vue/editor/context'
 import { provideLayerTree, useLayerTreeHostBridge } from '#vue/primitives/LayerTree/context'
 import { useLayerDrag } from '#vue/primitives/LayerTree/useLayerDrag'
@@ -59,8 +61,8 @@ function buildTree(parentId: string): LayerNode[] {
   const parent = editor.graph.getNode(parentId)
   if (!parent) return []
 
-  // Host design outline (boards/sections). Always re-attach live containers
-  // onto live-app frames so nothing is lost when outline leaves children empty.
+  // Host design outline (boards/sections). Re-attach optional host-owned rows
+  // so nothing is lost when an outline leaves scene children empty.
   const outlined = hostBridge?.getSceneChildren?.(parent)
   if (outlined) {
     return outlined.map((row) => {
@@ -75,7 +77,10 @@ function buildTree(parentId: string): LayerNode[] {
 
   return parent.childIds
     .map((cid) => editor.graph.getNode(cid))
-    .filter((n): n is NonNullable<typeof n> => !!n)
+    .filter(
+      (node): node is NonNullable<typeof node> =>
+        Boolean(node) && !isObjectGraphConnectionNode(node)
+    )
     .map((node) => {
       const virtual = hostBridge?.getVirtualChildren?.(node)
       if (virtual && virtual.length > 0) {
@@ -191,7 +196,7 @@ function rebuildTree() {
   for (const id of selectedIds.value) expandAncestorsOf(id, items.value, [])
 }
 
-// Host live layers change without graph events (version is a number fingerprint).
+// Host-owned layers change without graph events (version is a number fingerprint).
 watch(
   () => hostBridge?.version?.value ?? 0,
   (version, prev) => {
@@ -255,7 +260,7 @@ watch(
 
 // Initial focused expansion
 expandDefaultExceptUserClosed()
-// Layers can be reopened after a live DOM selection already exists. Vue's
+// Layers can be reopened after an internal DOM selection already exists. Vue's
 // selection watcher will not fire for that pre-existing value, so reveal the
 // current selection path during the initial tree build as well.
 for (const id of selectedIds.value) expandAncestorsOf(id, items.value, [])

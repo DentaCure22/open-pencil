@@ -1,34 +1,60 @@
 import { shallowRef } from 'vue'
 
-import { readCacheJson, removeCacheEntry, removeCachePrefix, writeCacheJson } from '@/app/cache'
+import type { Rect } from '@open-pencil/scene-graph/primitives'
 
-import type { NarratedTraceSession } from './types'
+import {
+  deleteLocalWorkspaceTraceSession,
+  persistLocalWorkspaceTraceSession,
+  readLocalWorkspaceTraceSession,
+  readLocalWorkspaceTraceSessionSummaries
+} from '@/app/workspace-document/local-authority/client'
 
-const HISTORY_INDEX_CACHE_KEY = 'narrated-trace/history-index'
-const SESSION_CACHE_PREFIX = 'narrated-trace/sessions/'
-const EVIDENCE_CACHE_PREFIX = 'narrated-trace/evidence/'
+import { persistedNarratedTraceGestures } from './persistence'
+import type {
+  NarratedTraceContextEntry,
+  NarratedTraceEvent,
+  NarratedTraceScope,
+  NarratedTraceSession
+} from './types'
+
 const DEFAULT_TITLE_MAX_LENGTH = 56
+const DEFAULT_ACTIVITY_ITEM_LIMIT = 80
+const DEFAULT_ACTIVITY_SESSION_LIMIT = 24
 
 export type NarratedTraceRecordSummary = {
+  bounds?: Rect
   durationMs: number
   eventCount: number
   evidenceCount: number
+  gestureCount?: number
+  gestureIds?: string[]
   id: string
+  latestGestureAt?: string
+  scope?: NarratedTraceScope
+  searchTerms?: string[]
   startedAt: string
+  targetIds?: string[]
   title: string
   updatedAt: string
 }
 
+export type NarratedTraceActivityItem = {
+  context: NarratedTraceContextEntry
+  event: NarratedTraceEvent
+  occurredAtMs: number
+  scope?: NarratedTraceScope
+  sessionId: string
+  sessionStartedAt: string
+  title: string
+}
+
+export type NarratedTraceActivityFeedOptions = {
+  itemLimit?: number
+  sessionLimit?: number
+}
+
 export const narratedTraceHistory = shallowRef<NarratedTraceRecordSummary[]>([])
 export const narratedTraceHistoryLoaded = shallowRef(false)
-
-function sessionCacheKey(sessionId: string) {
-  return `${SESSION_CACHE_PREFIX}${encodeURIComponent(sessionId)}`
-}
-
-function evidenceCachePrefix(sessionId: string) {
-  return `${EVIDENCE_CACHE_PREFIX}${encodeURIComponent(sessionId)}/`
-}
 
 export function compactNarratedTraceTitle(value: string) {
   const compact = value.replace(/\s+/g, ' ').trim()
@@ -67,6 +93,40 @@ function isRecordSummary(value: unknown): value is NarratedTraceRecordSummary {
   )
 }
 
+function summarySearchTerms(session: NarratedTraceSession, title: string): string[] {
+  const values = [
+    title,
+    ...session.events.flatMap((event) => [
+      event.label,
+      event.text ?? '',
+      event.target?.name ?? '',
+      ...(event.changes?.map((change) => change.property) ?? [])
+    ])
+  ]
+  return [
+    ...new Set(
+      values
+        .join(' ')
+        .toLowerCase()
+        .match(/[\p{L}\p{N}_.:-]+/gu)
+        ?.filter((term) => term.length > 1)
+    )
+  ].slice(0, 64)
+}
+
+function summaryBounds(session: NarratedTraceSession): Rect | undefined {
+  const bounds = session.events.flatMap((event) => {
+    const bounds = event.anchor?.pageRegion ?? event.target?.bounds
+    return bounds ? [bounds] : []
+  })
+  if (bounds.length === 0) return undefined
+  const minX = Math.min(...bounds.map((rect) => rect.x))
+  const minY = Math.min(...bounds.map((rect) => rect.y))
+  const maxX = Math.max(...bounds.map((rect) => rect.x + rect.width))
+  const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height))
+  return { height: maxY - minY, width: maxX - minX, x: minX, y: minY }
+}
+
 function isSession(value: unknown): value is NarratedTraceSession {
   if (!value || typeof value !== 'object') return false
   const session = value as Partial<NarratedTraceSession>
@@ -92,16 +152,35 @@ export function summarizeNarratedTraceSession(
   existingTitle?: string,
   updatedAt = new Date().toISOString()
 ): NarratedTraceRecordSummary {
+  const title =
+    compactNarratedTraceTitle(session.title ?? '') ||
+    existingTitle?.trim() ||
+    suggestedTitle(session)
+  const bounds = summaryBounds(session)
+  const targetIds = [
+    ...new Set(
+      session.events.flatMap((event) => (event.target?.stableId ? [event.target.stableId] : []))
+    )
+  ].slice(0, 32)
+  const gestureEvents = session.events.filter((event) => event.gesture)
+  const startedAtMs = Date.parse(session.startedAt)
+  const latestGesture = gestureEvents.at(-1)
   return {
+    ...(bounds ? { bounds } : {}),
     durationMs: session.durationMs,
     eventCount: session.events.length,
     evidenceCount: session.events.filter((event) => event.evidence).length,
+    gestureCount: gestureEvents.length,
+    ...(gestureEvents.length > 0 ? { gestureIds: gestureEvents.map((event) => event.id) } : {}),
     id: session.id,
+    ...(latestGesture && !Number.isNaN(startedAtMs)
+      ? { latestGestureAt: new Date(startedAtMs + latestGesture.atMs).toISOString() }
+      : {}),
+    ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
+    searchTerms: summarySearchTerms(session, title),
     startedAt: session.startedAt,
-    title:
-      compactNarratedTraceTitle(session.title ?? '') ||
-      existingTitle?.trim() ||
-      suggestedTitle(session),
+    ...(targetIds.length > 0 ? { targetIds } : {}),
+    title,
     updatedAt
   }
 }
@@ -117,14 +196,12 @@ export function upsertNarratedTraceRecordSummary(
 }
 
 async function readHistoryIndex() {
-  const cached = await readCacheJson<unknown>(HISTORY_INDEX_CACHE_KEY)
-  if (!Array.isArray(cached)) return []
-  return sortNarratedTraceRecords(cached.filter(isRecordSummary))
+  const summaries = await readLocalWorkspaceTraceSessionSummaries()
+  return sortNarratedTraceRecords(summaries.filter(isRecordSummary))
 }
 
 async function persistHistoryIndex(records: NarratedTraceRecordSummary[]) {
   narratedTraceHistory.value = sortNarratedTraceRecords(records)
-  await writeCacheJson(HISTORY_INDEX_CACHE_KEY, narratedTraceHistory.value)
 }
 
 export async function loadNarratedTraceHistory() {
@@ -133,16 +210,24 @@ export async function loadNarratedTraceHistory() {
   return narratedTraceHistory.value
 }
 
-export async function saveNarratedTraceRecord(session: NarratedTraceSession) {
+export async function saveNarratedTraceRecord(
+  session: NarratedTraceSession,
+  spokenTurns?: unknown[]
+) {
   const records = narratedTraceHistoryLoaded.value
     ? narratedTraceHistory.value
     : await readHistoryIndex()
   const existing = records.find((record) => record.id === session.id)
   const summary = summarizeNarratedTraceSession(session, existing?.title)
-
-  await writeCacheJson(sessionCacheKey(session.id), {
+  const persistedSession = {
     ...session,
     title: summary.title
+  }
+  await persistLocalWorkspaceTraceSession({
+    gestures: persistedNarratedTraceGestures(persistedSession),
+    session: persistedSession,
+    ...(spokenTurns ? { spokenTurns } : {}),
+    summary
   })
   await persistHistoryIndex(upsertNarratedTraceRecordSummary(records, summary))
   narratedTraceHistoryLoaded.value = true
@@ -150,8 +235,65 @@ export async function saveNarratedTraceRecord(session: NarratedTraceSession) {
 }
 
 export async function readNarratedTraceRecord(sessionId: string) {
-  const cached = await readCacheJson<unknown>(sessionCacheKey(sessionId))
-  return isSession(cached) ? cached : null
+  const persisted = await readLocalWorkspaceTraceSession(sessionId)
+  return isSession(persisted) ? persisted : null
+}
+
+export function buildNarratedTraceActivityFeed(
+  sessions: Array<{ session: NarratedTraceSession; title: string }>,
+  itemLimit = DEFAULT_ACTIVITY_ITEM_LIMIT
+): NarratedTraceActivityItem[] {
+  return sessions
+    .flatMap(({ session, title }) => {
+      const startedAtMs = Date.parse(session.startedAt)
+      return session.events.map((event) => {
+        const context = session.contextDraft.find((entry) => entry.sourceEventId === event.id) ?? {
+          included: true,
+          removed: false,
+          sourceEventId: event.id
+        }
+        return {
+          context,
+          event,
+          occurredAtMs: (Number.isNaN(startedAtMs) ? 0 : startedAtMs) + event.atMs,
+          ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
+          sessionId: session.id,
+          sessionStartedAt: session.startedAt,
+          title
+        }
+      })
+    })
+    .sort(
+      (first, second) =>
+        second.occurredAtMs - first.occurredAtMs ||
+        second.event.atMs - first.event.atMs ||
+        first.event.id.localeCompare(second.event.id)
+    )
+    .slice(0, Math.max(1, itemLimit))
+}
+
+export async function loadNarratedTraceActivityFeed(
+  options: NarratedTraceActivityFeedOptions = {}
+): Promise<NarratedTraceActivityItem[]> {
+  const records = narratedTraceHistoryLoaded.value
+    ? narratedTraceHistory.value
+    : await loadNarratedTraceHistory()
+  const sessionLimit = Math.max(
+    1,
+    Math.min(options.sessionLimit ?? DEFAULT_ACTIVITY_SESSION_LIMIT, DEFAULT_ACTIVITY_SESSION_LIMIT)
+  )
+  const sessions = await Promise.all(
+    records.slice(0, sessionLimit).map(async (record) => {
+      const session = await readNarratedTraceRecord(record.id)
+      return session ? { session, title: record.title } : null
+    })
+  )
+  return buildNarratedTraceActivityFeed(
+    sessions.filter(
+      (entry): entry is { session: NarratedTraceSession; title: string } => entry !== null
+    ),
+    Math.min(options.itemLimit ?? DEFAULT_ACTIVITY_ITEM_LIMIT, DEFAULT_ACTIVITY_ITEM_LIMIT)
+  )
 }
 
 export async function renameNarratedTraceRecord(sessionId: string, title: string) {
@@ -161,17 +303,9 @@ export async function renameNarratedTraceRecord(sessionId: string, title: string
     ? narratedTraceHistory.value
     : await readHistoryIndex()
   if (!records.some((record) => record.id === sessionId)) return false
-  await persistHistoryIndex(
-    records.map((record) =>
-      record.id === sessionId
-        ? { ...record, title: compact, updatedAt: new Date().toISOString() }
-        : record
-    )
-  )
-  const session = await readCacheJson<unknown>(sessionCacheKey(sessionId))
-  if (isSession(session)) {
-    await writeCacheJson(sessionCacheKey(sessionId), { ...session, title: compact })
-  }
+  const session = await readNarratedTraceRecord(sessionId)
+  if (!session) return false
+  await saveNarratedTraceRecord({ ...session, title: compact })
   narratedTraceHistoryLoaded.value = true
   return true
 }
@@ -180,10 +314,7 @@ export async function deleteNarratedTraceRecord(sessionId: string) {
   const records = narratedTraceHistoryLoaded.value
     ? narratedTraceHistory.value
     : await readHistoryIndex()
-  await Promise.all([
-    removeCacheEntry(sessionCacheKey(sessionId)),
-    removeCachePrefix(evidenceCachePrefix(sessionId))
-  ])
+  await deleteLocalWorkspaceTraceSession(sessionId)
   await persistHistoryIndex(records.filter((record) => record.id !== sessionId))
   narratedTraceHistoryLoaded.value = true
 }

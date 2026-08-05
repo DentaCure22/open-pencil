@@ -3,11 +3,26 @@ import { defineTool, nodeToResult } from '#core/tools/schema'
 
 export const getSelection = defineTool({
   name: 'get_selection',
-  description: 'Get details about currently selected nodes.',
-  params: {},
-  execute: (figma) => {
+  description: 'Get bounded details for up to 25 selected nodes. Child depth defaults to 0.',
+  params: {
+    depth: {
+      type: 'number',
+      description: 'Child depth per selected node. Default: 0, max: 2',
+      min: 0,
+      max: 2
+    }
+  },
+  execute: (figma, { depth }) => {
     const selection = figma.currentPage.selection
-    return { selection: selection.map(nodeToResult) }
+    const limit = 25
+    return {
+      count: selection.length,
+      limit,
+      selection: selection
+        .slice(0, limit)
+        .map((node) => nodeToResult(node, Math.min(depth ?? 0, 2))),
+      truncated: selection.length > limit
+    }
   }
 })
 

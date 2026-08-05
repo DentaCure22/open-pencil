@@ -6,7 +6,8 @@ export type MCPContent =
 
 export type MCPResult = { content: MCPContent[]; isError?: boolean }
 
-export const MAX_RESULT_BYTES = 900_000
+/** Model-facing MCP text is bounded; larger data must be narrowed or returned by reference. */
+export const MAX_RESULT_BYTES = 64 * 1024
 
 export function resultTooLargeMessage(kind: string, bytes: number, hint: string): string {
   return `${kind} is too large (${Math.round(bytes / 1024)}KB, limit ${Math.round(

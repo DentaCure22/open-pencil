@@ -120,8 +120,9 @@ function renderMaskNodeContent(
   nodeId: string,
   overlays: RenderOverlays
 ): void {
+  const position = graph.getPresentedNodePosition(nodeId)
   canvas.save()
-  canvas.translate(node.x, node.y)
+  canvas.translate(position.x, position.y)
   applyNodeTransforms(r, canvas, node, nodeId, overlays)
   renderNodeContent(r, canvas, graph, node, nodeId, {})
   canvas.restore()
@@ -152,7 +153,8 @@ function renderChildIds(
     (childId) => {
       const child = graph.getNode(childId)
       if (!child) return null
-      return { x: child.x, y: child.y, width: child.width, height: child.height }
+      const position = graph.getPresentedNodePosition(childId)
+      return { x: position.x, y: position.y, width: child.width, height: child.height }
     }
   )
 }
@@ -203,8 +205,9 @@ export function renderNode(
 
   r._nodeCount++
 
-  const absX = parentAbsX + node.x
-  const absY = parentAbsY + node.y
+  const position = graph.getPresentedNodePosition(nodeId)
+  const absX = parentAbsX + position.x
+  const absY = parentAbsY + position.y
 
   if (isCulled(r, node, absX, absY)) {
     r._culledCount++
@@ -212,7 +215,7 @@ export function renderNode(
   }
 
   canvas.save()
-  canvas.translate(node.x, node.y)
+  canvas.translate(position.x, position.y)
 
   const isolatesChildren = node.childIds.length > 0 && node.blendMode === 'NORMAL'
   const needsNodeLayer =

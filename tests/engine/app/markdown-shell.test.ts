@@ -27,9 +27,12 @@ describe('Markdown shell helpers', () => {
     const graph = await markdownFileToSceneGraph(
       new File(['# Literal'], 'notes.txt', { type: 'text/plain' })
     )
-    expect(
-      [...graph.getAllNodes()].some((node) => node.type === 'TEXT' && node.text === '# Literal')
-    ).toBe(true)
+    const document = graph.getChildren(graph.getPages()[0].id)[0]
+    expect(document.childIds).toEqual([])
+    expect(readContentSource(document)).toMatchObject({
+      mimeType: 'text/plain;charset=utf-8',
+      source: '# Literal'
+    })
   })
 
   test('prefers explicit Markdown clipboard data and identifies native design payloads', () => {
@@ -45,22 +48,25 @@ describe('Markdown shell helpers', () => {
     expect(hasOpenPencilOrFigmaClipboardHTML('<strong>web content</strong>')).toBe(false)
   })
 
-  test('builds a native OpenPencil clipboard payload from Markdown', async () => {
-    const payload = await markdownClipboardPayload('# Pasted\n\nA **native** document.')
+  test('builds a single source-backed OpenPencil clipboard object from Markdown', async () => {
+    const source = '# Pasted\n\nA **normal** Markdown document.'
+    const payload = await markdownClipboardPayload(source)
     const parsed = parseOpenPencilClipboard(payload.html)
+    const pasted = parsed?.nodes[0]
+    if (!pasted) throw new Error('Pasted Markdown frame not found')
 
     expect(payload.text).toContain('# Pasted')
     expect(parsed?.nodes).toHaveLength(1)
-    expect(parsed?.nodes[0]?.name).toBe('Pasted Markdown')
-    expect(
-      parsed?.nodes[0]?.children?.some(
-        (node) => node.type === 'TEXT' && node.styleRuns.some((run) => run.style.fontWeight === 700)
-      )
-    ).toBe(true)
+    expect(pasted.name).toBe('Pasted Markdown')
+    expect(pasted.children).toBeUndefined()
+    expect(readContentSource(pasted)).toMatchObject({ source })
   })
 
   test('persists regenerated Markdown and rolls metadata back when the writer fails', async () => {
-    const graph = await markdownToSceneGraph('# Notes\n\nOriginal\n', { fileName: 'notes.md' })
+    const graph = await markdownToSceneGraph('# Notes\n\nOriginal\n', {
+      fileName: 'notes.md',
+      representation: 'native'
+    })
     const document = graph.getChildren(graph.getPages()[0].id)[0]
     const paragraph = [...graph.getAllNodes()].find(
       (node) => node.type === 'TEXT' && node.text === 'Original'

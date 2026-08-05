@@ -30,11 +30,13 @@ export function wrapSelectionInContainer(
     y: minY,
     width: bw,
     height: bh
-  } = computeAbsoluteBounds(selectedNodes, (id) => ctx.graph.getAbsolutePosition(id))
+  } = computeAbsoluteBounds(selectedNodes, (id) => ctx.graph.getAuthoritativeAbsolutePosition(id))
   const maxX = minX + bw
   const maxY = minY + bh
 
-  const parentAbs = isTopLevel(parentId) ? { x: 0, y: 0 } : ctx.graph.getAbsolutePosition(parentId)
+  const parentAbs = isTopLevel(parentId)
+    ? { x: 0, y: 0 }
+    : ctx.graph.getAuthoritativeAbsolutePosition(parentId)
   const firstIndex = Math.min(...nodeIds.map((id) => parent.childIds.indexOf(id)))
 
   const padding = containerType === 'COMPONENT_SET' ? 40 : 0

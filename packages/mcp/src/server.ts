@@ -5,6 +5,12 @@ import { resolveCommand } from 'package-manager-detector/commands'
 import { detect, getUserAgent } from 'package-manager-detector/detect'
 import { WebSocketServer, type WebSocket } from 'ws'
 
+import {
+  classifyRpcExecutionSurface,
+  normalizePersistedExecutionError,
+  persistedAuthorityUnavailableError
+} from '@open-pencil/core/rpc'
+
 import type { RpcJsonObject } from '#mcp/json'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -12,12 +18,33 @@ import { bearerToken, isAuthorized, mcpRequestToken } from './auth'
 import { createBrowserRpcBridge } from './browser-rpc'
 import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from './http-options'
 import { preprocessRpc } from './jsx-preprocess'
+import { LocalAppManager } from './local-apps/manager'
+import { registerLocalAppRoutes } from './local-apps/routes'
+import type { LocalAppLauncherConfig } from './local-apps/types'
+import { LocalWorkspaceBoardRuntime } from './local-workspace-authority/board-runtime'
+import { registerLocalWorkspaceAuthorityRoutes } from './local-workspace-authority/routes'
+import { LocalWorkspaceAuthorityStore } from './local-workspace-authority/store'
 import { createMcpSessionManager } from './mcp-sessions'
 import { registerTools } from './tool/registration'
 
 export const MCP_VERSION: string = packageJson.version
 
 const HEARTBEAT_INTERVAL_MS = 5_000
+
+function stringArgument(body: Record<string, unknown>, key: string): string | undefined {
+  const args = body.args
+  if (!args || typeof args !== 'object') return undefined
+  const value = Reflect.get(args, key)
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isRpcRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function rpcArguments(body: Record<string, unknown>): Record<string, unknown> {
+  return isRpcRecord(body.args) ? body.args : {}
+}
 
 let installCommandPromise: Promise<string> | null = null
 
@@ -64,7 +91,10 @@ export interface ServerOptions {
   enableEval?: boolean
   mcpRoot?: string | null
   authToken?: string | null
-  corsOrigin?: string | null
+  corsOrigin?: string | string[] | null
+  localAppLaunchers?: readonly LocalAppLauncherConfig[]
+  localWorkspaceId?: string | null
+  localWorkspaceRoot?: string | null
 }
 
 export function startServer(options: ServerOptions = {}) {
@@ -74,17 +104,81 @@ export function startServer(options: ServerOptions = {}) {
   const mcpRoot = options.mcpRoot ?? null
   const authToken = options.authToken ?? null
   const corsOrigin = options.corsOrigin ?? null
+  const localWorkspaceRoot = options.localWorkspaceRoot ?? null
+  const localAppManager = new LocalAppManager(options.localAppLaunchers ?? [])
+  const localWorkspaceStore = localWorkspaceRoot
+    ? new LocalWorkspaceAuthorityStore({
+        preferredWorkspaceId: options.localWorkspaceId,
+        root: localWorkspaceRoot
+      })
+    : null
+  const localWorkspaceBoard = localWorkspaceStore
+    ? new LocalWorkspaceBoardRuntime(localWorkspaceStore)
+    : null
 
   const mcpSessions = createMcpSessionManager({
     serverVersion: MCP_VERSION,
     registerTools: (mcpServer: McpServer) =>
-      registerTools(mcpServer, { enableEval, mcpRoot, sendRpc: sendToBrowser })
+      registerTools(mcpServer, { enableEval, mcpRoot, sendRpc })
   })
   const browserRpc = createBrowserRpcBridge({
     authToken,
     onConnectionChange: mcpSessions.notifyToolsChanged
   })
   const sendToBrowser = browserRpc.sendRpc
+
+  async function sendRpc(body: Record<string, unknown>): Promise<unknown> {
+    const command = typeof body.command === 'string' ? body.command : ''
+    const surface = classifyRpcExecutionSurface(command, body.args)
+    if (surface === 'persisted_authority') {
+      if (!localWorkspaceBoard || !localWorkspaceStore) {
+        throw persistedAuthorityUnavailableError(command)
+      }
+      const authorityStatus = await localWorkspaceStore.status().catch(() => null)
+      if (authorityStatus?.state !== 'ready') throw persistedAuthorityUnavailableError(command)
+      if (body.command === 'board_open') {
+        const args = rpcArguments(body)
+        const workspaceId = stringArgument(body, 'workspace_id')
+        const contentDocumentId = stringArgument(body, 'content_document_id')
+        if (workspaceId && contentDocumentId) {
+          const resolution = browserRpc.resolveNavigationRuntime({
+            contentDocumentId,
+            ...(typeof args.editor_runtime_instance_id === 'string'
+              ? { requestedRuntimeInstanceId: args.editor_runtime_instance_id }
+              : {}),
+            workspaceId
+          })
+          let response: unknown
+          try {
+            response = await localWorkspaceBoard.sendRpc({
+              ...body,
+              args: {
+                ...args,
+                editor_candidate_runtime_ids: resolution.candidateRuntimeIds,
+                editor_navigation_status: resolution.status,
+                ...('reason' in resolution ? { editor_navigation_reason: resolution.reason } : {}),
+                ...('runtimeInstanceId' in resolution
+                  ? { editor_runtime_instance_id: resolution.runtimeInstanceId }
+                  : {})
+              }
+            })
+          } catch (error) {
+            throw normalizePersistedExecutionError(command, error)
+          }
+          if ('runtimeInstanceId' in resolution) {
+            browserRpc.notifyNavigationRuntime(resolution.runtimeInstanceId)
+          }
+          return response
+        }
+      }
+      try {
+        return await localWorkspaceBoard.sendRpc(body)
+      } catch (error) {
+        throw normalizePersistedExecutionError(command, error)
+      }
+    }
+    return sendToBrowser(body)
+  }
 
   // --- WebSocket: browser connects here ---
 
@@ -152,20 +246,31 @@ export function startServer(options: ServerOptions = {}) {
     )
   }
 
-  app.get('/health', async (c) =>
-    c.json({
-      status: browserRpc.isConnected() ? 'ok' : 'no_app',
+  app.get('/health', async (c) => {
+    const authorityStatus = await localWorkspaceStore?.status().catch(() => null)
+    const browserConnected = browserRpc.isConnected()
+    const authorityReady = authorityStatus?.state === 'ready'
+    const rpcToken = authToken ?? browserRpc.currentRpcToken()
+    let executionSurface = 'unavailable'
+    if (authorityReady) executionSurface = 'local_workspace_authority'
+    else if (browserConnected) executionSurface = 'live_browser'
+    return c.json({
+      status: browserConnected || authorityReady ? 'ok' : 'no_app',
       version: MCP_VERSION,
       installCommand: await mcpInstallCommand(),
       authRequired: authToken !== null,
-      ...(browserRpc.currentRpcToken() ? { token: browserRpc.currentRpcToken() } : {})
+      executionSurface,
+      presentationSurface: browserConnected ? 'live_browser' : 'unavailable',
+      browserConnected,
+      authorityReady,
+      ...(rpcToken ? { token: rpcToken } : {})
     })
-  )
+  })
 
   app.use('/rpc', async (c, next) => {
-    const rpcToken = browserRpc.currentRpcToken()
-    if (!browserRpc.isConnected() || !rpcToken) {
-      return c.json({ error: 'OpenPencil app is not connected. Is a document open?' }, 503)
+    const rpcToken = authToken ?? browserRpc.currentRpcToken()
+    if (!rpcToken) {
+      return c.json({ error: 'OpenPencil RPC authentication is unavailable.' }, 503)
     }
     const provided = bearerToken(c.req.header('authorization'))
     if (!isAuthorized(provided, rpcToken)) {
@@ -181,13 +286,25 @@ export function startServer(options: ServerOptions = {}) {
     }
     try {
       body = preprocessRpc(body as RpcJsonObject)
-      const result = await sendToBrowser(body as RpcJsonObject)
+      const result = await sendRpc(body as RpcJsonObject)
       return c.json(result)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return c.json({ ok: false, error: msg }, 502)
     }
   })
+
+  registerLocalAppRoutes(app, {
+    getAuthToken: () => authToken ?? browserRpc.currentRpcToken(),
+    manager: localAppManager
+  })
+
+  if (localWorkspaceStore) {
+    registerLocalWorkspaceAuthorityRoutes(app, {
+      getAuthToken: () => authToken ?? browserRpc.currentRpcToken(),
+      store: localWorkspaceStore
+    })
+  }
 
   // --- MCP Streamable HTTP ---
 

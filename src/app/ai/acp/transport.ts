@@ -79,10 +79,10 @@ export function formatConnectionError(e: unknown, agentDef?: ACPAgentDef): strin
     msg.includes('fetch failed') ||
     msg.includes('Failed to fetch')
   ) {
-    return 'MCP server is not running. Make sure the editor is open.'
+    return 'The selected ACP agent could not connect. Check its local CLI setup.'
   }
   if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
-    return 'MCP server did not respond in time.'
+    return 'The selected ACP agent did not respond in time.'
   }
   if (isMissingCommandError(msg)) {
     return missingCommandMessage(agentDef)
@@ -248,8 +248,6 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     }
 
     const connection = new ClientSideConnection((_agent: Agent) => clientImpl, stream)
-    const { getAutomationAuthToken } = await import('@/app/automation/mcp/spawn')
-    const automationAuthToken = await getAutomationAuthToken()
 
     await connection.initialize({
       protocolVersion: PROTOCOL_VERSION,
@@ -260,16 +258,7 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     try {
       sessionResult = await connection.newSession({
         cwd: this.cwd,
-        mcpServers: [
-          {
-            type: 'http' as const,
-            name: 'open-pencil',
-            url: 'http://127.0.0.1:7600/mcp',
-            headers: automationAuthToken
-              ? [{ name: 'Authorization', value: `Bearer ${automationAuthToken}` }]
-              : []
-          }
-        ]
+        mcpServers: []
       })
     } catch (e) {
       await child.kill()

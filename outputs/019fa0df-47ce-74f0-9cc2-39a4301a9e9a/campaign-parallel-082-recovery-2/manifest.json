@@ -1,0 +1,109 @@
+{
+  "manifest_id": "prompt-to-board-parallel-development-082-recovery-2",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "parallel-081-dev-parallel-081-a",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "campaign-parallel-082:parallel-082a-first-attempt",
+          "campaign-parallel-082-recovery:parallel-082a-linked-recovery",
+          "request-id:midnight-sleeper-train-decision-brief-20260730-v1"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card"
+      ],
+      "prompt": "Build a polished, editable decision brief for a midnight sleeper-train launch. Show the decision, three real tradeoffs, the recommended option, key evidence, and two immediate next actions. Make the hierarchy easy to scan and use native OpenPencil artifacts rather than one flattened diagram.\n\nLinked recovery instruction: every prior attempt is preserved and ended in a confirmed pre-mutation local CLI refusal. Reuse the exact original request ID midnight-sleeper-train-decision-brief-20260730-v1; do not invent a new request ID. For a mixed plan, physically connect the complete JSON to stdin in the same Board command with a pipeline or heredoc. This is recovery stage 2, not a first-attempt performance sample.",
+      "rubric": {
+        "rubric_id": "ptb-dev-native-decision-brief",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-PARALLEL-082-A-RECOVERY-2",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB PARALLEL-082-A — Midnight Rail Decision",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    },
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "parallel-081-dev-parallel-081-b",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "campaign-parallel-082:parallel-082b-first-attempt",
+          "campaign-parallel-082-recovery:parallel-082b-linked-recovery",
+          "request-id:wildfire-relief-command-workflow-20260730-v1"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card",
+        "object_connection"
+      ],
+      "prompt": "Create an editable wildfire-relief coordination workflow from field report through triage, dispatch, delivery, and verification. Include a clear exception or feedback path, concise role and handoff details, and meaningful labeled connectors between independent Board artifacts. Optimize for an incident commander scanning it under pressure.\n\nLinked recovery instruction: every prior attempt is preserved and ended in a confirmed pre-mutation local CLI refusal. Reuse the exact original request ID wildfire-relief-command-workflow-20260730-v1; do not invent a new request ID. For a mixed plan, physically connect the complete JSON to stdin in the same Board command with a pipeline or heredoc. This is recovery stage 2, not a first-attempt performance sample.",
+      "rubric": {
+        "rubric_id": "ptb-dev-mixed-connected-workflow",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-PARALLEL-082-B-RECOVERY-2",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB PARALLEL-082-B — Wildfire Relief Workflow",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    },
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "parallel-081-dev-parallel-081-c",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "campaign-parallel-082:parallel-082c-first-attempt",
+          "campaign-parallel-082-recovery:parallel-082c-linked-recovery",
+          "request-id:deep-space-greenhouse-control-v1"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "code_object",
+        "native_card",
+        "object_connection"
+      ],
+      "prompt": "Build a compact deep-space greenhouse control panel as an interactive Code Object. It should let a crew member adjust light intensity, water allocation, and growth mode, show a live readiness summary, and include a Reset control with durable state semantics. Add concise native Board context explaining the operating target and alert boundary, with meaningful relationships where useful. This is a headless persisted-authority run: create and read back the complete artifact, but report pixels and interaction as staged and unproven.\n\nLinked recovery instruction: every prior attempt is preserved and ended in a confirmed pre-mutation local CLI refusal. Reuse the exact original request ID deep-space-greenhouse-control-v1; do not invent a new request ID. For a mixed plan, physically connect the complete JSON to stdin in the same Board command with a pipeline or heredoc. This is recovery stage 2, not a first-attempt performance sample.",
+      "rubric": {
+        "rubric_id": "ptb-dev-code-object-native-context",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-PARALLEL-082-C-RECOVERY-2",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB PARALLEL-082-C — Deep Space Garden Lab",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

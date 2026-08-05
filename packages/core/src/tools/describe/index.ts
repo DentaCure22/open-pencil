@@ -16,11 +16,14 @@ export const describe = defineTool({
     const gridSize = args.grid ?? 8
 
     if (args.ids && Array.isArray(args.ids)) {
+      const ids = args.ids.slice(0, 25)
       return {
-        nodes: args.ids.map((nodeId) => {
+        count: args.ids.length,
+        nodes: ids.map((nodeId) => {
           const depth = Math.min(args.depth ?? autoDepth(figma.graph, nodeId), 5)
           return describeOneNode(figma, nodeId, depth, gridSize)
-        })
+        }),
+        truncated: args.ids.length > ids.length
       }
     }
 

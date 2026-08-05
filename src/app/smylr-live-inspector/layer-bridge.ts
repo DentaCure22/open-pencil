@@ -23,12 +23,7 @@ import {
   selectLiveInspectorNode,
   setLiveInspectorInteractionMode
 } from '@/app/smylr-live-inspector/session'
-import {
-  designSectionAnchorId,
-  getDesignOutlineChildren,
-  isDesignSectionId
-} from '@/app/smylr-production/design-layer-outline'
-import { isSmylrLiveAppFrameNode } from '@/app/smylr-production/workspace'
+import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
 
 export const LIVE_LAYER_ID_PREFIX = 'live:'
 
@@ -77,6 +72,9 @@ function attr(node: SmylrLiveContainerNode, key: string): string | undefined {
 
 /** Readable layer name — never drop the node, only rename. */
 export function displayNameForLiveNode(node: SmylrLiveContainerNode): string {
+  const containerLabel = attr(node, 'data-smylr-container-label')
+  if (containerLabel) return containerLabel
+
   const component = node.source?.componentName?.trim()
   if (component) return component
 
@@ -127,11 +125,12 @@ export function bumpLiveLayerTreeVersion() {
 
 /**
  * Full live container tree under a live-app scene frame.
- * Shows every node from the inspector document — no filtering.
+ * Shows every node while the contextual Containers tool owns selection.
  */
 export function buildLiveLayerChildrenForSceneNode(node: SceneNode): LayerNode[] | undefined {
-  if (!isSmylrLiveAppFrameNode(node)) return undefined
+  if (!isSmylrProductionAppCodeObjectFrame(node)) return undefined
   if (node.id !== liveInspectorActiveFrameId.value) return undefined
+  if (liveInspectorInteractionMode.value !== 'select') return undefined
   const tree = liveInspectorDocument.value?.tree
   if (!tree) return undefined
 
@@ -158,6 +157,7 @@ export function createSmylrLiveLayerTreeBridge(): LayerTreeHostBridge {
 
   const version = computed(() => {
     void liveInspectorActiveFrameId.value
+    const containerSelectionActive = liveInspectorInteractionMode.value === 'select'
     void liveInspectorStatus.value
     void store.state.currentPageId
     const tree = liveInspectorDocument.value?.tree
@@ -168,21 +168,17 @@ export function createSmylrLiveLayerTreeBridge(): LayerTreeHostBridge {
       for (const c of n.children ?? []) walk(c)
     }
     walk(tree)
-    return count * 1000 + liveLayerTreeVersion.value
+    return count * 1000 + liveLayerTreeVersion.value + (containerSelectionActive ? 1 : 0)
   })
 
   return {
     getVirtualChildren: buildLiveLayerChildrenForSceneNode,
-    getSceneChildren: (parent) => getDesignOutlineChildren(store.graph, parent),
-    isVirtualId: (id) => isLiveLayerId(id) || isDesignSectionId(id),
+    isVirtualId: isLiveLayerId,
     selectVirtual: (layerId: string) => {
-      if (isDesignSectionId(layerId)) {
-        const anchor = designSectionAnchorId(layerId)
-        if (anchor) store.select([anchor])
-        return
-      }
       const liveId = fromLiveLayerId(layerId)
       if (!liveId) return
+      const frameId = liveInspectorActiveFrameId.value
+      if (frameId) store.select([frameId])
       if (liveInspectorInteractionMode.value !== 'select') {
         setLiveInspectorInteractionMode('select')
       }

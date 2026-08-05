@@ -1,0 +1,40 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 0,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 1,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [
+    {
+      "code": "terminal_event_mismatch",
+      "detail": "Recorded result requires generated output without visible-proof terminal events; observed message=5, pending=0, release=0, error=1.",
+      "run_id": "output-086-full-a-first-attempt"
+    }
+  ],
+  "gate_passed": false,
+  "observations": [
+    {
+      "discrepancies": [
+        {
+          "code": "terminal_event_mismatch",
+          "detail": "Recorded result requires generated output without visible-proof terminal events; observed message=5, pending=0, release=0, error=1.",
+          "run_id": "output-086-full-a-first-attempt"
+        }
+      ],
+      "event_count": 25,
+      "result_status": "recorded",
+      "run_id": "output-086-full-a-first-attempt",
+      "state": "recorded"
+    }
+  ],
+  "results_total": 1,
+  "roster_id": "e86d714db9a9efb1dca5414087a280b748798aed1ac6d7451dd006777ae64470",
+  "scheduled_total": 1,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 1
+}

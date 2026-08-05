@@ -1,0 +1,17 @@
+[
+  {
+    "board_request_id": "ptb-run:bbfdbea217c70a2e2eeb79583d3bce1e",
+    "campaign_roster_id": "55ea690cbfa72c057984ccbce960c78d3c9122a928b5c3ea7dfb5940b43b11f8",
+    "config_id": "884b1b5c368f1b6dadb40455ab4ab9c9eac9ca03d6690e31440bebcec4549def",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-straight-091/001-straight-091a-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "straight-091a-first-attempt",
+    "scenario_id": "DEV-STRAIGHT-091-A",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-straight-091/001-straight-091a-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb41a-acf3-7412-b7cd-426da4ce473f"
+  }
+]

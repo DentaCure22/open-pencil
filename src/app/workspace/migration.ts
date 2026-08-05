@@ -15,13 +15,8 @@ function hasSessionProof(attestation: Record<string, unknown> | null): boolean {
   )
 }
 
-function hasStringFields(
-  record: Record<string, unknown> | null,
-  fields: string[]
-): boolean {
-  return Boolean(
-    record && fields.every((field) => typeof record[field] === 'string')
-  )
+function hasStringFields(record: Record<string, unknown> | null, fields: string[]): boolean {
+  return Boolean(record && fields.every((field) => typeof record[field] === 'string'))
 }
 
 function completeReference(value: unknown): boolean {
@@ -45,19 +40,12 @@ function completeArtifact(value: unknown): boolean {
 }
 
 function completeTaskInteraction(value: unknown): boolean {
-  if (!isRecord(value) || !isRecord(value.before) || !isRecord(value.after))
-    return false
+  if (!isRecord(value) || !isRecord(value.before) || !isRecord(value.after)) return false
   const before = value.before
   const after = value.after
   const revisions = ['artifactRevision', 'surfaceRevision']
   return Boolean(
-    hasStringFields(value, [
-      'eventId',
-      'frameId',
-      'kind',
-      'occurredAt',
-      'surfaceRunId',
-    ]) &&
+    hasStringFields(value, ['eventId', 'frameId', 'kind', 'occurredAt', 'surfaceRunId']) &&
     ['keydown', 'pointerdown'].includes(String(value.kind)) &&
     revisions.every(
       (field) =>
@@ -69,16 +57,8 @@ function completeTaskInteraction(value: unknown): boolean {
   )
 }
 
-function completeFamilyMember(
-  value: unknown,
-  index: number,
-  interactions: unknown[]
-): boolean {
-  if (
-    !isRecord(value) ||
-    !isRecord(value.surfaceRun) ||
-    !isRecord(value.artifact)
-  ) {
+function completeFamilyMember(value: unknown, index: number, interactions: unknown[]): boolean {
+  if (!isRecord(value) || !isRecord(value.surfaceRun) || !isRecord(value.artifact)) {
     return false
   }
   const surfaceRun = value.surfaceRun
@@ -109,11 +89,7 @@ function completeFamilyHeader(
     scope.schemaVersion === 1 &&
     family.complete === true &&
     family.schemaVersion === 1 &&
-    hasStringFields(family, [
-      'compositionId',
-      'recipeDigest',
-      'familyDigest',
-    ]) &&
+    hasStringFields(family, ['compositionId', 'recipeDigest', 'familyDigest']) &&
     Number(family.surfaceCount) === members.length &&
     members.length > 0
   )
@@ -143,10 +119,7 @@ function completeFinalFamily(
   memberCount: number
 ): boolean {
   if (!finalFamily || !Array.isArray(finalFamily.members)) return false
-  return (
-    typeof finalFamily.familyDigest === 'string' &&
-    finalFamily.members.length === memberCount
-  )
+  return typeof finalFamily.familyDigest === 'string' && finalFamily.members.length === memberCount
 }
 
 function completeFamilyClaim(
@@ -162,9 +135,7 @@ function completeFamilyClaim(
   const finalFamily = isRecord(claim.finalFamily) ? claim.finalFamily : null
   return Boolean(
     completeFamilyHeader(scope, family, members) &&
-    members.every((member, index) =>
-      completeFamilyMember(member, index, interactions)
-    ) &&
+    members.every((member, index) => completeFamilyMember(member, index, interactions)) &&
     completeFamilyPrimary(primary, target) &&
     completeFinalFamily(finalFamily, members.length)
   )
@@ -192,7 +163,7 @@ function completeObservedEnvelope(
       'reviewDigest',
       'runId',
       'surfaceRunId',
-      'taskInteractionDigest',
+      'taskInteractionDigest'
     ]) &&
     claim.dataPolicy === 'phi-free-declared-v1' &&
     Number.isInteger(claim.finalSurfaceRevision) &&
@@ -202,26 +173,16 @@ function completeObservedEnvelope(
   )
 }
 
-function hasCompleteObservedProof(
-  attestation: Record<string, unknown>
-): boolean {
+function hasCompleteObservedProof(attestation: Record<string, unknown>): boolean {
   if (attestation.kind !== 'observed-session') return true
   const proof = isRecord(attestation.proof) ? attestation.proof : null
   const claim = isRecord(proof?.claim) ? proof.claim : null
   const publicKey = isRecord(proof?.publicKey) ? proof.publicKey : null
   const target = isRecord(claim?.target) ? claim.target : null
-  const interactions = Array.isArray(proof?.taskInteractions)
-    ? proof.taskInteractions
-    : []
+  const interactions = Array.isArray(proof?.taskInteractions) ? proof.taskInteractions : []
   if (!proof || !claim || !target || interactions.length === 0) return false
   return Boolean(
-    completeObservedEnvelope(
-      proof,
-      claim,
-      publicKey,
-      interactions,
-      attestation
-    ) &&
+    completeObservedEnvelope(proof, claim, publicKey, interactions, attestation) &&
     completeObservedTarget(target) &&
     completeObservedInteractions(interactions) &&
     completeFamilyClaim(claim, target, interactions)
@@ -245,8 +206,7 @@ function migrateLearningReceipt(value: Record<string, unknown>): void {
   if (value.type !== 'learning-receipt') return
   const attestation = isRecord(value.attestation) ? value.attestation : null
   const independentlyAttested =
-    attestation?.kind === 'authenticated-session' ||
-    attestation?.kind === 'observed-session'
+    attestation?.kind === 'authenticated-session' || attestation?.kind === 'observed-session'
   if (
     attestation &&
     (!independentlyAttested ||
@@ -257,21 +217,19 @@ function migrateLearningReceipt(value: Record<string, unknown>): void {
   value.attestation = {
     attestedAt: typeof value.recordedAt === 'string' ? value.recordedAt : '',
     attestedBy: typeof value.recordedBy === 'string' ? value.recordedBy : '',
-    kind: value.executionKind === 'human' ? 'self-report' : 'automated-run',
+    kind: value.executionKind === 'human' ? 'self-report' : 'automated-run'
   }
 }
 
 function migrateSurfaceRun(value: Record<string, unknown>): void {
   if (value.type !== 'surface-run') return
   const intent = isRecord(value.intent) ? value.intent : null
-  const evidenceManifest = isRecord(value.evidenceManifest)
-    ? value.evidenceManifest
-    : null
+  const evidenceManifest = isRecord(value.evidenceManifest) ? value.evidenceManifest : null
   if (!isRecord(value.bindings)) {
     value.bindings = {
       evidenceItemIds: [],
       objectRefs: [intent, evidenceManifest].filter(Boolean),
-      viewIds: [],
+      viewIds: []
     }
   }
   if (!isRecord(value.formChoice)) {
@@ -281,23 +239,20 @@ function migrateSurfaceRun(value: Record<string, unknown>): void {
       rationale:
         typeof form.rationale === 'string'
           ? form.rationale
-          : 'Migrated from the original weekly decision renderer.',
+          : 'Migrated from the original weekly decision renderer.'
     }
   }
   if (typeof value.jobKind !== 'string') value.jobKind = 'decide'
   if (!Array.isArray(value.modes)) {
     value.modes = [
       { id: 'mode-focus', kind: 'focus', label: 'Focus' },
-      { id: 'mode-review', kind: 'review', label: 'Review' },
+      { id: 'mode-review', kind: 'review', label: 'Review' }
     ]
   }
-  if (typeof value.rendererId !== 'string')
-    value.rendererId = 'weekly-decision-v1'
+  if (typeof value.rendererId !== 'string') value.rendererId = 'weekly-decision-v1'
 }
 
-export function migrateWorkspacePayload(
-  payload: Record<string, unknown>
-): Record<string, unknown> {
+export function migrateWorkspacePayload(payload: Record<string, unknown>): Record<string, unknown> {
   const migrated = structuredClone(payload)
   if (!isRecord(migrated.objects)) {
     throw new WorkspaceDomainError(

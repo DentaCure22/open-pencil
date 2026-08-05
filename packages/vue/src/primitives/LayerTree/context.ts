@@ -10,17 +10,17 @@ export interface LayerNode {
   layoutMode: string
   visible: boolean
   locked: boolean
-  /** Virtual rows (e.g. live DOM) — not scene-graph nodes. */
+  /** Virtual rows (e.g. internal DOM) — not scene-graph nodes. */
   virtual?: boolean
   children?: LayerNode[]
 }
 
 /**
- * Optional host bridge: inject live/app layers into the design layer tree
+ * Optional host bridge: inject host-owned layers into the design layer tree
  * without a second layers UI.
  */
 export type LayerTreeHostBridge = {
-  /** Extra children under a scene node (e.g. live containers under a live frame). */
+  /** Extra host-owned rows under a scene node. */
   getVirtualChildren?: (node: SceneNode) => LayerNode[] | undefined
   /**
    * Optional full outline for a scene parent's children (design boards/sections).
@@ -37,7 +37,7 @@ export type LayerTreeHostBridge = {
   version?: ComputedRef<number> | Ref<number>
   /**
    * Ids that should be expanded by default when the tree (re)builds —
-   * e.g. primary live regions so designers don't open every wrapper.
+   * e.g. primary internal regions so designers don't open every wrapper.
    */
   defaultExpandedIds?: ComputedRef<string[]> | Ref<string[]>
 }

@@ -3,6 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: {
     index: './src/index.ts',
+    'local-workspace-authority': './src/local-workspace-authority.ts',
     server: './src/server.ts',
     stdio: './src/stdio.ts'
   },

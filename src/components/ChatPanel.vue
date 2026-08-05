@@ -10,8 +10,8 @@ import { activeTab } from '@/app/tabs'
 import AcpPermissionDialog from '@/components/chat/AcpPermissionDialog.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
-import AppTextButton from '@/components/ui/AppTextButton.vue'
 import ProviderSetup from '@/components/chat/ProviderSetup.vue'
+import AppTextButton from '@/components/ui/AppTextButton.vue'
 import { useAIChat } from '@/app/ai/chat/use'
 import { toast } from '@/app/shell/ui'
 import { useI18n } from '@open-pencil/vue'
@@ -94,7 +94,8 @@ async function handleSubmit(text: string) {
     toast.error(e instanceof Error ? e.message : String(e))
     return
   }
-  chat.value?.sendMessage({ text }).catch((e: unknown) => {
+  const request = chat.value?.sendMessage({ text })
+  request?.catch((e: unknown) => {
     console.error('Chat error:', e)
     toast.error(e instanceof Error ? e.message : String(e))
   })

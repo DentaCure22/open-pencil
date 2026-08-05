@@ -2,7 +2,7 @@ import type { SceneGraph, SceneGraphEvents, SceneNode } from '@open-pencil/scene
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
 
-type EmittedGraphEventName = Exclude<keyof SceneGraphEvents, 'node:previewUpdated'>
+type EmittedGraphEventName = keyof SceneGraphEvents
 
 type GraphEventOptions = {
   getGraph: () => SceneGraph
@@ -73,6 +73,7 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
   function onNodePreviewUpdated(id: string, changes: Partial<SceneNode>) {
     const { nodePicture } = rendererInvalidationForChanges(changes, { preview: true })
     invalidateRenderersForChange(options.getRenderers(), id, changes, nodePicture)
+    options.emitEditorEvent('node:previewUpdated', id, changes)
   }
 
   function onNodeStructureChanged(nodeId: string) {

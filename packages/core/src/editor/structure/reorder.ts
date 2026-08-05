@@ -7,8 +7,8 @@ export function createStructureReorderActions(ctx: EditorContext) {
     if (!node) return
 
     if (node.parentId !== parentId) {
-      const absPos = ctx.graph.getAbsolutePosition(nodeId)
-      const parentAbs = ctx.graph.getAbsolutePosition(parentId)
+      const absPos = ctx.graph.getAuthoritativeAbsolutePosition(nodeId)
+      const parentAbs = ctx.graph.getAuthoritativeAbsolutePosition(parentId)
       ctx.graph.updateNode(nodeId, { x: absPos.x - parentAbs.x, y: absPos.y - parentAbs.y })
     }
 

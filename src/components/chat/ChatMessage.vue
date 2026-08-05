@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { isTextUIPart, isToolUIPart, getToolName } from 'ai'
+import { getToolName, isTextUIPart, isToolUIPart } from 'ai'
 import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui'
+import { computed } from 'vue'
 import { Markdown } from 'vue-stream-markdown'
 import { vTestId } from '@open-pencil/vue'
 import 'vue-stream-markdown/index.css'
@@ -11,6 +12,12 @@ const { message } = defineProps<{ message: UIMessage }>()
 
 type ToolPart = Extract<UIMessagePart<UIDataTypes, UITools>, { toolCallId: string }>
 
+const userText = computed(() =>
+  message.parts
+    .filter(isTextUIPart)
+    .map((part) => part.text)
+    .join('')
+)
 function toolDisplayName(part: ToolPart): string {
   return getToolName(part)
     .replace(/^mcp__[^_]+__/, '')
@@ -117,12 +124,7 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
         data-test-id="chat-text-bubble"
         class="rounded-xl rounded-br-md bg-accent px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-white"
       >
-        {{
-          message.parts
-            .filter(isTextUIPart)
-            .map((p) => p.text)
-            .join('')
-        }}
+        {{ userText }}
       </div>
     </div>
   </div>

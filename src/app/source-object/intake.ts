@@ -83,7 +83,7 @@ function assetIsReferenced(editor: Editor, hash: string): boolean {
 
 async function prepareSourceObject(file: File): Promise<PreparedSourceObject> {
   const bytes = new Uint8Array(await file.arrayBuffer())
-  const fileName = file.name.trim() || 'Untitled source'
+  const fileName = file.name.trim() || 'Untitled file'
   return {
     bytes,
     fileName,
@@ -166,7 +166,7 @@ export async function placeSourceObjectFiles(
   const ids = snapshots.map((snapshot) => snapshot.id)
   setSelection(editor, ids)
   editor.undo.push({
-    label: files.length === 1 ? 'Place source file' : 'Place source files',
+    label: files.length === 1 ? 'Place attached file' : 'Place attached files',
     forward: () => {
       for (const item of prepared) editor.graph.images.set(item.hash, item.bytes)
       for (const snapshot of snapshots) restoreSnapshot(editor, snapshot)

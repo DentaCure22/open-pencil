@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  buildNarratedTraceActivityFeed,
   sortNarratedTraceRecords,
   summarizeNarratedTraceSession,
   upsertNarratedTraceRecordSummary
@@ -33,7 +34,6 @@ function session(overrides: Partial<NarratedTraceSession> = {}): NarratedTraceSe
             ],
             strokeWidth: 20
           },
-          cacheKey: 'narrated-trace/evidence/trace-one/focus-one',
           capturedAtMs: 5000,
           cropBounds: { height: 80, width: 100, x: 0, y: 0 },
           evidenceId: 'focus-one',
@@ -62,12 +62,13 @@ describe('Narrated Trace history', () => {
       durationMs: 42_000,
       eventCount: 2,
       evidenceCount: 1,
+      gestureCount: 0,
       id: 'trace-one',
+      searchTerms: ['make', 'the', 'patient', 'header', 'easier', 'to', 'scan', 'focused'],
       startedAt: '2026-07-12T18:00:00.000Z',
       title: 'Make the patient header easier to scan',
       updatedAt: '2026-07-12T19:00:00.000Z'
     })
-    expect(JSON.stringify(summary)).not.toContain('cacheKey')
     expect(JSON.stringify(summary)).not.toContain('data:image')
   })
 
@@ -81,6 +82,34 @@ describe('Narrated Trace history', () => {
     expect(summary.title).toBe('Header cleanup review')
   })
 
+  test('indexes new page-space anchors ahead of legacy target bounds', () => {
+    const anchored = session({
+      events: [
+        {
+          anchor: {
+            pagePoint: { x: 150, y: 180 },
+            pageRegion: { height: 80, width: 100, x: 100, y: 140 },
+            viewport: { panX: 24, panY: -12, zoom: 1.5 }
+          },
+          atMs: 5000,
+          id: 'focus',
+          kind: 'screenshot',
+          label: 'Focused placement area',
+          target: {
+            bounds: { height: 40, width: 40, x: 1200, y: 1200 },
+            name: 'Card',
+            path: ['Page', 'Card'],
+            stableId: 'card'
+          }
+        }
+      ]
+    })
+
+    const summary = summarizeNarratedTraceSession(anchored, undefined, '2026-07-12T19:00:00.000Z')
+
+    expect(summary.bounds).toEqual({ height: 80, width: 100, x: 100, y: 140 })
+  })
+
   test('upserts one record and keeps newest sessions first', () => {
     const older: NarratedTraceRecordSummary = {
       durationMs: 10_000,
@@ -91,11 +120,7 @@ describe('Narrated Trace history', () => {
       title: 'Older session',
       updatedAt: '2026-07-11T18:10:00.000Z'
     }
-    const current = summarizeNarratedTraceSession(
-      session(),
-      undefined,
-      '2026-07-12T19:00:00.000Z'
-    )
+    const current = summarizeNarratedTraceSession(session(), undefined, '2026-07-12T19:00:00.000Z')
     const updated = { ...current, durationMs: 60_000 }
 
     const records = upsertNarratedTraceRecordSummary([older, current], updated)
@@ -128,5 +153,34 @@ describe('Narrated Trace history', () => {
     ])
 
     expect(records.map((record) => record.id)).toEqual(['second', 'first'])
+  })
+
+  test('builds one bounded newest-first activity feed without duplicating sessions', () => {
+    const older = session({
+      id: 'older',
+      startedAt: '2026-07-12T17:00:00.000Z'
+    })
+    const newer = session({
+      id: 'newer',
+      scope: {
+        documentId: 'document-a',
+        pageId: 'page-a',
+        workspaceId: 'workspace-a'
+      },
+      startedAt: '2026-07-12T19:00:00.000Z'
+    })
+
+    const feed = buildNarratedTraceActivityFeed(
+      [
+        { session: older, title: 'Older' },
+        { session: newer, title: 'Newer' }
+      ],
+      3
+    )
+
+    expect(feed).toHaveLength(3)
+    expect(feed.map((item) => item.sessionId)).toEqual(['newer', 'newer', 'older'])
+    expect(feed[0]?.scope).toEqual(newer.scope)
+    expect(new Set(feed.map((item) => `${item.sessionId}:${item.event.id}`)).size).toBe(3)
   })
 })

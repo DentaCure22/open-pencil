@@ -1,0 +1,34 @@
+{
+  "review_id": "visible-dev-009-semantic-review",
+  "reviewed_by": "codex-independent-reviewer",
+  "scenario_id": "DEV-MX-CO-SPARSE-001",
+  "scenario_version": "764823051ac6487a8abeec37d4b3f6da4708c8a83cd4cd47d78d30b021fab71a",
+  "rubric_id": "ptb-dev-code-object",
+  "rubric_version": "1.0.0",
+  "screenshot_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-visible-dev-009/visible-dev-009.png",
+  "interaction_screenshot_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-visible-dev-009/visible-dev-009-interaction.png",
+  "quality_grade": "pass",
+  "quality_passed": true,
+  "observations": {
+    "initial_task_count": 12,
+    "initial_minutes_per_task": 25,
+    "initial_total_hours": 5,
+    "editable_inputs": true,
+    "interaction_probe": {
+      "task_count": 8,
+      "minutes_per_task": 45,
+      "observed_total_hours": 6,
+      "observed_total_minutes": 360
+    },
+    "initial_state_restored_after_probe": true,
+    "scanability": "pass",
+    "legibility": "pass",
+    "exact_target": "pass",
+    "modality": "code_object"
+  },
+  "notes": [
+    "The Code Object starts at the requested 12 tasks and 25 minutes per task and visibly reports 5 hours.",
+    "A live browser interaction changed the inputs to 8 and 45 and immediately produced 6 hours and 360 minutes, then the requested starting state was restored.",
+    "The compact dark-theme card is the only top-level object on the sparse fixture and remains readable at the witnessed viewport."
+  ]
+}

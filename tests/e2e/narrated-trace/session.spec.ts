@@ -12,199 +12,323 @@ test.describe.configure({ mode: 'serial' })
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await browser.newPage()
   page.on('pageerror', (error) => pageErrors.push(error))
-  await page.addInitScript(() => {
-    class MockSpeechRecognition extends EventTarget implements SpeechRecognition {
-      continuous = false
-      interimResults = false
-      lang = 'en-US'
-      maxAlternatives = 1
-      processLocally = true
-      onend: (() => void) | null = null
-      onerror: ((event: SpeechRecognitionErrorEvent) => void) | null = null
-      onresult: ((event: SpeechRecognitionEvent) => void) | null = null
-
-      abort() {
-        this.onend?.()
-      }
-
-      start() {
-        queueMicrotask(() => {
-          const alternative: SpeechRecognitionAlternative = {
-            confidence: 1,
-            transcript: 'Move this card down'
-          }
-          const result: SpeechRecognitionResult = {
-            0: alternative,
-            isFinal: true,
-            length: 1
-          }
-          const results: SpeechRecognitionResultList = { 0: result, length: 1 }
-          const speechEvent = Object.assign(new Event('result'), { resultIndex: 0, results })
-          this.onresult?.(speechEvent)
-        })
-      }
-
-      stop() {
-        this.onend?.()
-      }
-    }
-
-    window.SpeechRecognition = MockSpeechRecognition
-  })
   await page.goto('/?test&no-rulers')
   canvas = new CanvasHelper(page)
   await canvas.waitForInit()
+  await page.getByTestId('left-panel-trace-tab').click()
 })
 
 test.afterAll(async () => {
   await page.close()
 })
 
-test('records, cleans, restores, and reopens one narrated timeline', async () => {
+test('records bounded semantic editor actions and restores one unified History feed', async () => {
+  await expect(page.getByTestId('narrated-trace-history')).toBeVisible()
+  await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveCount(0)
+  await expect(page.getByTestId('narrated-trace-timeline')).toHaveCount(0)
+
   const rectangleId = await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
-    return store.createShape('RECTANGLE', 120, 120, 100, 80)
+    store.setTool('RECTANGLE')
+    const createdId = store.createShape('RECTANGLE', 120, 120, 100, 80)
+    const created = store.graph.getNode(createdId)
+    if (!created) throw new Error('Rectangle was not created')
+    store.clearSelection()
+    store.select([created.id])
+    return created.id
   })
-  await canvas.waitForRender()
+  await page.waitForTimeout(1300)
 
-  await page.getByTestId('narrated-trace-start').click()
-  await expect(page.getByTestId('narrated-trace-timer')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-header')).toContainText('Listening')
-  const traceTitle = page.getByTestId('narrated-trace-title')
-  await expect(traceTitle).toHaveValue('Narrated Session')
-  await traceTitle.fill('Patient card placement')
-  await page.waitForTimeout(250)
-  await expect(traceTitle).toHaveValue('Patient card placement')
-  await traceTitle.press('Tab')
-  await expect(traceTitle).toHaveValue('Patient card placement')
-  await expect(page.getByTestId('narrated-trace-panel')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-timeline')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-marker-transcript')).toHaveAttribute(
-    'aria-label',
-    'Spoken note'
-  )
-  await expect(
-    page.getByTestId('narrated-trace-row-transcript').getByLabel('Edit transcript segment')
-  ).toHaveValue('Move this card down')
-  await expect(page.getByTestId('narrated-trace-row-transcript')).toContainText('00:00')
+  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
+  await expect(page.getByTestId('narrated-trace-row-shape')).toContainText('Rectangle')
+  await expect(page.getByTestId('narrated-trace-row-selection')).toContainText('Rectangle')
+  await expect(page.getByTestId('narrated-trace-row-tool')).toBeVisible()
 
   await page.evaluate((nodeId) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    store.updateNode(nodeId, { height: 90, width: 140, x: 135, y: 130 })
+    store.updateNode(nodeId, { height: 105, width: 180, x: 150, y: 145 })
+    store.updateNode(nodeId, { height: 120, width: 220, x: 165, y: 160 })
+  }, rectangleId)
+  await page.waitForTimeout(800)
+
+  const transformRow = page.getByTestId('narrated-trace-row-edit').first()
+  await expect(transformRow).toContainText('Rectangle')
+  await expect(transformRow.getByTestId('narrated-trace-row-action')).toHaveText('Edited')
+  await expect(transformRow).toContainText('4 changes')
+
+  await page.evaluate((nodeId) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    store.updateNode(nodeId, {
+      cornerRadius: 18,
+      fills: [
+        {
+          color: { a: 1, b: 0.86, g: 0.44, r: 0.18 },
+          opacity: 1,
+          type: 'SOLID',
+          visible: true
+        }
+      ]
+    })
+  }, rectangleId)
+  await page.waitForTimeout(800)
+  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
+
+  await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     store.clearSelection()
-    store.select([nodeId])
-  }, rectangleId)
-  const selectionRow = page.getByTestId('narrated-trace-row-selection')
-  await expect(selectionRow.getByTestId('narrated-trace-row-title')).toHaveText('Rectangle')
-  await expect(selectionRow.getByTestId('narrated-trace-row-action')).toHaveText('Selected')
-  await expect(page.getByTestId('narrated-trace-marker-selection')).toHaveAttribute(
-    'aria-label',
-    'Selection changed'
-  )
+    const backgroundId = store.createShape('RECTANGLE', 20, 20, 20, 20)
+    store.updateNode(backgroundId, { width: 24 })
+  })
+  await page.waitForTimeout(1300)
+  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
+  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
 
-  await page.evaluate((nodeId) => {
+  const queryProof = await page.evaluate(async (targetId) => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
-    store.updateNode(nodeId, { width: 3274.3652377032345 })
+    const { narratedTraceScopeForStore } = await import('/src/app/narrated-trace/scope.ts')
+    const { queryNarratedTraceHistory } = await import('/src/app/narrated-trace/query.ts')
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1200)
+    })
+    const scope = narratedTraceScopeForStore(store)
+    const result = await queryNarratedTraceHistory({
+      limit: 3,
+      query: 'Rectangle width corner radius',
+      scope,
+      selectionIds: [targetId]
+    })
+    return {
+      eventKinds: result.matches[0]?.events.map((event) => event.kind) ?? [],
+      matchedBy: result.matches[0]?.matchedBy ?? [],
+      resultCount: result.matches.length,
+      scannedSessions: result.scanned.sessions,
+      scope,
+      status: result.status
+    }
   }, rectangleId)
-  const editRow = page.getByTestId('narrated-trace-row-edit')
-  await expect(editRow.getByTestId('narrated-trace-row-title')).toHaveText('Rectangle')
-  await expect(editRow.getByTestId('narrated-trace-row-action')).toHaveText('Edited')
-  await expect(editRow.getByTestId('narrated-trace-row-meta')).toHaveText('Width 100 → 3,274.37')
-
-  await page.getByTestId('narrated-trace-panel-stop').click()
-  await expect(page.getByTestId('narrated-trace-review-state')).toHaveCount(0)
-  await expect(page.getByTestId('narrated-trace-new-session')).toHaveAttribute(
-    'aria-label',
-    'New trace'
+  expect(queryProof).toMatchObject({
+    matchedBy: expect.arrayContaining(['selection']),
+    status: 'matched'
+  })
+  expect(queryProof.eventKinds).toContain('edit')
+  expect(queryProof.resultCount).toBeLessThanOrEqual(3)
+  expect(queryProof.scannedSessions).toBeLessThanOrEqual(12)
+  expect(queryProof.scope.documentId).toBeTruthy()
+  expect(queryProof.scope.pageId).toBeTruthy()
+  await expect(page.getByTestId('narrated-trace-retrieval-result')).toHaveAttribute(
+    'data-status',
+    'matched'
   )
-  await expect(page.getByTestId('narrated-trace-header')).not.toContainText('key moments')
-  await expect(page.getByTestId('narrated-trace-review-summary')).toHaveCount(0)
-  await expect(selectionRow).toHaveCount(0)
-  await expect(page.getByTestId('narrated-trace-background-toggle')).toContainText(
-    'Selection and canvas activity · 1'
+  await expect(page.getByTestId('narrated-trace-retrieval-detail')).toContainText('exact Board')
+  await expect(page.getByTestId('narrated-trace-retrieval-scope')).toContainText(
+    queryProof.scope.pageName ?? queryProof.scope.pageId
   )
-  await page.getByTestId('narrated-trace-background-toggle').click()
-  await expect(selectionRow).toBeVisible()
-  await page.getByTestId('narrated-trace-background-toggle').click()
 
-  const transcriptRow = page.getByTestId('narrated-trace-row-transcript')
-  const transcriptEditor = transcriptRow.getByLabel('Edit transcript segment')
-  await transcriptEditor.fill('Move the patient card down 24 pixels')
-  await transcriptEditor.press('Tab')
+  await page.reload()
+  canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await page.getByTestId('left-panel-trace-tab').click()
+  await expect(page.getByTestId('narrated-trace-activity-feed')).toBeVisible()
+  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
+  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
+  expect(pageErrors).toEqual([])
+})
 
-  await transcriptRow.getByRole('button', { name: 'Add clarification' }).click()
-  const clarification = transcriptRow.getByRole('textbox', { name: 'Add clarification' })
-  await clarification.fill('Keep the alignment with the chart.')
-  await clarification.press('Tab')
-  await transcriptRow.getByRole('button', { name: 'Edit clarification' }).click()
+test('keeps a consented mic session on for multiple Trace turns until explicit stop', async () => {
+  await page.evaluate(() => {
+    class FakeSpeechRecognition extends EventTarget implements SpeechRecognition {
+      static async available(): Promise<SpeechRecognitionAvailability> {
+        return 'unavailable'
+      }
 
-  await transcriptRow.getByTestId('narrated-trace-row-remove').click()
-  await expect(page.getByTestId('narrated-trace-removed-toggle')).toContainText('1 removed')
+      continuous = false
+      interimResults = false
+      lang = ''
+      maxAlternatives = 1
+      processLocally = false
+      onend: (() => void) | null = null
+      onerror: ((event: SpeechRecognitionErrorEvent) => void) | null = null
+      onresult: ((event: SpeechRecognitionEvent) => void) | null = null
+      private startCount = 0
 
-  await page.getByTestId('narrated-trace-removed-toggle').click()
-  await page.getByTestId('narrated-trace-row-restore').click()
+      abort() {
+        this.onend?.()
+      }
+
+      start() {
+        this.startCount += 1
+        this.dispatchEvent(new Event('speechstart'))
+        if (this.startCount > 1) {
+          setTimeout(() => {
+            const result = {
+              0: { confidence: 1, transcript: 'Now I am showing the chart controls' },
+              isFinal: false,
+              length: 1
+            } as SpeechRecognitionResult
+            this.onresult?.({
+              resultIndex: 0,
+              results: { 0: result, length: 1 }
+            } as SpeechRecognitionEvent)
+          }, 100)
+          setTimeout(() => {
+            const result = {
+              0: { confidence: 1, transcript: 'Now I am showing the chart controls' },
+              isFinal: true,
+              length: 1
+            } as SpeechRecognitionResult
+            this.onresult?.({
+              resultIndex: 0,
+              results: { 0: result, length: 1 }
+            } as SpeechRecognitionEvent)
+          }, 700)
+          return
+        }
+        setTimeout(() => {
+          const result = {
+            0: { confidence: 1, transcript: 'The selected card feels crowded' },
+            isFinal: true,
+            length: 1
+          } as SpeechRecognitionResult
+          this.onresult?.({
+            resultIndex: 0,
+            results: { 0: result, length: 1 }
+          } as SpeechRecognitionEvent)
+        }, 250)
+        setTimeout(() => this.onend?.(), 300)
+      }
+
+      stop() {
+        setTimeout(() => this.onend?.(), 0)
+      }
+    }
+
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: FakeSpeechRecognition
+    })
+  })
+  await page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const { OPENPENCIL_WORKSPACE_DOCUMENT_NAME, stampOpenPencilWorkspaceIdentity } =
+      await import('/src/app/workspace-document/identity.ts')
+    stampOpenPencilWorkspaceIdentity(store.graph, {
+      documentId: 'document-trace-mic-test',
+      documentName: OPENPENCIL_WORKSPACE_DOCUMENT_NAME,
+      roomId: 'workspace-room-trace-mic-test',
+      schemaVersion: 1,
+      workspaceId: 'workspace-trace-mic-test'
+    })
+  })
+
+  await page.getByTestId('left-panel-trace-tab').click()
+  await page.getByTestId('narrated-trace-mic-toggle').click()
+  const consent = page.getByTestId('narrated-trace-mic-consent')
+  await expect(consent).toContainText('may process speech over the network')
+  await page.waitForTimeout(300)
+  await expect(consent).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('narrated-trace-mic-toggle')).toHaveAccessibleName(
+    'Start Trace microphone'
+  )
+
+  await page.getByTestId('narrated-trace-mic-toggle').click()
+  await expect(consent).toContainText('may process speech over the network')
+  await page.getByTestId('narrated-trace-mic-consent-start').click()
+
+  const micToggle = page.getByTestId('narrated-trace-mic-toggle')
+  await expect(micToggle).toHaveAccessibleName('Stop microphone')
+  await expect(micToggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('narrated-trace-row-transcript')).toContainText(
+    'The selected card feels crowded'
+  )
+  await expect(page.getByTestId('narrated-trace-mic-listening')).toBeVisible()
+
+  await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    store.setTool(store.state.activeTool === 'RECTANGLE' ? 'ELLIPSE' : 'RECTANGLE')
+  })
+
+  await expect(page.getByTestId('narrated-trace-row-transcript')).toHaveCount(2)
   await expect(
-    page.getByTestId('narrated-trace-row-transcript').getByLabel('Edit transcript segment')
-  ).toHaveValue('Move the patient card down 24 pixels')
+    page
+      .getByTestId('narrated-trace-row-transcript')
+      .filter({ hasText: 'Now I am showing the chart controls' })
+  ).toHaveCount(1)
+  await expect(micToggle).toHaveAccessibleName('Stop microphone')
+  await expect(micToggle).toHaveAttribute('aria-pressed', 'true')
+  await page.waitForTimeout(1200)
 
-  await expect(page.getByTestId('narrated-trace-preview-toggle')).toHaveCount(0)
-  await expect(page.getByTestId('narrated-trace-context-preview')).toHaveCount(0)
-  await expect(
-    page.getByTestId('narrated-trace-timeline').getByLabel('Edit transcript segment')
-  ).toHaveValue('Move the patient card down 24 pixels')
-  await expect(page.getByTestId('narrated-trace-timeline')).toContainText(
-    'Keep the alignment with the chart.'
-  )
-  await expect(page.getByTestId('narrated-trace-copy-context')).toBeEnabled()
+  const queryProof = await page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const { narratedTraceScopeForStore } = await import('/src/app/narrated-trace/scope.ts')
+    const { queryNarratedTraceHistory } = await import('/src/app/narrated-trace/query.ts')
+    const result = await queryNarratedTraceHistory({
+      latestSpokenTurn: true,
+      scope: narratedTraceScopeForStore(store)
+    })
+    return {
+      eventKinds: result.matches.flatMap((match) => match.events.map((event) => event.kind)),
+      reason: result.reason,
+      sourceSpokenTurn: result.sourceSpokenTurn,
+      status: result.status
+    }
+  })
 
-  await page.getByTestId('narrated-trace-history-toggle').click()
-  await expect(page.getByTestId('narrated-trace-history')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-header')).toContainText('History')
-  await expect(page.getByTestId('narrated-trace-header')).not.toContainText('1 trace')
-  await expect(page.getByTestId('narrated-trace-review-state')).not.toBeVisible()
-  await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveAttribute(
-    'aria-label',
-    'Back to trace'
-  )
-  await expect(page.getByTestId('narrated-trace-history-record')).toHaveCount(1)
-  await expect(page.getByTestId('narrated-trace-history-record').first()).toHaveCSS(
-    'margin-top',
-    '8px'
-  )
-  await expect(page.getByLabel('Rename narrated session')).toHaveValue('Patient card placement')
-  await expect(
-    page.getByTestId('narrated-trace-history-meta').getByLabel('3 moments')
-  ).toContainText('3')
-
-  const savedTrace = page.getByTestId('narrated-trace-history-record')
-  await savedTrace.hover()
-  await savedTrace.getByRole('button', { name: 'Delete session' }).click()
-  await page.mouse.move(600, 600)
-  await expect(savedTrace.getByText('Delete?')).toBeVisible()
-  await expect(savedTrace.getByTestId('narrated-trace-history-delete-confirm')).toBeVisible()
-  await savedTrace.getByTestId('narrated-trace-history-delete-cancel').click()
-  await expect(savedTrace).toHaveCount(1)
-  await savedTrace.hover()
-  await page.getByTestId('narrated-trace-history-resume').click()
-  await expect(page.getByTestId('narrated-trace-header')).toContainText('Listening')
-  await expect(page.getByTestId('narrated-trace-title')).toHaveValue('Patient card placement')
-  await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveAttribute(
-    'aria-label',
-    'Open trace history'
+  expect(queryProof).toMatchObject({
+    eventKinds: expect.arrayContaining(['tool']),
+    sourceSpokenTurn: {
+      text: 'Now I am showing the chart controls'
+    },
+    status: 'matched'
+  })
+  await expect(page.getByTestId('narrated-trace-retrieval-result')).toHaveAttribute(
+    'data-status',
+    'matched'
   )
 
-  await page.getByTestId('narrated-trace-history-toggle').click()
-  await expect(page.getByTestId('narrated-trace-history')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-history-record')).toHaveCount(1)
-  await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveAttribute(
-    'aria-label',
-    'Back to trace'
+  await page.evaluate(async () => {
+    const { narratedTraceMicTurns, pruneNarratedTraceMicTurns } =
+      await import('/src/app/narrated-trace/index.ts')
+    const latest = narratedTraceMicTurns.value.at(-1)
+    if (!latest) throw new Error('Expected a latest spoken Trace turn')
+    narratedTraceMicTurns.value = narratedTraceMicTurns.value.map((turn) =>
+      turn.id === latest.id ? { ...turn, expiresAtEpochMs: Date.now() - 1 } : turn
+    )
+    pruneNarratedTraceMicTurns(Date.now())
+  })
+  await expect(page.getByTestId('narrated-trace-row-transcript')).toHaveCount(1)
+  await expect(page.getByTestId('narrated-trace-retrieval-result')).toHaveCount(0)
+
+  const remainingStatus = await page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const { narratedTraceScopeForStore } = await import('/src/app/narrated-trace/scope.ts')
+    const { queryNarratedTraceHistory } = await import('/src/app/narrated-trace/query.ts')
+    const result = await queryNarratedTraceHistory({
+      latestSpokenTurn: true,
+      scope: narratedTraceScopeForStore(store)
+    })
+    return result.status
+  })
+  await expect(page.getByTestId('narrated-trace-retrieval-result')).toHaveAttribute(
+    'data-status',
+    remainingStatus
   )
-  await page.getByTestId('narrated-trace-history-toggle').click()
-  await expect(page.getByTestId('narrated-trace-timeline')).toBeVisible()
-  await page.getByTestId('narrated-trace-new-session').click()
-  await expect(page.getByTestId('narrated-trace-panel-stop')).toBeVisible()
+
+  await micToggle.click()
+  await expect(micToggle).toHaveAccessibleName('Start Trace microphone')
+  await expect(micToggle).toHaveAttribute('aria-pressed', 'false')
+  await page.getByTestId('narrated-trace-mic-clear').click()
+  await expect(page.getByTestId('narrated-trace-row-transcript')).toHaveCount(0)
+  await expect(page.getByTestId('narrated-trace-retrieval-result')).toHaveCount(0)
   expect(pageErrors).toEqual([])
 })

@@ -176,19 +176,19 @@ describe('formatConnectionError', () => {
     installCommand: 'npm i -g @agentclientprotocol/claude-agent-acp'
   } as const
 
-  test('ECONNREFUSED maps to MCP not running', () => {
-    const msg = formatConnectionError(new Error('connect ECONNREFUSED 127.0.0.1:7600'))
-    expect(msg).toBe('MCP server is not running. Make sure the editor is open.')
+  test('ECONNREFUSED maps to an ACP connection error', () => {
+    const msg = formatConnectionError(new Error('connect ECONNREFUSED'))
+    expect(msg).toBe('The selected ACP agent could not connect. Check its local CLI setup.')
   })
 
-  test('fetch failed maps to MCP not running', () => {
+  test('fetch failed maps to an ACP connection error', () => {
     const msg = formatConnectionError(new Error('fetch failed'))
-    expect(msg).toBe('MCP server is not running. Make sure the editor is open.')
+    expect(msg).toBe('The selected ACP agent could not connect. Check its local CLI setup.')
   })
 
   test('timeout maps to timeout message', () => {
     const msg = formatConnectionError(new Error('Request timeout after 30s'))
-    expect(msg).toBe('MCP server did not respond in time.')
+    expect(msg).toBe('The selected ACP agent did not respond in time.')
   })
 
   test('ENOENT maps to install instructions', () => {

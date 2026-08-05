@@ -1,0 +1,28 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 0,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 1,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [],
+  "gate_passed": true,
+  "observations": [
+    {
+      "discrepancies": [],
+      "event_count": 17,
+      "result_status": "recorded",
+      "run_id": "parallel-088c-linked-recovery-1",
+      "state": "recorded"
+    }
+  ],
+  "results_total": 1,
+  "roster_id": "51fbdf5f3af335f2ce3e41413bd763d14b0bc0fb21d017f530a48ba3b7e66a9d",
+  "scheduled_total": 1,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 1
+}

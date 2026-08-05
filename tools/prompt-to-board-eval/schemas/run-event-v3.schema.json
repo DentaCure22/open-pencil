@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openpencil.dev/schemas/prompt-to-board-eval-event-v3.json",
+  "title": "Prompt-to-Board evaluation event v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "sequence",
+    "observed_at_ms",
+    "observed_monotonic_ms",
+    "recorder_id",
+    "precision_ms",
+    "source",
+    "kind",
+    "data"
+  ],
+  "properties": {
+    "schema_version": { "const": "prompt-to-board-eval-event/v3" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "observed_at_ms": { "type": "integer", "minimum": 0 },
+    "observed_monotonic_ms": { "type": "number", "minimum": 0 },
+    "recorder_id": { "type": "string", "minLength": 1 },
+    "precision_ms": { "type": "number", "minimum": 0 },
+    "source": {
+      "enum": ["browser", "codex", "openpencil", "orchestrator", "reviewer"]
+    },
+    "kind": {
+      "enum": [
+        "agent_message_completed",
+        "board_context_completed",
+        "codex_event_unmapped",
+        "codex_raw_stream_closed",
+        "codex_thread_started",
+        "codex_turn_completed",
+        "codex_turn_started",
+        "command_completed",
+        "command_started",
+        "durability_confirmed",
+        "final_response_released",
+        "openpencil_result",
+        "pixel_witness_captured",
+        "process_spawned",
+        "prompt_written",
+        "recovery_probe_completed",
+        "render_acknowledged",
+        "run_dispatched",
+        "run_error",
+        "run_pending_proof",
+        "semantic_review_completed",
+        "visual_review_completed"
+      ]
+    },
+    "data": { "type": "object" }
+  }
+}

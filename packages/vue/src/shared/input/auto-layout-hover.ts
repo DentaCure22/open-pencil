@@ -4,6 +4,7 @@ import {
   AUTO_LAYOUT_HOVER_TICK_HIT_TOLERANCE
 } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
+import { readContentSource } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 type AutoLayoutHover = NonNullable<Editor['state']['autoLayoutHover']>
@@ -15,6 +16,19 @@ function visibleLayoutChildren(node: SceneNode, editor: Editor) {
       (child): child is SceneNode =>
         !!child && child.visible && child.layoutPositioning !== 'ABSOLUTE'
     )
+}
+
+function isWithinMarkdownDocument(node: SceneNode, editor: Editor): boolean {
+  const visited = new Set<string>()
+  let current: SceneNode | null = node
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    if (readContentSource(current)?.format === 'markdown') return true
+    current = current.parentId ? (editor.graph.getNode(current.parentId) ?? null) : null
+  }
+
+  return false
 }
 
 function isNear(value: number, target: number, tolerance = AUTO_LAYOUT_HOVER_TICK_HIT_TOLERANCE) {
@@ -143,6 +157,7 @@ export function resolveAutoLayoutHover(
   const nodeId = [...editor.state.selectedIds][0]
   const node = editor.graph.getNode(nodeId)
   if (!node || (node.layoutMode !== 'HORIZONTAL' && node.layoutMode !== 'VERTICAL')) return null
+  if (isWithinMarkdownDocument(node, editor)) return null
 
   const abs = editor.graph.getAbsolutePosition(node.id)
   const localX = cx - abs.x

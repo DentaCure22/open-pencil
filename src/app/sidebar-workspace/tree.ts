@@ -1,7 +1,6 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { defaultBoardIcon, isBoardIconKey, type BoardIconKey } from '@/app/sidebar-workspace/icons'
-import { workspaceBasePageIdForPage } from '@/app/workspace-ui/projection'
 
 export const SIDEBAR_WORKSPACE_PLUGIN_ID = 'openpencil-sidebar-workspace'
 export const SIDEBAR_WORKSPACE_SCHEMA_VERSION = 1 as const
@@ -9,7 +8,7 @@ export const SIDEBAR_WORKSPACE_SCHEMA_VERSION = 1 as const
 const SIDEBAR_WORKSPACE_KEY = 'tree-v1'
 const DEFAULT_BOARD_LABEL = 'Main board'
 const SMYLR_PLUGIN_ID = 'smylr-production'
-const SMYLR_PROJECT_ID = 'sidebar-project:smylr'
+export const SMYLR_PROJECT_ID = 'sidebar-project:smylr'
 const SMYLR_PROJECT_NAME = 'Smylr'
 
 export type SidebarPageId = string
@@ -233,10 +232,7 @@ function reconcileSidebarWorkspace(
   stored: SidebarWorkspace | null
 ): SidebarWorkspace {
   const scenePages = graph.getPages()
-  const authoredScenePages = scenePages.filter((page) => {
-    const basePageId = workspaceBasePageIdForPage(page)
-    return !basePageId || basePageId === page.id
-  })
+  const authoredScenePages = scenePages
   const scenePageIds = new Set(authoredScenePages.map((page) => page.id))
   const derivedLogicalPageIds = new Set(
     scenePages
@@ -323,6 +319,21 @@ function reconcileSidebarWorkspace(
     })
   }
 
+  const occupiedPageIds = new Set(boards.map((board) => board.parentPageId))
+  const orphanedGeneratedPages = new Map(
+    pages.flatMap((page) => {
+      if (!page.id.startsWith('sidebar-page:') || occupiedPageIds.has(page.id)) return []
+      const scenePageId = page.id.slice('sidebar-page:'.length)
+      return scenePageIds.has(scenePageId) ? [] : [[page.id, page] as const]
+    })
+  )
+  pages = pages
+    .filter((page) => !orphanedGeneratedPages.has(page.id))
+    .map((page) => {
+      const orphanedParent = page.parentId ? orphanedGeneratedPages.get(page.parentId) : undefined
+      return orphanedParent ? { ...page, parentId: orphanedParent.parentId } : page
+    })
+
   const boardsWithIcons = boards.map((board) => {
     if (board.icon) return board
     const scenePageName = graph.getNode(board.pageId)?.name ?? ''
@@ -351,6 +362,22 @@ export function resolveSidebarWorkspace(graph: SceneGraph): SidebarWorkspaceReso
     changed: !stored || serializedWorkspace(stored) !== serializedWorkspace(workspace),
     workspace
   }
+}
+
+export function hasMoreOrganizedSidebarHierarchy(
+  candidate: SidebarWorkspace,
+  current: SidebarWorkspace
+): boolean {
+  const candidateBoardIds = new Set(candidate.boards.map((board) => board.pageId))
+  if (
+    candidateBoardIds.size !== current.boards.length ||
+    current.boards.some((board) => !candidateBoardIds.has(board.pageId))
+  ) {
+    return false
+  }
+  const nestedProjectCount = (workspace: SidebarWorkspace) =>
+    workspace.pages.filter((page) => page.parentId !== null).length
+  return nestedProjectCount(candidate) > nestedProjectCount(current)
 }
 
 export function sidebarWorkspacePluginData(

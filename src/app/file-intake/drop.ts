@@ -19,8 +19,8 @@ function announceFallback(count: number) {
   if (count === 0) return
   toast.warning(
     count === 1
-      ? 'Preview unavailable. The original file was preserved as a downloadable source.'
-      : `${count} files have no board preview. Their original bytes were preserved for download.`
+      ? 'Preview unavailable. The original file was preserved as an attached file.'
+      : `${count} attached files have no board preview. Their original bytes were preserved for download.`
   )
 }
 

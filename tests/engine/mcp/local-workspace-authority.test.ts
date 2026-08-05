@@ -1,0 +1,714 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+import {
+  LocalWorkspaceAuthorityStore,
+  LocalWorkspaceAuthorityStoreError
+} from '#mcp/local-workspace-authority/store'
+import { startServer } from '#mcp/server'
+
+const roots: string[] = []
+
+async function createStore() {
+  const root = await mkdtemp(path.join(tmpdir(), 'openpencil-local-authority-'))
+  roots.push(root)
+  return {
+    root,
+    store: new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+  }
+}
+
+async function expectOneCompetingCommit(
+  firstStore: LocalWorkspaceAuthorityStore,
+  secondStore: LocalWorkspaceAuthorityStore,
+  expectedContentHash: string
+) {
+  const results = await Promise.allSettled([
+    firstStore.commit({
+      document: { value: 'first-change' },
+      expectedContentHash,
+      expectedRevision: 1,
+      requestId: 'commit-first',
+      workspaceId: 'workspace-canonical'
+    }),
+    secondStore.commit({
+      document: { value: 'second-change' },
+      expectedContentHash,
+      expectedRevision: 1,
+      requestId: 'commit-second',
+      workspaceId: 'workspace-canonical'
+    })
+  ])
+  const winner = results.find((result) => result.status === 'fulfilled')
+  const loser = results.find((result) => result.status === 'rejected')
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+  expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+  if (!winner) throw new Error('Expected one winning commit')
+  if (!loser) throw new Error('Expected one stale commit')
+  expect(winner.value).toMatchObject({
+    appliedRevision: 2,
+    baseRevision: 1,
+    status: 'committed'
+  })
+  expect(loser.reason).toMatchObject({
+    code: 'stale_revision',
+    currentRevision: 2
+  })
+
+  const expectedValue = winner.value.requestId === 'commit-first' ? 'first-change' : 'second-change'
+  expect(await secondStore.head()).toMatchObject({
+    document: { value: expectedValue },
+    revision: 2
+  })
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })))
+})
+
+describe('local workspace authority', () => {
+  test('creates one cold-start authority identity across many store instances', async () => {
+    const container = await mkdtemp(path.join(tmpdir(), 'openpencil-local-authority-parent-'))
+    roots.push(container)
+    const root = path.join(container, 'nested', 'authority')
+    const stores = Array.from(
+      { length: 24 },
+      () =>
+        new LocalWorkspaceAuthorityStore({
+          preferredWorkspaceId: 'workspace-canonical',
+          root
+        })
+    )
+
+    const statuses = await Promise.all(
+      stores.map(async (store, index) => {
+        if (index % 2 === 1) expect(await store.head()).toBeNull()
+        return store.status()
+      })
+    )
+    expect(new Set(statuses.map((status) => status.authorityId)).size).toBe(1)
+    expect(new Set(statuses.map((status) => status.identity.documentId)).size).toBe(1)
+  })
+
+  test('keeps one stable configured identity across server restarts', async () => {
+    const { root, store } = await createStore()
+    const first = await store.status()
+    const restarted = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+    const second = await restarted.status()
+
+    expect(first).toEqual(second)
+    expect(first).toMatchObject({
+      revision: 0,
+      seedWorkspaceId: 'workspace-canonical',
+      state: 'configured'
+    })
+    expect(first.identity.workspaceId).toBe('workspace-canonical')
+  })
+
+  test('persists one latest-wins navigation intent and consumes it once', async () => {
+    const { root, store } = await createStore()
+    await store.initialize({
+      document: { nodes: ['canonical-copy'] },
+      requestId: 'seed-navigation',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const status = await store.status()
+    const first = await store.queueNavigationIntent({
+      contentDocumentId: status.identity.documentId,
+      pageId: 'page:first',
+      workspaceId: status.identity.workspaceId
+    })
+    const second = await store.queueNavigationIntent({
+      contentDocumentId: status.identity.documentId,
+      pageId: 'page:second',
+      runtimeInstanceId: 'runtime:chosen',
+      workspaceId: status.identity.workspaceId
+    })
+    const restarted = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+
+    expect(first.sequence).toBe(1)
+    expect(second.sequence).toBe(2)
+    expect(await restarted.consumeNavigationIntent(first.intentId)).toBe(false)
+    expect(await restarted.pendingNavigationIntent()).toMatchObject({
+      intentId: second.intentId,
+      pageId: 'page:second',
+      runtimeInstanceId: 'runtime:chosen',
+      sequence: 2
+    })
+    expect(await restarted.consumeNavigationIntent(second.intentId)).toBe(true)
+    expect(await restarted.consumeNavigationIntent(second.intentId)).toBe(false)
+    expect(await restarted.pendingNavigationIntent()).toBeNull()
+
+    const third = await restarted.queueNavigationIntent({
+      contentDocumentId: status.identity.documentId,
+      pageId: 'page:third',
+      workspaceId: status.identity.workspaceId
+    })
+    expect(third.sequence).toBe(3)
+  })
+
+  test('persists compact Trace targets without changing the Board revision', async () => {
+    const { root, store } = await createStore()
+    await store.initialize({
+      document: { nodes: ['canonical-copy'] },
+      requestId: 'seed-trace',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const status = await store.status()
+    const gesture = {
+      boardOrigin: {
+        contentDocumentId: status.identity.documentId,
+        documentId: 'runtime-tab-that-may-restart',
+        pageId: 'page:dental',
+        runtimeInstanceId: 'runtime:browser-that-may-restart',
+        workspaceId: status.identity.workspaceId
+      },
+      candidates: {
+        count: 2,
+        items: [{ stableId: 'card:first' }, { stableId: 'card:second' }],
+        primaryTargetId: 'card:first',
+        truncated: false
+      },
+      capturedAt: '2026-08-01T12:00:00.000Z',
+      contract: 'trace-gesture-agent/v1',
+      geometry: {
+        kind: 'focus',
+        pageRegion: { height: 80, width: 220, x: 100, y: 200 }
+      },
+      gestureId: 'gesture:persisted',
+      sessionId: 'session:persisted'
+    }
+    await store.recordTraceSession({
+      gestures: [gesture],
+      session: {
+        contextDraft: [],
+        durationMs: 0,
+        events: [
+          {
+            evidence: {
+              evidenceId: 'evidence:persisted',
+              image: { base64: 'must-not-be-persisted', mimeType: 'image/png' },
+              mimeType: 'image/png'
+            },
+            id: gesture.gestureId
+          }
+        ],
+        id: gesture.sessionId,
+        startedAt: gesture.capturedAt
+      },
+      summary: {
+        id: gesture.sessionId,
+        startedAt: gesture.capturedAt,
+        title: 'Persisted Trace',
+        updatedAt: gesture.capturedAt
+      }
+    })
+    expect(await store.traceGesture({ includeImage: true, latest: true })).toMatchObject({
+      gesture: {
+        evidence: { evidenceId: 'evidence:persisted', mimeType: 'image/png' },
+        imageStatus: 'missing'
+      },
+      status: 'matched'
+    })
+    await store.recordTraceEvidence({
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      evidenceId: 'evidence:persisted',
+      mimeType: 'image/png',
+      sessionId: gesture.sessionId
+    })
+
+    const restarted = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+    const compact = await restarted.traceGesture({ latest: true })
+    expect(compact).toMatchObject({
+      gesture: {
+        boardOrigin: {
+          contentDocumentId: status.identity.documentId,
+          documentId: status.identity.documentId,
+          pageId: 'page:dental',
+          runtimeInstanceId: `local-authority:${status.authorityId}`,
+          workspaceId: status.identity.workspaceId
+        },
+        candidates: {
+          items: [{ stableId: 'card:first' }, { stableId: 'card:second' }],
+          primaryTargetId: 'card:first'
+        },
+        evidence: { evidenceId: 'evidence:persisted', mimeType: 'image/png' },
+        gestureId: 'gesture:persisted',
+        imageStatus: 'not_requested'
+      },
+      scanned: { sessions: 1 },
+      status: 'matched'
+    })
+    expect(JSON.stringify(compact)).not.toContain('must-not-be-persisted')
+    expect(await restarted.traceGesture({ includeImage: true, latest: true })).toMatchObject({
+      gesture: {
+        evidence: {
+          evidenceId: 'evidence:persisted',
+          image: { base64: 'iVBORw==', mimeType: 'image/png' },
+          mimeType: 'image/png'
+        },
+        imageStatus: 'included'
+      },
+      status: 'matched'
+    })
+    expect((await restarted.head())?.revision).toBe(1)
+    expect(await restarted.traceSession('session:persisted')).toMatchObject({
+      id: 'session:persisted',
+      startedAt: gesture.capturedAt
+    })
+    expect(await restarted.traceSessionSummaries()).toEqual([
+      {
+        id: 'session:persisted',
+        startedAt: gesture.capturedAt,
+        title: 'Persisted Trace',
+        updatedAt: gesture.capturedAt
+      }
+    ])
+    expect(await restarted.traceEvidence('evidence:persisted')).toEqual({
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      mimeType: 'image/png'
+    })
+  })
+
+  test('imports the former gesture sidecar once into canonical Trace storage', async () => {
+    const { root, store } = await createStore()
+    await store.initialize({
+      document: { nodes: ['canonical-copy'] },
+      requestId: 'seed-legacy-trace',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const status = await store.status()
+    const gesture = {
+      boardOrigin: {
+        contentDocumentId: status.identity.documentId,
+        documentId: status.identity.documentId,
+        pageId: 'page:legacy',
+        runtimeInstanceId: `local-authority:${status.authorityId}`,
+        workspaceId: status.identity.workspaceId
+      },
+      candidates: {
+        count: 1,
+        items: [{ stableId: 'card:legacy' }],
+        truncated: false
+      },
+      capturedAt: '2026-08-01T12:00:00.000Z',
+      contract: 'trace-gesture-agent/v1',
+      geometry: {
+        kind: 'focus',
+        pageRegion: { height: 80, width: 220, x: 100, y: 200 }
+      },
+      gestureId: 'gesture:legacy',
+      sessionId: 'session:legacy'
+    }
+    await writeFile(
+      path.join(root, 'trace-gestures.json'),
+      JSON.stringify({ gestures: [gesture], version: 1 })
+    )
+
+    expect(await store.traceGesture({ latest: true })).toMatchObject({
+      gesture: { gestureId: gesture.gestureId, sessionId: gesture.sessionId },
+      scanned: { sessions: 1 },
+      status: 'matched'
+    })
+    expect(await store.traceSession(gesture.sessionId)).toMatchObject({
+      id: gesture.sessionId,
+      title: 'Imported Trace target'
+    })
+  })
+
+  test('accepts only the selected legacy workspace as the initial seed', async () => {
+    const { store } = await createStore()
+
+    await expect(
+      store.initialize({
+        document: { nodes: ['stale-copy'] },
+        requestId: 'seed-stale',
+        sourceWorkspaceId: 'workspace-other'
+      })
+    ).rejects.toMatchObject({
+      code: 'seed_workspace_mismatch'
+    })
+
+    const receipt = await store.initialize({
+      document: { nodes: ['canonical-copy'] },
+      requestId: 'seed-canonical',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+
+    expect(receipt).toMatchObject({
+      appliedRevision: 1,
+      baseRevision: 0,
+      status: 'initialized',
+      workspaceId: 'workspace-canonical'
+    })
+    expect(await store.head()).toMatchObject({
+      document: { nodes: ['canonical-copy'] },
+      revision: 1
+    })
+  })
+
+  test('serializes commits, rejects stale writes, and replays request IDs once', async () => {
+    const { root, store } = await createStore()
+    const initialized = await store.initialize({
+      document: { value: 'initial' },
+      requestId: 'seed',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const request = {
+      document: { value: 'chrome-change' },
+      expectedContentHash: initialized.contentHash,
+      expectedRevision: 1,
+      requestId: 'commit-chrome',
+      workspaceId: 'workspace-canonical'
+    }
+
+    const committed = await store.commit(request)
+    const replayed = await store.commit(request)
+    expect(committed).toEqual(replayed)
+    expect(committed).toMatchObject({
+      appliedRevision: 2,
+      baseRevision: 1,
+      status: 'committed'
+    })
+
+    await expect(
+      store.commit({
+        document: { value: 'stale-browser-copy' },
+        expectedContentHash: initialized.contentHash,
+        expectedRevision: 2,
+        requestId: 'commit-stale-browser-base',
+        workspaceId: 'workspace-canonical'
+      })
+    ).rejects.toMatchObject({
+      code: 'stale_content_hash',
+      currentRevision: 2
+    })
+    await expect(
+      store.commit({
+        document: { value: 'chrome-change' },
+        expectedContentHash: initialized.contentHash,
+        expectedRevision: 2,
+        requestId: 'commit-stale-unchanged-base',
+        workspaceId: 'workspace-canonical'
+      })
+    ).rejects.toMatchObject({
+      code: 'stale_content_hash',
+      currentRevision: 2
+    })
+    expect(await store.head()).toMatchObject({
+      contentHash: committed.contentHash,
+      document: { value: 'chrome-change' },
+      revision: 2
+    })
+
+    try {
+      await store.commit({
+        document: { value: 'stale-codex-change' },
+        expectedContentHash: initialized.contentHash,
+        expectedRevision: 1,
+        requestId: 'commit-codex-stale',
+        workspaceId: 'workspace-canonical'
+      })
+      throw new Error('Expected the stale commit to be rejected')
+    } catch (error) {
+      expect(
+        error instanceof LocalWorkspaceAuthorityStoreError &&
+          error.code === 'stale_revision' &&
+          error.currentRevision === 2
+      ).toBe(true)
+    }
+
+    const restarted = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+    expect(await restarted.head()).toMatchObject({
+      document: { value: 'chrome-change' },
+      revision: 2
+    })
+  })
+
+  test('notifies subscribers only when a new authority head commits', async () => {
+    const { store } = await createStore()
+    const changes: number[] = []
+    const unsubscribe = store.subscribeHeadCommitted((receipt) => {
+      changes.push(receipt.appliedRevision)
+    })
+    const initialized = await store.initialize({
+      document: { value: 'initial' },
+      requestId: 'seed-notification',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    await store.initialize({
+      document: { value: 'initial' },
+      requestId: 'seed-notification',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const committed = await store.commit({
+      document: { value: 'changed' },
+      expectedContentHash: initialized.contentHash,
+      expectedRevision: initialized.appliedRevision,
+      requestId: 'commit-notification',
+      workspaceId: 'workspace-canonical'
+    })
+    await store.commit({
+      document: { value: 'changed' },
+      expectedContentHash: initialized.contentHash,
+      expectedRevision: initialized.appliedRevision,
+      requestId: 'commit-notification',
+      workspaceId: 'workspace-canonical'
+    })
+    unsubscribe()
+
+    expect(changes).toEqual([initialized.appliedRevision, committed.appliedRevision])
+  })
+
+  test('serializes competing store instances that share one authority root', async () => {
+    const { root, store: firstStore } = await createStore()
+    const initialized = await firstStore.initialize({
+      document: { value: 'initial' },
+      requestId: 'seed',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const secondStore = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root
+    })
+
+    await expectOneCompetingCommit(firstStore, secondStore, initialized.contentHash)
+  })
+
+  test('retains only the latest 64 full workspace snapshots', async () => {
+    const { store } = await createStore()
+    let receipt = await store.initialize({
+      document: { value: 0 },
+      requestId: 'seed-history',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+
+    for (let value = 1; value <= 70; value += 1) {
+      receipt = await store.commit({
+        document: { value },
+        expectedContentHash: receipt.contentHash,
+        expectedRevision: receipt.appliedRevision,
+        requestId: `commit-history-${value}`,
+        workspaceId: 'workspace-canonical'
+      })
+    }
+
+    expect(await store.headAtRevision(6)).toBeNull()
+    expect(await store.headAtRevision(7)).toBeNull()
+    expect(await store.headAtRevision(8)).toMatchObject({ document: { value: 7 }, revision: 8 })
+    expect(await store.headAtRevision(70)).toMatchObject({ document: { value: 69 }, revision: 70 })
+    expect(await store.head()).toMatchObject({ document: { value: 70 }, revision: 71 })
+  })
+
+  test('serializes competing commits through real and symlinked root aliases', async () => {
+    const { root, store: realStore } = await createStore()
+    const initialized = await realStore.initialize({
+      document: { value: 'initial' },
+      requestId: 'seed',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const aliasContainer = await mkdtemp(path.join(tmpdir(), 'openpencil-local-authority-alias-'))
+    roots.push(aliasContainer)
+    const rootAlias = path.join(aliasContainer, 'authority')
+    await symlink(root, rootAlias, 'dir')
+    const aliasStore = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-canonical',
+      root: rootAlias
+    })
+
+    await expectOneCompetingCommit(realStore, aliasStore, initialized.contentHash)
+  })
+
+  test('protects the HTTP authority and exposes the configured canonical workspace', async () => {
+    const { root } = await createStore()
+    const server = startServer({
+      authToken: 'authority-test-token',
+      httpPort: 0,
+      localWorkspaceId: 'workspace-canonical',
+      localWorkspaceRoot: root,
+      wsPort: 0
+    })
+    try {
+      const unauthorized = await server.app.request('/local-workspace/v1/status')
+      expect(unauthorized.status).toBe(401)
+
+      const authorized = await server.app.request('/local-workspace/v1/status', {
+        headers: { Authorization: 'Bearer authority-test-token' }
+      })
+      expect(authorized.status).toBe(200)
+      expect(await authorized.json()).toMatchObject({
+        revision: 0,
+        seedWorkspaceId: 'workspace-canonical',
+        state: 'configured'
+      })
+    } finally {
+      server.close()
+    }
+  })
+
+  test('persists the canonical Trace session over HTTP without a browser', async () => {
+    const { root } = await createStore()
+    const server = startServer({
+      authToken: 'authority-trace-token',
+      httpPort: 0,
+      localWorkspaceId: 'workspace-canonical',
+      localWorkspaceRoot: root,
+      wsPort: 0
+    })
+    const headers = {
+      Authorization: 'Bearer authority-trace-token',
+      'Content-Type': 'application/json'
+    }
+    try {
+      await server.app.request('/local-workspace/v1/initialize', {
+        body: JSON.stringify({
+          document: { value: 'initial' },
+          requestId: 'seed-trace-route',
+          sourceWorkspaceId: 'workspace-canonical'
+        }),
+        headers,
+        method: 'POST'
+      })
+      const status = (await (
+        await server.app.request('/local-workspace/v1/status', { headers })
+      ).json()) as { identity: { documentId: string; workspaceId: string } }
+      const gesture = {
+        boardOrigin: {
+          contentDocumentId: status.identity.documentId,
+          pageId: 'page:dental',
+          workspaceId: status.identity.workspaceId
+        },
+        candidates: {
+          count: 1,
+          items: [{ stableId: 'card:first' }],
+          truncated: false
+        },
+        capturedAt: '2026-08-01T12:00:00.000Z',
+        contract: 'trace-gesture-agent/v1',
+        geometry: {
+          kind: 'focus',
+          pageRegion: { height: 80, width: 220, x: 100, y: 200 }
+        },
+        gestureId: 'gesture:http',
+        sessionId: 'session:http'
+      }
+      const traceResponse = await server.app.request('/local-workspace/v1/trace/sessions', {
+        body: JSON.stringify({
+          gestures: [gesture],
+          session: {
+            contextDraft: [],
+            durationMs: 0,
+            events: [],
+            id: gesture.sessionId,
+            startedAt: gesture.capturedAt
+          },
+          summary: {
+            id: gesture.sessionId,
+            startedAt: gesture.capturedAt,
+            title: 'HTTP Trace',
+            updatedAt: gesture.capturedAt
+          }
+        }),
+        headers,
+        method: 'POST'
+      })
+      expect(traceResponse.status).toBe(200)
+
+      const readResponse = await server.app.request('/rpc', {
+        body: JSON.stringify({ command: 'trace_get_gesture', args: { latest: true } }),
+        headers,
+        method: 'POST'
+      })
+      expect(await readResponse.json()).toMatchObject({
+        ok: true,
+        result: {
+          gesture: {
+            boardOrigin: { contentDocumentId: status.identity.documentId },
+            gestureId: 'gesture:http'
+          },
+          status: 'matched'
+        }
+      })
+    } finally {
+      server.close()
+    }
+  })
+
+  test('releases a waiting browser as soon as the authority head commits', async () => {
+    const { root } = await createStore()
+    const server = startServer({
+      authToken: 'authority-change-token',
+      httpPort: 0,
+      localWorkspaceId: 'workspace-canonical',
+      localWorkspaceRoot: root,
+      wsPort: 0
+    })
+    const headers = {
+      Authorization: 'Bearer authority-change-token',
+      'Content-Type': 'application/json'
+    }
+    try {
+      const initializedResponse = await server.app.request('/local-workspace/v1/initialize', {
+        body: JSON.stringify({
+          document: { value: 'initial' },
+          requestId: 'seed-change-stream',
+          sourceWorkspaceId: 'workspace-canonical'
+        }),
+        headers,
+        method: 'POST'
+      })
+      const initialized = (await initializedResponse.json()) as {
+        appliedRevision: number
+        contentHash: string
+      }
+      const waiting = server.app.request(
+        `/local-workspace/v1/changes?after_revision=${String(initialized.appliedRevision)}&timeout_ms=1000`,
+        { headers }
+      )
+      const committedResponse = await server.app.request('/local-workspace/v1/commit', {
+        body: JSON.stringify({
+          document: { value: 'changed' },
+          expectedContentHash: initialized.contentHash,
+          expectedRevision: initialized.appliedRevision,
+          requestId: 'commit-change-stream',
+          workspaceId: 'workspace-canonical'
+        }),
+        headers,
+        method: 'POST'
+      })
+      const committed = (await committedResponse.json()) as {
+        appliedRevision: number
+        contentHash: string
+      }
+      const change = await waiting
+
+      expect(change.status).toBe(200)
+      expect(await change.json()).toEqual({
+        authorityId: expect.any(String),
+        changed: true,
+        contentHash: committed.contentHash,
+        revision: committed.appliedRevision,
+        workspaceId: 'workspace-canonical'
+      })
+    } finally {
+      server.close()
+    }
+  })
+})

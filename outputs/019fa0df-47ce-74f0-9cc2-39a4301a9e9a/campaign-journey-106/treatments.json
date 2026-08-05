@@ -1,0 +1,14 @@
+{
+  "deterministic_release": true,
+  "frozen_authority_revision": 810,
+  "natural_prompt_sha256": "3f44a9d44c13607279c2e4aaf09ec45bda607227388ddb2ed20372f9d2dd3a8e",
+  "recipe_schema_sha256": "b80e2eb45ff02961a6a8f6b4a2119ba063b416437eaf550c38148cd1467fbb9a",
+  "treatment": {
+    "config_id": "4f2e0c83aaa6dab2dbdc37e30901146a5a572a55523fcd94945a5c5a50b166d2",
+    "full_prompt_sha256": "2cb45961204dc4781ac6906d44e94b4f9760a0f37e496160f6322735694f7acb",
+    "page_id": "0:3573",
+    "request_id": "ptb-run:9b207289aedc0d5c533654facd64df06",
+    "run_id": "journey-106-process-flow-first-attempt",
+    "treatment": "process_flow_provided_recipe_cold_straight_through"
+  }
+}

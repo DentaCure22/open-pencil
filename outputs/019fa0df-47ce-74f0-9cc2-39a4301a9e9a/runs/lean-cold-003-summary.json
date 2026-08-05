@@ -1,0 +1,51 @@
+{
+  "failures": [],
+  "metadata": {
+    "expected_outcome": "artifact_success",
+    "prompt": "Create one native card on the exact OpenPencil Board using one command only.\n\nRun:\n`/Users/omar/.codex/skills/openpencil/scripts/openpencil-cli.sh board build --fresh-context --auto-place --runtime-instance-id \"local-authority:local-authority-f06b17af-2b12-4b51-8e75-49506e084910\" --workspace-id \"workspace-44c2b737-ada8-4e45-b8d9-1d30aadf4fdc\" --document-id \"document-1b633407-6552-4f35-a64b-7ac3899a306d\" --content-document-id \"document-1b633407-6552-4f35-a64b-7ac3899a306d\" --page-id \"0:338\" --request-id \"eval-lean-cold-003-v1\" --intent \"Show the lean Board-agent contract\" --recipe '{\"kind\":\"native_card\",\"title\":\"LEAN AGENT — FULL REQUEST TO BOARD\",\"body\":\"Exact target in prompt\\nOne guarded CLI command\\nDurable receipt\\nNo repository exploration\"}' --json`\n\nDo not inspect files, skills, docs, or the Board separately. Do not use raw eval or another command. Return the required structured final from the authoritative result. Claim receipt and durability only if reported. Render and pixels are false because this run uses persisted authority without an open editor.\n",
+    "requirements": {
+      "durability": true,
+      "pixel_witness": false,
+      "receipt": true,
+      "recovery": false,
+      "render_acknowledgement": false,
+      "visual_quality": false
+    },
+    "run_id": "lean-cold-003",
+    "scenario_id": "lean-prescribed-card"
+  },
+  "milestones": {
+    "authoritative_result_at_ms": 1785346276365,
+    "durability_confirmed_at_ms": 1785346276365,
+    "final_response_observed_at_ms": 1785346283011,
+    "first_board_tool_started_at_ms": 1785346276016,
+    "first_tool_started_at_ms": 1785346276016,
+    "pixel_witness_at_ms": null,
+    "prompt_dispatched_at_ms": 1785346263931,
+    "render_acknowledged_at_ms": null
+  },
+  "schema_version": "prompt-to-board-eval-summary/v2",
+  "target": {
+    "content_document_id": "document-1b633407-6552-4f35-a64b-7ac3899a306d",
+    "document_id": "document-1b633407-6552-4f35-a64b-7ac3899a306d",
+    "page_id": "0:338",
+    "runtime_instance_id": "local-authority:local-authority-f06b17af-2b12-4b51-8e75-49506e084910",
+    "workspace_id": "workspace-44c2b737-ada8-4e45-b8d9-1d30aadf4fdc"
+  },
+  "timings_ms": {
+    "command_execution_total": 349,
+    "prompt_to_authoritative": 12434,
+    "prompt_to_final": 19080,
+    "prompt_to_first_board_tool": 12085,
+    "prompt_to_first_tool": 12085,
+    "prompt_to_visible": null
+  },
+  "valid": true,
+  "witnesses": {
+    "durability": true,
+    "pixel": false,
+    "receipt": true,
+    "render": false,
+    "visual_quality": false
+  }
+}

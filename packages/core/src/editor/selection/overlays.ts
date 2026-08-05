@@ -6,12 +6,12 @@ import type { EditorContext } from '#core/editor/types'
 export function createSelectionOverlayActions(ctx: EditorContext) {
   function setMarquee(rect: Rect | null) {
     ctx.state.marquee = rect
-    ctx.requestRepaint()
+    ctx.requestOverlayRepaint()
   }
 
   function setSnapGuides(guides: SnapGuide[]) {
     ctx.state.snapGuides = guides
-    ctx.requestRepaint()
+    ctx.requestOverlayRepaint()
   }
 
   function setRotationPreview(preview: { nodeId: string; angle: number } | null) {
@@ -21,8 +21,10 @@ export function createSelectionOverlayActions(ctx: EditorContext) {
 
   function setHoveredNode(id: string | null) {
     if (ctx.state.hoveredNodeId === id) return
+    const previous = ctx.state.hoveredNodeId
     ctx.state.hoveredNodeId = id
-    ctx.requestRepaint()
+    ctx.emitEditorEvent('hover:changed', id, previous)
+    ctx.requestOverlayRepaint()
   }
 
   function setDropTarget(id: string | null) {
@@ -34,7 +36,7 @@ export function createSelectionOverlayActions(ctx: EditorContext) {
   function setLayoutInsertIndicator(indicator: typeof ctx.state.layoutInsertIndicator) {
     if (ctx.state.layoutInsertIndicator === indicator) return
     ctx.state.layoutInsertIndicator = indicator
-    ctx.requestRepaint()
+    ctx.requestOverlayRepaint()
   }
 
   function setAutoLayoutHover(hover: typeof ctx.state.autoLayoutHover) {
@@ -48,7 +50,7 @@ export function createSelectionOverlayActions(ctx: EditorContext) {
       return
     }
     ctx.state.autoLayoutHover = hover
-    ctx.requestRepaint()
+    ctx.requestOverlayRepaint()
   }
 
   return {

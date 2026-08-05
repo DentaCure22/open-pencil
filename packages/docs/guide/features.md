@@ -104,11 +104,11 @@ openpencil analyze clusters design.fig  # Repeated patterns
 openpencil eval design.fig -c "..."     # Figma Plugin API
 ```
 
-When the desktop app is running, omit the file to control the live editor via RPC:
+Use exact-target Board commands for live or persisted automation:
 
 ```sh
-openpencil tree                     # Live document
-openpencil export -f png            # Screenshot canvas
+openpencil board list --json
+openpencil board context --workspace-id <workspace> --page-id <page> --json
 ```
 
 All commands support `--json`. Install: `npm install -g @open-pencil/cli` (or `bun add -g @open-pencil/cli`).

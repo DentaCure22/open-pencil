@@ -95,6 +95,14 @@ export function createEditor(options?: EditorOptions) {
     })
   }
 
+  function requestOverlayRepaint() {
+    state.renderVersion++
+    emitEditorEvent('overlay:requested', {
+      renderVersion: state.renderVersion,
+      sceneVersion: state.sceneVersion
+    })
+  }
+
   function setSelectedIds(ids: Set<string>) {
     const previous = [...state.selectedIds]
     state.selectedIds = ids
@@ -146,6 +154,7 @@ export function createEditor(options?: EditorOptions) {
     getTextEditor: () => _textEditor,
     requestRender,
     requestRepaint,
+    requestOverlayRepaint,
     emitEditorEvent,
     setSelectedIds,
     setActiveTool,
@@ -230,6 +239,7 @@ export function createEditor(options?: EditorOptions) {
     // Lifecycle
     requestRender,
     requestRepaint,
+    requestOverlayRepaint,
     onEditorEvent,
     setCanvasKit,
     removeCanvasRenderer,

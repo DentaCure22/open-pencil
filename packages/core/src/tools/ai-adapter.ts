@@ -58,6 +58,28 @@ export interface AIAdapterOptions {
 }
 
 const STEP_WARNING_THRESHOLD = 5
+const MODEL_TOOL_RESULT_BYTE_LIMIT = 32 * 1024
+const UTF8_ENCODER = new TextEncoder()
+
+function boundedModelToolResult(result: unknown): unknown {
+  const serialized = JSON.stringify(result) ?? 'null'
+  const bytes = UTF8_ENCODER.encode(serialized).length
+  if (bytes <= MODEL_TOOL_RESULT_BYTE_LIMIT) return result
+  const summary =
+    result && typeof result === 'object'
+      ? {
+          ...(Array.isArray(result) ? { item_count: result.length } : {}),
+          keys: Array.isArray(result) ? [] : Object.keys(result).slice(0, 24)
+        }
+      : { type: typeof result }
+  return {
+    byte_limit: MODEL_TOOL_RESULT_BYTE_LIMIT,
+    result_bytes: bytes,
+    summary,
+    tool_result_omitted: true,
+    instruction: 'Narrow the request by exact IDs, depth, projection, or limit.'
+  }
+}
 
 function appendStepWarning(result: unknown, budget: StepBudget): unknown {
   const remaining = budget.max - budget.current
@@ -172,6 +194,7 @@ export function toolsToAI(
             const ids = extractNodeIds(execResult)
             if (ids.length > 0) options.onFlashNodes(ids)
           }
+          execResult = boundedModelToolResult(execResult)
           emitToolLog(options, def, args, startTime, figma, nodeBefore, execResult)
           if (options.getStepBudget) {
             execResult = appendStepWarning(execResult, options.getStepBudget())

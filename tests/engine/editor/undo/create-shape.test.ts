@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 
 import { createEditor } from '@open-pencil/core/editor'
 
@@ -61,5 +61,25 @@ describe('create shape undo/redo', () => {
     // Redo move
     editor.undo.redo()
     expect(getNodeOrThrow(editor.graph, id).x).toBe(200)
+  })
+
+  test('redo restores nested children exactly once', () => {
+    const editor = createEditor()
+    let frameId = ''
+    let titleId = ''
+    let bodyId = ''
+
+    editor.undo.runBatch('Create nested frame', () => {
+      frameId = editor.createShape('FRAME', 20, 20, 320, 180)
+      titleId = editor.createShape('TEXT', 24, 24, 272, 32, frameId)
+      bodyId = editor.createShape('TEXT', 24, 68, 272, 88, frameId)
+    })
+    expect(getNodeOrThrow(editor.graph, frameId).childIds).toEqual([titleId, bodyId])
+
+    expect(editor.undo.undo()).toBe('Create nested frame')
+    expect(editor.graph.getNode(frameId)).toBeUndefined()
+
+    expect(editor.undo.redo()).toBe('Create nested frame')
+    expect(getNodeOrThrow(editor.graph, frameId).childIds).toEqual([titleId, bodyId])
   })
 })

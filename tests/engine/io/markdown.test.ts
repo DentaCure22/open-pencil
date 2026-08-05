@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { MERMAID_DIAGRAM_REVISION, MERMAID_PARSER } from '@open-pencil/core/diagram'
+import { createMermaidSvgSpec } from '@open-pencil/core/diagram'
 import {
   BUILTIN_IO_FORMATS,
   IORegistry,
@@ -12,7 +12,12 @@ import {
   markdownFromSceneGraph,
   writeMarkdownDocument
 } from '@open-pencil/core/io/formats/markdown'
+import type { MarkdownImportOptions } from '@open-pencil/core/io/formats/markdown'
 import type { SceneNode } from '@open-pencil/scene-graph'
+
+function nativeMarkdown(source: string, options: MarkdownImportOptions = {}) {
+  return markdownToSceneGraph(source, { ...options, representation: 'native' })
+}
 
 function markdownKind(node: SceneNode): string | null {
   return (
@@ -39,7 +44,37 @@ describe('Markdown document import', () => {
     expect(registry.findReader('notes.txt')?.id).toBe('markdown')
   })
 
-  test('creates editable native blocks while retaining the original source', async () => {
+  test('creates one source-authoritative frame by default and exports the exact source', async () => {
+    const source = '# Notes\n\nA **normal** Markdown document.\n'
+    const graph = await markdownToSceneGraph(source, { fileName: 'notes.md' })
+    const page = graph.getPages()[0]
+    const document = graph.getChildren(page.id)[0]
+
+    expect(page.name).toBe('notes')
+    expect(document).toMatchObject({
+      childIds: [],
+      clipsContent: true,
+      height: 720,
+      layoutMode: 'NONE',
+      name: 'notes',
+      type: 'FRAME',
+      width: 820
+    })
+    expect(readContentSource(document)).toMatchObject({
+      fileName: 'notes.md',
+      format: 'markdown',
+      revision: 1,
+      source
+    })
+    expect(markdownFromSceneGraph(graph)).toBe(source)
+    expect(writeMarkdownDocument(graph)).toMatchObject({
+      changed: false,
+      revision: 1,
+      source
+    })
+  })
+
+  test('creates editable native blocks only when explicitly converted', async () => {
     const source = `# Release notes
 
 This is a paragraph with [a source](https://example.com).
@@ -62,7 +97,7 @@ This is a paragraph with [a source](https://example.com).
 const ready = true
 \`\`\`
 `
-    const graph = await markdownToSceneGraph(source, {
+    const graph = await nativeMarkdown(source, {
       fileName: 'release-notes.md',
       mimeType: 'text/markdown'
     })
@@ -104,29 +139,12 @@ const ready = true
     expect(nodes.some((node) => node.name === 'Table header')).toBe(true)
   })
 
-  test('turns Mermaid fences into editable diagram nodes through the host parser', async () => {
+  test('turns Mermaid fences into one SVG-backed frame through the host renderer', async () => {
     const source = '```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```'
-    const graph = await markdownToSceneGraph(source, {
+    const graph = await nativeMarkdown(source, {
       fileName: 'flow.md',
-      createMermaidScene: async (definition) => ({
-        source: definition,
-        revision: MERMAID_DIAGRAM_REVISION,
-        parser: MERMAID_PARSER,
-        width: 240,
-        height: 80,
-        nodes: [
-          {
-            key: 'start',
-            type: 'RECTANGLE',
-            props: { name: 'Start', x: 0, y: 0, width: 100, height: 48 }
-          },
-          {
-            key: 'finish',
-            type: 'RECTANGLE',
-            props: { name: 'Finish', x: 140, y: 0, width: 100, height: 48 }
-          }
-        ]
-      })
+      createMermaidScene: async (definition) =>
+        createMermaidSvgSpec(definition, { width: 240, height: 80 })
     })
     const nodes = [...graph.getAllNodes()]
     const diagram = nodes.find((node) => markdownKind(node) === 'mermaid')
@@ -134,23 +152,15 @@ const ready = true
 
     expect(diagram?.type).toBe('FRAME')
     expect(diagramId).toBeTruthy()
-    expect(nodes.filter((node) => node.parentId === diagram?.id)).toHaveLength(2)
-    expect(
-      nodes
-        .filter((node) => node.parentId === diagram?.id)
-        .every((node) =>
-          node.pluginData.some(
-            (entry) => entry.key === 'mermaid/diagram-id' && entry.value === diagramId
-          )
-        )
-    ).toBe(true)
+    expect(nodes.filter((node) => node.parentId === diagram?.id)).toHaveLength(0)
+    expect(pluginValue(diagram as SceneNode, 'mermaid/role')).toBe('diagram')
     expect(markdownFromSceneGraph(graph)).toContain(
       '```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```'
     )
   })
 
   test('maps inline Markdown styles to editable text runs and retains link targets', async () => {
-    const graph = await markdownToSceneGraph(
+    const graph = await nativeMarkdown(
       'Plain **bold and *italic*** plus `code`, ~~removed~~, and [source](https://example.com "Docs").'
     )
     const paragraph = [...graph.getAllNodes()].find(
@@ -181,7 +191,7 @@ const ready = true
 
   test('stores resolved data images as source-backed image fills', async () => {
     const source = '![Embedded](data:image/png;base64,AQIDBA==)'
-    const graph = await markdownToSceneGraph(source)
+    const graph = await nativeMarkdown(source)
     const imageFrame = [...graph.getAllNodes()].find((node) => markdownKind(node) === 'image')
     const imageNode = imageFrame
       ? graph
@@ -210,7 +220,7 @@ const ready = true
       })
     }
     try {
-      const graph = await markdownToSceneGraph('![Remote](https://example.com/image.png)')
+      const graph = await nativeMarkdown('![Remote](https://example.com/image.png)')
       const imageNode = [...graph.getAllNodes()].find((node) =>
         node.fills.some((fill) => fill.type === 'IMAGE')
       )
@@ -224,7 +234,7 @@ const ready = true
   })
 
   test('keeps an explicit placeholder when an image resolver fails', async () => {
-    const graph = await markdownToSceneGraph('![Remote](https://example.com/image.png)', {
+    const graph = await nativeMarkdown('![Remote](https://example.com/image.png)', {
       resolveImage: async () => {
         throw new Error('Offline')
       }
@@ -240,11 +250,11 @@ const ready = true
   })
 
   test('supports inert MDX and literal plain-text fallback modes', async () => {
-    const mdx = await markdownToSceneGraph('# Notes\n\n<Card title="Safe" />', {
+    const mdx = await nativeMarkdown('# Notes\n\n<Card title="Safe" />', {
       fileName: 'notes.mdx',
       sourceMode: 'mdx'
     })
-    const plainText = await markdownToSceneGraph('# Literal heading\n- Literal list', {
+    const plainText = await nativeMarkdown('# Literal heading\n- Literal list', {
       fileName: 'notes.txt',
       mimeType: 'text/plain',
       sourceMode: 'plain-text'
@@ -263,7 +273,7 @@ const ready = true
   })
 
   test('regenerates edited Markdown and increments revisions only when source changes', async () => {
-    const graph = await markdownToSceneGraph('# Notes\n\nOriginal\n', { fileName: 'notes.md' })
+    const graph = await nativeMarkdown('# Notes\n\nOriginal\n', { fileName: 'notes.md' })
     const paragraph = [...graph.getAllNodes()].find(
       (node) => node.type === 'TEXT' && markdownKind(node) === 'paragraph'
     )
@@ -290,7 +300,7 @@ const ready = true
   })
 
   test('regenerates lists, tasks, quotes, tables, dividers, and fenced code', async () => {
-    const graph = await markdownToSceneGraph(`# Structured
+    const graph = await nativeMarkdown(`# Structured
 
 - [x] Done
 - Open

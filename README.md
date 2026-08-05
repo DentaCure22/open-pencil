@@ -1,6 +1,6 @@
 # OpenPencil
 
-Open-source design editor. Opens `.fig` and `.pen` design files, includes built-in AI, and ships as a programmable toolkit with a headless Vue SDK for building custom editors.
+Open-source spatial workspace and design editor. Opens `.fig` and `.pen` design files, includes built-in AI, and ships as a programmable toolkit with a headless Vue SDK for building custom editors.
 
 > **Status:** Active development. Usable today, with some rough edges as features evolve.
 
@@ -21,19 +21,28 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 ## What it does
 
 - **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
-- **AI builds designs** — describe what you want in chat, 90+ tools create and modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
+- **AI builds designs** — describe what you want in chat; agents can retrieve prior Boards, place exact reusable objects, and fork Board-specific variants before 90+ tools create or modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
+- **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist full sessions in SQLite, and publish only the latest exact Board targets, connections, region, expiry, and PNG path to a bounded `trace-context.json` for routine agent follow-ups
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
-- **Knowledge workspaces** — organize the same typed notes, collections, graph nodes, design artifacts, reviews, and source-backed Live App Blocks across native Canvas, Document, Graph, and Review views without duplicating identity
+- **Spatial workspace** — compose native objects, Code Objects, connected workflows, documents, media, and evidence directly across persistent Boards without parallel projection systems
 - **Flexible Pages and Boards** — group unlimited canvas Boards inside nested Pages, search and rename them inline, and reorganize the workspace with drag and drop
-- **Mermaid diagrams** — paste any Mermaid source and keep it source-backed on the board; every rendered diagram type becomes separate editable shapes, labels, connectors, and vector details with one-step undo, with polished native styling for architecture diagrams
-- **Source-backed documents** — open Markdown/MDX/text, SVG, JSON/JSON Schema, CSV, HTML, JSX, and TSX with retained source; Markdown, SVG, JSON, and CSV project into ordinary editable canvas layers, while code stays safely editable outside a live runtime
-- **Media evidence** — insert, paste, or drop raster images, PDFs, video, and audio onto a board; images remain native layers and PDF/video/audio use bounded source-backed viewers with normal board selection, movement, undo, and `.fig` persistence
+- **Mermaid diagrams** — paste source or call `insert_mermaid_diagram` from MCP to place Mermaid 11.16 diagrams as one theme-aware SVG-backed Board frame; move or resize the frame normally, then update its retained source to redraw it in place without generated child layers
+- **Workflow boards** — map product areas, journeys, tasks, screen states, recovery paths, and technical systems on ordinary Boards; Mermaid supplies compact diagram-as-code visuals, while app-like experiences use Code Objects
+- **Board Experiences** — optionally coordinate many ordinary objects without creating a new Board type or embedded app; one page-owned runtime can create and connect native objects or Code Object components while identity, selection, transforms, persistence, permissions, and Undo remain under OpenPencil authority
+- **Connected objects** — connect any ordinary native object or Code Object through official React Flow handles and plain Bézier edges, including movement and reconnecting directly on the same Board; the native object remains the one visible identity, React Flow shares OpenPencil's camera instead of creating a second canvas, and links and automatic reactions retain normal persistence, permissions, and Undo/Redo
+- **Code Objects** — author trusted TypeScript/TSX through ReactDOM, or host a first-party full
+  program such as Smylr through the trusted-web-app iframe renderer, inside the same ordinary
+  persisted `FRAME`; select, resize with shared Desktop/Laptop/iPad/Phone controls, connect,
+  duplicate, delete, undo, save, and reopen normally, then click or press Enter to interact and
+  Escape to return to Design
+- **Rich artifacts** — documents, spreadsheets, presentations, charts, forms, dashboards, and other app-like experiences are frame-owned Code Objects, not separate object systems; exact imported bytes and provenance stay attached to the owning frame
+- **Media and evidence** — basic text, shapes, vectors, frames, images, audio, video, and connectors remain ordinary native board content; PDFs use the Code Object lifecycle with retained bytes, persistent page state, and page extraction
 - **Intent-to-experience tools** — let people or agents preflight an exact blueprint, then turn captured intent into bounded briefs, maps, presentations, comparisons, decisions, or user-authored formula models with inspectable evidence, proposal provenance, capability limits, undo, and durable decision receipts
 - **Lint, convert, and extract tokens** — inspect documents, lint naming/layout/accessibility, convert between supported formats, analyze colors/typography/spacing/clusters, and extract design tokens
 - **Components, variants, and libraries** — create reusable components, group variants into component sets, insert assets as instances, and publish or review portable component libraries with DTCG design tokens
 - **Design-to-code export** — export selections as JSX/Tailwind, generate token outputs, and map designs into component-oriented code workflows
 - **Vue SDK for custom editors** — headless components and composables for embedding OpenPencil into other apps or building workflow-specific editing surfaces. [Read the SDK docs →](https://openpencil.dev/programmable/sdk/)
-- **Real-time collaboration** — P2P via WebRTC, no server, no account. Cursors, presence, follow mode
+- **One persistent workspace** — Keep every Project and Board inside one durable OpenPencil document; active local editors share smooth in-progress movement while final released transforms and connectors remain durable, undoable Board state, and optional Cloud collaboration plus agent automation resolve the same stable workspace identity
 - **Auto layout & CSS Grid** — flex and grid layout via Yoga WASM, with gap, padding, alignment, track sizing
 - **~7 MB desktop app** — Tauri v2 for macOS, Windows, Linux. Also runs in the browser as a PWA
 
@@ -74,6 +83,9 @@ openpencil query design.fig "//FRAME[@width < 300]"                # Frames unde
 openpencil query design.fig "//TEXT[contains(@name, 'Button')]"     # Text with 'Button' in name
 openpencil query design.fig "//*[@cornerRadius > 0]"               # Rounded corners
 openpencil query design.fig "//SECTION//TEXT"                       # Text inside sections
+
+# Read the latest pointed context like any other local file
+sed -n '1,200p' ~/.openpencil/local-workspace-authority-v1/trace-context.json
 ```
 
 ### Export
@@ -89,14 +101,45 @@ openpencil export design.fig -f html --css tailwind    # Tailwind HTML fragment
 openpencil export design.fig -f html --html standalone --assets external # HTML + assets
 openpencil convert design.pen output.fig               # Convert between document formats
 openpencil import page.html --css styles.css -o page.fig # HTML/CSS → editable .fig
+openpencil import dashboard.tsx --css dashboard.css -o dashboard.fig # React/TSX → editable .fig
 ```
 
-DOM/CSS input flows through `@open-pencil/dom-css`, so HTML, authored CSS, and Tailwind utility CSS can become editable OpenPencil layers:
+Board automation has its own four-command workflow below: `board search`, `board create`,
+`board build`, and `board present`.
+
+DOM/CSS input flows through `@open-pencil/dom-css`, so React/TSX, HTML, authored CSS, and Tailwind utility CSS can become editable OpenPencil layers:
 
 ```sh
 openpencil import card.html --css card.css -o card.fig
 openpencil import card.html --tailwind "flex flex-col gap-3 w-80 p-6 rounded-xl bg-white" -o card.fig
 ```
+
+Use a Code Object when the result should stay interactive. Authored components use a stable
+ReactDOM root; first-party full programs may use a frame-bound trusted iframe while retaining their
+native auth, router, portals, and scrolling. Trusted web-app runtimes are bounded and volatile:
+OpenPencil keeps the selected frame plus recent comparison frames resident, while the source app
+owns each frame's session-local last view. Runtime routes and scroll positions never become Board
+JSON or Undo entries. Every Code Object and native shape participates in the same typed object
+graph. External or untrusted websites use a sandboxed embed.
+
+Code Objects may declare multiple stable named Object Graph ports. Each port defines its semantic
+ID, label, input/output direction, supported connection kinds, object side, and relative offset.
+Authored TSX can place `data-openpencil-port-id="PORT_ID"` on the rendered row or control that owns a
+port; OpenPencil measures that semantic marker while the Code Object is mounted so the connector
+follows internal layout changes, while the relative offset remains the unloaded-runtime fallback.
+An atomic Board plan can create several components and connect exact port IDs in the same
+transaction; React Flow supplies the aligned handles and edge interaction without owning a second
+canvas or graph store. Existing side-only connections remain supported.
+
+The same plan can place a `canonical_object` artifact from an exact `source_object_id`, or run
+`canonical_object.fork` before a Board-specific semantic edit. This is the sole reuse and divergence
+path, so materialization, lineage, receipts, persistence, and Undo remain one atomic Board build.
+
+Large Code Object source and semantic plans use the same canonical Board request; pass it through
+`--request-file` only when shell quoting is impractical. The compiler owns exact geometry,
+collision-safe placement, and recipe expansion.
+
+Use a Board Experience when many independent objects need coordinated behavior. The experience is metadata on the ordinary page, not a Board subtype or renderer: every meaningful visible piece remains a selectable native object or Code Object frame, while rapid internal motion may use transient component updates that do not flood Undo history. Leaving the experience stops the coordinator without converting the Board into an embedded application.
 
 ```html
 <div className="flex flex-col gap-4 p-6 bg-white rounded-xl">
@@ -151,17 +194,54 @@ openpencil eval design.fig -c "figma.currentPage.children.length"
 openpencil eval design.fig -c "figma.currentPage.selection.forEach(n => n.opacity = 0.5)" -w
 ```
 
-### Control the running app
+`eval` always requires a document file. Use `--write` or `--output` to persist its changes.
 
-When the desktop app is running, omit the file argument — the CLI connects via RPC and operates on the live canvas. Useful for automation scripts, CI pipelines, or AI agents that need to interact with the editor:
+### Find and edit a persisted Board
+
+Use the compact index only when the Board or object ID is unknown:
 
 ```sh
-openpencil tree                               # Inspect the live document
-openpencil export -f png                      # Screenshot the current canvas
-openpencil eval -c "figma.currentPage.name"   # Query the editor
+openpencil board search "pricing decisions" --limit 10 --json
+openpencil board create --name "Agent Sandbox" --request-id "create-agent-sandbox" --json
 ```
 
-All commands support `--json` for machine-readable output.
+Known Board/object IDs skip search. Otherwise `board search` returns compact IDs, names, types, and
+Board locations from a disposable index; load only the selected object. `workspace.json` remains the
+source of truth for normal direct edits.
+
+For a specialized guarded semantic transaction, `board build` remains available:
+
+```sh
+openpencil board build --request '{
+  "contract": "board-build-request/v1",
+  "target": {
+    "workspace_id": "workspace-id",
+    "content_document_id": "content-document-id",
+    "document_id": "document-id",
+    "page_id": "board-page-id"
+  },
+  "request_id": "build-status-card",
+  "intent": "Build one status card",
+  "plan": {
+    "contract": "board-build-plan/v1",
+    "artifacts": [{
+      "alias": "status",
+      "recipe": {
+        "kind": "native_card",
+        "title": "Status",
+        "body": "Ready",
+        "placement": { "target": { "kind": "auto" } }
+      }
+    }],
+    "connections": []
+  }
+}' --release-summary --json
+```
+
+Use `--request-file` only when the request is too large for the shell. Add `--latest-gesture` or one
+exact `--gesture-id` when Trace should guide the change. OpenPencil handles runtime routing,
+authority, revisions, retries, persistence, and Undo internally. Run `board present` only when the
+user asks to reveal the saved result in a connected editor.
 
 ## AI & MCP
 
@@ -171,7 +251,10 @@ Press <kbd>⌘</kbd><kbd>J</kbd> to open the AI assistant. It has 100+ tools tha
 
 ### Coding agents (desktop)
 
-Use Claude Code, Codex, or Gemini CLI directly in the chat panel. The agent connects to the editor's MCP server and uses all 100+ design tools. Requires the desktop app and the agent CLI installed locally.
+Use Claude Code, Codex, or Gemini CLI directly in the chat panel. Normal local Board and Trace work
+uses the canonical files without starting MCP. If you explicitly run the standalone MCP server, the
+editor detects it and exposes the live 100+ tool surface. Requires the desktop app and the agent CLI
+installed locally.
 
 **Setup (Claude Code):**
 
@@ -189,6 +272,16 @@ Use Claude Code, Codex, or Gemini CLI directly in the chat panel. The agent conn
 ### MCP server
 
 Connect Claude Code, Cursor, Windsurf, or any MCP client to inspect, modify, and export design documents headlessly. 100+ tools. [Full docs →](https://openpencil.dev/reference/mcp-tools)
+
+OpenPencil does not launch MCP automatically. Start it only when you want live MCP tools; normal
+local Board and Trace persistence uses a separate narrow authority without MCP or WebSocket ports.
+
+For normal persisted Board work, coding agents edit the canonical `workspace.json` document directly;
+OpenPencil derives revisions, history, and live synchronization. `board search` is the compact lookup
+path for unknown targets, while CLI/MCP mutation commands remain optional specialized adapters.
+When the user points, the same agent reads the bounded adjacent `trace-context.json`, checks its
+status and expiry, and follows its exact object IDs into `workspace.json`; the user's words remain the
+instruction, and the optional PNG path is loaded only when the target needs visual clarification.
 
 **Stdio** (Claude Code, Cursor, Windsurf):
 
@@ -212,7 +305,7 @@ For other MCP clients:
 **HTTP** (scripts, CI):
 
 ```sh
-openpencil-mcp-http   # http://localhost:3100/mcp
+openpencil-mcp-http   # http://localhost:7600/mcp
 ```
 
 **File access:** Set `OPENPENCIL_MCP_ROOT` to scope file operations (`open_file`, `new_document`, export `path` param) to a directory. Defaults to the current working directory.
@@ -231,7 +324,9 @@ For documentation-aware agents, the docs site publishes [llms.txt](https://openp
 
 ## Collaboration
 
-Share a link to co-edit in real time. No server, no account — peers connect directly via WebRTC.
+When OpenPencil Cloud is configured, sign in once and the shared workspace connects automatically. Owners can copy a one-time cofounder invite from the collaboration control; boards, project folders, document edits, cursors, and selections then stay synchronized across devices.
+
+Without cloud configuration, private peer-to-peer rooms continue to work without accounts:
 
 1. Click the share button in the top-right panel
 2. Share the generated link (`app.openpencil.dev/share/<room-id>`)
@@ -292,7 +387,7 @@ tests/            E2E, visual, engine, and integration tests
 | Layout        | Yoga WASM (flex + grid via [fork](https://github.com/open-pencil/yoga/tree/grid)) |
 | UI            | Vue 3, Reka UI, Tailwind CSS 4                                                    |
 | File format   | Kiwi binary + Zstd + ZIP                                                          |
-| Collaboration | Trystero (WebRTC P2P) + Yjs (CRDT)                                                |
+| Collaboration | Trystero (WebRTC P2P) + Yjs (CRDT) + optional Supabase durability                 |
 | Desktop       | Tauri v2                                                                          |
 | AI/MCP        | Multi-provider (Anthropic, OpenAI, Google AI, OpenRouter), MCP SDK, Hono          |
 

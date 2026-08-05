@@ -21,7 +21,7 @@ function createProductionStore() {
   })
   store.graph.createNode('FRAME', page.id, {
     pluginData: [
-      { key: 'kind', pluginId: 'smylr-production', value: 'live-app-frame' },
+      { key: 'kind', pluginId: 'smylr-production', value: 'smylr-code-object-frame' },
       { key: 'pageId', pluginId: 'smylr-production', value: 'dental-chart' }
     ]
   })
@@ -29,35 +29,35 @@ function createProductionStore() {
 }
 
 describe('Smylr production view tool state', () => {
-  test('captures and restores the active tool instead of inferring it from live frames', async () => {
+  test('captures and restores the active tool on Code Object pages', async () => {
     const store = createProductionStore()
-    store.setTool('SMYLR_CONTAINER')
+    store.setTool('PEN')
     const saved = captureSmylrProductionView(store)
 
-    expect(saved?.activeTool).toBe('SMYLR_CONTAINER')
+    expect(saved?.activeTool).toBe('PEN')
 
     store.setTool('SELECT')
     expect(await applySmylrProductionView(store, saved)).toBe(true)
-    expect(store.state.activeTool).toBe('SMYLR_CONTAINER')
+    expect(store.state.activeTool).toBe('PEN')
   })
 
-  test('keeps Move selected when that was the saved tool on a live-frame page', async () => {
+  test('keeps Move selected when that was the saved tool on a Code Object page', async () => {
     const store = createProductionStore()
     const saved = captureSmylrProductionView(store)
 
     expect(saved?.activeTool).toBe('SELECT')
 
-    store.setTool('SMYLR_CONTAINER')
+    store.setTool('PEN')
     expect(await applySmylrProductionView(store, saved)).toBe(true)
     expect(store.state.activeTool).toBe('SELECT')
   })
 
-  test('uses Move for legacy saved views without tool state', async () => {
+  test('uses Move for saved views without tool state', async () => {
     const store = createProductionStore()
     const saved = captureSmylrProductionView(store)
     if (!saved) throw new Error('test view missing')
 
-    store.setTool('SMYLR_CONTAINER')
+    store.setTool('PEN')
     expect(
       await applySmylrProductionView(store, {
         page: saved.location,
@@ -67,34 +67,17 @@ describe('Smylr production view tool state', () => {
     expect(store.state.activeTool).toBe('SELECT')
   })
 
-  test('gives each experience purpose an independent view-memory identity', () => {
+  test('preserves an ordinary board as the active production workspace view', async () => {
     const store = createProductionStore()
-    const page = store.graph.getPages()[0]
-    if (!page) throw new Error('test page missing')
+    const boardId = store.addPage('Product Map')
+    const board = store.graph.getNode(boardId)
+    const saved = captureSmylrProductionView(store)
 
-    store.graph.updateNode(page.id, {
-      pluginData: [
-        ...page.pluginData,
-        {
-          key: 'basePageId',
-          pluginId: 'openpencil-knowledge-workspace',
-          value: 'dental-chart-base'
-        },
-        {
-          key: 'experiencePurpose',
-          pluginId: 'openpencil-knowledge-workspace',
-          value: 'compare'
-        }
-      ]
-    })
+    expect(smylrProductionPageView(board)).toEqual({ kind: 'ordinary-board', pageId: boardId })
+    expect(saved?.location).toEqual({ kind: 'ordinary-board', pageId: boardId })
 
-    expect(smylrProductionPageView(store.graph.getNode(page.id))).toEqual({
-      kind: 'experience-compare',
-      pageId: 'dental-chart-base'
-    })
-    expect(captureSmylrProductionView(store)?.location).toEqual({
-      kind: 'experience-compare',
-      pageId: 'dental-chart-base'
-    })
+    await store.switchPage(store.graph.getPages()[0]?.id ?? '')
+    expect(await applySmylrProductionView(store, saved)).toBe(true)
+    expect(store.state.currentPageId).toBe(boardId)
   })
 })

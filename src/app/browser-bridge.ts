@@ -1,5 +1,4 @@
-import type { ChatTransport, UIMessage } from 'ai'
-
+import type { ChatTransportFactory } from '@/app/ai/chat/override'
 import type { EditorStore } from '@/app/editor/session/create'
 
 export interface OpenPencilTestHooks {
@@ -10,7 +9,7 @@ export interface OpenPencilTestHooks {
 
 export interface OpenPencilWindowAPI {
   getStore?: () => EditorStore
-  setChatTransport?: (factory: () => ChatTransport<UIMessage>) => void
+  setChatTransport?: (factory: ChatTransportFactory) => void
   openFile?: (path: string) => Promise<void>
   test?: OpenPencilTestHooks
 }
@@ -38,7 +37,7 @@ export function setOpenPencilStore(store: EditorStore) {
 }
 
 export function exposeChatTransportOverride(
-  setChatTransport: (factory: () => ChatTransport<UIMessage>) => void
+  setChatTransport: (factory: ChatTransportFactory) => void
 ) {
   windowApi().setChatTransport = setChatTransport
 }

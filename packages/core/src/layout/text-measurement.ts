@@ -22,18 +22,39 @@ export function estimateTextSize(
   const text = node.text || ''
 
   const explicitLineH = (node.lineHeight ?? 0) > 0 ? (node.lineHeight as number) : undefined
-  const measured = measureTextWithOpenType(text, fontSize, family, style, maxWidth, explicitLineH)
-  if (measured) return measured
-
   const charWidth = fontSize * GLYPH_WIDTH_FACTOR
-  const singleLineWidth = Math.ceil(text.length * charWidth)
   const lineH = (node.lineHeight ?? 0) > 0 ? (node.lineHeight as number) : Math.ceil(fontSize * 1.4)
+  const hardLines = text.split(/\r\n?|\n/u)
+  let width = 0
+  let height = 0
 
-  if (maxWidth && maxWidth > 0 && singleLineWidth > maxWidth) {
-    const lines = Math.ceil(singleLineWidth / maxWidth)
-    return { width: maxWidth, height: Math.ceil(lines * lineH) }
+  for (const hardLine of hardLines) {
+    const measured = measureTextWithOpenType(
+      hardLine,
+      fontSize,
+      family,
+      style,
+      maxWidth,
+      explicitLineH
+    )
+    if (measured) {
+      width = Math.max(width, measured.width)
+      height += measured.height
+      continue
+    }
+
+    const singleLineWidth = Math.ceil(hardLine.length * charWidth)
+    if (maxWidth && maxWidth > 0 && singleLineWidth > maxWidth) {
+      const lines = Math.ceil(singleLineWidth / maxWidth)
+      width = Math.max(width, maxWidth)
+      height += Math.ceil(lines * lineH)
+      continue
+    }
+    width = Math.max(width, singleLineWidth)
+    height += lineH
   }
-  return { width: singleLineWidth, height: lineH }
+
+  return { width, height }
 }
 
 export function getTextMeasurer(): TextMeasurer | null {

@@ -47,7 +47,14 @@ function connectMockBrowser(
     const token = 'test-token-' + Date.now()
 
     ws.on('open', () => {
-      ws.send(JSON.stringify({ type: 'register', token, active: options.active === true }))
+      ws.send(
+        JSON.stringify({
+          type: 'register',
+          token,
+          active: options.active === true,
+          runtime_instance_id: 'runtime:server-test'
+        })
+      )
 
       ws.on('message', async (raw) => {
         const msg = JSON.parse(raw.toString()) as {
@@ -172,6 +179,18 @@ function parseResult(result: { content: { type: string; text?: string }[] }): un
   return textContent?.text ? JSON.parse(textContent.text) : null
 }
 
+function guardedMutationArgs(graph: SceneGraph, requestId: string) {
+  return {
+    content_document_id: graph.rootId,
+    document_id: 'doc-1',
+    expected_revision: 0,
+    page_id: graph.getPages()[0].id,
+    request_id: requestId,
+    runtime_instance_id: 'runtime:server-test',
+    workspace_id: 'workspace:server-test'
+  }
+}
+
 describe('MCP server', () => {
   let client: Client
   let graph: SceneGraph
@@ -195,9 +214,43 @@ describe('MCP server', () => {
     expect(names).toContain('set_fill')
     expect(names).toContain('get_page_tree')
     expect(names).toContain('render')
+    expect(names).toContain('board_build')
     expect(names).toContain('insert_mermaid_diagram')
+    expect(names).toContain('query_trace_history')
     expect(names).toContain('get_codegen_prompt')
     expect(tools.length).toBeGreaterThan(30)
+    const mermaid = tools.find((tool) => tool.name === 'insert_mermaid_diagram')
+    expect(Object.keys(mermaid?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        'content_document_id',
+        'document_id',
+        'expected_revision',
+        'owner_id',
+        'page_id',
+        'request_id',
+        'runtime_instance_id',
+        'source',
+        'workspace_id',
+        'x',
+        'y'
+      ])
+    )
+    const builder = tools.find((tool) => tool.name === 'board_build')
+    expect(Object.keys(builder?.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        'content_document_id',
+        'context_token',
+        'contract',
+        'document_id',
+        'expected_revision',
+        'intent',
+        'page_id',
+        'recipe',
+        'request_id',
+        'runtime_instance_id',
+        'workspace_id'
+      ])
+    )
   })
 
   test('tools have descriptions and input schemas', async () => {
@@ -211,7 +264,15 @@ describe('MCP server', () => {
   test('create_shape creates a node on the live canvas', async () => {
     const result = await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 0, y: 0, width: 200, height: 100, name: 'Test' }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-frame'),
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        name: 'Test'
+      }
     })
     expect(result.isError).not.toBe(true)
     const data = parseResult(result) as { id: string; name: string; type: string }
@@ -226,13 +287,24 @@ describe('MCP server', () => {
   test('set_fill validates and applies color', async () => {
     const create = await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'RECTANGLE', x: 0, y: 0, width: 50, height: 50 }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-fill-fixture'),
+        type: 'RECTANGLE',
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50
+      }
     })
     const { id } = parseResult(create) as { id: string }
 
     const fill = await client.callTool({
       name: 'set_fill',
-      arguments: { id, color: '#00ff00' }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-fill'),
+        id,
+        color: '#00ff00'
+      }
     })
     expect(fill.isError).not.toBe(true)
   })
@@ -240,7 +312,15 @@ describe('MCP server', () => {
   test('get_page_tree returns page structure', async () => {
     await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 0, y: 0, width: 100, height: 100, name: 'F1' }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-tree'),
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        name: 'F1'
+      }
     })
     const result = await client.callTool({ name: 'get_page_tree', arguments: {} })
     expect(result.isError).not.toBe(true)
@@ -251,11 +331,24 @@ describe('MCP server', () => {
   test('delete_node removes a node', async () => {
     const create = await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'RECTANGLE', x: 0, y: 0, width: 50, height: 50 }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-delete-fixture'),
+        type: 'RECTANGLE',
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50
+      }
     })
     const { id } = parseResult(create) as { id: string }
 
-    await client.callTool({ name: 'delete_node', arguments: { id } })
+    await client.callTool({
+      name: 'delete_node',
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-delete'),
+        id
+      }
+    })
 
     const get = await client.callTool({ name: 'get_node', arguments: { id } })
     const data = parseResult(get) as { error?: string }
@@ -265,15 +358,36 @@ describe('MCP server', () => {
   test('find_nodes filters by type', async () => {
     await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 0, y: 0, width: 100, height: 100 }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-find-1'),
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
     })
     await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'RECTANGLE', x: 0, y: 0, width: 50, height: 50 }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-find-2'),
+        type: 'RECTANGLE',
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50
+      }
     })
     await client.callTool({
       name: 'create_shape',
-      arguments: { type: 'FRAME', x: 0, y: 0, width: 100, height: 100 }
+      arguments: {
+        ...guardedMutationArgs(graph, 'request:server-find-3'),
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
     })
     const result = await client.callTool({ name: 'find_nodes', arguments: { type: 'FRAME' } })
     const data = parseResult(result) as { count: number }

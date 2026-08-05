@@ -5,14 +5,14 @@ import type {
   LearningAttestationKind,
   LearningExecutionKind,
   ObservedSessionClaim,
-  ObservedSessionTaskInteraction,
+  ObservedSessionTaskInteraction
 } from './types'
 
 const ATTESTATION_KINDS: ReadonlySet<LearningAttestationKind> = new Set([
   'authenticated-session',
   'automated-run',
   'observed-session',
-  'self-report',
+  'self-report'
 ])
 
 export type LearningAttestationContext = {
@@ -37,13 +37,9 @@ function hasVerifiedSessionProof(attestation: LearningAttestation): boolean {
   )
 }
 
-function hasCompleteReference(
-  reference: { objectId: string; revision: number } | undefined
-) {
+function hasCompleteReference(reference: { objectId: string; revision: number } | undefined) {
   return Boolean(
-    reference?.objectId &&
-    Number.isInteger(reference.revision) &&
-    reference.revision > 0
+    reference?.objectId && Number.isInteger(reference.revision) && reference.revision > 0
   )
 }
 
@@ -104,9 +100,7 @@ function interactionRevisionMatches(
   )
 }
 
-function hasCompleteTaskInteractions(
-  attestation: LearningAttestation
-): boolean {
+function hasCompleteTaskInteractions(attestation: LearningAttestation): boolean {
   const proof = attestation.proof
   const claim = proof?.claim
   const interactions = proof?.taskInteractions ?? []
@@ -122,7 +116,7 @@ function hasCompleteTaskInteractions(
   const familyMembers = new Map(
     (claim.version === 2 ? claim.scope.family.members : []).map((member) => [
       member.surfaceRun.objectId,
-      member,
+      member
     ])
   )
   const previousBySurface = new Map<string, (typeof interactions)[number]>()
@@ -130,10 +124,8 @@ function hasCompleteTaskInteractions(
     const member = familyMembers.get(interaction.surfaceRunId)
     const previousForSurface = previousBySurface.get(interaction.surfaceRunId)
     const expectedBefore = previousForSurface?.after ?? {
-      artifactRevision:
-        member?.artifact.boardRevision ?? claim.target.artifact.boardRevision,
-      surfaceRevision:
-        member?.surfaceRun.revision ?? claim.target.surfaceRun.revision,
+      artifactRevision: member?.artifact.boardRevision ?? claim.target.artifact.boardRevision,
+      surfaceRevision: member?.surfaceRun.revision ?? claim.target.surfaceRun.revision
     }
     const interactionValid = Boolean(
       interactionEnvelopeMatches(attestation, interaction, eventIds) &&
@@ -196,15 +188,14 @@ function hasCompleteObservedClaim(
     claim.recordedAt,
     claim.runId,
     claim.surfaceRunId,
-    claim.taskInteractionDigest,
+    claim.taskInteractionDigest
   ].every(Boolean)
   const revisionsComplete =
     Number.isInteger(claim.finalSurfaceRevision) &&
     claim.finalSurfaceRevision > 0 &&
     Number.isInteger(claim.taskInteractionCount)
   const digestsComplete =
-    claim.reviewDigest.startsWith('sha256:') &&
-    claim.taskInteractionDigest.startsWith('sha256:')
+    claim.reviewDigest.startsWith('sha256:') && claim.taskInteractionDigest.startsWith('sha256:')
   return Boolean(
     identifiersComplete &&
     revisionsComplete &&
@@ -217,9 +208,7 @@ function hasCompleteObservedClaim(
   )
 }
 
-function hasCompleteObservedPublicKey(
-  attestation: LearningAttestation
-): boolean {
+function hasCompleteObservedPublicKey(attestation: LearningAttestation): boolean {
   const proof = attestation.proof
   const publicKey = proof?.publicKey
   return Boolean(
@@ -240,11 +229,8 @@ function hasCompleteObservedProof(attestation: LearningAttestation): boolean {
   )
 }
 
-export function validateLearningAttestation(
-  context: LearningAttestationContext
-): void {
-  const { attestation, executionKind, receiptId, recordedAt, recordedBy } =
-    context
+export function validateLearningAttestation(context: LearningAttestationContext): void {
+  const { attestation, executionKind, receiptId, recordedAt, recordedBy } = context
   if (!ATTESTATION_KINDS.has(attestation.kind)) {
     throw new WorkspaceDomainError(
       'validation_failed',
@@ -267,29 +253,23 @@ export function validateLearningAttestation(
     )
   }
   const independentlyAttested =
-    attestation.kind === 'authenticated-session' ||
-    attestation.kind === 'observed-session'
+    attestation.kind === 'authenticated-session' || attestation.kind === 'observed-session'
   if (independentlyAttested && !hasVerifiedSessionProof(attestation)) {
     throw new WorkspaceDomainError(
       'validation_failed',
       `${attestation.kind} attestation requires a verified session proof and observed interaction evidence`
     )
   }
-  if (
-    attestation.kind === 'observed-session' &&
-    !hasCompleteObservedProof(attestation)
-  ) {
+  if (attestation.kind === 'observed-session' && !hasCompleteObservedProof(attestation)) {
     throw new WorkspaceDomainError(
       'validation_failed',
       'observed-session attestation requires complete durable signed proof material'
     )
   }
-  const locallyAttested =
-    attestation.kind === 'self-report' || attestation.kind === 'automated-run'
+  const locallyAttested = attestation.kind === 'self-report' || attestation.kind === 'automated-run'
   if (
     locallyAttested &&
-    (attestation.attestedBy !== recordedBy ||
-      attestation.attestedAt !== recordedAt)
+    (attestation.attestedBy !== recordedBy || attestation.attestedAt !== recordedAt)
   ) {
     throw new WorkspaceDomainError(
       'validation_failed',

@@ -84,3 +84,46 @@ describe('countDescendants', () => {
     expect(graph.countDescendants(frame)).toBe(CHILD_COUNT)
   })
 })
+
+describe('getDescendants', () => {
+  test('walks one subtree in child order without visiting sibling pages', () => {
+    const graph = new SceneGraph()
+    const firstPage = pageId(graph)
+    const frame = graph.createNode('FRAME', firstPage, {
+      name: 'Frame',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 200
+    })
+    graph.createNode('RECTANGLE', frame.id, {
+      name: 'Nested rectangle',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10
+    })
+    graph.createNode('ELLIPSE', firstPage, {
+      name: 'Page ellipse',
+      x: 20,
+      y: 20,
+      width: 10,
+      height: 10
+    })
+    const secondPage = graph.addPage('Page 2')
+    graph.createNode('RECTANGLE', secondPage.id, {
+      name: 'Other page rectangle',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10
+    })
+
+    expect([...graph.getDescendants(firstPage)].map((node) => node.name)).toEqual([
+      'Frame',
+      'Nested rectangle',
+      'Page ellipse'
+    ])
+    expect([...graph.getDescendants('missing')]).toEqual([])
+  })
+})

@@ -1,0 +1,39 @@
+{
+  "manifest_id": "prompt-to-board-matched-development-102",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "matched-102-community-cooling-center",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-matched-pair-102"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_text",
+        "native_card"
+      ],
+      "prompt": "On this empty disposable Board, build a clear editable launch brief for a fictional neighborhood cooling center. Add one heading plus three concise cards titled Goals, Operations, and Risks. Include concrete, useful details: opening during a five-day heat alert; serving 180 residents daily; hours 10:00–20:00 at the East Library; staffing with one site lead, two volunteers per shift, and one nurse on call; supplies for water, fans, charging, and transit vouchers; and risks covering power loss, capacity overflow, and missed vulnerable residents. Use a readable three-column grid. Do not add connectors or a Code Object.",
+      "rubric": {
+        "rubric_id": "ptb-dev-community-cooling-brief-grid",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-MATCHED-102",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB MATCHED-102 — disposable empty authority Board",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

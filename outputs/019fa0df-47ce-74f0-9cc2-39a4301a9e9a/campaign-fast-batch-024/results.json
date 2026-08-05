@@ -1,0 +1,44 @@
+[
+  {
+    "campaign_roster_id": "85473647f34f101b70919b9917cca81de412bca787931f9da4f779a006bf895d",
+    "config_id": "ef21fe7bcee965f577c001febe185b43a1b9c056880599a49463a55ac66e780c",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/001-fast-dev-024a-first-attempt/events.jsonl",
+    "order": 0,
+    "run_id": "fast-dev-024a-first-attempt",
+    "scenario_id": "FAST-DEV-024A",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/001-fast-dev-024a-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb089-6abc-7612-8b18-e1f7a6cba3c1"
+  },
+  {
+    "campaign_roster_id": "85473647f34f101b70919b9917cca81de412bca787931f9da4f779a006bf895d",
+    "config_id": "f4add3ed46897a1c918ed442952407b6f92f45904bf5c3d4a8d99659705c97d2",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/002-fast-dev-024b-first-attempt/events.jsonl",
+    "order": 1,
+    "run_id": "fast-dev-024b-first-attempt",
+    "scenario_id": "FAST-DEV-024B",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/002-fast-dev-024b-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb089-6abb-7dc3-9f5b-be97c9e86913"
+  },
+  {
+    "campaign_roster_id": "85473647f34f101b70919b9917cca81de412bca787931f9da4f779a006bf895d",
+    "config_id": "35c9d951dc629f788aded1555a97c163e4f23ce70710407182501cc32d7bd92f",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/003-fast-dev-024c-first-attempt/events.jsonl",
+    "order": 2,
+    "run_id": "fast-dev-024c-first-attempt",
+    "scenario_id": "FAST-DEV-024C",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-fast-batch-024/003-fast-dev-024c-first-attempt/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb089-6ac4-7d73-aff0-6fca53f17767"
+  }
+]

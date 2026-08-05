@@ -514,7 +514,8 @@ export class SkiaRenderer {
     viewportWidth: number,
     viewportHeight: number,
     showRulers = true,
-    layer: RenderPipeline.RenderLayer = 'full'
+    layer: RenderPipeline.RenderLayer = 'full',
+    selectionChromeOwnerIds?: ReadonlySet<string>
   ): void {
     const dpr = IS_BROWSER ? window.devicePixelRatio || 1 : 1
     RenderPipeline.renderFromEditorState(
@@ -526,7 +527,8 @@ export class SkiaRenderer {
       viewportHeight,
       showRulers,
       dpr,
-      layer
+      layer,
+      selectionChromeOwnerIds
     )
   }
 

@@ -1,0 +1,34 @@
+[
+  {
+    "board_request_id": "ptb-run:8b1cb482e8ada7780f1c0405a6ebdbb7",
+    "campaign_roster_id": "237c7010bb2b50db4e628f815f36a350b450260f1c72c70cc10194364de83ccf",
+    "config_id": "a195f0c3e02b4eaab76a07bc201fd51bd433b4100ff26d74bab3528675694962",
+    "error": null,
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/001-matched-101a-explicit-plan-first-attempt/events.jsonl",
+    "exit_code": 0,
+    "order": 0,
+    "resume_thread_id": null,
+    "run_id": "matched-101a-explicit-plan-first-attempt",
+    "scenario_id": "DEV-MATCHED-101",
+    "status": "recorded",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/001-matched-101a-explicit-plan-first-attempt/stderr.log",
+    "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/001-matched-101a-explicit-plan-first-attempt/telemetry-v1.json",
+    "thread_id": "019fb478-1a79-7f02-a304-1b51aab340e8"
+  },
+  {
+    "board_request_id": "ptb-run:87e388b8e983ecd10eb227e7e49336dd",
+    "campaign_roster_id": "237c7010bb2b50db4e628f815f36a350b450260f1c72c70cc10194364de83ccf",
+    "config_id": "cba81ef2dcafd5df2fa11fcacf693777c864f879831ff022b3b0f1d2979d630a",
+    "error": null,
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/002-matched-101b-provided-recipe-first-attempt/events.jsonl",
+    "exit_code": 0,
+    "order": 1,
+    "resume_thread_id": null,
+    "run_id": "matched-101b-provided-recipe-first-attempt",
+    "scenario_id": "DEV-MATCHED-101",
+    "status": "recorded",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/002-matched-101b-provided-recipe-first-attempt/stderr.log",
+    "telemetry_artifact_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-101/002-matched-101b-provided-recipe-first-attempt/telemetry-v1.json",
+    "thread_id": "019fb478-a315-77e2-9f19-6f8155dea7c0"
+  }
+]

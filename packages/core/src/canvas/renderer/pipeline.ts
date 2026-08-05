@@ -37,7 +37,8 @@ export function renderFromEditorState(
   viewportHeight: number,
   showRulers = true,
   dpr = 1,
-  layer: RenderLayer = 'full'
+  layer: RenderLayer = 'full',
+  selectionChromeOwnerIds?: ReadonlySet<string>
 ): void {
   r.dpr = dpr
   r.panX = state.panX
@@ -54,6 +55,7 @@ export function renderFromEditorState(
     graph,
     state.selectedIds,
     {
+      selectionChromeOwnerIds,
       hoveredNodeId: state.hoveredNodeId,
       enteredContainerId: state.enteredContainerId,
       editingTextId: state.editingTextId,
@@ -164,6 +166,7 @@ export function render(
   updateSceneBackingPreviewState(r, layer)
 
   const hasPositionPreview =
+    graph.hasNodePositionPresentations() &&
     graph.positionPreviewVersion !== r.scenePicturePositionPreviewVersion &&
     sceneVersion === r.scenePictureVersion
   const hasVolatileOverlays = hasPositionPreview || hasVolatileOverlay(overlays)

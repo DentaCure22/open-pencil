@@ -8,12 +8,7 @@ import type {
   WorkspaceView
 } from './types'
 
-type ProtectedObjectKey =
-  | keyof WorkspaceObjectBase
-  | 'type'
-  | 'collectionId'
-  | 'runtime'
-  | 'capture'
+type ProtectedObjectKey = keyof WorkspaceObjectBase | 'type' | 'collectionId'
 
 export type WorkspaceObjectPatchByType = {
   [ObjectType in WorkspaceObjectType]: Partial<
@@ -72,12 +67,6 @@ export type DisconnectRelationOperation = {
   relationId: string
   type: 'disconnect-relation'
 }
-export type SetRuntimeOwnerOperation = {
-  blockId: string | null
-  handshakeAt?: string
-  type: 'set-runtime-owner'
-}
-
 export type WorkspaceOperation =
   | CreateObjectOperation
   | UpdateObjectOperation
@@ -90,7 +79,6 @@ export type WorkspaceOperation =
   | ArchiveViewOperation
   | ConnectRelationOperation
   | DisconnectRelationOperation
-  | SetRuntimeOwnerOperation
 
 export type WorkspaceMutationEnvelope = {
   dryRun: boolean

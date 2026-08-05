@@ -3,7 +3,7 @@ import type { Token, Tokens, TokensList } from 'marked'
 import { generateId, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import { colorToFill } from '#core/color'
-import { mermaidDiagramPluginData, type MermaidSceneSpec } from '#core/diagram'
+import { mermaidDiagramOwnerPluginData, type MermaidSceneSpec } from '#core/diagram'
 import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '#core/io/content-source'
 import { computeAllLayouts } from '#core/layout'
 
@@ -265,8 +265,8 @@ function renderMermaid(
   width: number
 ): void {
   const diagramId = generateId()
-  const metadata = mermaidDiagramPluginData(diagramId, diagram)
-  const frame = context.graph.createNode('FRAME', parentId, {
+  const metadata = mermaidDiagramOwnerPluginData(diagramId, diagram)
+  context.graph.createNode('FRAME', parentId, {
     name: 'Mermaid diagram',
     width,
     height: Math.max(120, diagram.height + 32),
@@ -277,17 +277,6 @@ function renderMermaid(
     layoutAlignSelf: 'STRETCH',
     pluginData: [...markdownData('mermaid', token.raw, { language: 'mermaid' }), ...metadata]
   })
-  for (const node of diagram.nodes) {
-    context.graph.createNode(node.type, frame.id, {
-      ...structuredClone(node.props),
-      x: 16 + (node.props.x ?? 0),
-      y: 16 + (node.props.y ?? 0),
-      pluginData: [
-        ...(node.props.pluginData ?? []).map((item) => structuredClone(item)),
-        ...metadata.map((item) => structuredClone(item))
-      ]
-    })
-  }
 }
 
 async function renderCodeOrMermaid(
@@ -473,7 +462,7 @@ function documentName(fileName: string | undefined): string {
 
 export async function renderMarkdownDocument(
   graph: SceneGraph,
-  tokens: TokensList,
+  tokens: TokensList | null,
   source: string,
   options: MarkdownImportOptions
 ): Promise<void> {
@@ -481,6 +470,38 @@ export async function renderMarkdownDocument(
 
   const name = documentName(options.fileName)
   graph.updateNode(page.id, { name })
+  const pluginData = [
+    ...contentSourcePluginData({
+      format: 'markdown',
+      mimeType: options.mimeType || 'text/markdown',
+      fileName: options.fileName ?? null,
+      revision: CONTENT_SOURCE_REVISION,
+      source
+    }),
+    {
+      pluginId: 'open-pencil',
+      key: 'markdown/source-mode',
+      value: options.sourceMode ?? 'markdown'
+    }
+  ]
+
+  if (options.representation !== 'native') {
+    graph.createNode('FRAME', page.id, {
+      name,
+      x: 0,
+      y: 0,
+      width: DOCUMENT_WIDTH,
+      height: 720,
+      clipsContent: true,
+      layoutMode: 'NONE',
+      fills: [colorToFill(SURFACE_COLOR)],
+      strokes: [solidStroke(BORDER_COLOR)],
+      cornerRadius: 12,
+      pluginData
+    })
+    return
+  }
+
   const documentFrame = createVerticalFrame(graph, page.id, name, DOCUMENT_WIDTH, {
     x: 0,
     y: 0,
@@ -492,27 +513,14 @@ export async function renderMarkdownDocument(
     fills: [colorToFill(SURFACE_COLOR)],
     strokes: [solidStroke(BORDER_COLOR)],
     cornerRadius: 12,
-    pluginData: [
-      ...contentSourcePluginData({
-        format: 'markdown',
-        mimeType: options.mimeType || 'text/markdown',
-        fileName: options.fileName ?? null,
-        revision: CONTENT_SOURCE_REVISION,
-        source
-      }),
-      {
-        pluginId: 'open-pencil',
-        key: 'markdown/source-mode',
-        value: options.sourceMode ?? 'markdown'
-      }
-    ]
+    pluginData
   })
   const context: MarkdownRenderContext = {
     graph,
     createMermaidScene: options.createMermaidScene,
     resolveImage: options.resolveImage
   }
-  await renderTokens(context, documentFrame.id, tokens, CONTENT_WIDTH)
+  await renderTokens(context, documentFrame.id, tokens ?? [], CONTENT_WIDTH)
 
   if (documentFrame.childIds.length === 0) {
     createTextNode(graph, documentFrame.id, 'Empty Markdown document', {

@@ -1,0 +1,5 @@
+{
+  "finalText": "Added a native “Onboarding decision” card directly below Roadmap:\n\n- KEEP — Guided setup in beta\n- WATCH — Activation drop-off\n- REVISIT — After two weeks\n\nExact page `0:439`, object `0:388`. Graph readback, contrast, presentation, and durable persistence passed. Existing cards were not modified.\n\n### Recap\n\n- Added one scannable card with 48px clearance below Roadmap.\n- No remaining issue; pixel screenshot proof was not separately performed.\n\n",
+  "generatedAtMs": 1785358412534,
+  "releasedAtMs": 1785358482244
+}

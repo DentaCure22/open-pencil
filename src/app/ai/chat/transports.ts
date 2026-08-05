@@ -1,5 +1,5 @@
 import { Chat } from '@ai-sdk/vue'
-import { DirectChatTransport, stepCountIs, ToolLoopAgent } from 'ai'
+import { DirectChatTransport, pruneMessages, stepCountIs, ToolLoopAgent } from 'ai'
 import type { ChatTransport, UIMessage } from 'ai'
 import type { ComputedRef, Ref } from 'vue'
 
@@ -91,8 +91,17 @@ export function createToolLoopTransport({
     providerOptions: cacheProviderOptions,
     prepareCall: (options) => {
       resetRunSteps(store)
+      const messages = Array.isArray(options.messages)
+        ? pruneMessages({
+            emptyMessages: 'remove',
+            messages: options.messages,
+            reasoning: 'before-last-message',
+            toolCalls: 'before-last-4-messages'
+          })
+        : undefined
       return {
         ...options,
+        ...(messages ? { messages } : {}),
         maxOutputTokens,
         providerOptions: cacheProviderOptions
       }

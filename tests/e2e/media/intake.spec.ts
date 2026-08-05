@@ -59,30 +59,34 @@ function threePagePdfBytes(): number[] {
   return [...new Uint8Array(pdf.output('arraybuffer'))]
 }
 
-test('dropped PDF becomes a visible source-backed viewer frame', async () => {
+test('dropped PDF becomes one interactive Code Object with retained source bytes', async () => {
   await dropFile('research.pdf', 'application/pdf', threePagePdfBytes())
 
-  const overlay = editor.page.getByTestId('media-evidence-pdf')
-  await expect(overlay).toBeVisible()
-  await expect(overlay).toContainText('research.pdf')
-  await expect(editor.page.getByTestId('media-evidence-pdf-viewer')).toBeVisible()
-  await expect(editor.page.getByTestId('media-evidence-pdf-canvas')).toHaveAttribute(
+  const pdf = editor.page.getByTestId('code-object-pdf')
+  const wrapper = editor.page.locator('[data-code-object-mode]').filter({ has: pdf })
+  await expect(pdf).toBeVisible()
+  await expect(pdf).toContainText('research.pdf')
+  await expect(wrapper).toHaveAttribute('data-code-object-mode', 'design')
+  await expect(editor.page.getByTestId('code-object-pdf-viewer')).toBeVisible()
+  await expect(editor.page.getByTestId('code-object-pdf-canvas')).toHaveAttribute(
     'aria-label',
     'PDF page 1 of 3: research.pdf'
   )
-  await expect(editor.page.getByTestId('media-evidence-pdf-controls')).toContainText('/ 3')
+  await expect(editor.page.getByTestId('code-object-pdf-controls')).toContainText('1 / 3')
   await expect(
     editor.page.getByRole('link', { name: 'Open source PDF: research.pdf' })
   ).toBeVisible()
+  await expect(editor.page.locator('iframe')).toHaveCount(0)
 
   const nextPage = editor.page.getByRole('button', {
     name: 'Next PDF page, currently page 1 of 3'
   })
+  await expect(nextPage).toBeDisabled()
+  await editor.page.getByTestId('code-object-design-hit-target').dblclick()
+  await expect(wrapper).toHaveAttribute('data-code-object-mode', 'interact')
   await expect(nextPage).toBeEnabled()
-  await nextPage.focus()
-  await expect(nextPage).toBeFocused()
-  await editor.page.keyboard.press('Enter')
-  await expect(editor.page.getByTestId('media-evidence-pdf-canvas')).toHaveAttribute(
+  await nextPage.click()
+  await expect(editor.page.getByTestId('code-object-pdf-canvas')).toHaveAttribute(
     'aria-label',
     'PDF page 2 of 3: research.pdf'
   )
@@ -121,6 +125,9 @@ test('dropped PDF becomes a visible source-backed viewer frame', async () => {
     )
     return {
       assetCount: store.graph.images.size,
+      codeObject: node?.pluginData.find(
+        (entry) => entry.pluginId === 'openpencil-code-object' && entry.key === 'document'
+      )?.value,
       extractedId: extracted?.id,
       extractedType: extracted?.type,
       nodeType: node?.type,
@@ -129,6 +136,11 @@ test('dropped PDF becomes a visible source-backed viewer frame', async () => {
   })
 
   expect(state.nodeType).toBe('FRAME')
+  expect(JSON.parse(state.codeObject ?? '{}')).toMatchObject({
+    component: 'pdf-document',
+    runtime: 'openpencil-code',
+    state: { activePage: 2, view: 'pdf' }
+  })
   expect(state.assetCount).toBe(2)
   expect(state.extractedId).toBeTruthy()
   expect(state.extractedType).toBe('RECTANGLE')
@@ -139,7 +151,7 @@ test('dropped PDF becomes a visible source-backed viewer frame', async () => {
   editor.canvas.assertNoErrors()
 })
 
-test('dropped large PNG stays native, editable, source-backed, and fit to the viewport', async () => {
+test('dropped large PNG stays native, editable, retains source bytes, and fits the viewport', async () => {
   await dropFile('photo.png', 'image/png', await pngBytes(1600, 900))
   await expect
     .poll(() => editor.page.evaluate(() => window.openPencil?.getStore?.().state.selectedIds.size))

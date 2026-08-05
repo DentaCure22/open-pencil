@@ -21,7 +21,7 @@ function defaultOutput(file: string, format: string): string {
 }
 
 export default defineCommand({
-  meta: { description: 'Convert a document to another writable format' },
+  meta: { name: 'convert', description: 'Convert a document to another writable format' },
   args: {
     file: {
       type: 'positional',

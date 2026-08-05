@@ -62,7 +62,7 @@ test('board switching fits first visits and preserves the camera around the side
       width: 960,
       height: 600,
       pluginData: [
-        { pluginId: 'smylr-production', key: 'kind', value: 'live-app-frame' },
+        { pluginId: 'smylr-production', key: 'kind', value: 'smylr-code-object-frame' },
         { pluginId: 'smylr-production', key: 'state', value: 'current' }
       ]
     })

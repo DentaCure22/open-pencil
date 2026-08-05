@@ -284,7 +284,17 @@ export function createSmylrBrandDesignPage(graph: SceneGraph, pageNode: SceneNod
   )
 
   // Status rule
-  addText(graph, board.id, 'Status color — only when needed', pad + 600, 550, 14, 700, BRAND.ink, 360)
+  addText(
+    graph,
+    board.id,
+    'Status color — only when needed',
+    pad + 600,
+    550,
+    14,
+    700,
+    BRAND.ink,
+    360
+  )
   const statuses = [
     { label: 'Success', meta: '--success', color: BRAND.success },
     { label: 'Warning', meta: '--warning', color: BRAND.warning },

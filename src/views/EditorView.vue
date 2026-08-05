@@ -1,42 +1,50 @@
 <script setup lang="ts">
 import { useHead } from '@unhead/vue'
-import { useDebounceFn, useEventListener, useUrlSearchParams } from '@vueuse/core'
+import { useDebounceFn, useEventListener, useIntervalFn, useUrlSearchParams } from '@vueuse/core'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useViewportKind, formatShortcut, useI18n } from '@open-pencil/vue'
 
+import {
+  bindAutomationPersistence,
+  type AutomationPersistenceTransaction
+} from '@/app/automation/bridge/persistence'
+import { initializeOpenPencilCloud, openPencilCloud } from '@/app/cloud/workspace'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
-import { useEditorStore } from '@/app/editor/active-store'
+import {
+  captureReloadState,
+  loadReloadState,
+  saveReloadState,
+  type ReloadStateSnapshot
+} from '@/app/document/io/reload-state'
+import { setActiveEditorStore, useEditorStore } from '@/app/editor/active-store'
 import { useKeyboard } from '@/app/shell/keyboard/use'
 import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { openFileFromPath, useMenu } from '@/app/shell/menu/use'
 import {
+  hasMoreOrganizedSidebarHierarchy,
+  resolveSidebarWorkspace,
+  sidebarWorkspacePluginData,
+  type SidebarWorkspace
+} from '@/app/sidebar-workspace/tree'
+import { switchSidebarWorkspaceBoard } from '@/app/sidebar-workspace/navigation'
+import {
   removeDesignedComponentPlaceholders,
   removeStaleComputedComponentPages
 } from '@/app/smylr-component-library/computed-catalog'
 import {
-  exitLiveInspectorPreviewMode,
-  liveInspectorPreviewMode
-} from '@/app/smylr-live-inspector/session'
-import { liveWorkspaceItems, restoreLiveWorkspace } from '@/app/smylr-live-inspector/workspace'
-import {
-  restoreSmylrProductionDocument,
-  saveSmylrProductionDocument
+  bindSmylrProductionDocumentPersistence,
+  bindSmylrProductionDocumentWriteGuard,
+  restoreSmylrProductionDocument
 } from '@/app/smylr-production/document-state'
 import {
-  bindLiveFrameDeletionSync,
-  clearLiveFrameTombstones,
-  loadLiveFrameTombstones
-} from '@/app/smylr-production/live/frame-deletion'
-import {
-  isApplyingSharedSmylrProductionDocument,
-  refreshSharedSmylrProductionWorkspace,
-  restoreSharedSmylrProductionWorkspace,
-  saveSharedSmylrProductionWorkspace
-} from '@/app/smylr-production/shared-document-state'
+  connectLocalWorkspaceAuthority,
+  type LocalWorkspaceAuthority,
+  type LocalWorkspaceAuthorityRole
+} from '@/app/smylr-production/document-persistence/local-authority'
 import {
   isBrowserPageReload,
   restoreSmylrProductionView,
@@ -46,14 +54,41 @@ import {
   hasSmylrProductionWorkspace,
   isSmylrFoundationsStale,
   openSmylrProductionWorkspace,
+  repairSmylrProductionWorkspaceStructure,
   refreshSmylrFoundationsBoardsInPlace,
   stampSmylrFoundationsRevision,
   switchSmylrProductionPage
 } from '@/app/smylr-production/workspace'
-import { createTab, activeTab, getActiveStore, tabCount } from '@/app/tabs'
+import {
+  createTab,
+  activeTab,
+  getActiveStore,
+  getWorkspaceTab,
+  switchTab,
+  tabCount
+} from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
+import {
+  loadOpenPencilWorkspaceIdentity,
+  openPencilWorkspaceIdentityPluginData,
+  OPENPENCIL_WORKSPACE_DOCUMENT_NAME,
+  readOpenPencilWorkspaceIdentity
+} from '@/app/workspace-document/identity'
+import {
+  consumeLocalWorkspaceNavigationIntent,
+  currentLocalWorkspaceAuthorityStatus,
+  readLocalWorkspaceNavigationIntent,
+  refreshLocalWorkspaceAuthorityStatus,
+  revertLocalWorkspaceBoardTransaction,
+  subscribeLocalWorkspaceAuthorityHead
+} from '@/app/workspace-document/local-authority/client'
+import { createLocalWorkspaceAuthorityHistoryBridge } from '@/app/workspace-document/local-authority/history'
+import { shouldAllowConcurrentLocalWorkspaceWriters } from '@/app/workspace-document/local-authority/mode'
+import { createLocalWorkspaceNavigationConsumer } from '@/app/workspace-document/local-authority/navigation'
+import { createLocalWorkspaceDocumentAuthority } from '@/app/workspace-document/local-authority/session'
+import { createLocalWorkspaceAuthorityHeadSynchronizer } from '@/app/workspace-document/local-authority/synchronizer'
+import EmptyBoardStart from '@/components/EmptyBoardStart.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
-import HtmlFirstCanvasWelcome from '@/components/HtmlFirstCanvasWelcome.vue'
 import MermaidImportDialog from '@/components/diagram/MermaidImportDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import { provideMobileHud } from '@/components/MobileHud/context'
@@ -62,6 +97,7 @@ import BoardDock from '@/components/sidebar/BoardDock.vue'
 import TabBar from '@/components/TabBar.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
 import Tip from '@/components/ui/Tip.vue'
+import CloudWorkspaceGate from '@/components/cloud/CloudWorkspaceGate.vue'
 
 const MobileDrawer = defineAsyncComponent(() => import('@/components/MobileDrawer.vue'))
 const MobileHud = defineAsyncComponent(() => import('@/components/MobileHud/MobileHud.vue'))
@@ -69,15 +105,25 @@ const MobileHud = defineAsyncComponent(() => import('@/components/MobileHud/Mobi
 const route = useRoute()
 const params = useUrlSearchParams('history')
 const showChrome = !('no-chrome' in params)
-const showHtmlSourceTools = 'html-source' in params
+const showCodeTools = 'html-source' in params || !('test' in params)
 const isExplicitSmylrWorkspace = 'smylr-app' in params || 'smylr-production' in params
 const isUnifiedHomeWorkspace = route.path === '/' && !('test' in params) && !('blank' in params)
 const isSmylrProductionWorkspace = isExplicitSmylrWorkspace || isUnifiedHomeWorkspace
+const workspaceIdentityPromise = isSmylrProductionWorkspace
+  ? loadOpenPencilWorkspaceIdentity()
+  : null
 const requestedSmylrPageId =
   typeof params['smylr-page'] === 'string' ? params['smylr-page'] : undefined
 
 const createdInitialTab = tabCount() === 0
 const firstTab = createdInitialTab ? createTab() : (activeTab.value ?? createTab())
+// A Vite module reload can recreate the active-store ref while preserving the
+// existing tab collection. Rebind before any setup composable reads the proxy.
+setActiveEditorStore(firstTab.store)
+const workspaceStore = isSmylrProductionWorkspace
+  ? (getWorkspaceTab()?.store ?? firstTab.store)
+  : firstTab.store
+if (isSmylrProductionWorkspace) workspaceStore.state.loading = true
 const store = useEditorStore()
 const isCurrentSmylrBoard = computed(() => {
   void store.state.sceneVersion
@@ -90,19 +136,20 @@ const isCurrentPageEmpty = computed(() => {
   void store.state.sceneVersion
   return store.graph.getChildren(store.state.currentPageId).length === 0
 })
-const showHtmlFirstStart = computed(
+const showEmptyBoardStart = computed(
   () =>
     !isSmylrProductionWorkspace &&
-    (showHtmlSourceTools || !('test' in params)) &&
+    showCodeTools &&
     !isCurrentSmylrBoard.value &&
     isCurrentPageEmpty.value
 )
 
 const { dialogs } = useI18n()
 const { isMobile } = useViewportKind()
-const collab = useCollab(getActiveStore)
+const collab = useCollab(() => (isSmylrProductionWorkspace ? workspaceStore : getActiveStore()))
 provide(COLLAB_KEY, collab)
 provideMobileHud(collab)
+if (isSmylrProductionWorkspace) void initializeOpenPencilCloud()
 
 const shouldRestoreSmylrView = createdInitialTab && isBrowserPageReload()
 // Always restore the last local production canvas when opening ?smylr-app —
@@ -110,17 +157,150 @@ const shouldRestoreSmylrView = createdInitialTab && isBrowserPageReload()
 const shouldRestoreSmylrDocument = isSmylrProductionWorkspace
 let didAttemptSmylrViewRestore = false
 let didAttemptSmylrDocumentRestore = false
+let didRestoreTabReloadState = false
 let stopSmylrPagePersistence: (() => void) | null = null
 let stopSmylrSelectionPersistence: (() => void) | null = null
 let stopSmylrViewportPersistence: (() => void) | null = null
 let stopSmylrToolPersistence: (() => void) | null = null
 let stopSmylrDocumentPersistence: (() => void) | null = null
 let stopSmylrDeletePersistence: (() => void) | null = null
-let stopLiveFrameDeletionSync: (() => void) | null = null
+let stopSmylrDocumentTracking: (() => void) | null = null
+let releaseAutomationPersistence: (() => void) | null = null
 let smylrDeletePersistenceQueued = false
+let productionWorkspaceReady = false
+let connectedWorkspaceRoomId: string | null = null
+let localWorkspaceReloadStateId: string | null = null
+let localWorkspaceAuthority: LocalWorkspaceAuthority | null = null
+let stopLocalWorkspaceAuthorityHeadSubscription: (() => void) | null = null
+const localWorkspaceRole = ref<LocalWorkspaceAuthorityRole | 'cloud' | 'pending'>(
+  isSmylrProductionWorkspace ? 'pending' : 'writer'
+)
+const canWriteLocalWorkspaceDocument = () =>
+  Boolean(
+    !openPencilCloud.state.value.workspace &&
+    localWorkspaceRole.value === 'writer' &&
+    localWorkspaceAuthority?.canWrite()
+  )
+const releaseSmylrProductionDocumentWriteGuard = isSmylrProductionWorkspace
+  ? bindSmylrProductionDocumentWriteGuard(workspaceStore, canWriteLocalWorkspaceDocument)
+  : null
+
+async function repairHydratedWorkspace(
+  active: ReturnType<typeof getActiveStore>,
+  localSidebarWorkspace: SidebarWorkspace
+) {
+  const cloudSidebarWorkspace = resolveSidebarWorkspace(active.graph).workspace
+  const localHierarchyIsBetter = hasMoreOrganizedSidebarHierarchy(
+    localSidebarWorkspace,
+    cloudSidebarWorkspace
+  )
+  const root = active.graph.getNode(active.graph.rootId)
+  const identity = await workspaceIdentityPromise
+  const identityChanged = Boolean(
+    root &&
+    identity &&
+    readOpenPencilWorkspaceIdentity(active.graph)?.workspaceId !== identity.workspaceId
+  )
+  if (localHierarchyIsBetter && root) {
+    active.updateNode(root.id, {
+      pluginData: sidebarWorkspacePluginData(root, localSidebarWorkspace)
+    })
+  }
+  const currentRoot = active.graph.getNode(active.graph.rootId)
+  if (identityChanged && identity && currentRoot) {
+    active.updateNode(currentRoot.id, {
+      pluginData: openPencilWorkspaceIdentityPluginData(currentRoot, identity)
+    })
+    active.state.documentName = OPENPENCIL_WORKSPACE_DOCUMENT_NAME
+  }
+  const structureChanged = repairSmylrProductionWorkspaceStructure(active)
+  const structureTouched = localHierarchyIsBetter || identityChanged || structureChanged
+  if (structureTouched) active.requestRender()
+  if (requestedSmylrPageId) {
+    await switchSmylrProductionPage(active, requestedSmylrPageId)
+  }
+  if (structureTouched) await persistSmylrDocumentNow(active)
+}
+
+async function connectOpenPencilWorkspace() {
+  const workspace = openPencilCloud.state.value.workspace
+  const identity = await workspaceIdentityPromise
+  if (!isSmylrProductionWorkspace || !productionWorkspaceReady || !identity) return
+  const roomId = workspace?.roomId ?? identity.roomId
+  if (connectedWorkspaceRoomId === roomId && collab.state.value.connected) return
+  connectedWorkspaceRoomId = roomId
+  const localSidebarWorkspace = resolveSidebarWorkspace(workspaceStore.graph).workspace
+  if (!workspace) {
+    const seedLocalWorkspace = localWorkspaceRole.value === 'writer'
+    collab.connectLocalWorkspace(
+      identity.roomId,
+      seedLocalWorkspace
+        ? () => repairHydratedWorkspace(workspaceStore, localSidebarWorkspace)
+        : undefined,
+      seedLocalWorkspace
+    )
+    return
+  }
+  collab.connectSharedWorkspace(workspace.roomId, workspace.durableStore, () =>
+    repairHydratedWorkspace(workspaceStore, localSidebarWorkspace)
+  )
+}
+
+watch(
+  () => openPencilCloud.state.value.workspace,
+  () => {
+    if (!productionWorkspaceReady) return
+    connectedWorkspaceRoomId = null
+    void ensureWorkspaceAuthorityMode()
+      .then(() => connectOpenPencilWorkspace())
+      .catch((error) => console.error('[OpenPencil Workspace] authority switch failed', error))
+  }
+)
+
+async function ensureWorkspaceAuthorityMode() {
+  if (!isSmylrProductionWorkspace) return
+  const cloudWorkspace = openPencilCloud.state.value.workspace
+  if (cloudWorkspace) {
+    stopSmylrDocumentPersistenceTracking()
+    stopLocalWorkspaceAuthorityHeadSubscription?.()
+    stopLocalWorkspaceAuthorityHeadSubscription = null
+    localWorkspaceAuthority?.close()
+    localWorkspaceAuthority = null
+    localWorkspaceRole.value = 'cloud'
+    return
+  }
+  if (localWorkspaceAuthority) return
+
+  const identity = await workspaceIdentityPromise
+  if (!identity) return
+  localWorkspaceReloadStateId = identity.workspaceId
+  localWorkspaceRole.value = 'pending'
+  const authorityStatus =
+    currentLocalWorkspaceAuthorityStatus() ?? (await refreshLocalWorkspaceAuthorityStatus())
+  const authority = await connectLocalWorkspaceAuthority({
+    allowConcurrentWriters: shouldAllowConcurrentLocalWorkspaceWriters(authorityStatus),
+    documentId: identity.documentId,
+    onHeadCommitted: requestLocalWorkspaceAuthorityHeadSynchronization,
+    onWriterLost: () => {
+      localWorkspaceRole.value = 'viewer'
+      stopSmylrDocumentPersistenceTracking()
+    }
+  })
+  localWorkspaceAuthority = authority
+  stopLocalWorkspaceAuthorityHeadSubscription?.()
+  stopLocalWorkspaceAuthorityHeadSubscription = subscribeLocalWorkspaceAuthorityHead(
+    requestLocalWorkspaceAuthorityHeadSynchronization
+  )
+  localWorkspaceRole.value = authority.role
+  if (productionWorkspaceReady && authority.role === 'writer') {
+    startSmylrDocumentPersistenceTracking()
+  }
+}
 
 async function restoreSmylrViewAfterRefresh(active: ReturnType<typeof getActiveStore>) {
-  if (!shouldRestoreSmylrView || didAttemptSmylrViewRestore) return false
+  if (!shouldRestoreSmylrView || didAttemptSmylrViewRestore || didRestoreTabReloadState) {
+    return false
+  }
   didAttemptSmylrViewRestore = true
   return restoreSmylrProductionView(active, {
     expectedPageId: active.state.currentPageId
@@ -130,24 +310,34 @@ async function restoreSmylrViewAfterRefresh(active: ReturnType<typeof getActiveS
 async function restoreSmylrDocument(active: ReturnType<typeof getActiveStore>) {
   if (!shouldRestoreSmylrDocument || didAttemptSmylrDocumentRestore) return false
   didAttemptSmylrDocumentRestore = true
-  await restoreLiveWorkspace()
-  const localRestore = await restoreSmylrProductionDocument(active)
-  const sharedRestore = await restoreSharedSmylrProductionWorkspace(active)
-  if (sharedRestore === 'restored') return true
-  return localRestore
+  const identity = await workspaceIdentityPromise
+  let reloadState: ReloadStateSnapshot | null = captureReloadState(active.state)
+  if (createdInitialTab) reloadState = identity ? loadReloadState(identity.workspaceId) : null
+  const restored = await localDocumentAuthority.restore(
+    active,
+    () => restoreSmylrProductionDocument(active),
+    reloadState
+  )
+  if (restored) localAuthorityHeadSynchronizer.acknowledge(active.state.sceneVersion)
+  didRestoreTabReloadState = restored && reloadState !== null
+  return restored
 }
 
-async function persistSmylrDocumentNow(active: ReturnType<typeof getActiveStore>) {
-  const localSaved = await saveSmylrProductionDocument(active)
-  if (!isApplyingSharedSmylrProductionDocument()) {
-    await saveSharedSmylrProductionWorkspace(active)
+async function persistSmylrDocumentNow(
+  active: ReturnType<typeof getActiveStore>,
+  transaction?: AutomationPersistenceTransaction
+) {
+  const sceneVersion = active.state.sceneVersion
+  const persisted = await localDocumentAuthority.persist(active, transaction)
+  if (persisted && active.state.sceneVersion === sceneVersion) {
+    localAuthorityHeadSynchronizer.acknowledge(sceneVersion)
   }
-  return localSaved
+  return persisted
 }
 
 const persistSmylrView = useDebounceFn(
   () => {
-    if (isSmylrProductionWorkspace) void saveSmylrProductionView(getActiveStore())
+    if (isSmylrProductionWorkspace) void saveSmylrProductionView(workspaceStore)
   },
   120,
   { maxWait: 1000 }
@@ -155,63 +345,220 @@ const persistSmylrView = useDebounceFn(
 
 const persistSmylrDocument = useDebounceFn(
   () => {
-    if (isSmylrProductionWorkspace) void persistSmylrDocumentNow(getActiveStore())
+    if (isSmylrProductionWorkspace) void persistSmylrDocumentNow(workspaceStore)
   },
   300,
   { maxWait: 1000 }
 )
 
+const localAuthorityHistory = createLocalWorkspaceAuthorityHistoryBridge({
+  onError: (error) => {
+    console.warn('[Local workspace authority] Durable history action failed:', error)
+  },
+  revertTransaction: revertLocalWorkspaceBoardTransaction,
+  store: workspaceStore,
+  synchronize: () => synchronizeLocalWorkspaceAuthorityHead(true)
+})
+
+const localDocumentAuthority = createLocalWorkspaceDocumentAuthority({
+  canWrite: canWriteLocalWorkspaceDocument,
+  isCloudActive: () => Boolean(openPencilCloud.state.value.workspace),
+  onBlocked: ({ newerHead }) => {
+    localWorkspaceRole.value = 'viewer'
+    stopSmylrDocumentPersistenceTracking()
+    if (newerHead) void synchronizeLocalWorkspaceAuthorityHead(true)
+  },
+  onHeadApplied: (head) => {
+    localAuthorityHistory.applyHead(head)
+    collab.publishGraphReplacement()
+  },
+  onLocalHeadCommitted: () => localWorkspaceAuthority?.notifyHeadCommitted()
+})
+
+const localAuthorityNavigation = createLocalWorkspaceNavigationConsumer({
+  consumeIntent: consumeLocalWorkspaceNavigationIntent,
+  currentAuthority: currentLocalWorkspaceAuthorityStatus,
+  currentPageId: () => workspaceStore.state.currentPageId,
+  currentRuntimeInstanceId: () => null,
+  openPage: async (pageId) => {
+    const page = workspaceStore.graph.getNode(pageId)
+    if (page?.type !== 'CANVAS') return false
+    const authority = currentLocalWorkspaceAuthorityStatus()
+    const workspaceTab = getWorkspaceTab(authority?.identity.workspaceId)
+    if (!workspaceTab || workspaceTab.store !== workspaceStore) return false
+    switchTab(workspaceTab.id)
+    await switchSidebarWorkspaceBoard(workspaceStore, pageId)
+    return activeTab.value?.id === workspaceTab.id && workspaceStore.state.currentPageId === pageId
+  },
+  readIntent: readLocalWorkspaceNavigationIntent
+})
+
+function consumePendingLocalNavigation() {
+  return localAuthorityNavigation.consumePending().catch((error) => {
+    console.warn('[Local workspace authority] Board navigation failed:', error)
+    return false
+  })
+}
+
+const localAuthorityHeadSynchronizer = createLocalWorkspaceAuthorityHeadSynchronizer({
+  canResumeWriting: () =>
+    Boolean(localWorkspaceAuthority?.role === 'writer' && localWorkspaceAuthority.canWrite()),
+  canSynchronize: () =>
+    Boolean(
+      isSmylrProductionWorkspace &&
+      productionWorkspaceReady &&
+      !openPencilCloud.state.value.workspace
+    ),
+  canWrite: canWriteLocalWorkspaceDocument,
+  currentSceneVersion: () => workspaceStore.state.sceneVersion,
+  persist: () => persistSmylrDocumentNow(workspaceStore),
+  restore: () =>
+    localDocumentAuthority.restore(
+      workspaceStore,
+      async () => false,
+      captureReloadState(workspaceStore.state)
+    ),
+  setWritable: (writable) => {
+    localWorkspaceRole.value = writable ? 'writer' : 'viewer'
+  },
+  startTracking: startSmylrDocumentPersistenceTracking,
+  stopTracking: stopSmylrDocumentPersistenceTracking
+})
+
+function synchronizeLocalWorkspaceAuthorityHead(localChangesAlreadyPreserved = false) {
+  return localAuthorityHeadSynchronizer.synchronize(localChangesAlreadyPreserved)
+}
+
+async function synchronizeLocalWorkspaceAuthorityHeadIfChanged(): Promise<boolean> {
+  if (
+    !isSmylrProductionWorkspace ||
+    !productionWorkspaceReady ||
+    openPencilCloud.state.value.workspace ||
+    !(await localDocumentAuthority.hasNewerHead())
+  ) {
+    return false
+  }
+  return synchronizeLocalWorkspaceAuthorityHead()
+}
+
+function requestLocalWorkspaceAuthorityHeadSynchronization(): void {
+  void synchronizeLocalWorkspaceAuthorityHeadIfChanged().catch((error) => {
+    console.warn('[Local workspace authority] Head synchronization failed:', error)
+  })
+}
+
+if (isSmylrProductionWorkspace) {
+  releaseAutomationPersistence = bindAutomationPersistence(
+    workspaceStore,
+    async (requestedSceneRevision, transaction) => {
+      if (workspaceStore.state.sceneVersion !== requestedSceneRevision) {
+        return { reason: 'concurrent_scene_change', status: 'unknown' }
+      }
+      const saved = await persistSmylrDocumentNow(workspaceStore, transaction)
+      if (!saved) return { reason: 'save_not_acknowledged', status: 'unknown' }
+      if (workspaceStore.state.sceneVersion !== requestedSceneRevision) {
+        return { reason: 'concurrent_scene_change', status: 'unknown' }
+      }
+      const authority = currentLocalWorkspaceAuthorityStatus()
+      return authority?.state === 'ready'
+        ? {
+            authority_id: authority.authorityId,
+            authority_revision: authority.revision,
+            content_hash: authority.contentHash ?? undefined,
+            status: 'durable',
+            target: 'local_workspace_authority'
+          }
+        : { status: 'durable', target: 'browser_local' }
+    }
+  )
+}
+
+const authorityNavigationMonitor = useIntervalFn(
+  async () => {
+    if (
+      !isSmylrProductionWorkspace ||
+      !productionWorkspaceReady ||
+      openPencilCloud.state.value.workspace
+    ) {
+      return
+    }
+    await consumePendingLocalNavigation()
+  },
+  750,
+  { immediate: false }
+)
+
 function scheduleSmylrDocumentPersistence() {
-  if (isApplyingSharedSmylrProductionDocument()) return
   persistSmylrDocument()
 }
 
 function persistSmylrDocumentAfterDelete() {
-  if (smylrDeletePersistenceQueued || isApplyingSharedSmylrProductionDocument()) return
+  if (smylrDeletePersistenceQueued) return
   smylrDeletePersistenceQueued = true
   queueMicrotask(() => {
     smylrDeletePersistenceQueued = false
-    if (isSmylrProductionWorkspace) void persistSmylrDocumentNow(getActiveStore())
+    if (isSmylrProductionWorkspace) void persistSmylrDocumentNow(workspaceStore)
   })
 }
 
-function startSmylrViewPersistence() {
-  if (!isSmylrProductionWorkspace || stopSmylrPagePersistence) return
-  const active = getActiveStore()
-  if (!stopLiveFrameDeletionSync) {
-    stopLiveFrameDeletionSync = bindLiveFrameDeletionSync(active)
+function stopSmylrDocumentPersistenceTracking() {
+  stopSmylrDocumentPersistence?.()
+  stopSmylrDeletePersistence?.()
+  stopSmylrDocumentTracking?.()
+  stopSmylrDocumentPersistence = null
+  stopSmylrDeletePersistence = null
+  stopSmylrDocumentTracking = null
+}
+
+function startSmylrDocumentPersistenceTracking() {
+  if (
+    !isSmylrProductionWorkspace ||
+    !canWriteLocalWorkspaceDocument() ||
+    stopSmylrDocumentTracking
+  ) {
+    return
   }
-  stopSmylrPagePersistence = active.onEditorEvent('page:changed', persistSmylrView)
-  stopSmylrSelectionPersistence = active.onEditorEvent('selection:changed', persistSmylrView)
-  stopSmylrViewportPersistence = active.onEditorEvent('viewport:changed', persistSmylrView)
-  stopSmylrToolPersistence = active.onEditorEvent('tool:changed', persistSmylrView)
+  const active = workspaceStore
+  stopSmylrDocumentTracking = bindSmylrProductionDocumentPersistence(active)
   stopSmylrDocumentPersistence = active.onEditorEvent(
     'render:requested',
     scheduleSmylrDocumentPersistence
   )
-  // Deletion must reach local + shared storage before a quick reload can restore
-  // the previous graph. Coalesce child deletions into one same-turn save instead
+  // Deletion must reach local storage before a quick reload can restore the
+  // previous graph. Coalesce child deletions into one same-turn save instead
   // of waiting for the normal 300 ms document debounce.
   stopSmylrDeletePersistence = active.onEditorEvent('node:deleted', persistSmylrDocumentAfterDelete)
-  void saveSmylrProductionView(active)
   void persistSmylrDocumentNow(active)
+}
+
+function startSmylrViewPersistence() {
+  if (!isSmylrProductionWorkspace || stopSmylrPagePersistence) return
+  const active = workspaceStore
+  const saveReloadStateNow = () => {
+    if (localWorkspaceReloadStateId) {
+      saveReloadState(localWorkspaceReloadStateId, active.state)
+    }
+  }
+  stopSmylrPagePersistence = active.onEditorEvent('page:changed', () => {
+    saveReloadStateNow()
+    persistSmylrView()
+  })
+  stopSmylrSelectionPersistence = active.onEditorEvent('selection:changed', persistSmylrView)
+  stopSmylrViewportPersistence = active.onEditorEvent('viewport:changed', persistSmylrView)
+  stopSmylrToolPersistence = active.onEditorEvent('tool:changed', persistSmylrView)
+  saveReloadStateNow()
+  void saveSmylrProductionView(active)
+  startSmylrDocumentPersistenceTracking()
 }
 
 useEventListener(window, 'pagehide', () => {
   if (!isSmylrProductionWorkspace) return
-  const active = getActiveStore()
+  const active = workspaceStore
+  if (localWorkspaceReloadStateId) {
+    saveReloadState(localWorkspaceReloadStateId, active.state)
+  }
   void saveSmylrProductionView(active)
   void persistSmylrDocumentNow(active)
-})
-
-useEventListener(window, 'focus', () => {
-  if (!isSmylrProductionWorkspace) return
-  void refreshSharedSmylrProductionWorkspace(getActiveStore())
-})
-
-watch(liveWorkspaceItems, () => {
-  if (!isSmylrProductionWorkspace) return
-  scheduleSmylrDocumentPersistence()
 })
 
 /**
@@ -220,9 +567,12 @@ watch(liveWorkspaceItems, () => {
  * (after a vite rebuild + soft reload) so you don't need Cmd+Shift+R forever.
  */
 async function refreshFoundationsIfStale(active: ReturnType<typeof getActiveStore>) {
+  if (repairSmylrProductionWorkspaceStructure(active)) {
+    active.requestRender()
+    void persistSmylrDocumentNow(active)
+  }
   if (!isSmylrFoundationsStale(active)) return
-  // Never replaceGraph the whole production canvas for a builder bump —
-  // that re-seeds every live iframe and wipes deleted frames / design edits.
+  // Never replaceGraph the whole production canvas for a builder bump.
   const refreshed = await refreshSmylrFoundationsBoardsInPlace(active, {
     selectedPageId: requestedSmylrPageId,
     preserveViewport: true
@@ -233,14 +583,13 @@ async function refreshFoundationsIfStale(active: ReturnType<typeof getActiveStor
 
 async function ensureSmylrProductionWorkspace(force = false) {
   if (!isSmylrProductionWorkspace) return
-  const active = getActiveStore()
+  const active = workspaceStore
 
   // Prefer restoring the user's last scene graph (deletes included).
   if (!force && (await restoreSmylrDocument(active))) {
     await refreshFoundationsIfStale(active)
     if (requestedSmylrPageId) await switchSmylrProductionPage(active, requestedSmylrPageId)
     await restoreSmylrViewAfterRefresh(active)
-    // Re-persist post-tombstone graph so the next boot matches what the user sees.
     void persistSmylrDocumentNow(active)
     return
   }
@@ -272,11 +621,6 @@ async function ensureSmylrProductionWorkspace(force = false) {
 
   // No workspace yet, or explicit ?smylr-rebuild= force seed.
   if (active.state.currentPageId !== initialPageId && !force) return
-  if (force) {
-    // Explicit rebuild is the only path that clears user delete tombstones.
-    clearLiveFrameTombstones()
-  }
-  await loadLiveFrameTombstones()
   await openSmylrProductionWorkspace(active, {
     selectedPageId: requestedSmylrPageId
   })
@@ -288,18 +632,22 @@ async function ensureSmylrProductionWorkspace(force = false) {
 // dismiss the splash — never block boot on foundations graph build.
 if (isSmylrProductionWorkspace) {
   onMounted(() => {
-    // Bind delete hooks immediately so early deletes (before seed finishes) stick.
-    const active = getActiveStore()
-    if (!stopLiveFrameDeletionSync) {
-      stopLiveFrameDeletionSync = bindLiveFrameDeletionSync(active)
-    }
-    void loadLiveFrameTombstones()
     // Double-rAF: let EditorCanvas mount + start CanvasKit before heavy graph work.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        void ensureSmylrProductionWorkspace()
-          .then(startSmylrViewPersistence)
+        void ensureWorkspaceAuthorityMode()
+          .then(() => ensureSmylrProductionWorkspace())
+          .then(() => {
+            productionWorkspaceReady = true
+            startSmylrViewPersistence()
+            authorityNavigationMonitor.resume()
+            void consumePendingLocalNavigation()
+            return connectOpenPencilWorkspace()
+          })
           .catch((e) => console.error('[Smylr Production Workspace]', e))
+          .finally(() => {
+            workspaceStore.state.loading = false
+          })
       })
     })
   })
@@ -322,19 +670,17 @@ watch(
   }
 )
 
-/** In-place board update (HMR event from board files + accept deps). */
-function bumpBoards(reason: string) {
+/** In-place Board update after foundation source changes. */
+function bumpBoards() {
   if (!isSmylrProductionWorkspace) return
-  void import('@/app/smylr-production/live/reseed').then(({ scheduleSmylrLiveReseed }) => {
-    return scheduleSmylrLiveReseed(getActiveStore, {
-      selectedPageId: typeof params['smylr-page'] === 'string' ? params['smylr-page'] : undefined,
-      reason
-    })
-  })
+  void refreshSmylrFoundationsBoardsInPlace(workspaceStore, {
+    selectedPageId: requestedSmylrPageId,
+    preserveViewport: true
+  }).then(() => persistSmylrDocumentNow(workspaceStore))
 }
 
 // Board modules fire this after self-accept so we always get the new builder.
-useEventListener(window, 'smylr-foundations-hmr', () => bumpBoards('hmr-event'))
+useEventListener(window, 'smylr-foundations-hmr', bumpBoards)
 
 if (import.meta.hot) {
   import.meta.hot.accept(
@@ -344,7 +690,7 @@ if (import.meta.hot) {
       '../app/smylr-production/smylr-token-catalog.ts',
       '../app/smylr-production/smylr-tokens.reference.json'
     ],
-    () => bumpBoards('hmr-accept')
+    bumpBoards
   )
 }
 
@@ -355,11 +701,7 @@ useMenu()
 function isEditorCanvasWheelTarget(event: WheelEvent) {
   const target = event.target
   if (!(target instanceof Element)) return false
-  return Boolean(
-    target.closest(
-      '[data-test-id="editor-root"] canvas, [data-test-id="smylr-live-app-embed"], [data-test-id="smylr-live-frame-selection"]'
-    )
-  )
+  return Boolean(target.closest('[data-test-id="editor-root"] canvas'))
 }
 
 useEventListener(
@@ -375,31 +717,14 @@ useEventListener(
 
 function showEditorUI() {
   store.state.showUI = true
-  exitLiveInspectorPreviewMode()
 }
 
 function handleEditorLayout(layout: number[]) {
-  if (!liveInspectorPreviewMode.value && showLayersPanel.value && layout.length === 2) {
+  if (showLayersPanel.value && layout.length === 2) {
     saveEditorLayout(layout)
   }
 }
 
-watch(
-  () => store.state.showUI,
-  (showUI) => {
-    if (!showUI || !liveInspectorPreviewMode.value) return
-    showEditorUI()
-  }
-)
-
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-  if (event.code !== 'Escape' || !liveInspectorPreviewMode.value) return
-  event.preventDefault()
-  showEditorUI()
-})
-
-const automationCleanup = ref<(() => void) | null>(null)
-const mcpCleanup = ref<(() => void) | null>(null)
 const fileAssociationCleanup = ref<(() => void) | null>(null)
 const initialEditorLayout = loadEditorLayout()
 
@@ -442,40 +767,11 @@ async function bindAssociatedFileOpen() {
   await openPendingAssociatedFiles()
 }
 
-async function openSmylrContainerIfRequested() {
-  if ('smylr-live-clipboard' in params || 'smylr-live' in params) {
-    await store.openSmylrLiveContainerClipboardDocument()
-    return
-  }
-
-  if (!('smylr-sample' in params)) return
-  await store.openSampleSmylrLiveContainerDocument()
-}
-
 onMounted(async () => {
-  try {
-    const { spawnMCPIfNeeded } = await import('@/app/automation/mcp/spawn')
-    const mcp = await spawnMCPIfNeeded()
-    mcpCleanup.value = mcp?.disconnect ?? null
-    const tauri = isTauri()
-    if (import.meta.env.DEV || tauri) {
-      const { connectAutomation } = await import('@/app/automation/bridge/server')
-      automationCleanup.value = connectAutomation(getActiveStore, mcp?.authToken ?? null).disconnect
-    }
-  } catch (e) {
-    console.warn('[MCP]', e)
-  }
-
   try {
     await bindAssociatedFileOpen()
   } catch (e) {
     console.error('[Open With]', e)
-  }
-
-  try {
-    await openSmylrContainerIfRequested()
-  } catch (e) {
-    console.error('[Smylr Container]', e)
   }
 })
 
@@ -484,12 +780,16 @@ onUnmounted(() => {
   stopSmylrSelectionPersistence?.()
   stopSmylrViewportPersistence?.()
   stopSmylrToolPersistence?.()
-  stopSmylrDocumentPersistence?.()
-  stopSmylrDeletePersistence?.()
-  stopLiveFrameDeletionSync?.()
-  stopLiveFrameDeletionSync = null
-  mcpCleanup.value?.()
-  automationCleanup.value?.()
+  stopSmylrDocumentPersistenceTracking()
+  stopLocalWorkspaceAuthorityHeadSubscription?.()
+  stopLocalWorkspaceAuthorityHeadSubscription = null
+  authorityNavigationMonitor.pause()
+  releaseAutomationPersistence?.()
+  releaseAutomationPersistence = null
+  localAuthorityHistory.dispose()
+  releaseSmylrProductionDocumentWriteGuard?.()
+  localWorkspaceAuthority?.close()
+  localWorkspaceAuthority = null
   fileAssociationCleanup.value?.()
 })
 </script>
@@ -497,10 +797,12 @@ onUnmounted(() => {
 <template>
   <div
     data-test-id="editor-root"
+    :data-local-workspace-role="localWorkspaceRole"
     class="flex h-screen w-screen flex-col"
     style="overscroll-behavior: none"
   >
     <SafariBanner />
+    <CloudWorkspaceGate :enabled="isSmylrProductionWorkspace" />
     <TabBar />
     <MermaidImportDialog />
 
@@ -515,13 +817,13 @@ onUnmounted(() => {
         without a flex parent — that collapsed the canvas to 0 height.
       -->
       <div class="absolute inset-0 isolate z-0 flex min-h-0 min-w-0">
-        <EditorCanvas :dither-presentation="showHtmlFirstStart ? 'surface' : 'overlay'" />
-        <HtmlFirstCanvasWelcome v-if="showHtmlFirstStart" :page-is-empty="isCurrentPageEmpty" />
+        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+        <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
       </div>
 
       <!-- Floating chrome over canvas; middle is transparent + click-through -->
       <SplitterGroup
-        v-if="!showHtmlFirstStart"
+        v-if="!showEmptyBoardStart"
         direction="horizontal"
         :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
         class="pointer-events-none absolute inset-0 z-20 bg-transparent"
@@ -551,10 +853,7 @@ onUnmounted(() => {
               data-test-id="layers-shell"
               class="border-chrome-border bg-chrome shadow-chrome-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] border backdrop-blur-2xl [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
             >
-              <LayersPanel
-                :show-code-tab="showHtmlSourceTools && !isCurrentSmylrBoard"
-                @close="closeLayersPanel"
-              />
+              <LayersPanel :show-code-tab="showCodeTools" @close="closeLayersPanel" />
             </div>
           </div>
         </SplitterPanel>
@@ -576,8 +875,8 @@ onUnmounted(() => {
           class="pointer-events-none relative min-w-0 bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
         >
           <!-- Keep both floating controls on the usable canvas centerline. -->
-          <Toolbar v-if="!liveInspectorPreviewMode" :sidebar-open="showLayersPanel" />
-          <BoardDock v-if="!liveInspectorPreviewMode" :sidebar-open="showLayersPanel" />
+          <Toolbar :sidebar-open="showLayersPanel" />
+          <BoardDock :sidebar-open="showLayersPanel" />
         </SplitterPanel>
       </SplitterGroup>
 
@@ -587,7 +886,7 @@ onUnmounted(() => {
         leave-active-class="transition-[opacity,transform] duration-100 ease-in motion-reduce:transition-none"
         leave-to-class="-translate-x-2 opacity-0"
       >
-        <div v-if="!showHtmlFirstStart && !showLayersPanel" class="absolute top-3 left-3 z-30">
+        <div v-if="!showEmptyBoardStart && !showLayersPanel" class="absolute top-3 left-3 z-30">
           <Tip label="Open layers panel">
             <button
               type="button"
@@ -610,15 +909,12 @@ onUnmounted(() => {
       class="flex flex-1 overflow-hidden"
     >
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showHtmlFirstStart ? 'surface' : 'overlay'" />
-        <HtmlFirstCanvasWelcome v-if="showHtmlFirstStart" :page-is-empty="isCurrentPageEmpty" />
-        <MobileHud v-if="!showHtmlFirstStart && !liveInspectorPreviewMode" />
-        <Toolbar v-if="!showHtmlFirstStart && !liveInspectorPreviewMode" />
+        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+        <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
+        <MobileHud v-if="!showEmptyBoardStart" />
+        <Toolbar v-if="!showEmptyBoardStart" />
       </div>
-      <MobileDrawer
-        v-if="!showHtmlFirstStart"
-        :show-code-tab="showHtmlSourceTools && !isCurrentSmylrBoard"
-      />
+      <MobileDrawer v-if="!showEmptyBoardStart" :show-code-tab="showCodeTools" />
     </div>
 
     <!-- Collapsed UI (showUI=false) -->
@@ -628,22 +924,20 @@ onUnmounted(() => {
       class="flex flex-1 overflow-hidden"
     >
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showHtmlFirstStart ? 'surface' : 'overlay'" />
+        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
         <div
           v-if="!isMobile"
           class="border-border bg-panel absolute top-7 left-7 z-10 flex items-center gap-2 rounded-lg border px-2 py-1 shadow-sm"
         >
           <img src="/favicon-32.png" class="size-4" alt="OpenPencil" />
           <span data-test-id="editor-document-name" class="text-surface text-xs">{{
-            liveInspectorPreviewMode ? 'Preview' : store.state.documentName
+            store.state.documentName
           }}</span>
           <Tip
             :label="
-              liveInspectorPreviewMode
-                ? 'Exit preview (Esc)'
-                : dialogs.showUI({
-                    shortcut: formatShortcut(appMenuShortcut('toggle-ui')) ?? ''
-                  })
+              dialogs.showUI({
+                shortcut: formatShortcut(appMenuShortcut('toggle-ui')) ?? ''
+              })
             "
           >
             <button
@@ -651,8 +945,7 @@ onUnmounted(() => {
               class="text-muted hover:bg-hover hover:text-surface ml-1 flex size-6 cursor-pointer items-center justify-center rounded transition-colors"
               @click="showEditorUI"
             >
-              <icon-lucide-x v-if="liveInspectorPreviewMode" class="size-3.5" />
-              <icon-lucide-sidebar v-else class="size-3.5" />
+              <icon-lucide-sidebar class="size-3.5" />
             </button>
           </Tip>
         </div>
@@ -662,7 +955,7 @@ onUnmounted(() => {
     <!-- Bare canvas (no chrome, e.g. ?no-chrome) -->
     <div v-else :key="'bare-' + activeTab?.id" class="flex flex-1 overflow-hidden">
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showHtmlFirstStart ? 'surface' : 'overlay'" />
+        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
       </div>
     </div>
   </div>

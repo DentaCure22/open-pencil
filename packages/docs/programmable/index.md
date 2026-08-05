@@ -48,7 +48,8 @@ Going the other direction, export any selection back to JSX with Tailwind classe
 
 Inspect, lint, export, and analyze design documents without opening the editor. List pages, search nodes, extract design tokens, catch layout or accessibility issues, and render to PNG — all from the terminal with machine-readable JSON output.
 
-The CLI also connects to the running desktop app via RPC, so you can script the editor while you're using it.
+The CLI also exposes guarded exact-target Board commands over RPC or persisted local authority;
+file-based `eval` remains separate from live Board mutation.
 
 [Inspecting Files](./cli/inspecting) · [Exporting](./cli/exporting) · [Analyzing Designs](./cli/analyzing) · [Scripting](./cli/scripting)
 

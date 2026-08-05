@@ -1,6 +1,5 @@
 import type { Component } from 'vue'
 import IconCircle from '~icons/lucide/circle'
-import IconBox from '~icons/lucide/box'
 import IconColumns from '~icons/lucide/columns-3'
 import IconComponentSet from '~icons/lucide/component'
 import IconComponent from '~icons/lucide/diamond'
@@ -22,7 +21,6 @@ import type { Tool } from '@/app/editor/session'
 
 export const toolIcons: Record<Tool, Component> = {
   SELECT: IconMousePointer,
-  SMYLR_CONTAINER: IconBox,
   FRAME: IconFrame,
   SECTION: IconSection,
   RECTANGLE: IconSquare,

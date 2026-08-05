@@ -438,7 +438,7 @@ export function renderNodesToSVG(
     const node = graph.getNode(id)
     if (!node?.visible) continue
 
-    const abs = graph.getAbsolutePosition(id)
+    const abs = graph.getAuthoritativeAbsolutePosition(id)
     const offsetX = abs.x - minX
     const offsetY = abs.y - minY
 

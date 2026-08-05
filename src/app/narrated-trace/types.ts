@@ -1,7 +1,7 @@
-import type { Rect } from '@open-pencil/scene-graph/primitives'
+import type { SceneNode } from '@open-pencil/scene-graph'
+import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 export type NarratedTraceStatus = 'idle' | 'recording' | 'paused' | 'review'
-export type NarratedTraceViewMode = 'history' | 'timeline'
 
 export type NarratedTraceEventKind =
   | 'transcript'
@@ -10,6 +10,7 @@ export type NarratedTraceEventKind =
   | 'ink'
   | 'shape'
   | 'screenshot'
+  | 'sync'
   | 'viewport'
   | 'navigation'
   | 'tool'
@@ -17,10 +18,40 @@ export type NarratedTraceEventKind =
   | 'redo'
   | 'note'
 
+export const NARRATED_TRACE_ACTIVITY_KINDS = [
+  'ink',
+  'screenshot',
+  'selection',
+  'tool',
+  'shape',
+  'edit'
+] as const
+
+export type NarratedTraceActivityKind = (typeof NARRATED_TRACE_ACTIVITY_KINDS)[number]
+
 export type NarratedTraceViewport = {
   panX: number
   panY: number
   zoom: number
+}
+
+/**
+ * A durable deictic anchor in page space. `targetRelativePoint` is normalized
+ * against the referenced target's bounds at capture time.
+ */
+export type NarratedTraceSpatialAnchor = {
+  pagePoint: Vector
+  pageRegion: Rect
+  targetRelativePoint?: Vector
+  viewport: NarratedTraceViewport
+}
+
+export type NarratedTraceScope = {
+  documentId: string
+  documentName?: string
+  pageId: string
+  pageName?: string
+  workspaceId?: string
 }
 
 export type NarratedTraceTarget = {
@@ -44,6 +75,38 @@ export type NarratedTracePoint = {
   y: number
 }
 
+export type NarratedTraceGestureRelation = 'contained' | 'contains-region' | 'intersecting'
+
+export type NarratedTraceGestureCandidate = {
+  bounds: Rect
+  depth: number
+  name: string
+  nodeType: SceneNode['type']
+  objectCoverageRatio: number
+  /** Stable top-level object owned directly by the captured page. */
+  ownerId?: string
+  path: string[]
+  regionCoverageRatio: number
+  relation: NarratedTraceGestureRelation
+  route?: string
+  stableId: string
+}
+
+export type NarratedTraceGesture = {
+  candidateCount: number
+  candidates: NarratedTraceGestureCandidate[]
+  candidatesTruncated: boolean
+  /** Exact runtime tab observed at capture; revalidate before use. */
+  documentTabId?: string
+  kind: 'focus' | 'ink'
+  pagePoints: Vector[]
+  primaryTargetId?: string
+  /** Exact app runtime observed at capture; revalidate before use. */
+  runtimeInstanceId?: string
+  screenBounds: Rect
+  screenPoints: NarratedTracePoint[]
+}
+
 export type NarratedTraceInk = {
   bounds: Rect
   color: string
@@ -62,24 +125,30 @@ export type NarratedTraceEvidenceOmission = {
 
 export type NarratedTraceEvidence = {
   annotation: NarratedTraceEvidenceAnnotation
-  cacheKey: string
+  /** Captures bake the annotation into the PNG. */
+  annotationBaked?: boolean
   capturedAtMs: number
   cropBounds: Rect
   evidenceId: string
   height: number
   mimeType: 'image/png'
   omissions: NarratedTraceEvidenceOmission[]
-  source: 'canvas' | 'live-frame'
+  source: 'canvas' | 'frame-snapshot'
   targetPath?: string[]
   targetStableId?: string
   width: number
 }
 
 export type NarratedTraceEvent = {
+  anchor?: NarratedTraceSpatialAnchor
   atMs: number
   changes?: NarratedTraceChange[]
   durationMs?: number
   evidence?: NarratedTraceEvidence
+  evidenceStatus?: 'failed' | 'pending' | 'ready'
+  groupedEventCount?: number
+  groupedTargetCount?: number
+  gesture?: NarratedTraceGesture
   id: string
   kind: NarratedTraceEventKind
   label: string
@@ -117,6 +186,7 @@ export type NarratedTraceSession = {
   durationMs: number
   events: NarratedTraceEvent[]
   id: string
+  scope?: NarratedTraceScope
   startedAt: string
   title?: string
 }

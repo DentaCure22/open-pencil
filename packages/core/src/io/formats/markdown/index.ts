@@ -11,6 +11,7 @@ export type {
   MarkdownInlineLink,
   MarkdownInlineRun,
   MarkdownInlineStyle,
+  MarkdownRepresentation,
   MarkdownSourceMode
 } from './types'
 export {
@@ -24,7 +25,9 @@ export async function markdownToSceneGraph(
   options: MarkdownImportOptions = {}
 ): Promise<SceneGraph> {
   const graph = new SceneGraph()
-  await renderMarkdownDocument(graph, markdownTokens(source, options.sourceMode), source, options)
+  const tokens =
+    options.representation === 'native' ? markdownTokens(source, options.sourceMode) : null
+  await renderMarkdownDocument(graph, tokens, source, options)
   return graph
 }
 

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { installMockChatTransport } from '#tests/helpers/chat'
 
 const USE_REAL_LLM = process.env.TEST_REAL_LLM === '1'
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? ''
@@ -17,98 +18,13 @@ test.beforeAll(async ({ browser }) => {
   await canvas.waitForInit()
 
   if (!USE_REAL_LLM) {
-    await injectMockTransport(page)
+    await installMockChatTransport(page)
   }
 })
 
 test.afterAll(async () => {
   await page.close()
 })
-
-async function injectMockTransport(page: Page) {
-  await page.evaluate(() => {
-    const setChatTransport = window.openPencil?.setChatTransport
-    if (!setChatTransport) throw new Error('Transport override not available')
-
-    let msgCounter = 0
-
-    setChatTransport(() => ({
-      async sendMessages({
-        messages
-      }: {
-        messages: Array<{ role: string; parts: Array<{ type: string; text?: string }> }>
-      }) {
-        const lastUser = [...messages].reverse().find((m) => m.role === 'user')
-        const text = lastUser?.parts?.find((p) => p.type === 'text')?.text ?? ''
-        const msgId = `mock-msg-${++msgCounter}`
-        const lowerText = text.toLowerCase()
-        const wantsTool = lowerText.includes('frame') || lowerText.includes('rectangle')
-
-        if (lowerText.includes('missing agent')) {
-          throw new Error(
-            '"claude-agent-acp" is not installed. Install it with: npm i -g @agentclientprotocol/claude-agent-acp'
-          )
-        }
-
-        return new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'start', messageId: msgId })
-
-            if (wantsTool) {
-              const toolCallId = `call-${msgId}`
-              controller.enqueue({
-                type: 'tool-input-start',
-                toolCallId,
-                toolName: 'create_shape'
-              })
-              controller.enqueue({
-                type: 'tool-input-delta',
-                toolCallId,
-                inputTextDelta:
-                  '{"type":"FRAME","x":100,"y":100,"width":200,"height":150,"name":"Card"}'
-              })
-              controller.enqueue({
-                type: 'tool-input-available',
-                toolCallId,
-                toolName: 'create_shape',
-                input: { type: 'FRAME', x: 100, y: 100, width: 200, height: 150, name: 'Card' }
-              })
-              controller.enqueue({
-                type: 'tool-output-available',
-                toolCallId,
-                toolName: 'create_shape',
-                output: {
-                  id: '0:99',
-                  type: 'FRAME',
-                  x: 100,
-                  y: 100,
-                  width: 200,
-                  height: 150,
-                  name: 'Card'
-                }
-              })
-            }
-
-            const words = wantsTool
-              ? ['Created', 'a', 'frame', 'called', '"Card".']
-              : `I'll help you with: "${text}". Here's a mock response.`.split(' ')
-
-            controller.enqueue({ type: 'text-start', id: 'text-1' })
-            for (const word of words) {
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: word + ' ' })
-            }
-            controller.enqueue({ type: 'text-end', id: 'text-1' })
-            controller.enqueue({ type: 'finish', finishReason: 'stop' })
-            controller.close()
-          }
-        })
-      },
-      async reconnectToStream() {
-        return null
-      }
-    }))
-  })
-}
 
 function chatTab() {
   return page.getByRole('tab', { name: 'AI' })

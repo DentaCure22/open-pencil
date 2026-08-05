@@ -32,6 +32,16 @@ describe('analyze overlaps', () => {
     expect(result.summary.overlapCount).toBe(0)
   })
 
+  test('ignores transient collaborative drag presentation', () => {
+    const graph = new SceneGraph()
+    const page = pageId(graph)
+    rect(graph, 'A', page, 0, 0, 50, 50)
+    const moving = rect(graph, 'B', page, 200, 0, 50, 50)
+    graph.setNodePositionPresentation(moving.id, { x: 25, y: 0 })
+
+    expect(computeOverlaps(graph).summary.overlapCount).toBe(0)
+  })
+
   test('skips hidden and locked nodes by default', () => {
     const graph = new SceneGraph()
     const page = pageId(graph)

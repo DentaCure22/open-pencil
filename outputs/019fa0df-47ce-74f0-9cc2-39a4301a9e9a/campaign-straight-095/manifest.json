@@ -1,0 +1,38 @@
+{
+  "manifest_id": "prompt-to-board-straight-development-095",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "straight-095-supply-cache-note",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-batch-095-straight-through"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_text"
+      ],
+      "prompt": "On this empty disposable Board, add one plain editable cache note: Supply cache opens 06:00. Water: 18 L. Medical: 2 trauma kits. Radio batteries: 12. If the seal is broken or inventory differs, photograph it, stop distribution, and notify Logistics Lead. Owner: Quartermaster. Keep it as one uncluttered note with no extra decoration.",
+      "rubric": {
+        "rubric_id": "ptb-dev-native-single-note",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-STRAIGHT-095-A",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "editor_required": false,
+        "fixture_ref": "PTB STRAIGHT-095 — Cache Note",
+        "kind": "persisted_authority",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "optional"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}

@@ -24,18 +24,6 @@ function getNodeTransformChain(graph: SceneGraph, node: SceneNode): SceneNode[] 
   return chain
 }
 
-function isSmylrLiveAppFrame(node: SceneNode): boolean {
-  return (
-    node.name.startsWith('Live Smylr App /') ||
-    node.pluginData.some(
-      (entry) =>
-        entry.pluginId === 'smylr-production' &&
-        entry.key === 'kind' &&
-        entry.value === 'live-app-frame'
-    )
-  )
-}
-
 export function drawHoverHighlight(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -96,6 +84,12 @@ export function drawSelection(
   overlays: RenderOverlays
 ): void {
   if (selectedIds.size === 0) return
+  if (
+    selectedIds.size === 1 &&
+    overlays.selectionChromeOwnerIds?.has(selectedIds.values().next().value ?? '')
+  ) {
+    return
+  }
   const nodeEditId = overlays.nodeEditState?.nodeId ?? null
 
   r.drawParentFrameOutlines(canvas, graph, selectedIds)
@@ -106,8 +100,6 @@ export function drawSelection(
     if (nodeEditId === id) return
     const node = graph.getNode(id)
     if (!node) return
-    if (isSmylrLiveAppFrame(node)) return
-
     const useComponentColor = r.isComponentType(node.type)
     r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
     r.selectionPaint.setStrokeWidth(1 / r.zoom)
@@ -125,8 +117,6 @@ export function drawSelection(
     if (nodeEditId === id) continue
     const node = graph.getNode(id)
     if (!node) continue
-    if (isSmylrLiveAppFrame(node)) continue
-
     const useComponentColor = r.isComponentType(node.type)
     r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
     r.selectionPaint.setStrokeWidth(1 / r.zoom)

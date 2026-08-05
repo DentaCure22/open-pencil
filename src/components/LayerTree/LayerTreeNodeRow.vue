@@ -65,7 +65,7 @@ const emit = defineEmits<{
     />
     <span class="min-w-0 flex-1 truncate">{{ node.name }}</span>
 
-    <!-- Virtual rows (live DOM / design sections) — no lock/visibility chrome. -->
+    <!-- Virtual rows (internal DOM / design sections) — no lock/visibility chrome. -->
     <LayerTreeActions
       v-if="!node.virtual"
       :node="node"

@@ -1,0 +1,368 @@
+{
+  "derived_at_ms": 1785440382470,
+  "run_id": "matched-103a-provided-recipe-first-attempt",
+  "schema_version": "prompt-to-board-run-telemetry/v1",
+  "source_event_count": 19,
+  "source_event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-matched-103/001-matched-103a-provided-recipe-first-attempt/events.jsonl",
+  "source_event_log_sha256": "0e25fb87ff7c7b5907de6d4601c2a9aa210c1acc46dac1a0e437ea7ad187c609",
+  "telemetry": {
+    "bytes": {
+      "full_dispatched_prompt": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 2,
+        "value": 2665
+      },
+      "generated_final": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 16,
+        "value": 545
+      },
+      "raw_codex_stream": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 18,
+        "value": 39592
+      },
+      "released_final": {
+        "availability": "unavailable",
+        "availability_reason": "No released final with exact UTF-8 text bytes was observed.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "tool_arguments": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 12,
+        "value": 814
+      },
+      "tool_result": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 13,
+        "value": 11362
+      }
+    },
+    "context_inventory": {
+      "components": [
+        {
+          "availability": "observed",
+          "availability_reason": null,
+          "bytes": 2665,
+          "kind": "full_dispatched_prompt",
+          "provenance_hash": null,
+          "sha256": "98e15f962cedb2338344f222f1e36c8ab97c9427c30d045db0a6e07cc7a45129",
+          "source": "campaign.prompt",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "observed",
+          "availability_reason": null,
+          "bytes": 777,
+          "kind": "user_prompt",
+          "provenance_hash": null,
+          "sha256": "3c72f7ee90c17c0cf48726ecdc0a1197ec48d7092dd119b3706c3cb0e98054a6",
+          "source": "scenario.prompt",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "observed",
+          "availability_reason": null,
+          "bytes": 354,
+          "kind": "exact_target_packet",
+          "provenance_hash": null,
+          "sha256": "865ccbfdbe181d2069f43a0cea0228ed2fc7e1934d01d7ed11fae1628f594671",
+          "source": "campaign.target",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "observed",
+          "availability_reason": null,
+          "bytes": 1530,
+          "kind": "execution_contract",
+          "provenance_hash": null,
+          "sha256": "dcfbe4b8b90b8fdc3eb07b8972aa8d645a2e506f4a6e8df921b0fd91aef36da8",
+          "source": "campaign.contract",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "The evaluator cannot observe this context component.",
+          "bytes": null,
+          "kind": "system_instructions",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "codex_protocol",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "The evaluator cannot observe this context component.",
+          "bytes": null,
+          "kind": "developer_instructions",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "codex_protocol",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "provenance_only",
+          "availability_reason": "The frozen run records provenance but not the exact injected bytes.",
+          "bytes": null,
+          "kind": "project_instructions",
+          "provenance_hash": "ae7f06578d2c423b73f59ad8d5cd8aac1064910ae633bb0c4f7ade0ad2d08ce5",
+          "sha256": null,
+          "source": "evaluation.context",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "provenance_only",
+          "availability_reason": "The frozen run records provenance but not the exact injected bytes.",
+          "bytes": null,
+          "kind": "provided_recipe",
+          "provenance_hash": "34245008c568fc37de653955e94fb6078de0827a7378e9caf9bd7d3906b91a91",
+          "sha256": null,
+          "source": "evaluation.assistance.provided_recipe_sha256",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "provenance_only",
+          "availability_reason": "The frozen run records provenance but not the exact injected bytes.",
+          "bytes": null,
+          "kind": "skill_bundle",
+          "provenance_hash": "1e09362fe7613f504c3ecbb253ed601be1de153c8fc9acf43bc46763871cd656",
+          "sha256": null,
+          "source": "evaluation.prompt_tooling",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "The evaluator cannot observe this context component.",
+          "bytes": null,
+          "kind": "optional_modules",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "codex_protocol",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "provenance_only",
+          "availability_reason": "The frozen run records provenance but not the exact injected bytes.",
+          "bytes": null,
+          "kind": "tool_schemas",
+          "provenance_hash": "3b25377442d05d977e16d23e6decb73ec0376d528dbf97f3567e6cca6fa0eea2",
+          "sha256": null,
+          "source": "evaluation.prompt_tooling",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "This context component is not applicable to the run.",
+          "bytes": null,
+          "kind": "warm_session_history",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "campaign.warm_session",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "The evaluator cannot observe this context component.",
+          "bytes": null,
+          "kind": "board_context",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "codex_protocol",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        },
+        {
+          "availability": "unavailable",
+          "availability_reason": "The evaluator cannot observe this context component.",
+          "bytes": null,
+          "kind": "tool_output",
+          "provenance_hash": null,
+          "sha256": null,
+          "source": "codex_protocol",
+          "token_count": null,
+          "token_count_availability_reason": "Codex JSONL does not attribute input tokens to individual context components."
+        }
+      ],
+      "schema_version": "prompt-to-board-context-inventory/v2"
+    },
+    "milestones": {
+      "codex_turn_started_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 5,
+        "value": 1785440337336
+      },
+      "durability_observed_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 15,
+        "value": 1785440375403
+      },
+      "evaluator_enqueued_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 0,
+        "value": 1785440336828
+      },
+      "final_generated_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 16,
+        "value": 1785440382155
+      },
+      "final_model_request_started_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL does not expose this per-model-call timestamp.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "final_released_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "No released final was observed.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "first_model_token_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL does not expose this per-model-call timestamp.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "first_tool_arguments_available_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 7,
+        "value": 1785440350380
+      },
+      "first_tool_arguments_started_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL exposes complete tool arguments only when invocation starts.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "first_tool_completed_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 8,
+        "value": 1785440350380
+      },
+      "first_tool_invoked_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 7,
+        "value": 1785440350380
+      },
+      "model_request_enqueued_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL does not expose this per-model-call timestamp.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "model_started_at_ms": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL does not expose this per-model-call timestamp.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "process_spawned_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 1,
+        "value": 1785440336830
+      },
+      "prompt_written_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 2,
+        "value": 1785440336830
+      },
+      "receipt_observed_at_ms": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 14,
+        "value": 1785440375403
+      }
+    },
+    "tokens": {
+      "cache_write_input_tokens": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 0
+      },
+      "cached_input_tokens": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 103424
+      },
+      "input_tokens": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 132990
+      },
+      "output_tokens": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 2484
+      },
+      "reasoning_output_tokens": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 1197
+      },
+      "scope": {
+        "availability": "observed",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": "codex_thread_total"
+      },
+      "tool_argument_tokens": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL exposes tool arguments but not their token count.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "tool_result_tokens": {
+        "availability": "unavailable",
+        "availability_reason": "codex exec JSONL exposes tool results but not their token count.",
+        "source_event_sequence": null,
+        "value": null
+      },
+      "total_tokens": {
+        "availability": "derived",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 135474
+      },
+      "uncached_input_tokens": {
+        "availability": "derived",
+        "availability_reason": null,
+        "source_event_sequence": 17,
+        "value": 29566
+      }
+    },
+    "unmapped_codex_events": 3
+  }
+}

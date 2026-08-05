@@ -18,7 +18,7 @@ function supportLabels(format: ReturnType<IORegistry['listFormats']>[number]): s
 }
 
 export default defineCommand({
-  meta: { description: 'List supported document and export formats' },
+  meta: { name: 'formats', description: 'List supported document and export formats' },
   args: {
     json: { type: 'boolean', description: 'Output as JSON' }
   },

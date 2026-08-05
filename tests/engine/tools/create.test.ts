@@ -26,6 +26,41 @@ describe('create_shape', () => {
     expect(node.y).toBe(200)
     expect(node.width).toBe(300)
     expect(node.height).toBe(400)
+    expect(node.fills).toEqual([
+      {
+        color: { a: 1, b: 1, g: 1, r: 1 },
+        opacity: 1,
+        type: 'SOLID',
+        visible: true
+      }
+    ])
+  })
+
+  test('creates visible native shapes with the editor defaults', () => {
+    const { figma } = setupToolTest()
+    const tool = getTool('create_shape')
+
+    for (const type of ['ELLIPSE', 'POLYGON', 'RECTANGLE', 'STAR']) {
+      const result = tool.execute(figma, {
+        height: 80,
+        type,
+        width: 80,
+        x: 0,
+        y: 0
+      }) as ToolResult
+      const node = expectDefined(
+        figma.getNodeById(expectDefined(result.id, 'created node id')),
+        'created visible node'
+      )
+      expect(node.fills).toEqual([
+        {
+          color: { a: 1, b: 0.83, g: 0.83, r: 0.83 },
+          opacity: 1,
+          type: 'SOLID',
+          visible: true
+        }
+      ])
+    }
   })
 
   test('creates nested inside parent', () => {

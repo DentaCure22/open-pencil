@@ -43,7 +43,7 @@ const COMMAND_MENU_IDS = new Set<string>([
 export { importFileDialog, openFileDialog }
 export { openFileFromPath } from '@/app/shell/menu/files'
 
-export function useMenu() {
+export function useMenu(enabled: () => boolean = () => true) {
   if (!isTauri()) return
 
   let unlisten: (() => void) | undefined
@@ -84,6 +84,7 @@ export function useMenu() {
 
   void import('@tauri-apps/api/event').then(({ listen }) => {
     return listen<string>('menu-event', (event) => {
+      if (!enabled()) return
       if (COMMAND_MENU_IDS.has(event.payload)) {
         runCommand(event.payload as EditorCommandId)
         return

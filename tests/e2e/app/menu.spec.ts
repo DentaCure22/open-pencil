@@ -123,8 +123,8 @@ test('Insert menu creates separate editable Mermaid pieces', async () => {
     })
     const owner = nodes.find(
       (node) =>
-        node.type === 'FRAME' &&
-        node.name === 'Mermaid diagram' &&
+        node.type === 'GROUP' &&
+        node.name === 'Mermaid · Flowchart' &&
         node.pluginData.some((entry) => entry.key === 'mermaid/diagram-id')
     )
     const pieces = (owner?.childIds ?? []).flatMap((id) => {
@@ -161,7 +161,7 @@ test('Insert menu creates separate editable Mermaid pieces', async () => {
 
   expect(inserted.hasBackground).toBe(false)
   expect(inserted.diagramIds).toHaveLength(1)
-  expect(inserted.ownerType).toBe('FRAME')
+  expect(inserted.ownerType).toBe('GROUP')
   expect(inserted.pieceCount).toBeGreaterThan(4)
   expect(inserted.types).toEqual(expect.arrayContaining(['TEXT', 'VECTOR']))
   expect(inserted.parentIds.every((id) => id === inserted.ownerId)).toBe(true)
@@ -220,7 +220,7 @@ test('Insert menu converts Mermaid Architecture into editable native pieces', as
     }
   })
 
-  expect(inserted.ownerType).toBe('FRAME')
+  expect(inserted.ownerType).toBe('GROUP')
   expect(inserted.hasImageFill).toBe(false)
   expect(inserted.pieceCount).toBeGreaterThan(10)
   expect(inserted.source).toContain('architecture-beta')
@@ -228,7 +228,7 @@ test('Insert menu converts Mermaid Architecture into editable native pieces', as
   assertNoMermaidErrors()
 })
 
-test('Insert menu preserves native Mermaid Sankey gradients and blending', async () => {
+test('Insert menu keeps native Mermaid Sankey gradients readable on transparent boards', async () => {
   await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Insert' }).click()
   await editor.page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
 
@@ -276,13 +276,77 @@ Processing,Losses,3`)
     }
   })
 
-  expect(inserted.ownerType).toBe('FRAME')
+  expect(inserted.ownerType).toBe('GROUP')
   expect(inserted.pieceCount).toBeGreaterThan(8)
   expect(inserted.gradientLinkCount).toBe(4)
   expect(inserted.gradientStopCounts).toEqual([2, 2, 2, 2])
-  expect(inserted.linkBlendModes).toEqual(['MULTIPLY', 'MULTIPLY', 'MULTIPLY', 'MULTIPLY'])
+  expect(inserted.linkBlendModes).toEqual(['NORMAL', 'NORMAL', 'NORMAL', 'NORMAL'])
   expect(inserted.linkOpacities).toEqual([0.5, 0.5, 0.5, 0.5])
   expect(inserted.hasImageFill).toBe(false)
+
+  const diagramTransform = () =>
+    editor.page.evaluate(() => {
+      const store = window.openPencil?.getStore?.()
+      if (!store) throw new Error('OpenPencil store not initialized')
+      const page = store.graph.getNode(store.state.currentPageId)
+      const owner = (page?.childIds ?? [])
+        .map((id) => store.graph.getNode(id))
+        .find((candidate) =>
+          candidate?.pluginData
+            .find((entry) => entry.key === 'mermaid/source')
+            ?.value.includes('sankey-beta')
+        )
+      if (!owner) throw new Error('Sankey owner unavailable')
+      const absolute = store.graph.getAbsolutePosition(owner.id)
+      return {
+        height: owner.height,
+        screenCenterX: (absolute.x + owner.width / 2) * store.state.zoom + store.state.panX,
+        screenCenterY: (absolute.y + owner.height / 2) * store.state.zoom + store.state.panY,
+        screenHandleX: (absolute.x + owner.width) * store.state.zoom + store.state.panX,
+        screenHandleY: (absolute.y + owner.height) * store.state.zoom + store.state.panY,
+        width: owner.width,
+        x: owner.x,
+        y: owner.y
+      }
+    })
+
+  const canvasBounds = await editor.page.getByTestId('canvas-element').boundingBox()
+  if (!canvasBounds) throw new Error('Canvas bounds unavailable')
+  const beforeMove = await diagramTransform()
+  await editor.page.mouse.move(
+    canvasBounds.x + beforeMove.screenCenterX,
+    canvasBounds.y + beforeMove.screenCenterY
+  )
+  await editor.page.mouse.down()
+  await editor.page.mouse.move(
+    canvasBounds.x + beforeMove.screenCenterX + 60,
+    canvasBounds.y + beforeMove.screenCenterY + 30,
+    { steps: 8 }
+  )
+  await editor.page.mouse.up()
+  await editor.canvas.waitForRender()
+
+  const afterMove = await diagramTransform()
+  expect(afterMove.x).toBeGreaterThan(beforeMove.x)
+  expect(afterMove.y).toBeGreaterThan(beforeMove.y)
+
+  await editor.page.mouse.move(
+    canvasBounds.x + afterMove.screenHandleX,
+    canvasBounds.y + afterMove.screenHandleY
+  )
+  await editor.page.mouse.down()
+  await editor.page.mouse.move(
+    canvasBounds.x + afterMove.screenHandleX + 80,
+    canvasBounds.y + afterMove.screenHandleY + 10,
+    { steps: 10 }
+  )
+  await editor.page.mouse.up()
+  await editor.canvas.waitForRender()
+
+  const afterResize = await diagramTransform()
+  expect(afterResize.width).toBeGreaterThan(afterMove.width)
+  expect(afterResize.height).toBeGreaterThan(afterMove.height)
+  expect(afterResize.width / afterResize.height).toBeCloseTo(afterMove.width / afterMove.height, 2)
   assertNoMermaidErrors()
 })
 

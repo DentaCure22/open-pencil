@@ -10,6 +10,7 @@ export type EmbeddedSurfaceWheelMessage = {
   deltaY?: number
   kind: string
   metaKey?: boolean
+  runtimeInstanceId?: string
 }
 
 function isRecord(value: unknown): value is UnknownRecord {

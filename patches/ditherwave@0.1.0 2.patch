@@ -1,0 +1,65 @@
+diff --git a/node_modules/ditherwave b/node_modules/ditherwave
+new file mode 120000
+index 0000000000000000000000000000000000000000..05987faefb6ff120760afbda4934708bf3d3759d
+--- /dev/null
++++ b/node_modules/ditherwave
+@@ -0,0 +1 @@
++.bun/ditherwave@0.1.0+0f58469d5b3bd39f/node_modules/ditherwave
+\ No newline at end of file
+diff --git a/LICENSE b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/LICENSE
+deleted file mode 100644
+index 19f571de025542e637a1d4a17b256b069dbbce73..0000000000000000000000000000000000000000
+diff --git a/README.md b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/README.md
+deleted file mode 100644
+index 8bcd7e72d31796d459d1c9dfda0ad24c2962a98e..0000000000000000000000000000000000000000
+diff --git a/dist/index.cjs b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.cjs
+deleted file mode 100644
+index faf5ed3bebb6cebec00476b9f3831171b470c896..0000000000000000000000000000000000000000
+diff --git a/dist/index.cjs.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.cjs.map
+deleted file mode 100644
+index 11da243d8aa29b370ca70fb06a7ae95d5a82d7ed..0000000000000000000000000000000000000000
+diff --git a/dist/index.d.cts b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.d.cts
+deleted file mode 100644
+index 58bceca2ae8e8159ebb4fed45cf1cfd9449d4f01..0000000000000000000000000000000000000000
+diff --git a/dist/index.d.ts b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.d.ts
+deleted file mode 100644
+index 58bceca2ae8e8159ebb4fed45cf1cfd9449d4f01..0000000000000000000000000000000000000000
+diff --git a/dist/index.js b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.js
+deleted file mode 100644
+index 04463311660570f8b545ac5d3964c892e3d7926d..0000000000000000000000000000000000000000
+diff --git a/dist/index.js.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.js.map
+deleted file mode 100644
+index 0a9fee04086478b8843f79bfca347007bde9baf1..0000000000000000000000000000000000000000
+diff --git a/dist/index.umd.global.js b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.umd.global.js
+deleted file mode 100644
+index bdd29acd9a394b09fad29108ed7e311405b699ba..0000000000000000000000000000000000000000
+diff --git a/dist/index.umd.global.js.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/index.umd.global.js.map
+deleted file mode 100644
+index 54a10ad0cfa136dbc21a054b838951605395cd5d..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.cjs b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.cjs
+deleted file mode 100644
+index 663d38868e307d5723f39ebfcbdf6c39ba308084..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.cjs.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.cjs.map
+deleted file mode 100644
+index 53831a4c374f2b166513f7d18a8e3baa4b1c1c7a..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.d.cts b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.d.cts
+deleted file mode 100644
+index 5adeba9c4201f58577f3da33e36b0ffa018ff28e..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.d.ts b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.d.ts
+deleted file mode 100644
+index 5adeba9c4201f58577f3da33e36b0ffa018ff28e..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.js b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.js
+deleted file mode 100644
+index 19f17a5b012db100038849829256753c3a8ed1fd..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.js.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.js.map
+deleted file mode 100644
+index 187079d75ca8b8ccfa50c29c5641ecd73979f820..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.umd.global.js b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.umd.global.js
+deleted file mode 100644
+index 1479493ce2a3d758e3cd0207cb7c42a526b82dfb..0000000000000000000000000000000000000000
+diff --git a/dist/vanilla.umd.global.js.map b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/dist/vanilla.umd.global.js.map
+deleted file mode 100644
+index 92634d49cbadf461b408a6a63652ea4f0a8ab6d7..0000000000000000000000000000000000000000
+diff --git a/package.json b/Users/omar/.bun/install/cache/ditherwave@0.1.0@@@1/package.json
+deleted file mode 100644
+index c54646c87f93ad61de1b32237851a76ed18dd9ab..0000000000000000000000000000000000000000

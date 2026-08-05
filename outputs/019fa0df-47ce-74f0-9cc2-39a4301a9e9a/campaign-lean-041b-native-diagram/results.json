@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "284aa90a2537aab18eb604d83ccdd19423ee68a6a1cfc4e2072973e5d0d6b6ec",
+    "config_id": "1fee38a33cfbe4182a963f126cb0724781f64ba4822b7315619d7941c65cfdb6",
+    "event_log_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-041b-native-diagram/001-lean-041b-native-diagram/events.jsonl",
+    "order": 0,
+    "run_id": "lean-041b-native-diagram",
+    "scenario_id": "FAST-DEV-041B",
+    "stderr_path": "outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-041b-native-diagram/001-lean-041b-native-diagram/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb107-0599-7213-8fee-0a09d138d674"
+  }
+]

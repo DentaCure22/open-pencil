@@ -1,7 +1,5 @@
 import type { Editor, EditorState } from '@open-pencil/core/editor'
 
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
-
 type MobileClipboardState = EditorState & { clipboardHtml: string }
 
 export function createMobileClipboardActions(editor: Editor, state: MobileClipboardState) {
@@ -13,7 +11,6 @@ export function createMobileClipboardActions(editor: Editor, state: MobileClipbo
 
   async function mobileCut() {
     await mobileCopy()
-    removeWorkspaceItemsForSelectedLiveFrames(editor)
     editor.deleteSelected()
   }
 

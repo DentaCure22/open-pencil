@@ -1,6 +1,9 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { isMermaidDiagramContainer } from '#core/diagram'
 import type { EditorContext } from '#core/editor/types'
+
+const MERMAID_FRAME_HIT_TEST = { isBoundsHitTarget: isMermaidDiagramContainer }
 
 export function createSelectionHitTestActions(
   ctx: EditorContext,
@@ -16,12 +19,14 @@ export function createSelectionHitTestActions(
       if (!scopeNode) {
         ctx.state.enteredContainerId = null
       } else {
-        return deep ? ctx.graph.hitTestDeep(cx, cy, scopeId) : ctx.graph.hitTest(cx, cy, scopeId)
+        return deep
+          ? ctx.graph.hitTestDeep(cx, cy, scopeId, MERMAID_FRAME_HIT_TEST)
+          : ctx.graph.hitTest(cx, cy, scopeId, MERMAID_FRAME_HIT_TEST)
       }
     }
     return deep
-      ? ctx.graph.hitTestDeep(cx, cy, ctx.state.currentPageId)
-      : ctx.graph.hitTest(cx, cy, ctx.state.currentPageId)
+      ? ctx.graph.hitTestDeep(cx, cy, ctx.state.currentPageId, MERMAID_FRAME_HIT_TEST)
+      : ctx.graph.hitTest(cx, cy, ctx.state.currentPageId, MERMAID_FRAME_HIT_TEST)
   }
 
   function selectAtPoint(cx: number, cy: number) {

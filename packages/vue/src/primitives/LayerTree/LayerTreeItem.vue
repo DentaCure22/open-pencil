@@ -33,7 +33,7 @@ function onRef(el: unknown) {
   ctx.setRowRef(node.id, htmlEl)
 }
 
-// Virtual (live) rows are not scene-graph nodes — skip drag.
+// Virtual host-owned rows are not scene-graph nodes — skip drag.
 if (!node.virtual) {
   ctx.setupDrag(rowEl, () => ({
     id: node.id,

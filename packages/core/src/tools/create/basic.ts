@@ -1,5 +1,36 @@
+import type { Fill, Stroke } from '@open-pencil/scene-graph'
+
+import {
+  BLACK,
+  DEFAULT_FRAME_FILL,
+  DEFAULT_SHAPE_FILL,
+  SECTION_DEFAULT_FILL,
+  SECTION_DEFAULT_STROKE
+} from '#core/constants'
 import type { FigmaNodeProxy } from '#core/figma-api'
 import { defineTool, nodeSummary } from '#core/tools/schema'
+
+const BLACK_FILL: Fill = {
+  type: 'SOLID',
+  color: BLACK,
+  opacity: 1,
+  visible: true
+}
+
+const DEFAULT_FILLS: Partial<Record<string, Fill>> = {
+  ELLIPSE: DEFAULT_SHAPE_FILL,
+  FRAME: DEFAULT_FRAME_FILL,
+  LINE: BLACK_FILL,
+  POLYGON: DEFAULT_SHAPE_FILL,
+  RECTANGLE: DEFAULT_SHAPE_FILL,
+  SECTION: SECTION_DEFAULT_FILL,
+  STAR: DEFAULT_SHAPE_FILL,
+  TEXT: BLACK_FILL
+}
+
+const DEFAULT_STROKES: Partial<Record<string, Stroke>> = {
+  SECTION: SECTION_DEFAULT_STROKE
+}
 
 export const createShape = defineTool({
   name: 'create_shape',
@@ -37,6 +68,10 @@ export const createShape = defineTool({
     node.x = args.x
     node.y = args.y
     node.resize(args.width, args.height)
+    const fill = DEFAULT_FILLS[args.type]
+    const stroke = DEFAULT_STROKES[args.type]
+    if (fill) node.fills = [structuredClone(fill)]
+    if (stroke) node.strokes = [structuredClone(stroke)]
     if (args.name) node.name = args.name
     if (parent) parent.appendChild(node)
     return nodeSummary(node)

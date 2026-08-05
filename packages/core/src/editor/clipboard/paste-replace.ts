@@ -75,7 +75,9 @@ export function replaceTargetsWithCreated(
     }
   })
 
-  const targetBounds = computeAbsoluteBounds(targets, (id) => ctx.graph.getAbsolutePosition(id))
+  const targetBounds = computeAbsoluteBounds(targets, (id) =>
+    ctx.graph.getAuthoritativeAbsolutePosition(id)
+  )
   centerNodesAt(
     created,
     targetBounds.x + targetBounds.width / 2,

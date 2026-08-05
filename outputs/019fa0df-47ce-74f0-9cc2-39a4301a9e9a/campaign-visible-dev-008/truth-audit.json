@@ -1,0 +1,28 @@
+{
+  "counts": {
+    "failed": 0,
+    "finalized": 1,
+    "interrupted": 0,
+    "never_started": 0,
+    "pending_proof": 0,
+    "recorded": 0,
+    "skipped": 0,
+    "unlogged_failure": 0
+  },
+  "discrepancies": [],
+  "gate_passed": true,
+  "observations": [
+    {
+      "discrepancies": [],
+      "event_count": 57,
+      "result_status": "pending_proof",
+      "run_id": "visible-dev-008-first-attempt",
+      "state": "finalized"
+    }
+  ],
+  "results_total": 1,
+  "roster_id": "66a9970e234b524d37ba6225c89d421e37591f9f38887d079d1e1fca1f053fae",
+  "scheduled_total": 1,
+  "schema_version": "prompt-to-board-campaign-truth-audit/v1",
+  "started_total": 1
+}

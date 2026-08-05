@@ -1,0 +1,16 @@
+[
+  {
+    "campaign_roster_id": "8960df6db36427eb47f2b1cdaaeddbdcfcac922aa78e4de8f5817f1046910295",
+    "config_id": "bbd292b871cf041d6b0087bc97e1155a9ae941b5c77a969d8b90d3dd681c2a80",
+    "event_log_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-040c-code-object/001-lean-040c-code-object/events.jsonl",
+    "order": 0,
+    "run_id": "lean-040c-code-object",
+    "scenario_id": "LEAN-040C",
+    "stderr_path": "/Users/omar/Documents/Open Pencil/outputs/019fa0df-47ce-74f0-9cc2-39a4301a9e9a/campaign-lean-040c-code-object/001-lean-040c-code-object/stderr.log",
+    "error": null,
+    "exit_code": 0,
+    "resume_thread_id": null,
+    "status": "recorded",
+    "thread_id": "019fb102-1d88-7252-8259-1051deefef2d"
+  }
+]

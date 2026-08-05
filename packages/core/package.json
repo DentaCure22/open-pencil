@@ -30,6 +30,11 @@
       "import": "./dist/color/index.js",
       "default": "./dist/color/index.js"
     },
+    "./code-object": {
+      "types": "./dist/code-object/index.d.ts",
+      "import": "./dist/code-object/index.js",
+      "default": "./dist/code-object/index.js"
+    },
     "./text": {
       "types": "./dist/text/index.d.ts",
       "import": "./dist/text/index.js",
@@ -188,11 +193,13 @@
     "diff": "^8.0.3",
     "es-toolkit": "^1.46.1",
     "expr-eval": "^2.0.2",
+    "fast-xml-parser": "^5.3.5",
     "fflate": "^0.8.2",
     "fontoxpath": "^3.34.0",
     "fzstd": "^0.1.1",
     "jspdf": "^4.2.1",
     "marked": "^17.0.5",
+    "minisearch": "^7.2.0",
     "nanoevents": "^9.1.0",
     "opentype.js": "^1.3.4",
     "sucrase": "^3.35.1",

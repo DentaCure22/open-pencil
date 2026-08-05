@@ -57,6 +57,15 @@ export function createViewportActions(ctx: EditorContext) {
     }
   }
 
+  function setViewport(viewport: { panX: number; panY: number; zoom: number }) {
+    const previous = currentViewport()
+    ctx.state.panX = viewport.panX
+    ctx.state.panY = viewport.panY
+    ctx.state.zoom = Math.max(0.02, Math.min(256, viewport.zoom))
+    ctx.requestRepaint()
+    emitViewportChanged(previous)
+  }
+
   function setZoomAroundPoint(level: number, centerX: number, centerY: number) {
     const previous = currentViewport()
     const newZoom = Math.max(0.02, Math.min(256, level))
@@ -125,6 +134,44 @@ export function createViewportActions(ctx: EditorContext) {
     return true
   }
 
+  function revealNode(nodeId: string, insets: ViewportInsets = {}, margin = 48): boolean {
+    const node = ctx.graph.getNode(nodeId)
+    if (!node) return false
+
+    const b = computeAbsoluteBounds([node], (id) => ctx.graph.getAbsolutePosition(id))
+    const { width: viewW, height: viewH } = ctx.getViewportSize()
+    const area = resolveViewportArea(viewW, viewH, insets)
+    const safeMargin = Math.max(0, Math.min(margin, area.width / 4, area.height / 4))
+    const safeLeft = area.centerX - area.width / 2 + safeMargin
+    const safeRight = area.centerX + area.width / 2 - safeMargin
+    const safeTop = area.centerY - area.height / 2 + safeMargin
+    const safeBottom = area.centerY + area.height / 2 - safeMargin
+    const screenLeft = b.x * ctx.state.zoom + ctx.state.panX
+    const screenRight = (b.x + b.width) * ctx.state.zoom + ctx.state.panX
+    const screenTop = b.y * ctx.state.zoom + ctx.state.panY
+    const screenBottom = (b.y + b.height) * ctx.state.zoom + ctx.state.panY
+
+    if (
+      screenRight - screenLeft > safeRight - safeLeft ||
+      screenBottom - screenTop > safeBottom - safeTop
+    ) {
+      zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
+      return true
+    }
+
+    let panX = ctx.state.panX
+    let panY = ctx.state.panY
+    if (screenLeft < safeLeft) panX += safeLeft - screenLeft
+    else if (screenRight > safeRight) panX -= screenRight - safeRight
+    if (screenTop < safeTop) panY += safeTop - screenTop
+    else if (screenBottom > safeBottom) panY -= screenBottom - safeBottom
+
+    if (panX !== ctx.state.panX || panY !== ctx.state.panY) {
+      setViewport({ panX, panY, zoom: ctx.state.zoom })
+    }
+    return true
+  }
+
   function zoomToLevel(level: number) {
     const { width: viewW, height: viewH } = ctx.getViewportSize()
     const centerX = (-ctx.state.panX + viewW / 2) / ctx.state.zoom
@@ -154,16 +201,49 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
   }
 
+  function zoomToReadableSelection(minimumScreenTextSize = 11, insets: ViewportInsets = {}): void {
+    if (ctx.state.selectedIds.size === 0) return
+    const selectedNodes = [...ctx.state.selectedIds]
+      .map((id) => ctx.graph.getNode(id))
+      .filter((node): node is NonNullable<typeof node> => node != null)
+    if (selectedNodes.length === 0) return
+
+    zoomToSelection(insets)
+
+    const pending = selectedNodes.flatMap((node) => [node.id, ...node.childIds])
+    const visited = new Set<string>()
+    let smallestFontSize = Infinity
+    while (pending.length > 0) {
+      const id = pending.shift()
+      if (!id || visited.has(id)) continue
+      visited.add(id)
+      const node = ctx.graph.getNode(id)
+      if (!node) continue
+      if (node.type === 'TEXT') smallestFontSize = Math.min(smallestFontSize, node.fontSize)
+      pending.push(...node.childIds)
+    }
+    if (!Number.isFinite(smallestFontSize) || smallestFontSize <= 0) return
+
+    const readableZoom = minimumScreenTextSize / smallestFontSize
+    if (ctx.state.zoom >= readableZoom) return
+    const { width: viewW, height: viewH } = ctx.getViewportSize()
+    const area = resolveViewportArea(viewW, viewH, insets)
+    setZoomAroundPoint(readableZoom, area.centerX, area.centerY)
+  }
+
   return {
     screenToCanvas,
+    setViewport,
     setZoomAroundPoint,
     applyZoom,
     pan,
     zoomToBounds,
     zoomToFit,
     zoomToNode,
+    revealNode,
     zoomTo100,
     zoomToLevel,
-    zoomToSelection
+    zoomToSelection,
+    zoomToReadableSelection
   }
 }

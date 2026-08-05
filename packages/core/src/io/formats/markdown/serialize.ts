@@ -305,6 +305,8 @@ function markdownDocumentFrame(graph: SceneGraph): SceneNode {
 
 export function markdownFromSceneGraph(graph: SceneGraph): string {
   const sourceFrame = markdownDocumentFrame(graph)
+  const metadata = readContentSource(sourceFrame)
+  if (sourceFrame.childIds.length === 0 && metadata) return metadata.source
   const source = serializeChildren(graph, sourceFrame, sourceMode(sourceFrame) === 'plain-text')
   return source ? `${source.replace(/\n+$/g, '')}\n` : ''
 }

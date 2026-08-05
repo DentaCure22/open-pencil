@@ -219,7 +219,10 @@ async function exportFromFile(format: string, args: ExportArgs) {
 }
 
 export default defineCommand({
-  meta: { description: 'Export a document to PNG, JPG, WEBP, SVG, PDF, JSX, HTML, or .fig' },
+  meta: {
+    name: 'export',
+    description: 'Export a document to PNG, JPG, WEBP, SVG, PDF, JSX, HTML, or .fig'
+  },
   args: {
     file: {
       type: 'positional',

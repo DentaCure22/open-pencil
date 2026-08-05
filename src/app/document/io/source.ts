@@ -123,6 +123,29 @@ export function createDocumentSourceActions({
     return null
   }
 
+  function frameOwnedCodeObjectSources(): string[] {
+    return [...editor.graph.getAllNodes()].flatMap((node) => {
+      const raw = node.pluginData.find(
+        (entry) => entry.pluginId === 'openpencil-code-object' && entry.key === 'document'
+      )?.value
+      if (!raw) return []
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          'source' in parsed &&
+          typeof parsed.source === 'string'
+        ) {
+          return [parsed.source]
+        }
+      } catch {
+        return []
+      }
+      return []
+    })
+  }
+
   function captureReconciliationState(document: SceneNode) {
     const text = editor.graph
       .flattenTree(document.id)
@@ -185,6 +208,17 @@ export function createDocumentSourceActions({
     }
 
     const document = sourceDocumentNode(format)
+    if ((format === 'jsx' || format === 'tsx') && !document) {
+      const authoredSources = frameOwnedCodeObjectSources()
+      if (authoredSources.length === 1) {
+        await writeFile(new TextEncoder().encode(authoredSources[0]))
+        return
+      }
+      if (authoredSources.length > 1) {
+        throw new Error(`Choose one Code Object before saving ${format.toUpperCase()} source`)
+      }
+    }
+
     if (!document) throw new Error(`${format.toUpperCase()} source document is missing`)
     const snapshot = captureReconciliationState(document)
     const reconciliation = sourceReconciliation(format, document)

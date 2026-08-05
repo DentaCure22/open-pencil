@@ -20,10 +20,23 @@ export { provideEditor, useEditor, EDITOR_KEY } from '#vue/editor/context'
 /** Canvas and input integration composables. */
 export { useCanvas } from '#vue/canvas/surface/use'
 export type { UseCanvasOptions } from '#vue/canvas/surface/use'
+export {
+  cancelEditorPresentationFrame,
+  cancelEditorPresentationUpdate,
+  scheduleEditorPresentationFrame,
+  scheduleEditorPresentationUpdate
+} from '#vue/canvas/surface/frame-scheduler'
+export type {
+  EditorPresentationFrame,
+  EditorPresentationFrameCallback,
+  EditorPresentationUpdateCallback
+} from '#vue/canvas/surface/frame-scheduler'
 export { useCanvasInput } from '#vue/canvas/useCanvasInput'
 export { useCanvasVirtualReference } from '#vue/canvas/overlays/useCanvasVirtualReference'
 export { useTextEdit } from '#vue/canvas/text-edit/use'
 export { useCanvasDrop, extractImageFilesFromClipboard } from '#vue/canvas/drop/use'
+export { applyMoveSnap } from '#vue/shared/input/move-snap'
+export type { MoveSnapInput, MoveSnapOriginal } from '#vue/shared/input/move-snap'
 
 /** Low-level selection, graph, and derived-state helpers. */
 export { useNodeProps, MIXED } from '#vue/controls/node-props/use'

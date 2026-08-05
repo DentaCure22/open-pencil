@@ -3,7 +3,11 @@ import type { ComputedRef } from 'vue'
 
 import type { EditorStore } from '@/app/editor/active-store'
 
-export function bindSpaceHandTool(inputFocused: ComputedRef<boolean>, store: EditorStore) {
+export function bindSpaceHandTool(
+  inputFocused: ComputedRef<boolean>,
+  store: EditorStore,
+  enabled: () => boolean = () => true
+) {
   let toolBeforeSpace: typeof store.state.activeTool | null = null
 
   function restoreTool() {
@@ -13,6 +17,7 @@ export function bindSpaceHandTool(inputFocused: ComputedRef<boolean>, store: Edi
   }
 
   useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+    if (!enabled()) return
     if (event.code !== 'Space') return
     if (inputFocused.value || store.state.editingTextId) return
     if (event.metaKey || event.ctrlKey || event.altKey) return

@@ -7,16 +7,16 @@ const ORIGINAL_SOURCE = `export function PatientCard() {
 }`
 const EDITED_SOURCE = `export function PatientCard() {
   return <article aria-label="Patient summary">Edited</article>
-}
-
-globalThis.__OPENPENCIL_MODALITY_EXECUTED__ = true`
+}`
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?test&no-rulers')
+  await page.goto('/?test&no-rulers&html-source')
   await new CanvasHelper(page).waitForInit()
 })
 
-test('File Open keeps TSX source inert through edit, undo, save, and reopen', async ({ page }) => {
+test('File Open creates one editable TSX Code Object through edit, undo, save, and reopen', async ({
+  page
+}) => {
   await page.evaluate((initialSource) => {
     let persistedSource = initialSource
     let writeCount = 0
@@ -41,22 +41,15 @@ test('File Open keeps TSX source inert through edit, undo, save, and reopen', as
   await page.keyboard.press('Meta+o')
 
   await expect(page.getByTestId('app-document-name')).toHaveText('PatientCard')
-  await expect(page.getByTestId('source-document-format')).toHaveText('tsx')
-  await expect(page.getByTestId('source-document-runtime-boundary')).toContainText(
-    'does not evaluate arbitrary component code'
-  )
-  const editor = page.getByRole('textbox', { name: 'TSX source' })
+  await expect(page.getByText('Original', { exact: true })).toBeVisible()
+  await expect(page.locator('iframe')).toHaveCount(0)
+  await page.getByTestId('sidebar-context-code').click()
+  const editor = page.getByTestId('code-object-source')
   await expect(editor).toHaveValue(ORIGINAL_SOURCE)
 
   await editor.fill(EDITED_SOURCE)
-  await expect(page.getByTestId('source-document-dirty')).toHaveText('Unsaved source')
-  await page.getByTestId('source-document-save').click()
-  await expect(page.getByTestId('source-document-message')).toContainText(
-    'Source saved on this document'
-  )
-  expect(
-    await page.evaluate(() => Reflect.get(globalThis, '__OPENPENCIL_MODALITY_EXECUTED__'))
-  ).toBeUndefined()
+  await page.getByTestId('code-object-apply').click()
+  await expect(page.getByRole('article', { name: 'Patient summary' })).toContainText('Edited')
 
   await page.keyboard.press('Meta+z')
   await expect(editor).toHaveValue(ORIGINAL_SOURCE)
@@ -68,13 +61,13 @@ test('File Open keeps TSX source inert through edit, undo, save, and reopen', as
 
   await page.keyboard.press('Meta+o')
   await expect(page.getByTestId('tabbar-tab')).toHaveCount(2)
-  await expect(page.getByRole('textbox', { name: 'TSX source' })).toHaveValue(EDITED_SOURCE)
-  expect(
-    await page.evaluate(() => Reflect.get(globalThis, '__OPENPENCIL_MODALITY_EXECUTED__'))
-  ).toBeUndefined()
+  await page.getByTestId('sidebar-context-code').click()
+  await expect(page.getByTestId('code-object-source')).toHaveValue(EDITED_SOURCE)
+  await expect(page.getByRole('article', { name: 'Patient summary' })).toContainText('Edited')
+  await expect(page.locator('iframe')).toHaveCount(0)
 })
 
-test('pasted media file enters the same source-backed intake path as a drop', async ({ page }) => {
+test('pasted PDF enters the same Code Object intake path as a drop', async ({ page }) => {
   await page.evaluate(() => {
     const transfer = new DataTransfer()
     transfer.items.add(
@@ -91,8 +84,9 @@ test('pasted media file enters the same source-backed intake path as a drop', as
     )
   })
 
-  await expect(page.getByTestId('media-evidence-pdf')).toContainText('clipboard.pdf')
+  await expect(page.getByTestId('code-object-pdf')).toContainText('clipboard.pdf')
   await expect(page.getByRole('link', { name: 'Open source PDF: clipboard.pdf' })).toBeVisible()
+  await expect(page.locator('iframe')).toHaveCount(0)
   const source = await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
@@ -105,6 +99,7 @@ test('pasted media file enters the same source-backed intake path as a drop', as
 })
 
 test('Insert > Media opens the browser picker and places the selected file', async ({ page }) => {
+  await page.getByTestId('code-object-start').click()
   const menubar = page.locator('[role="menubar"]')
   if (!(await menubar.isVisible())) await page.getByTestId('app-menu-toggle').click()
   await page.getByRole('menuitem', { name: 'Insert', exact: true }).click()
@@ -118,6 +113,7 @@ test('Insert > Media opens the browser picker and places the selected file', asy
     name: 'inserted.pdf'
   })
 
-  await expect(page.getByTestId('media-evidence-pdf')).toContainText('inserted.pdf')
+  await expect(page.getByTestId('code-object-pdf')).toContainText('inserted.pdf')
   await expect(page.getByRole('link', { name: 'Open source PDF: inserted.pdf' })).toBeVisible()
+  await expect(page.locator('iframe')).toHaveCount(0)
 })

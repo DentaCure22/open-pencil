@@ -146,8 +146,8 @@ function projectedPath(store: EditorStore, node: SceneNode) {
   const points = network.vertices.map((vertex) => transformedPoint(store, matrix, vertex))
   const path = network.segments
     .map((segment) => {
-      const start = network.vertices[segment.start]
-      const end = network.vertices[segment.end]
+      const start = network.vertices.at(segment.start)
+      const end = network.vertices.at(segment.end)
       if (!start || !end) return ''
       const startPoint = transformedPoint(store, matrix, start)
       const endPoint = transformedPoint(store, matrix, end)

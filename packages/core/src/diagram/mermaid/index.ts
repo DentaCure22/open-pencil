@@ -1,14 +1,15 @@
-export { parseMermaidDiagram } from './parse'
-export { createMermaidSceneSpec } from './scene'
-export { mermaidDiagramPluginData, mermaidSourcePluginData } from './metadata'
-export { MERMAID_DIAGRAM_REVISION, MERMAID_PARSER, MERMAID_SVG_PARSER } from './types'
+export { createMermaidSceneSpec, createMermaidSvgSpec } from './scene'
+export {
+  isMermaidDiagramContainer,
+  mermaidDiagramName,
+  mermaidDiagramPluginData,
+  mermaidDiagramOwnerPluginData,
+  mermaidSourcePluginData
+} from './metadata'
+export { MERMAID_DIAGRAM_REVISION, MERMAID_SVG_PARSER } from './types'
 export type {
-  MermaidBinaryFile,
+  MermaidAppearance,
   MermaidDiagram,
-  MermaidLabel,
-  MermaidParser,
   MermaidParserName,
-  MermaidSceneNodeSpec,
-  MermaidSceneSpec,
-  MermaidSkeletonElement
+  MermaidSceneSpec
 } from './types'

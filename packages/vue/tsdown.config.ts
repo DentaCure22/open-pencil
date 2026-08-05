@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module'
 
+import { defineConfig } from 'tsdown'
 import raw from 'unplugin-raw/rolldown'
 import vue from 'unplugin-vue/rolldown'
-import { defineConfig } from 'tsdown'
 
 const require = createRequire(import.meta.url)
 
@@ -33,7 +33,9 @@ function atlaskitSubpathResolver() {
 
 export default defineConfig({
   entry: {
-    index: './src/index.ts'
+    i18n: './src/i18n/public.ts',
+    index: './src/index.ts',
+    presentation: './src/presentation.ts'
   },
   platform: 'browser',
   format: ['esm'],
@@ -86,12 +88,27 @@ export default defineConfig({
     codeSplitting: {
       groups: [
         {
+          name: 'presentation-runtime',
+          test: /src[\\/]canvas[\\/]surface[\\/]frame-scheduler\.ts$/,
+          priority: 100,
+          includeDependenciesRecursively: false
+        },
+        {
+          name: 'i18n-runtime',
+          test: /src[\\/]i18n[\\/](?:create|locale|messages(?:[\\/].*)?)\.(?:ts|json)$/,
+          priority: 100,
+          entriesAware: true,
+          entriesAwareMergeThreshold: 0,
+          includeDependenciesRecursively: false
+        },
+        {
           test: /(?<!\.d\.c?ts)$/,
           name: (id) => {
             const cleanId = id.split('?')[0]
             const parts = cleanId.split(/[\\/]/g)
             const srcIndex = parts.lastIndexOf('src')
-            const file = srcIndex >= 0 ? parts.slice(srcIndex + 1).join('/') : parts.at(-1) ?? 'index'
+            const file =
+              srcIndex >= 0 ? parts.slice(srcIndex + 1).join('/') : (parts.at(-1) ?? 'index')
             return file.replace(/\.(vue|ts)$/, '')
           }
         }

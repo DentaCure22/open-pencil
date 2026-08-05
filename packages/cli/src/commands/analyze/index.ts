@@ -7,7 +7,7 @@ import spacing from './spacing'
 import typography from './typography'
 
 export default defineCommand({
-  meta: { description: 'Analyze design tokens and patterns' },
+  meta: { name: 'analyze', description: 'Analyze design tokens and patterns' },
   subCommands: {
     colors,
     typography,

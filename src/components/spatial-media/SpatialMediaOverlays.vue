@@ -14,22 +14,12 @@ type SpatialMediaItem = { node: SceneNode; source: SpatialMediaSource }
 const store = useEditorStore()
 const previewUrls = shallowRef<Record<string, string>>({})
 
-function belongsToCurrentPage(node: SceneNode): boolean {
-  let current: SceneNode | undefined = node
-  while (current.parentId) {
-    if (current.parentId === store.state.currentPageId) return true
-    current = store.graph.getNode(current.parentId)
-    if (!current) return false
-  }
-  return false
-}
-
 const items = computed<SpatialMediaItem[]>(() => {
   void store.state.sceneVersion
   void store.state.currentPageId
   const result: SpatialMediaItem[] = []
-  for (const node of store.graph.getAllNodes()) {
-    if (!node.visible || !belongsToCurrentPage(node)) continue
+  for (const node of store.graph.getDescendants(store.state.currentPageId)) {
+    if (!node.visible) continue
     const source = spatialMediaSource(node)
     if (!source || !store.graph.images.has(source.assetHash)) continue
     result.push({ node, source })

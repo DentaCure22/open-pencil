@@ -4,8 +4,7 @@ import { defineCommand } from 'citty'
 
 import { FigmaAPI } from '@open-pencil/core/figma-api'
 
-import { isAppMode, requireFile, rpc } from '#cli/app-client'
-import { appTargetOptions, appTargetRpcArgs } from '#cli/app-target'
+import { requireFile } from '#cli/app-client'
 import { printError } from '#cli/format'
 import { loadDocument } from '#cli/headless'
 
@@ -27,12 +26,15 @@ function serializeResult(value: unknown): unknown {
 }
 
 export default defineCommand({
-  meta: { description: 'Execute JavaScript with Figma plugin API' },
+  meta: {
+    name: 'eval',
+    description: 'Execute JavaScript with Figma plugin API against a document file'
+  },
   args: {
     file: {
       type: 'positional',
-      description: 'Document file path (omit to connect to running app)',
-      required: false
+      description: 'Document file path; live-app eval is disabled',
+      required: true
     },
     code: { type: 'string', alias: 'c', description: 'JavaScript code to execute' },
     stdin: { type: 'boolean', description: 'Read code from stdin' },
@@ -43,7 +45,6 @@ export default defineCommand({
       description: 'Write to a different file',
       required: false
     },
-    ...appTargetOptions,
     json: { type: 'boolean', description: 'Output as JSON' },
     quiet: { type: 'boolean', alias: 'q', description: 'Suppress output' }
   },
@@ -59,14 +60,6 @@ export default defineCommand({
     if (!code) {
       printError('Provide code via --code or --stdin')
       process.exit(1)
-    }
-
-    if (isAppMode(args.file)) {
-      const result = await rpc('eval', { code, ...appTargetRpcArgs(args) })
-      if (!args.quiet && result !== undefined && result !== null) {
-        printResult(result, !!args.json)
-      }
-      return
     }
 
     const file = requireFile(args.file)

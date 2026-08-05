@@ -1,10 +1,11 @@
 import type { Ref } from 'vue'
 
+import { objectGraphConnectionForSelection } from '@open-pencil/scene-graph'
 import type { useEditorCommands, useViewportKind } from '@open-pencil/vue'
 
 import type { EditorPanelTab } from '@/app/ai/chat/use'
 import type { EditorStore } from '@/app/editor/active-store'
-import { removeWorkspaceItemsForSelectedLiveFrames } from '@/app/smylr-production/live/frame-deletion'
+import { disconnectObjects } from '@/app/object-graph/actions'
 
 type KeyboardActionsOptions = {
   store: EditorStore
@@ -33,9 +34,15 @@ export function createKeyboardActions({
       else store.nodeEditDeleteSelected()
       return
     }
-    // Drop linked workspace items before the scene nodes go away, otherwise
-    // ensureWorkspaceFrames() will resurrect alternate live iframes.
-    removeWorkspaceItemsForSelectedLiveFrames(store)
+    const connection = objectGraphConnectionForSelection(
+      store.graph,
+      store.state.currentPageId,
+      store.state.selectedIds
+    )
+    if (connection) {
+      disconnectObjects(store, connection.id)
+      return
+    }
     runCommand('selection.delete')
   }
 
@@ -48,6 +55,7 @@ export function createKeyboardActions({
       store.penCommit(false)
       return
     }
+    if (store.containerNavigation.enterSelectedContainer()) return
     const node = store.selectedNode.value
     if (node?.type === 'TEXT') {
       requestAnimationFrame(() => {
@@ -67,6 +75,8 @@ export function createKeyboardActions({
       store.penCancel()
       return
     }
+    if (store.objectGraphNavigation.returnToOrigin()) return
+    if (store.containerNavigation.exit()) return
     if (store.state.enteredContainerId) {
       store.exitContainer()
       return

@@ -6,6 +6,7 @@ import { findMoveDropTarget, reparentOutsideNodes } from '#vue/shared/input/drop
 export { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
 import { AUTO_LAYOUT_BREAK_THRESHOLD } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
+import type { Vector } from '@open-pencil/scene-graph'
 
 import { applyMoveSnap } from '#vue/shared/input/move-snap'
 import type { DragMove } from '#vue/shared/input/types'
@@ -112,23 +113,42 @@ function getMoveDistance(d: DragMove) {
 
 function hasMoved(d: DragMove, editor: Editor) {
   return [...d.originals].some(([id, orig]) => {
-    const node = editor.graph.getNode(id)
-    return node && (node.x !== orig.x || node.y !== orig.y)
+    const position = editor.graph.getPresentedNodePosition(id)
+    return position.x !== orig.x || position.y !== orig.y
   })
 }
 
 function restoreOriginalPositions(d: DragMove, editor: Editor) {
-  for (const [id, orig] of d.originals) {
-    editor.graph.updateNodePositionPreview(id, orig.x, orig.y)
+  for (const id of d.originals.keys()) {
+    editor.graph.clearNodePositionPresentation(id)
   }
 }
 
-function applyFinalPositions(d: DragMove, editor: Editor) {
-  const dx = d.currentX - d.startX
-  const dy = d.currentY - d.startY
-  for (const [id, orig] of d.originals) {
-    editor.updateNode(id, { x: Math.round(orig.x + dx), y: Math.round(orig.y + dy) })
+function capturePresentedPositions(d: DragMove, editor: Editor): Map<string, Vector> {
+  return new Map(
+    [...d.originals.keys()].map((id) => [id, editor.graph.getPresentedNodePosition(id)])
+  )
+}
+
+function applyFinalPositions(positions: ReadonlyMap<string, Vector>, editor: Editor) {
+  for (const [id, position] of positions) {
+    editor.updateNode(id, { x: position.x, y: position.y })
   }
+}
+
+function removeCancelledDuplicate(d: DragMove, editor: Editor) {
+  if (!d.duplicated) return
+  for (const id of [...d.originals.keys()].toReversed()) editor.graph.deleteNode(id)
+  editor.select([...(d.duplicatedPreviousSelection ?? new Set<string>())])
+  editor.requestRender()
+}
+
+export function cancelMove(d: DragMove, editor: Editor) {
+  restoreOriginalPositions(d, editor)
+  editor.setLayoutInsertIndicator(null)
+  editor.setSnapGuides([])
+  editor.setDropTarget(null)
+  removeCancelledDuplicate(d, editor)
 }
 
 export function handleMoveUp(d: DragMove, editor: Editor) {
@@ -144,6 +164,7 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
   editor.setSnapGuides([])
 
   if (indicator) {
+    restoreOriginalPositions(d, editor)
     if (getMoveDistance(d) < AUTO_LAYOUT_REORDER_CLICK_SLOP) {
       editor.setDropTarget(null)
       return
@@ -156,10 +177,11 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
   }
 
   const moved = hasMoved(d, editor)
+  const finalPositions = moved ? capturePresentedPositions(d, editor) : null
+  restoreOriginalPositions(d, editor)
 
-  if (moved) {
-    restoreOriginalPositions(d, editor)
-    applyFinalPositions(d, editor)
+  if (finalPositions) {
+    applyFinalPositions(finalPositions, editor)
     const dropId = editor.state.dropTargetId
     if (dropId) {
       editor.reparentNodes([...editor.state.selectedIds], dropId)
@@ -171,9 +193,7 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
   if (d.duplicated) {
     const previousSelection = d.duplicatedPreviousSelection ?? new Set<string>()
     if (!moved) {
-      for (const id of [...d.originals.keys()].toReversed()) editor.graph.deleteNode(id)
-      editor.select([...previousSelection])
-      editor.requestRender()
+      removeCancelledDuplicate(d, editor)
       editor.setDropTarget(null)
       return
     }

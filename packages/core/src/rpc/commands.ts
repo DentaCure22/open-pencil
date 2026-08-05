@@ -23,8 +23,11 @@ export type AutomationDocumentSummary = {
   name: string
   path?: string
   active: boolean
+  content_document_id: string
   current_page_id: string
   current_page_name: string
+  kind: 'document' | 'workspace'
+  workspace_id?: string
   pages: Array<{ id: string; name: string }>
 }
 

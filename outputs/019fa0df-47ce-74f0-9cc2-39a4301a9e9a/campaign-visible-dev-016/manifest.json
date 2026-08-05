@@ -1,0 +1,39 @@
+{
+  "manifest_id": "prompt-to-board-development-matrix-v1",
+  "revision": 1,
+  "scenarios": [
+    {
+      "expected_outcome": "artifact_success",
+      "lineage": {
+        "family_id": "ptb-dev-mixed-connected-sparse-v1",
+        "optimization_exposure": "allowed",
+        "origin": "system",
+        "parent_scenario_ids": [],
+        "source_record_ids": [
+          "development-matrix-brief-2026-07-29"
+        ],
+        "transform": null
+      },
+      "modalities": [
+        "native_card",
+        "code_object",
+        "object_connection"
+      ],
+      "prompt": "Build a small sprint-planning area from separate, independently selectable Board pieces: concise Must, Should, and Could summary cards; an adjustable capacity control; and visible typed relationships from Must to Should and Could showing that Must constrains them. Keep the summaries outside the control so each can be selected, moved, and connected independently.",
+      "rubric": {
+        "rubric_id": "ptb-dev-mixed-connected",
+        "version": "1.0.0"
+      },
+      "scenario_id": "DEV-MX-MC-SPARSE-001",
+      "session_mode": "fresh",
+      "split": "dev",
+      "target_policy": {
+        "fixture_ref": "ptb-dev-sparse-v1",
+        "kind": "exact_fixture",
+        "target_substitution": "forbidden"
+      },
+      "visibility": "required"
+    }
+  ],
+  "schema_version": "prompt-to-board-scenario-manifest/v1"
+}
