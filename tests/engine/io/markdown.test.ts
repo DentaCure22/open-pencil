@@ -54,6 +54,14 @@ describe('Markdown document import', () => {
     expect(document).toMatchObject({
       childIds: [],
       clipsContent: true,
+      fills: [
+        {
+          color: { a: 1, b: 1, g: 1, r: 1 },
+          opacity: 1,
+          type: 'SOLID',
+          visible: true
+        }
+      ],
       height: 720,
       layoutMode: 'NONE',
       name: 'notes',

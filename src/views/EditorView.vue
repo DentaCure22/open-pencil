@@ -328,6 +328,7 @@ async function persistSmylrDocumentNow(
   transaction?: AutomationPersistenceTransaction
 ) {
   const sceneVersion = active.state.sceneVersion
+  if (!transaction && localAuthorityHeadSynchronizer.isAcknowledged(sceneVersion)) return true
   const persisted = await localDocumentAuthority.persist(active, transaction)
   if (persisted && active.state.sceneVersion === sceneVersion) {
     localAuthorityHeadSynchronizer.acknowledge(sceneVersion)
@@ -558,7 +559,6 @@ useEventListener(window, 'pagehide', () => {
     saveReloadState(localWorkspaceReloadStateId, active.state)
   }
   void saveSmylrProductionView(active)
-  void persistSmylrDocumentNow(active)
 })
 
 /**
@@ -817,7 +817,7 @@ onUnmounted(() => {
         without a flex parent — that collapsed the canvas to 0 height.
       -->
       <div class="absolute inset-0 isolate z-0 flex min-h-0 min-w-0">
-        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+        <EditorCanvas />
         <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
       </div>
 
@@ -874,7 +874,7 @@ onUnmounted(() => {
           data-test-id="canvas-chrome-area"
           class="pointer-events-none relative min-w-0 bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
         >
-          <!-- Keep both floating controls on the usable canvas centerline. -->
+          <!-- Keep tools out of the center while the Board dock anchors navigation below. -->
           <Toolbar :sidebar-open="showLayersPanel" />
           <BoardDock :sidebar-open="showLayersPanel" />
         </SplitterPanel>
@@ -909,7 +909,7 @@ onUnmounted(() => {
       class="flex flex-1 overflow-hidden"
     >
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+          <EditorCanvas />
         <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
         <MobileHud v-if="!showEmptyBoardStart" />
         <Toolbar v-if="!showEmptyBoardStart" />
@@ -924,7 +924,7 @@ onUnmounted(() => {
       class="flex flex-1 overflow-hidden"
     >
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+        <EditorCanvas />
         <div
           v-if="!isMobile"
           class="border-border bg-panel absolute top-7 left-7 z-10 flex items-center gap-2 rounded-lg border px-2 py-1 shadow-sm"
@@ -955,7 +955,7 @@ onUnmounted(() => {
     <!-- Bare canvas (no chrome, e.g. ?no-chrome) -->
     <div v-else :key="'bare-' + activeTab?.id" class="flex flex-1 overflow-hidden">
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-        <EditorCanvas :dither-presentation="showEmptyBoardStart ? 'surface' : 'overlay'" />
+      <EditorCanvas />
       </div>
     </div>
   </div>

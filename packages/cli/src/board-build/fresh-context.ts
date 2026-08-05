@@ -1,20 +1,22 @@
 import { readFile } from 'node:fs/promises'
 
-import { rpcEnvelopeExact, type AppRpcEnvelope, type AppRpcTarget } from '#cli/app-client'
+import { rpcEnvelopeExact, type AppRpcEnvelope } from '#cli/app-client'
+import {
+  assertFreshContextTarget as assertExactTarget,
+  type BoardJsonObject,
+  type ExactFreshContextTarget,
+  type FreshContextTarget,
+  freshContextElapsed as elapsed,
+  type FreshContextMetrics,
+  isBoardJsonObject,
+  type PersistedBoardTarget
+} from '#cli/fresh-context/shared'
 
-type BoardJsonObject = { [key: string]: unknown }
-
-export type ExactFreshContextTarget = {
-  content_document_id: string
-  document_id: string
-  page_id: string
-  runtime_instance_id: string
-  workspace_id: string
-}
-
-export type PersistedBoardTarget = Omit<ExactFreshContextTarget, 'runtime_instance_id'>
-
-export type FreshContextTarget = PersistedBoardTarget & { runtime_instance_id?: string }
+export type {
+  ExactFreshContextTarget,
+  FreshContextTarget,
+  PersistedBoardTarget
+} from '#cli/fresh-context/shared'
 
 export const BOARD_BUILD_REQUEST_CONTRACT = 'board-build-request/v1' as const
 
@@ -58,23 +60,11 @@ export type BoardBuildRpcSender = (
   args: Record<string, unknown>
 ) => Promise<AppRpcEnvelope<BoardJsonObject>>
 
-type FreshContextCallCounts = {
-  board_build: number
-  board_context: number
-  total: number
-}
-
-type FreshContextTiming = {
-  board_build: number
-  board_context: number
-  total: number
-}
-
 export type FreshContextHandshake = {
   contract: 'board-build-fresh-context/v2'
-  handshake_elapsed_ms: FreshContextTiming
+  handshake_elapsed_ms: FreshContextMetrics<'board_build'>
   resolved_relative_object_id?: string
-  semantic_rpc_calls: FreshContextCallCounts
+  semantic_rpc_calls: FreshContextMetrics<'board_build'>
   stale_recovery_count: 0 | 1 | 2
 }
 
@@ -351,10 +341,6 @@ export async function exactFreshContextTargetSource(
   }
   assertMatchingFlattenedTarget(args, target)
   return target
-}
-
-function isBoardJsonObject(value: unknown): value is BoardJsonObject {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
 function assertSupportedFields(
@@ -959,29 +945,6 @@ function isConclusiveStaleContext(error: unknown): boolean {
   )
 }
 
-function assertExactTarget(
-  actual: AppRpcTarget | undefined,
-  expected: FreshContextTarget,
-  label: string
-): asserts actual is AppRpcTarget {
-  if (!actual) throw new Error(`${label} did not return an exact target.`)
-  if (!Number.isInteger(actual.boardRevision) || actual.boardRevision < 0) {
-    throw new Error(`${label} did not return a valid integer Board revision.`)
-  }
-  const values: Record<(typeof TARGET_FIELDS)[number], string | undefined> = {
-    content_document_id: actual.contentDocumentId,
-    document_id: actual.documentId,
-    page_id: actual.pageId,
-    runtime_instance_id: actual.runtimeInstanceId,
-    workspace_id: actual.workspaceId
-  }
-  const fields = expected.runtime_instance_id ? TARGET_FIELDS : PERSISTED_TARGET_FIELDS
-  const mismatches = fields.filter((field) => values[field] !== expected[field])
-  if (mismatches.length > 0) {
-    throw new Error(`${label} returned the wrong exact target: ${mismatches.join(', ')}.`)
-  }
-}
-
 function freshBoardBuildBase(context: unknown, target: FreshContextTarget): FreshBoardBuildBase {
   if (!isBoardJsonObject(context)) {
     throw new Error('Fresh Board context did not return an object.')
@@ -1014,12 +977,6 @@ function freshBoardBuildBase(context: unknown, target: FreshContextTarget): Fres
     throw new Error('Fresh Board context returned board_build_base without a valid revision.')
   }
   return { base, expectedRevision: base.expected_revision }
-}
-
-function elapsed(started: number, finished: number): number {
-  const duration = finished - started
-  if (!Number.isFinite(duration)) return 0
-  return Math.round(Math.max(0, duration) * 100) / 100
 }
 
 export async function buildWithFreshContext(

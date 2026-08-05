@@ -53,7 +53,7 @@ function selectEditorTool(tool: Tool) {
   <div
     data-test-id="toolbar-motion"
     :data-sidebar-open="sidebarOpen"
-    class="pointer-events-auto absolute top-3 left-1/2 z-30 flex -translate-x-1/2 transform-gpu items-center transition-transform duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+    class="pointer-events-auto absolute top-3 right-3 z-30 flex items-center"
   >
     <div
       data-test-id="toolbar"

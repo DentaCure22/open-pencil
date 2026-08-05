@@ -115,27 +115,21 @@ function hitTestChildren(
   return null
 }
 
-export function hitTest(
+type HitTestFunction = (
   graph: SceneGraph,
   px: number,
   py: number,
   scopeId?: string,
-  options: HitTestOptions = {}
-): SceneNode | null {
-  const scope = scopeId ?? graph.rootId
-  return hitTestChildren(graph, px, py, scope, false, options)
+  options?: HitTestOptions
+) => SceneNode | null
+
+function createHitTest(deep: boolean): HitTestFunction {
+  return (graph, px, py, scopeId, options = {}) =>
+    hitTestChildren(graph, px, py, scopeId ?? graph.rootId, deep, options)
 }
 
-export function hitTestDeep(
-  graph: SceneGraph,
-  px: number,
-  py: number,
-  scopeId?: string,
-  options: HitTestOptions = {}
-): SceneNode | null {
-  const scope = scopeId ?? graph.rootId
-  return hitTestChildren(graph, px, py, scope, true, options)
-}
+export const hitTest = createHitTest(false)
+export const hitTestDeep = createHitTest(true)
 
 function hitTestFrameChildren(
   graph: SceneGraph,

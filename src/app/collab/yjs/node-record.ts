@@ -42,8 +42,11 @@ function syncNodeChangesToYMap(
 ) {
   for (const key of Object.keys(changes) as (keyof SceneNode)[]) {
     const value = node[key]
-    if (value === undefined) ynode.delete(key)
-    else ynode.set(key, structuredClone(value))
+    if (value === undefined) {
+      if (ynode.has(key)) ynode.delete(key)
+    } else if (!collabValuesEqual(ynode.get(key), value)) {
+      ynode.set(key, structuredClone(value))
+    }
   }
   syncSourceInvalidationsForChanges(node, changes, ynode)
 }

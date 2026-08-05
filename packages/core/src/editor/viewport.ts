@@ -18,6 +18,11 @@ export interface ResolvedViewportArea {
   width: number
 }
 
+export interface ZoomToBoundsOptions {
+  maxZoom?: number
+  zoomMultiplier?: number
+}
+
 export function resolveViewportArea(
   viewW: number,
   viewH: number,
@@ -97,7 +102,8 @@ export function createViewportActions(ctx: EditorContext) {
     minY: number,
     maxX: number,
     maxY: number,
-    insets: ViewportInsets = {}
+    insets: ViewportInsets = {},
+    options: ZoomToBoundsOptions = {}
   ) {
     const previous = currentViewport()
     const padding = 80
@@ -106,7 +112,11 @@ export function createViewportActions(ctx: EditorContext) {
 
     const { width: viewW, height: viewH } = ctx.getViewportSize()
     const area = resolveViewportArea(viewW, viewH, insets)
-    const zoom = Math.min(area.width / w, area.height / h, 1)
+    const zoom = Math.min(
+      (area.width / w) * (options.zoomMultiplier ?? 1),
+      (area.height / h) * (options.zoomMultiplier ?? 1),
+      options.maxZoom ?? 1
+    )
     const boundsCenterX = (minX + maxX) / 2
     const boundsCenterY = (minY + maxY) / 2
 
@@ -125,12 +135,16 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
   }
 
-  function zoomToNode(nodeId: string, insets?: ViewportInsets): boolean {
+  function zoomToNode(
+    nodeId: string,
+    insets?: ViewportInsets,
+    options: ZoomToBoundsOptions = {}
+  ): boolean {
     const node = ctx.graph.getNode(nodeId)
     if (!node) return false
 
     const b = computeAbsoluteBounds([node], (id) => ctx.graph.getAbsolutePosition(id))
-    zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
+    zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets, options)
     return true
   }
 

@@ -1,15 +1,15 @@
-import {
-  getAppToken,
-  rpcEnvelopeExact,
-  type AppRpcEnvelope,
-  type AppRpcTarget
-} from '#cli/app-client'
+import { getAppToken, rpcEnvelopeExact, type AppRpcEnvelope } from '#cli/app-client'
 import {
   resolveExactVisibleTopLevelObjectId,
   type ExactFreshContextTarget
 } from '#cli/board-build/fresh-context'
-
-type BoardJsonObject = { [key: string]: unknown }
+import {
+  assertFreshContextTarget as assertExactTarget,
+  type BoardJsonObject,
+  freshContextElapsed as elapsed,
+  type FreshContextMetrics,
+  isBoardJsonObject
+} from '#cli/fresh-context/shared'
 
 export type FreshBoardConnectLogicalArgs = {
   automatic?: boolean
@@ -29,24 +29,12 @@ export type BoardConnectRpcSender = (
   args: Record<string, unknown>
 ) => Promise<AppRpcEnvelope<BoardJsonObject>>
 
-type FreshContextCallCounts = {
-  board_context: number
-  connect_objects: number
-  total: number
-}
-
-type FreshContextTiming = {
-  board_context: number
-  connect_objects: number
-  total: number
-}
-
 export type FreshBoardConnectHandshake = {
   contract: 'board-connect-fresh-context/v2'
-  handshake_elapsed_ms: FreshContextTiming
+  handshake_elapsed_ms: FreshContextMetrics<'connect_objects'>
   resolved_source_object_id?: string
   resolved_target_object_id?: string
-  semantic_rpc_calls: FreshContextCallCounts
+  semantic_rpc_calls: FreshContextMetrics<'connect_objects'>
   stale_recovery_count: 0 | 1
 }
 
@@ -96,10 +84,6 @@ const LOGICAL_FIELDS = new Set([
 const CONNECTION_KINDS = new Set(['action', 'data', 'visual'])
 const CONNECTION_PORT_PATTERN = /^[A-Za-z][A-Za-z0-9._/-]{0,127}$/u
 const CONNECT_CAPABILITY = 'board.change.object_graph.connect'
-
-function isBoardJsonObject(value: unknown): value is BoardJsonObject {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
 
 function assertSupportedFields(
   value: BoardJsonObject,
@@ -189,28 +173,6 @@ export function normalizeFreshBoardConnectLogical(value: unknown): FreshBoardCon
   }
 }
 
-function assertExactTarget(
-  actual: AppRpcTarget | undefined,
-  expected: ExactFreshContextTarget,
-  label: string
-): asserts actual is AppRpcTarget {
-  if (!actual) throw new Error(`${label} did not return an exact target.`)
-  if (!Number.isInteger(actual.boardRevision) || actual.boardRevision < 0) {
-    throw new Error(`${label} did not return a valid integer Board revision.`)
-  }
-  const values: Record<(typeof TARGET_FIELDS)[number], string | undefined> = {
-    content_document_id: actual.contentDocumentId,
-    document_id: actual.documentId,
-    page_id: actual.pageId,
-    runtime_instance_id: actual.runtimeInstanceId,
-    workspace_id: actual.workspaceId
-  }
-  const mismatches = TARGET_FIELDS.filter((field) => values[field] !== expected[field])
-  if (mismatches.length > 0) {
-    throw new Error(`${label} returned the wrong exact target: ${mismatches.join(', ')}.`)
-  }
-}
-
 function freshConnectObjectsBase(
   context: unknown,
   target: ExactFreshContextTarget
@@ -245,12 +207,6 @@ function freshConnectObjectsBase(
     throw new Error('Fresh Board context returned connect_objects_base without a valid revision.')
   }
   return { base: value, expectedRevision: value.expected_revision }
-}
-
-function elapsed(started: number, finished: number): number {
-  const duration = finished - started
-  if (!Number.isFinite(duration)) return 0
-  return Math.round(Math.max(0, duration) * 100) / 100
 }
 
 function isConclusiveStaleContext(error: unknown): boolean {

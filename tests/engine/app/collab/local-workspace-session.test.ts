@@ -135,7 +135,15 @@ describe('local OpenPencil workspace session', () => {
     })
     expect(objectGraphReactFlowSnapshot(store.graph, store.state.currentPageId)).toEqual(before)
 
+    const sceneVersion = store.state.sceneVersion
+    let overlayRepaints = 0
+    const stopOverlayListener = store.onEditorEvent('overlay:requested', () => {
+      overlayRepaints += 1
+    })
     session.dispose()
+    expect(store.state.sceneVersion).toBe(sceneVersion)
+    expect(overlayRepaints).toBe(1)
+    stopOverlayListener()
   })
 
   test('hydrates a stale hot joiner from the active Board and syncs geometry both ways', async () => {

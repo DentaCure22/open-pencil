@@ -1,6 +1,10 @@
 import { useEventListener } from '@vueuse/core'
 import { ref, type Ref } from 'vue'
 
+import {
+  DOUBLE_CLICK_FOCUS_MAX_ZOOM,
+  DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER
+} from '@open-pencil/core/constants'
 import type { Editor, ViewportInsets } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -67,7 +71,11 @@ export function useCanvasInput(
 
   const { handleTextEditClick, onDblClick: onTextDblClick } = createTextEditInput({
     editor,
-    focusNode: (nodeId) => editor.zoomToNode(nodeId, getViewportInsets?.()),
+    focusNode: (nodeId) =>
+      editor.zoomToNode(nodeId, getViewportInsets?.(), {
+        maxZoom: DOUBLE_CLICK_FOCUS_MAX_ZOOM,
+        zoomMultiplier: DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER
+      }),
     getCoords,
     hitTestInScope,
     hitTestSectionTitle,

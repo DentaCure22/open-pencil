@@ -11,7 +11,7 @@ import {
   type ProOptions,
   type Viewport
 } from '@xyflow/react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 import {
@@ -40,6 +40,7 @@ import {
   objectGraphReactFlowSnapshot,
   parseObjectGraphHandle,
   reconcileObjectGraphEdges,
+  reconcileObjectGraphNodeHandles,
   reconcileObjectGraphNodes,
   type ObjectGraphReactEdge,
   type ObjectGraphReactNode
@@ -87,7 +88,7 @@ type ObjectGraphEdgeReadinessProps = {
 }
 
 type ObjectGraphViewportSyncProps = {
-  viewport: Viewport
+  store: EditorStore
 }
 
 function ObjectGraphEdgeReadiness({ onChange }: ObjectGraphEdgeReadinessProps) {
@@ -103,27 +104,55 @@ function ObjectGraphEdgeReadiness({ onChange }: ObjectGraphEdgeReadinessProps) {
   return null
 }
 
-function ObjectGraphViewportSync({ viewport }: ObjectGraphViewportSyncProps) {
-  const store = useStoreApi()
-  const panZoom = useStore((state) => state.panZoom)
+function ObjectGraphViewportSync({ store }: ObjectGraphViewportSyncProps) {
+  const flowStore = useStoreApi()
+  const syncViewport = useCallback(
+    (presentation: EditorPresentationFrame) => {
+      const state = flowStore.getState()
+      const viewport = presentation.viewport
+      const [x, y, zoom] = state.transform
+      if (sameViewport({ x, y, zoom }, viewport)) return
+      state.panZoom?.syncViewport(viewport)
+      flowStore.setState({ transform: [viewport.x, viewport.y, viewport.zoom] })
+    },
+    [flowStore]
+  )
+  const scheduleViewport = useCallback(() => {
+    scheduleEditorPresentationFrame(store, syncViewport)
+  }, [store, syncViewport])
 
-  useLayoutEffect(() => {
-    const state = store.getState()
-    const [x, y, zoom] = state.transform
-    if (sameViewport({ x, y, zoom }, viewport)) return
-    panZoom?.syncViewport(viewport)
-    store.setState({ transform: [viewport.x, viewport.y, viewport.zoom] })
-  }, [panZoom, store, viewport])
+  useEffect(() => {
+    const unsubscribeViewport = store.onEditorEvent('viewport:changed', scheduleViewport)
+    const unsubscribeRepaint = store.onEditorEvent('repaint:requested', scheduleViewport)
+    scheduleViewport()
+    return () => {
+      unsubscribeViewport()
+      unsubscribeRepaint()
+      cancelEditorPresentationFrame(store, syncViewport)
+    }
+  }, [scheduleViewport, store, syncViewport])
 
   return null
 }
 
-function sameIds(current: ReadonlySet<string>, next: string[]): boolean {
-  return current.size === next.length && next.every((id) => current.has(id))
-}
-
 function sameViewport(current: Viewport, next: Viewport): boolean {
   return current.x === next.x && current.y === next.y && current.zoom === next.zoom
+}
+
+function syncHoveredNodeHandles(
+  current: ObjectGraphSurfaceFrame,
+  store: EditorStore
+): ObjectGraphSurfaceFrame {
+  const nodes = reconcileObjectGraphNodeHandles(
+    current.nodes,
+    store.state.hoveredNodeId,
+    store.state.selectedIds
+  )
+  return nodes === current.nodes ? current : { ...current, nodes }
+}
+
+function sameIds(current: ReadonlySet<string>, next: string[]): boolean {
+  return current.size === next.length && next.every((id) => current.has(id))
 }
 
 function directConnectionKind(
@@ -236,60 +265,55 @@ export function ObjectGraphSurface({ store }: ObjectGraphSurfaceProps) {
     [store]
   )
   const [frame, setFrame] = useState<ObjectGraphSurfaceFrame>(() => projectSurfaceFrame(store))
-  const [viewport, setViewport] = useState<Viewport>(initialViewport)
+  const hoverPending = useRef(false)
   const projectionPending = useRef(true)
 
-  const flushFrame = useCallback(
-    (presentation: EditorPresentationFrame) => {
-      flushSync(() => {
-        setViewport((current) =>
-          sameViewport(current, presentation.viewport)
-            ? current
-            : {
-                x: presentation.viewport.x,
-                y: presentation.viewport.y,
-                zoom: presentation.viewport.zoom
-              }
-        )
-        if (projectionPending.current) {
-          projectionPending.current = false
-          setFrame((current) => {
-            const next = projectSurfaceFrame(store, current)
-            return sameSurfaceFrame(current, next) ? current : next
-          })
-        }
-      })
-    },
-    [store]
-  )
+  const flushFrame = useCallback(() => {
+    flushSync(() => {
+      if (projectionPending.current) {
+        projectionPending.current = false
+        hoverPending.current = false
+        setFrame((current) => {
+          const next = projectSurfaceFrame(store, current)
+          return sameSurfaceFrame(current, next) ? current : next
+        })
+      } else if (hoverPending.current) {
+        hoverPending.current = false
+        setFrame((current) => syncHoveredNodeHandles(current, store))
+      }
+    })
+  }, [store])
 
-  const scheduleFrame = useCallback(() => {
+  const scheduleProjectionFrame = useCallback(() => {
     scheduleEditorPresentationFrame(store, flushFrame)
   }, [flushFrame, store])
 
   const scheduleProjection = useCallback(() => {
     projectionPending.current = true
-    scheduleFrame()
-  }, [scheduleFrame])
+    scheduleProjectionFrame()
+  }, [scheduleProjectionFrame])
+
+  const scheduleHover = useCallback(() => {
+    hoverPending.current = true
+    scheduleProjectionFrame()
+  }, [scheduleProjectionFrame])
 
   useEffect(() => {
     const unsubscribeGraph = store.objectGraph.subscribe(scheduleProjection)
     const unsubscribeNavigation = store.objectGraphNavigation.subscribe(scheduleProjection)
     const unsubscribePortPresentation = subscribeObjectGraphPortPresentation(scheduleProjection)
     const unsubscribeTool = store.onEditorEvent('tool:changed', scheduleProjection)
-    const unsubscribeViewport = store.onEditorEvent('viewport:changed', scheduleFrame)
-    const unsubscribeRepaint = store.onEditorEvent('repaint:requested', scheduleFrame)
+    const unsubscribeHover = store.onEditorEvent('hover:changed', scheduleHover)
     scheduleProjection()
     return () => {
       unsubscribeGraph()
       unsubscribeNavigation()
       unsubscribePortPresentation()
       unsubscribeTool()
-      unsubscribeViewport()
-      unsubscribeRepaint()
+      unsubscribeHover()
       cancelEditorPresentationFrame(store, flushFrame)
     }
-  }, [flushFrame, scheduleFrame, scheduleProjection, store])
+  }, [flushFrame, scheduleHover, scheduleProjection, store])
 
   const { edges, interactive, navigation, nodes } = frame
   const edgeIds = useMemo(() => new Set(edges.map((edge) => edge.id)), [edges])
@@ -375,7 +399,7 @@ export function ObjectGraphSurface({ store }: ObjectGraphSurfaceProps) {
         zoomOnScroll={false}
       >
         <ObjectGraphEdgeReadiness onChange={setEdgesReady} />
-        <ObjectGraphViewportSync viewport={viewport} />
+        <ObjectGraphViewportSync store={store} />
       </ReactFlow>
       {navigation ? (
         <div

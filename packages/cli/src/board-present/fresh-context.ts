@@ -1,7 +1,12 @@
 import { rpcEnvelopeLiveExact, type AppRpcEnvelope, type AppRpcTarget } from '#cli/app-client'
 import type { ExactFreshContextTarget, PersistedBoardTarget } from '#cli/board-build/fresh-context'
-
-type BoardJsonObject = { [key: string]: unknown }
+import {
+  assertFreshContextTarget,
+  type BoardJsonObject,
+  freshContextElapsed as elapsed,
+  type FreshContextMetrics,
+  isBoardJsonObject
+} from '#cli/fresh-context/shared'
 
 export type FreshBoardPresentLogicalArgs = {
   object_ids: string[]
@@ -12,22 +17,10 @@ export type BoardPresentRpcSender = (
   args: Record<string, unknown>
 ) => Promise<AppRpcEnvelope<BoardJsonObject>>
 
-type FreshContextCallCounts = {
-  board_context: 1
-  board_present: 1
-  total: 2
-}
-
-type FreshContextTiming = {
-  board_context: number
-  board_present: number
-  total: number
-}
-
 export type FreshBoardPresentHandshake = {
   contract: 'board-present-fresh-context/v2'
-  handshake_elapsed_ms: FreshContextTiming
-  semantic_rpc_calls: FreshContextCallCounts
+  handshake_elapsed_ms: FreshContextMetrics<'board_present'>
+  semantic_rpc_calls: FreshContextMetrics<'board_present'>
 }
 
 export type FreshBoardPresentExecution = {
@@ -42,31 +35,12 @@ export type FreshBoardPresentOptions = {
   send?: BoardPresentRpcSender
 }
 
-const TARGET_FIELDS = ['content_document_id', 'document_id', 'page_id', 'workspace_id'] as const
-
-function isBoardJsonObject(value: unknown): value is BoardJsonObject {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
 function liveExactTarget(
   actual: AppRpcTarget | undefined,
   expected: PersistedBoardTarget,
   label: string
 ): ExactFreshContextTarget {
-  if (!actual) throw new Error(`${label} did not return an exact target.`)
-  if (!Number.isInteger(actual.boardRevision) || actual.boardRevision < 0) {
-    throw new Error(`${label} did not return a valid integer Board revision.`)
-  }
-  const values: Record<(typeof TARGET_FIELDS)[number], string | undefined> = {
-    content_document_id: actual.contentDocumentId,
-    document_id: actual.documentId,
-    page_id: actual.pageId,
-    workspace_id: actual.workspaceId
-  }
-  const mismatches = TARGET_FIELDS.filter((field) => values[field] !== expected[field])
-  if (mismatches.length > 0) {
-    throw new Error(`${label} returned the wrong exact target: ${mismatches.join(', ')}.`)
-  }
+  assertFreshContextTarget(actual, expected, label)
   const runtimeInstanceId = actual.runtimeInstanceId?.trim()
   if (!runtimeInstanceId) {
     throw new Error(`${label} did not return a live runtime instance.`)
@@ -105,12 +79,6 @@ function contextToken(context: unknown): string {
     throw new Error('Fresh Board context did not return a context token.')
   }
   return context.context_token.trim()
-}
-
-function elapsed(started: number, finished: number): number {
-  const duration = finished - started
-  if (!Number.isFinite(duration)) return 0
-  return Math.round(Math.max(0, duration) * 100) / 100
 }
 
 export async function presentWithFreshContext(

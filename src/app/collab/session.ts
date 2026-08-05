@@ -18,7 +18,6 @@ import {
   connectLocalWorkspaceChannel,
   type LocalWorkspaceChannel
 } from '@/app/collab/local-workspace-channel'
-import { getObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import { createCacheDurableYjsOutbox } from '@/app/collab/persistence/outbox'
 import {
   connectDurableYjsProvider,
@@ -33,6 +32,7 @@ import {
   registerYjsObservers,
   type SyncNodeToYjs
 } from '@/app/collab/yjs'
+import { getObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 import { PEER_COLORS } from '@/constants'
 
@@ -460,5 +460,5 @@ export function disposeCollabSessionResources(resources: CollabSessionResources)
   resources.ydoc?.destroy()
   resources.resetFollow()
   resources.store.state.remoteCursors = []
-  resources.store.requestRender()
+  resources.store.requestOverlayRepaint()
 }

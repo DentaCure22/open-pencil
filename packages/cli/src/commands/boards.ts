@@ -5,7 +5,7 @@ import { defineCommand } from 'citty'
 import type { WorkspaceSearchResult } from '@open-pencil/core/rpc'
 
 import { rpcEnvelopeExact, type AppRpcEnvelope, type AppRpcTarget } from '#cli/app-client'
-import { appTargetOptions } from '#cli/app-target'
+import { appTargetOptions, exactAppTargetRpcArgs } from '#cli/app-target'
 import {
   boardListIndex,
   boardListLimit,
@@ -155,16 +155,7 @@ function workspaceSearchResult(value: JsonObject): WorkspaceSearchResult {
   return value as WorkspaceSearchResult
 }
 
-export function exactBoardRpcArgs(args: ExactBoardCliArgs): Record<string, unknown> {
-  const workspaceId = args['workspace-id']?.trim()
-  return {
-    content_document_id: required(args['content-document-id'], '--content-document-id'),
-    document_id: required(args['document-id'], '--document-id'),
-    page_id: required(args['page-id'], '--page-id'),
-    runtime_instance_id: required(args['runtime-instance-id'], '--runtime-instance-id'),
-    ...(workspaceId ? { workspace_id: workspaceId } : {})
-  }
-}
+export const exactBoardRpcArgs = exactAppTargetRpcArgs
 
 function optionalTargetValue(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
@@ -554,6 +545,15 @@ function boardOpenTitle(status: BoardOpenResult['status']): string {
   throw new Error('Unknown Board open status.')
 }
 
+async function runBoardSearchCommand(args: BoardSearchArgs): Promise<void> {
+  try {
+    printList(await searchBoardPages(args), Boolean(args.json))
+  } catch (error) {
+    printError(error)
+    process.exit(1)
+  }
+}
+
 export const list = defineCommand({
   meta: {
     name: 'list',
@@ -567,12 +567,7 @@ export const list = defineCommand({
     json: jsonOption
   },
   async run({ args }) {
-    try {
-      printList(await searchBoardPages(args), Boolean(args.json))
-    } catch (error) {
-      printError(error)
-      process.exit(1)
-    }
+    await runBoardSearchCommand(args)
   }
 })
 
@@ -594,12 +589,7 @@ export const search = defineCommand({
     json: jsonOption
   },
   async run({ args }) {
-    try {
-      printList(await searchBoardPages(args), Boolean(args.json))
-    } catch (error) {
-      printError(error)
-      process.exit(1)
-    }
+    await runBoardSearchCommand(args)
   }
 })
 

@@ -76,10 +76,16 @@ export function syncSourceInvalidationsForChanges(
   const changeKeys = Object.keys(changes)
   if (Object.hasOwn(changes, 'source')) syncFullSourceInvalidationState(node, ynode)
   const invalidations = sourceMetadataInvalidationsForEdit(changeKeys)
-  if (invalidations.rawSize) ynode.set(Y_SOURCE_RAW_SIZE_INVALIDATED, true)
-  if (invalidations.rawTransform) ynode.set(Y_SOURCE_RAW_TRANSFORM_INVALIDATED, true)
-  if (invalidations.rawNodeFields) ynode.set(Y_SOURCE_RAW_NODE_FIELDS_INVALIDATED, true)
-  if (invalidations.exportSettings) ynode.set(Y_SOURCE_EXPORT_SETTINGS_INVALIDATED, true)
+  if (invalidations.rawSize) setInvalidation(ynode, Y_SOURCE_RAW_SIZE_INVALIDATED, true)
+  if (invalidations.rawTransform) {
+    setInvalidation(ynode, Y_SOURCE_RAW_TRANSFORM_INVALIDATED, true)
+  }
+  if (invalidations.rawNodeFields) {
+    setInvalidation(ynode, Y_SOURCE_RAW_NODE_FIELDS_INVALIDATED, true)
+  }
+  if (invalidations.exportSettings) {
+    setInvalidation(ynode, Y_SOURCE_EXPORT_SETTINGS_INVALIDATED, true)
+  }
 }
 
 export function resolveYjsSourceMetadata(ynode: Y.Map<unknown>): SceneNode['source'] | undefined {

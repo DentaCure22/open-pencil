@@ -5,6 +5,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
+import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
 import {
   mediaEvidenceSource,
   type MediaEvidenceKind,
@@ -22,6 +23,7 @@ type MediaEvidenceItem = {
 type ViewerState = 'error' | 'loading' | 'ready'
 
 const store = useEditorStore()
+const presentationViewport = useEditorPresentationViewport(store)
 const assetUrls = shallowRef<Record<string, string>>({})
 const viewerStates = shallowRef<Record<string, ViewerState>>({})
 
@@ -40,9 +42,19 @@ const items = computed<MediaEvidenceItem[]>(() => {
   return result
 })
 
+const itemInventory = computed(() =>
+  items.value
+    .map(
+      (item) =>
+        `${item.node.id}\u0000${item.source.assetHash}\u0000${item.source.metadata.mimeType}`
+    )
+    .join('\u0001')
+)
+
 watch(
-  items,
-  (nextItems) => {
+  itemInventory,
+  () => {
+    const nextItems = items.value
     const nextHashes = new Set(nextItems.map((item) => item.source.assetHash))
     const nextUrls: Record<string, string> = {}
     for (const hash of nextHashes) {
@@ -74,22 +86,19 @@ onBeforeUnmount(() => {
 })
 
 function overlayStyle(node: SceneNode) {
-  void store.state.renderVersion
-  const absolute = store.graph.getAbsolutePosition(node.id)
-  const zoom = store.state.zoom
-  return {
-    height: `${Math.max(1, node.height * zoom)}px`,
-    opacity: node.opacity,
-    transform: `translate3d(${absolute.x * zoom + store.state.panX}px, ${
-      absolute.y * zoom + store.state.panY
-    }px, 0) rotate(${node.rotation}deg)`,
-    transformOrigin: 'center center',
-    width: `${Math.max(1, node.width * zoom)}px`
-  }
+  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
 }
 
 function isSelected(nodeId: string): boolean {
   return store.state.selectedIds.has(nodeId)
+}
+
+function isInteracting(nodeId: string): boolean {
+  return store.state.enteredContainerId === nodeId
+}
+
+function surfaceAcceptsPointer(item: MediaEvidenceItem): boolean {
+  return item.source.kind === 'video' ? isInteracting(item.node.id) : isSelected(item.node.id)
 }
 
 function sourceUrl(source: MediaEvidenceSource): string {
@@ -123,11 +132,13 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
       :key="item.node.id"
       :data-test-id="`media-evidence-${item.source.kind}`"
       :data-media-node-id="item.node.id"
+      :data-media-evidence-mode="isInteracting(item.node.id) ? 'interact' : 'design'"
       :style="overlayStyle(item.node)"
-      class="pointer-events-none absolute top-0 left-0 overflow-hidden rounded-[12px] bg-[#0e0f12] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]"
+      class="pointer-events-none absolute top-0 left-0 overflow-hidden rounded-[12px] bg-[#0e0f12] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] [contain:layout_paint_style] [will-change:transform]"
       :class="isSelected(item.node.id) ? 'ring-2 ring-accent/85' : ''"
     >
       <header
+        v-if="item.source.kind !== 'video'"
         class="flex h-8 items-center justify-between gap-3 border-b border-white/10 bg-[#17181d]/95 px-3 text-[11px] text-[#f1f1f3]"
       >
         <span class="min-w-0 truncate font-medium">{{ item.source.fileName }}</span>
@@ -137,8 +148,11 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
       </header>
 
       <div
-        class="relative h-[calc(100%-2rem)] w-full overflow-hidden bg-[#090a0c]"
-        :class="isSelected(item.node.id) ? 'pointer-events-auto' : 'pointer-events-none'"
+        class="relative w-full overflow-hidden bg-[#090a0c]"
+        :class="[
+          item.source.kind === 'video' ? 'h-full' : 'h-[calc(100%-2rem)]',
+          surfaceAcceptsPointer(item) ? 'pointer-events-auto' : 'pointer-events-none'
+        ]"
       >
         <PdfEvidenceViewer
           v-if="item.source.kind === 'pdf'"
@@ -151,7 +165,7 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
         <VideoEvidenceViewer
           v-else-if="item.source.kind === 'video'"
           :node="item.node"
-          :selected="isSelected(item.node.id)"
+          :selected="isInteracting(item.node.id)"
           :source="item.source"
           :source-url="sourceUrl(item.source)"
           @error="setViewerState(item.node.id, 'error')"

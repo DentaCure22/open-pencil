@@ -45,6 +45,25 @@ function waitForExpectedValue(
   })
 }
 
+function waitForSyncResponse(channel: BroadcastChannel): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      channel.removeEventListener('message', handleMessage)
+      reject(new Error('Timed out waiting for local workspace sync response'))
+    }, 1000)
+    const handleMessage = (event: MessageEvent<unknown>) => {
+      if (typeof event.data !== 'object' || event.data === null) return
+      if (Reflect.get(event.data, 'type') !== 'sync-response') return
+      const update = Reflect.get(event.data, 'update')
+      if (!(update instanceof Uint8Array)) return
+      clearTimeout(timeout)
+      channel.removeEventListener('message', handleMessage)
+      resolve(update)
+    }
+    channel.addEventListener('message', handleMessage)
+  })
+}
+
 describe('local OpenPencil workspace channel', () => {
   test('hydrates an already-open workspace and keeps later changes live', async () => {
     const roomId = `test-${crypto.randomUUID()}`
@@ -69,6 +88,34 @@ describe('local OpenPencil workspace channel', () => {
     secondChannel.close()
     first.destroy()
     second.destroy()
+  })
+
+  test('answers bootstrap requests with only the state missing from the follower', async () => {
+    const roomId = `test-${crypto.randomUUID()}`
+    const writer = new Y.Doc()
+    const follower = new Y.Doc()
+    writer.getMap('workspace').set('history', 'x'.repeat(20_000))
+    const fullUpdate = Y.encodeStateAsUpdate(writer)
+    Y.applyUpdate(follower, fullUpdate)
+    const writerChannel = connectLocalWorkspaceChannel(roomId, writer)
+    if (!writerChannel) throw new Error('BroadcastChannel is unavailable')
+    expect(await writerChannel.bootstrap(() => undefined, 5)).toBe('seeded')
+
+    const observer = new BroadcastChannel(`openpencil-workspace:${roomId}`)
+    const response = waitForSyncResponse(observer)
+    const followerChannel = connectLocalWorkspaceChannel(roomId, follower)
+    if (!followerChannel) throw new Error('BroadcastChannel is unavailable')
+
+    expect(await followerChannel.bootstrap(undefined, 5)).toBe('peer')
+    const missingUpdate = await response
+    expect(fullUpdate.byteLength).toBeGreaterThan(10_000)
+    expect(missingUpdate.byteLength).toBeLessThan(100)
+
+    observer.close()
+    writerChannel.close()
+    followerChannel.close()
+    writer.destroy()
+    follower.destroy()
   })
 
   test('lets only the persistence writer seed simultaneous cold-start clients', async () => {

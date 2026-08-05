@@ -3,20 +3,15 @@ import {
   type MutationRequestReceipt
 } from '@/app/automation/bridge/request-receipts'
 import { isUnknownRecord, type AutomationTarget } from '@/app/automation/bridge/target'
-import {
-  waitForCodeObjectRuntimeRender,
-  type WaitForCodeObjectRuntimeRender
-} from '@/app/code-object/compiler'
+import { type WaitForCodeObjectRuntimeRender } from '@/app/code-object/compiler'
 
 import { codeObjectSemanticOwner } from '../mutation'
 import {
-  authoredCodeObjectOwner,
   codeObjectComponentReadback,
   codeObjectHistoricalOnly,
   codeObjectNextAction,
   codeObjectReconciliationFailure,
-  codeObjectRuntimeReadback,
-  completeCodeObjectReadback
+  readAuthoredCodeObject
 } from '../readback'
 import { codeObjectSourceHash } from '../source'
 import {
@@ -88,39 +83,30 @@ export async function codeObjectRefineReadback(
     props_hash: expected.propsHash,
     source_hash: expected.sourceHash
   }
-  const owner = authoredCodeObjectOwner(target, expected.ownerId, expectedSummary)
-  if (owner.readback) return owner.readback
-  const { document, frame } = owner
-  const [propsHash, sourceHash] = await Promise.all([
-    mutationRequestSignature(CODE_OBJECT_PROPS_ROUTE, document.props),
-    codeObjectSourceHash(document.source)
-  ])
-  const runtime = await codeObjectRuntimeReadback({
-    ...(runtimeOptions.afterGeneration === undefined
-      ? {}
-      : { afterGeneration: runtimeOptions.afterGeneration }),
-    document,
-    ownerId: expected.ownerId,
-    waitForRuntimeRender: runtimeOptions.waitForRuntimeRender ?? waitForCodeObjectRuntimeRender
-  })
-  const reasons = [
-    ...(document.definitionId === expected.objectKey ? [] : ['object_key_changed']),
-    ...(document.name === expected.name ? [] : ['name_changed']),
-    ...(propsHash === expected.propsHash ? [] : ['props_changed']),
-    ...(sourceHash === expected.sourceHash ? [] : ['source_changed']),
-    ...(runtime?.status === 'error' ? ['runtime_render_failed'] : []),
-    ...(runtime?.status === 'timeout' ? ['runtime_mount_or_render_timeout'] : [])
-  ]
-  return completeCodeObjectReadback({
-    component: {
-      ...codeObjectComponentReadback(document, sourceHash),
-      props_hash: propsHash
-    },
+  return readAuthoredCodeObject({
+    afterGeneration: runtimeOptions.afterGeneration,
     expected: expectedSummary,
-    frame,
-    reasons,
-    ...(runtime ? { runtime } : {}),
-    target
+    inspect: async (document) => {
+      const [propsHash, sourceHash] = await Promise.all([
+        mutationRequestSignature(CODE_OBJECT_PROPS_ROUTE, document.props),
+        codeObjectSourceHash(document.source)
+      ])
+      return {
+        component: {
+          ...codeObjectComponentReadback(document, sourceHash),
+          props_hash: propsHash
+        },
+        reasons: [
+          ...(document.definitionId === expected.objectKey ? [] : ['object_key_changed']),
+          ...(document.name === expected.name ? [] : ['name_changed']),
+          ...(propsHash === expected.propsHash ? [] : ['props_changed']),
+          ...(sourceHash === expected.sourceHash ? [] : ['source_changed'])
+        ]
+      }
+    },
+    ownerId: expected.ownerId,
+    target,
+    waitForRuntimeRender: runtimeOptions.waitForRuntimeRender
   })
 }
 

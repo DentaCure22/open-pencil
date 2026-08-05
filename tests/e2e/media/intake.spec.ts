@@ -188,10 +188,167 @@ test('dropped large PNG stays native, editable, retains source bytes, and fits t
 test('invalid video shows an explicit preview error state', async () => {
   await dropFile('broken.webm', 'video/webm', [1, 2, 3, 4, 5, 6])
 
-  await expect(editor.page.getByTestId('media-evidence-video')).toBeVisible()
+  const evidence = editor.page.getByTestId('media-evidence-video')
+  const video = editor.page.getByTestId('media-evidence-video-viewer')
+  await expect(evidence).toBeVisible()
+  await expect(evidence).toHaveAttribute('data-media-evidence-mode', 'design')
+  await expect(evidence.locator('header')).toHaveCount(0)
+  await expect(video).not.toHaveAttribute('controls', '')
   const status = editor.page.getByTestId('media-evidence-video-status')
   await expect(status).toHaveAttribute('role', 'alert')
   await expect(status).toContainText('VIDEO preview could not be loaded')
+
+  const initial = await editor.page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    const node = [...(store?.graph.getAllNodes() ?? [])].find((candidate) =>
+      candidate.pluginData.some(
+        (entry) => entry.key === 'content-source/file-name' && entry.value === 'broken.webm'
+      )
+    )
+    if (!store || !node) throw new Error('Expected video evidence frame')
+    const absolute = store.graph.getAbsolutePosition(node.id)
+    return {
+      id: node.id,
+      screenX: store.state.panX + (absolute.x + node.width / 2) * store.state.zoom,
+      screenY: store.state.panY + (absolute.y + node.height / 2) * store.state.zoom,
+      x: node.x,
+      y: node.y
+    }
+  })
+  await editor.canvas.drag(
+    initial.screenX,
+    initial.screenY,
+    initial.screenX + 64,
+    initial.screenY + 40
+  )
+  await expect
+    .poll(() =>
+      editor.page.evaluate((id) => {
+        const node = window.openPencil?.getStore?.().graph.getNode(id)
+        return node ? { x: node.x, y: node.y } : null
+      }, initial.id)
+    )
+    .toEqual({ x: initial.x + 64, y: initial.y + 40 })
+
+  await editor.canvas.dblclick(initial.screenX + 64, initial.screenY + 40)
+  await expect(evidence).toHaveAttribute('data-media-evidence-mode', 'interact')
+  await expect(video).toHaveAttribute('controls', '')
+  editor.canvas.assertNoErrors()
+})
+
+test('Markdown frames move normally, center on double-click, and scroll while focused', async () => {
+  const source = [
+    '# Canvas report',
+    '',
+    ...Array.from(
+      { length: 48 },
+      (_, index) =>
+        `## Finding ${index + 1}\n\nA concise finding with enough detail to require scrolling.`
+    )
+  ].join('\n')
+  const frameId = await editor.page.evaluate((markdownSource) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const frame = store.graph.createNode('FRAME', store.state.currentPageId, {
+      name: 'Canvas report',
+      x: 120,
+      y: 100,
+      width: 520,
+      height: 360,
+      clipsContent: true,
+      cornerRadius: 12,
+      fills: [
+        {
+          type: 'SOLID',
+          color: { r: 1, g: 1, b: 1, a: 1 },
+          opacity: 1,
+          visible: true
+        }
+      ],
+      pluginData: [
+        { pluginId: 'open-pencil', key: 'content-source/format', value: 'markdown' },
+        { pluginId: 'open-pencil', key: 'content-source/mime-type', value: 'text/markdown' },
+        { pluginId: 'open-pencil', key: 'content-source/revision', value: '1' },
+        { pluginId: 'open-pencil', key: 'content-source/source', value: markdownSource },
+        { pluginId: 'open-pencil', key: 'markdown/source-mode', value: 'markdown' }
+      ]
+    })
+    store.select([frame.id])
+    store.requestRender()
+    return frame.id
+  }, source)
+
+  const document = editor.page.getByTestId('markdown-document')
+  const preview = editor.page.getByTestId('markdown-document-preview')
+  await expect(document).toBeVisible()
+  await expect(document).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await expect(document).toHaveAttribute('data-markdown-document-mode', 'design')
+  await expect(preview).toHaveCSS('overflow-y', 'hidden')
+
+  const initial = await editor.page.evaluate((id) => {
+    const store = window.openPencil?.getStore?.()
+    const frame = store?.graph.getNode(id)
+    if (!store || !frame) throw new Error('Expected Markdown frame')
+    const absolute = store.graph.getAbsolutePosition(id)
+    return {
+      canvasX: store.state.panX + (absolute.x + frame.width / 2) * store.state.zoom,
+      canvasY: store.state.panY + (absolute.y + frame.height / 2) * store.state.zoom,
+      x: frame.x,
+      y: frame.y
+    }
+  }, frameId)
+  await editor.canvas.drag(
+    initial.canvasX,
+    initial.canvasY,
+    initial.canvasX + 60,
+    initial.canvasY + 40
+  )
+  await expect
+    .poll(() =>
+      editor.page.evaluate((id) => {
+        const frame = window.openPencil?.getStore?.().graph.getNode(id)
+        return frame ? { x: frame.x, y: frame.y } : null
+      }, frameId)
+    )
+    .toEqual({ x: initial.x + 60, y: initial.y + 40 })
+
+  const movedCenter = await editor.page.evaluate((id) => {
+    const store = window.openPencil?.getStore?.()
+    const frame = store?.graph.getNode(id)
+    if (!store || !frame) throw new Error('Expected moved Markdown frame')
+    const absolute = store.graph.getAbsolutePosition(id)
+    return {
+      x: store.state.panX + (absolute.x + frame.width / 2) * store.state.zoom,
+      y: store.state.panY + (absolute.y + frame.height / 2) * store.state.zoom
+    }
+  }, frameId)
+  await editor.canvas.dblclick(movedCenter.x, movedCenter.y)
+
+  await expect(document).toHaveAttribute('data-markdown-document-mode', 'read')
+  await expect(preview).toHaveCSS('overflow-y', 'auto')
+  expect(
+    await editor.page.evaluate(
+      (id) => window.openPencil?.getStore?.().state.enteredContainerId === id,
+      frameId
+    )
+  ).toBe(true)
+
+  const [documentBox, canvasBox] = await Promise.all([
+    document.boundingBox(),
+    editor.page.getByTestId('canvas-area').boundingBox()
+  ])
+  if (!documentBox || !canvasBox) throw new Error('Expected Markdown and canvas bounds')
+  expect(documentBox.x + documentBox.width / 2).toBeCloseTo(canvasBox.x + canvasBox.width / 2, 0)
+  expect(documentBox.y + documentBox.height / 2).toBeCloseTo(canvasBox.y + canvasBox.height / 2, 0)
+
+  const before = await preview.evaluate((element) => element.scrollTop)
+  await preview.hover()
+  await editor.page.mouse.wheel(0, 500)
+  await expect.poll(() => preview.evaluate((element) => element.scrollTop)).toBeGreaterThan(before)
+
+  await editor.page.keyboard.press('Escape')
+  await expect(document).toHaveAttribute('data-markdown-document-mode', 'design')
+  await expect(preview).toHaveCSS('overflow-y', 'hidden')
   editor.canvas.assertNoErrors()
 })
 

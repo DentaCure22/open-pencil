@@ -24,6 +24,7 @@ import {
   objectGraphReactFlowSnapshot,
   normalizeObjectGraphConnectionRecords,
   reconcileObjectGraphEdges,
+  reconcileObjectGraphNodeHandles,
   reconcileObjectGraphNodes,
   reconnectObjects,
   resolveObjectGraphConnectionGeometry
@@ -279,6 +280,14 @@ describe('object graph', () => {
     const unchanged = objectGraphReactFlowSnapshot(store.graph, store.state.currentPageId)
     expect(reconcileObjectGraphNodes(initial.nodes, unchanged.nodes)).toBe(initial.nodes)
     expect(reconcileObjectGraphEdges(initial.edges, unchanged.edges)).toBe(initial.edges)
+    const hovered = reconcileObjectGraphNodeHandles(initial.nodes, source.id, new Set())
+    expect(hovered).not.toBe(initial.nodes)
+    expect(hovered.find((node) => node.id === source.id)?.data.showHandles).toBe(true)
+    expect(hovered.find((node) => node.id === source.id)?.data.ports).toBe(
+      initial.nodes.find((node) => node.id === source.id)?.data.ports
+    )
+    expect(hovered.find((node) => node.id === target.id)).toBe(initialTarget)
+    expect(reconcileObjectGraphNodeHandles(hovered, source.id, new Set())).toBe(hovered)
     store.undo.clear()
 
     store.updateNodeWithUndo(target.id, { rotation: 12, x: 900, y: 380 }, 'Move target')
@@ -364,7 +373,7 @@ describe('object graph', () => {
     ).toEqual(connection)
   })
 
-  test('publishes committed and preview geometry through one coordinator subscription', () => {
+  test('publishes geometry without waking graph subscribers for pointer-only hover', () => {
     const store = createEditorStore()
     const node = rectangle(store, 'Observed', 100, 120)
     let revisions = 0
@@ -401,7 +410,7 @@ describe('object graph', () => {
 
     const afterCommit = revisions
     store.setHoveredNode(node.id)
-    expect(revisions).toBeGreaterThan(afterCommit)
+    expect(revisions).toBe(afterCommit)
     expect(
       objectGraphReactFlowSnapshot(store.graph, store.state.currentPageId, {
         hoveredNodeId: store.state.hoveredNodeId

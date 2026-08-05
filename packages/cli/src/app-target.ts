@@ -46,6 +46,35 @@ export const appTargetOptions = {
   }
 } as const
 
+export type ExactAppTargetRpcArgs = {
+  content_document_id: string
+  document_id: string
+  page_id: string
+  runtime_instance_id: string
+  workspace_id?: string
+}
+
+function requiredTargetValue(value: string | undefined, flag: string): string {
+  const trimmed = value?.trim()
+  if (!trimmed) throw new Error(`${flag} is required.`)
+  return trimmed
+}
+
+export function exactAppTargetRpcArgs(
+  args: AppTargetCliArgs,
+  requireWorkspace = false
+): ExactAppTargetRpcArgs {
+  const workspaceId = args['workspace-id']?.trim()
+  if (requireWorkspace && !workspaceId) throw new Error('--workspace-id is required.')
+  return {
+    content_document_id: requiredTargetValue(args['content-document-id'], '--content-document-id'),
+    document_id: requiredTargetValue(args['document-id'], '--document-id'),
+    page_id: requiredTargetValue(args['page-id'], '--page-id'),
+    runtime_instance_id: requiredTargetValue(args['runtime-instance-id'], '--runtime-instance-id'),
+    ...(workspaceId ? { workspace_id: workspaceId } : {})
+  }
+}
+
 export function appTargetRpcArgs(args: AppTargetCliArgs): {
   content_document_id?: string
   document_id?: string

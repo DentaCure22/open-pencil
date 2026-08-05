@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Remove the animated dither from empty and working canvases so the Board rests on a stable,
+  distraction-free surface.
+- Move the desktop tool strip to the top-right and make double-click focus zoom 25% closer while
+  preserving chrome-aware centering and the existing fit behavior used elsewhere.
+- Make source-backed video frames chrome-free and directly draggable in normal Board mode, then
+  enable playback controls and frame capture only after entering the media surface. Reconcile media
+  assets only when the media inventory changes so ordinary transforms do not rebuild viewer state.
+- Keep large, long-lived Boards responsive by repairing only collaboration hierarchy branches that
+  changed, caching Code Object metadata across pans, and projecting only saved Narrated Trace ink
+  instead of rescanning every Board node on each presentation frame. Keep Object Graph camera sync
+  imperative and update only changed hover handles so normal pans do not rerender the React surface.
+  Seed restored collaboration state atomically and skip duplicate unchanged authority saves during
+  hydration. Remove dormant workspace/proving prototypes with no application consumers, and avoid
+  racing a full authority save against the replacement page during reload. Consolidate repeated
+  fresh-context CLI validation, timing, acquisition, and collaboration image synchronization.
+- Give source-backed Markdown and text frames white reading surfaces that retain normal Board
+  transforms, center on double-click, and scroll after entering the focused reading surface.
 - Replace caller-managed runtime Board Authority grants with automatic, operation-scoped Board
   Permissions. Keep page, target, ownership, field, limit, Undo, and transient-cleanup checks while
   moving Code Object shapes and Board Experience components into their owning domains; the canonical

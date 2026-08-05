@@ -310,6 +310,18 @@ export function currentLocalWorkspaceAuthorityStatus(): LocalWorkspaceAuthorityS
   return latestStatus
 }
 
+async function applyReceiptToLatestStatus(receipt: LocalWorkspaceAuthorityReceipt): Promise<void> {
+  const status = latestStatus ?? (await refreshLocalWorkspaceAuthorityStatus())
+  if (!status) return
+  latestStatus = {
+    ...status,
+    contentHash: receipt.contentHash,
+    revision: receipt.appliedRevision,
+    state: 'ready',
+    updatedAt: receipt.committedAt
+  }
+}
+
 export function subscribeLocalWorkspaceAuthorityHead(listener: () => void): () => void {
   if (!IS_BROWSER) return () => undefined
   const controller = new AbortController()
@@ -332,7 +344,12 @@ export function subscribeLocalWorkspaceAuthorityHead(listener: () => void): () =
         observedRevision = Math.max(observedRevision, change.revision)
         listener()
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') continue
+        if (
+          error instanceof Error &&
+          (error.name === 'AbortError' || error.name === 'TimeoutError')
+        ) {
+          continue
+        }
         console.warn(
           '[Local workspace authority] Head subscription interrupted:',
           error instanceof Error ? error.message : error
@@ -562,16 +579,7 @@ export async function initializeLocalWorkspaceAuthority(
       }
     })
   )
-  const status = latestStatus ?? (await refreshLocalWorkspaceAuthorityStatus())
-  if (status) {
-    latestStatus = {
-      ...status,
-      contentHash: receipt.contentHash,
-      revision: receipt.appliedRevision,
-      state: 'ready',
-      updatedAt: receipt.committedAt
-    }
-  }
+  await applyReceiptToLatestStatus(receipt)
   return receipt
 }
 
@@ -596,16 +604,7 @@ export async function commitLocalWorkspaceAuthority(
       }
     })
   )
-  const status = latestStatus ?? (await refreshLocalWorkspaceAuthorityStatus())
-  if (status) {
-    latestStatus = {
-      ...status,
-      contentHash: receipt.contentHash,
-      revision: receipt.appliedRevision,
-      state: 'ready',
-      updatedAt: receipt.committedAt
-    }
-  }
+  await applyReceiptToLatestStatus(receipt)
   return receipt
 }
 

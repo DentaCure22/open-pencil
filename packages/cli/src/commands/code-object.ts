@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { defineCommand } from 'citty'
 
 import { rpcDirect } from '#cli/app-client'
-import { appTargetOptions, type AppTargetCliArgs } from '#cli/app-target'
+import { appTargetOptions, exactAppTargetRpcArgs, type AppTargetCliArgs } from '#cli/app-target'
 import { bold, entity, fmtList, printError } from '#cli/format'
 
 type CodeObjectResult = {
@@ -80,7 +80,7 @@ const inspectArgs = {
 
 export function codeObjectInspectRpcArgs(args: CodeObjectInspectArgs) {
   return {
-    ...exactCodeObjectTarget(args),
+    ...exactAppTargetRpcArgs(args, true),
     owner_id: required(args['owner-id'], '--owner-id')
   }
 }
@@ -89,16 +89,6 @@ function required(value: string | undefined, flag: string): string {
   const trimmed = value?.trim()
   if (!trimmed) throw new Error(`${flag} is required.`)
   return trimmed
-}
-
-function exactCodeObjectTarget(args: AppTargetCliArgs) {
-  return {
-    content_document_id: required(args['content-document-id'], '--content-document-id'),
-    document_id: required(args['document-id'], '--document-id'),
-    page_id: required(args['page-id'], '--page-id'),
-    runtime_instance_id: required(args['runtime-instance-id'], '--runtime-instance-id'),
-    workspace_id: required(args['workspace-id'], '--workspace-id')
-  }
 }
 
 function expectedRevision(value: string | undefined): number {
@@ -132,7 +122,7 @@ export function codeObjectUpsertRpcArgs(
   }
 ) {
   return {
-    ...exactCodeObjectTarget(args),
+    ...exactAppTargetRpcArgs(args, true),
     height: input.height,
     name: input.name,
     mutation: {

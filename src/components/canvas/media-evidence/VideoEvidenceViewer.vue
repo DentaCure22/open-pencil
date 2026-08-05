@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { refAutoReset } from '@vueuse/core'
-import { ref, useTemplateRef } from 'vue'
+import { ref, useTemplateRef, watch } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -26,6 +26,13 @@ const video = useTemplateRef<HTMLVideoElement>('video')
 const isReady = ref(false)
 const isCapturing = ref(false)
 const captureError = refAutoReset(false, 2400)
+
+watch(
+  () => selected,
+  (interactive) => {
+    if (!interactive) video.value?.pause()
+  }
+)
 
 function handleReady() {
   isReady.value = true
@@ -62,7 +69,7 @@ async function captureFrame() {
       :src="sourceUrl"
       :aria-label="`Video preview: ${source.fileName}`"
       class="size-full object-contain"
-      controls
+      :controls="selected"
       data-test-id="media-evidence-video-viewer"
       playsinline
       preload="metadata"

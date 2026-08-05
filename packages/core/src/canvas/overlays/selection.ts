@@ -76,6 +76,16 @@ export function drawEnteredContainer(
   r.auxStroke.setPathEffect(null)
 }
 
+function setNodeSelectionColor(r: SkiaRenderer, node: SceneNode): void {
+  r.selectionPaint.setColor(r.isComponentType(node.type) ? r.compColor() : r.selColor())
+}
+
+function selectionRotation(node: SceneNode, overlays: RenderOverlays): number {
+  return overlays.rotationPreview?.nodeId === node.id
+    ? overlays.rotationPreview.angle
+    : node.rotation
+}
+
 export function drawSelection(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -100,30 +110,22 @@ export function drawSelection(
     if (nodeEditId === id) return
     const node = graph.getNode(id)
     if (!node) return
-    const useComponentColor = r.isComponentType(node.type)
-    r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
     r.selectionPaint.setStrokeWidth(1 / r.zoom)
-
-    const rotation =
-      overlays.rotationPreview?.nodeId === id ? overlays.rotationPreview.angle : node.rotation
-    r.drawNodeSelection(canvas, node, rotation, graph)
+    setNodeSelectionColor(r, node)
+    r.drawNodeSelection(canvas, node, selectionRotation(node, overlays), graph)
     r.drawSelectionLabels(canvas, graph, selectedIds, overlays)
 
     r.selectionPaint.setColor(r.selColor())
     return
   }
 
+  r.selectionPaint.setStrokeWidth(1 / r.zoom)
   for (const id of selectedIds) {
     if (nodeEditId === id) continue
     const node = graph.getNode(id)
     if (!node) continue
-    const useComponentColor = r.isComponentType(node.type)
-    r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
-    r.selectionPaint.setStrokeWidth(1 / r.zoom)
-
-    const rotation =
-      overlays.rotationPreview?.nodeId === id ? overlays.rotationPreview.angle : node.rotation
-    r.drawNodeOutline(canvas, node, rotation, graph)
+    setNodeSelectionColor(r, node)
+    r.drawNodeOutline(canvas, node, selectionRotation(node, overlays), graph)
   }
 
   r.selectionPaint.setColor(r.selColor())

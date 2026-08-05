@@ -29,12 +29,10 @@ import { createCanvasContextSelection } from '@/app/editor/canvas/context-select
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
-import { isSmylrFlowPageNode } from '@/app/smylr-production/workspace'
 import IconLucidePanelBottom from '~icons/lucide/panel-bottom'
 import IconLucidePanelLeft from '~icons/lucide/panel-left'
 import IconLucidePanelRight from '~icons/lucide/panel-right'
 import IconLucidePanelTop from '~icons/lucide/panel-top'
-import AnimatedDitherBackground from './canvas/AnimatedDitherBackground.vue'
 import BoardExperienceRuntimeHost from './canvas/BoardExperienceRuntimeHost.vue'
 import CanvasMenu from './canvas/CanvasMenu.vue'
 import CodeObjectOverlays from './canvas/CodeObjectOverlays.vue'
@@ -48,20 +46,11 @@ import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
 import SourceObjectOverlays from './canvas/SourceObjectOverlays.vue'
 import ScrubInput from './inputs/ScrubInput.vue'
 
-type DitherPresentation = 'overlay' | 'surface'
-
-const { ditherPresentation = 'overlay' } = defineProps<{
-  ditherPresentation?: DitherPresentation
-}>()
-
 const store = useEditorStore()
 const collab = useCollabInjected()
 const canvasAreaRef = ref<HTMLDivElement | null>(null)
 const sceneCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-const usesQuietCanvasBackground = computed(() =>
-  isSmylrFlowPageNode(store.graph.getNode(store.state.currentPageId))
-)
 
 const { updateCursor } = useCanvasCollaborationAwareness(store, collab)
 const { selectAtContextPoint } = createCanvasContextSelection(canvasRef, store)
@@ -151,16 +140,11 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         @dragover="onAssetVariantDragOver"
         @drop="onAssetVariantDrop"
       >
-        <!-- Scene stays transparent so the dither can sit behind native objects. -->
         <canvas
           ref="sceneCanvasRef"
           data-test-id="scene-canvas-element"
           aria-hidden="true"
           class="pointer-events-none absolute inset-0 z-[1] size-full outline-none"
-        />
-        <AnimatedDitherBackground
-          :presentation="ditherPresentation"
-          :quiet="usesQuietCanvasBackground"
         />
         <canvas
           ref="canvasRef"

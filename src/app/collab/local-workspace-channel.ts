@@ -10,7 +10,7 @@ import { LOCAL_WORKSPACE_COLLAB_ORIGIN } from '@/app/collab/origins'
 type LocalWorkspaceChannelMessage =
   | { sessionId: string; type: 'bootstrap-candidate' }
   | { sessionId: string; type: 'bootstrap-seeding' }
-  | { requestId: string; type: 'sync-request' }
+  | { requestId: string; stateVector: Uint8Array; type: 'sync-request' }
   | { requestId: string; type: 'sync-response'; update: Uint8Array }
   | { preview: DragPreviewMessage; type: 'drag-preview' }
   | { sessionId: string; type: 'preview-disconnect' }
@@ -25,6 +25,7 @@ export type LocalWorkspaceChannel = DragPreviewTransport & {
 
 const LOCAL_WORKSPACE_BOOTSTRAP_WAIT_MS = 150
 const LOCAL_WORKSPACE_BOOTSTRAP_FAILOVER_MS = 5_000
+const LOCAL_WORKSPACE_BOOTSTRAP_RETRY_MAX_MS = 2_000
 
 function isDragPreviewMessage(value: unknown): value is DragPreviewMessage {
   if (!value || typeof value !== 'object') return false
@@ -48,7 +49,9 @@ function isLocalWorkspaceChannelMessage(value: unknown): value is LocalWorkspace
   if (candidate.type === 'bootstrap-candidate' || candidate.type === 'bootstrap-seeding') {
     return typeof candidate.sessionId === 'string'
   }
-  if (candidate.type === 'sync-request') return typeof candidate.requestId === 'string'
+  if (candidate.type === 'sync-request') {
+    return typeof candidate.requestId === 'string' && candidate.stateVector instanceof Uint8Array
+  }
   if (candidate.type === 'sync-response') {
     return typeof candidate.requestId === 'string' && candidate.update instanceof Uint8Array
   }
@@ -66,7 +69,7 @@ export function connectLocalWorkspaceChannel(
   const sessionId = crypto.randomUUID()
   const previewListeners = new Set<(preview: DragPreviewMessage) => void>()
   const disconnectListeners = new Set<(sessionId: string) => void>()
-  const pendingSyncRequests = new Set<string>()
+  const pendingSyncRequests = new Map<string, Uint8Array>()
   const bootstrapCandidates = new Set<string>()
   let activeRequestId: string | null = null
   let bootstrapTimer: ReturnType<typeof setTimeout> | null = null
@@ -82,7 +85,7 @@ export function connectLocalWorkspaceChannel(
 
   function postUpdate(update: Uint8Array) {
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin overload.
-    channel.postMessage({ type: 'update', update: new Uint8Array(update) })
+    channel.postMessage({ type: 'update', update })
   }
 
   function handleDocumentUpdate(update: Uint8Array, origin: unknown) {
@@ -90,11 +93,11 @@ export function connectLocalWorkspaceChannel(
     postUpdate(update)
   }
 
-  function postSyncResponse(requestId: string) {
+  function postSyncResponse(requestId: string, stateVector: Uint8Array) {
     const message: LocalWorkspaceChannelMessage = {
       requestId,
       type: 'sync-response',
-      update: new Uint8Array(Y.encodeStateAsUpdate(ydoc))
+      update: Y.encodeStateAsUpdate(ydoc, stateVector)
     }
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin overload.
     channel.postMessage(message)
@@ -112,7 +115,9 @@ export function connectLocalWorkspaceChannel(
     bootstrapFailoverTimer = null
     bootstrapRetryTimer = null
     seedDocument = null
-    for (const requestId of pendingSyncRequests) postSyncResponse(requestId)
+    for (const [requestId, stateVector] of pendingSyncRequests) {
+      postSyncResponse(requestId, stateVector)
+    }
     pendingSyncRequests.clear()
     finishBootstrap?.(result)
     finishBootstrap = null
@@ -120,8 +125,13 @@ export function connectLocalWorkspaceChannel(
 
   function postSyncRequest() {
     if (!activeRequestId || ready || closed) return
+    const message: LocalWorkspaceChannelMessage = {
+      requestId: activeRequestId,
+      stateVector: Y.encodeStateVector(ydoc),
+      type: 'sync-request'
+    }
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin overload.
-    channel.postMessage({ requestId: activeRequestId, type: 'sync-request' })
+    channel.postMessage(message)
   }
 
   function scheduleBootstrapRetry(waitMs: number) {
@@ -130,7 +140,7 @@ export function connectLocalWorkspaceChannel(
       () => {
         bootstrapRetryTimer = null
         postSyncRequest()
-        scheduleBootstrapRetry(waitMs)
+        scheduleBootstrapRetry(Math.min(waitMs * 2, LOCAL_WORKSPACE_BOOTSTRAP_RETRY_MAX_MS))
       },
       Math.max(1, waitMs)
     )
@@ -239,8 +249,8 @@ export function connectLocalWorkspaceChannel(
       return
     }
     if (event.data.type === 'sync-request') {
-      if (ready) postSyncResponse(event.data.requestId)
-      else pendingSyncRequests.add(event.data.requestId)
+      if (ready) postSyncResponse(event.data.requestId, event.data.stateVector)
+      else pendingSyncRequests.set(event.data.requestId, event.data.stateVector)
       return
     }
     if (event.data.type === 'sync-response') {

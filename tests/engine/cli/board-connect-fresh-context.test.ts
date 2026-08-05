@@ -308,8 +308,8 @@ describe('Board connect fresh-context CLI handshake', () => {
       normalizeFreshBoardConnectLogical({ ...logical, automatic: undefined, kind: 'data' })
     ).toThrow('require explicit automatic true or false')
     expect(() =>
-      normalizeFreshBoardConnectLogical({ ...logical, source_port: 'diagonal' })
-    ).toThrow('must be auto, bottom, left, right, or top')
+      normalizeFreshBoardConnectLogical({ ...logical, source_port: '1invalid' })
+    ).toThrow('must be a side or stable named port ID')
     expect(() => normalizeFreshBoardConnectLogical({ ...logical, label: 'x'.repeat(81) })).toThrow(
       'label exceeds 80 characters'
     )

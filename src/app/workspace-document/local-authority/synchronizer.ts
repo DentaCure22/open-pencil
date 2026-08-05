@@ -20,6 +20,10 @@ export function createLocalWorkspaceAuthorityHeadSynchronizer(
     persistedSceneVersion = sceneVersion
   }
 
+  function isAcknowledged(sceneVersion = options.currentSceneVersion()) {
+    return persistedSceneVersion === sceneVersion
+  }
+
   function synchronize(localChangesAlreadyPreserved = false): Promise<boolean> {
     if (!options.canSynchronize()) return Promise.resolve(false)
     if (inFlight) return inFlight
@@ -51,5 +55,5 @@ export function createLocalWorkspaceAuthorityHeadSynchronizer(
     return inFlight
   }
 
-  return { acknowledge, synchronize }
+  return { acknowledge, isAcknowledged, synchronize }
 }

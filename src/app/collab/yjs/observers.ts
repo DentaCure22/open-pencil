@@ -1,7 +1,7 @@
 import type * as Y from 'yjs'
 
-import type { ObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import { YJS_STRUCTURE_REPAIR_ORIGIN } from '@/app/collab/origins'
+import type { ObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 
 type YjsObserverOptions = {
@@ -34,7 +34,6 @@ export function registerYjsObservers({
     setSuppressGraphSync(true)
     try {
       applyYjsToGraph(events)
-      store.requestRender()
     } catch (error) {
       logObserverError('Failed to apply remote graph changes', error)
     } finally {
@@ -64,7 +63,6 @@ export function registerYjsObservers({
     setSuppressGraphSync(true)
     try {
       applyYjsObjectGraphToGraph(events)
-      store.requestRender()
     } catch (error) {
       logObserverError('Failed to apply remote Object Graph changes', error)
     } finally {

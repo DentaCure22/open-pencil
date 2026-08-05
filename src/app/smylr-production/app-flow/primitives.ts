@@ -58,6 +58,30 @@ export function mergeAppFlowPluginData(
   ]
 }
 
+function appFlowTextProperties(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  fontWeight: 400 | 600 | 700,
+  color: Color,
+  maxWidth: number
+) {
+  return {
+    fills: [solid(color)],
+    fontFamily: FONT,
+    fontSize,
+    fontWeight,
+    height: Math.ceil(fontSize * 1.4),
+    name: text,
+    text,
+    textAutoResize: 'WIDTH_AND_HEIGHT' as const,
+    width: Math.min(maxWidth, Math.max(32, Math.ceil(text.length * fontSize * 0.56))),
+    x,
+    y
+  }
+}
+
 export function addAppFlowText(
   graph: SceneGraph,
   parentId: string,
@@ -69,19 +93,11 @@ export function addAppFlowText(
   color: Color,
   maxWidth: number
 ) {
-  const node = graph.createNode('TEXT', parentId, {
-    fills: [solid(color)],
-    fontFamily: FONT,
-    fontSize,
-    fontWeight,
-    height: Math.ceil(fontSize * 1.4),
-    name: text,
-    text,
-    textAutoResize: 'WIDTH_AND_HEIGHT',
-    width: Math.min(maxWidth, Math.max(32, Math.ceil(text.length * fontSize * 0.56))),
-    x,
-    y
-  })
+  const node = graph.createNode(
+    'TEXT',
+    parentId,
+    appFlowTextProperties(text, x, y, fontSize, fontWeight, color, maxWidth)
+  )
   return node
 }
 
@@ -98,18 +114,9 @@ export function updateAppFlowText(
 ): SceneNode | null {
   const node = graph.getNode(nodeId)
   if (node?.type !== 'TEXT') return null
-  graph.updateNode(node.id, {
-    fills: [solid(color)],
-    fontFamily: FONT,
-    fontSize,
-    fontWeight,
-    height: Math.ceil(fontSize * 1.4),
-    name: text,
-    text,
-    textAutoResize: 'WIDTH_AND_HEIGHT',
-    width: Math.min(maxWidth, Math.max(32, Math.ceil(text.length * fontSize * 0.56))),
-    x,
-    y
-  })
+  graph.updateNode(
+    node.id,
+    appFlowTextProperties(text, x, y, fontSize, fontWeight, color, maxWidth)
+  )
   return graph.getNode(node.id) ?? node
 }

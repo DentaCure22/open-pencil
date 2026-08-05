@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
+import * as Y from 'yjs'
+
 import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 import type { Matrix } from '@open-pencil/scene-graph/primitives'
 
@@ -94,6 +96,29 @@ function assertAcyclicHierarchy(nodes: ProbeNode[]) {
 }
 
 describe('Yjs graph invariants', () => {
+  test('seeds a complete restored graph as one Yjs update', () => {
+    const store = createEditorStore()
+    const pageId = store.state.currentPageId
+    for (let index = 0; index < 130; index += 1) {
+      store.graph.createNode('RECTANGLE', pageId, {
+        height: 20,
+        width: 20,
+        x: index * 24
+      })
+    }
+    const harness = createSyncHarness(store)
+    let updateCount = 0
+    harness.ydoc.on('update', () => {
+      updateCount += 1
+    })
+
+    harness.sync.syncAllNodesToYjs()
+
+    expect(updateCount).toBe(1)
+    expect(harness.ynodes.size).toBe([...store.graph.getAllNodes()].length)
+    harness.destroy()
+  })
+
   test('publishes an authority-restored graph as one bounded live update', () => {
     const writerStore = createEditorStore()
     const pageId = writerStore.state.currentPageId
@@ -194,6 +219,148 @@ describe('Yjs graph invariants', () => {
     expect(ynode?.get('x')).toBe(42)
 
     harness.destroy()
+  })
+
+  test('does not publish or render same-value collaboration updates', () => {
+    const writerStore = createEditorStore()
+    const rectangle = writerStore.graph.createNode('RECTANGLE', writerStore.state.currentPageId, {
+      height: 80,
+      width: 120,
+      x: 42
+    })
+    const followerStore = cloneStore(writerStore)
+    const writer = createSyncHarness(writerStore)
+    const follower = createSyncHarness(followerStore)
+    writer.sync.syncAllNodesToYjs()
+    applyMissingUpdate(writer, follower)
+
+    let localUpdateCount = 0
+    writer.ydoc.on('update', () => {
+      localUpdateCount += 1
+    })
+    writer.sync.syncNodeToYjs(rectangle.id, { x: 42 })
+    expect(localUpdateCount).toBe(0)
+
+    const writerNode = writer.ynodes.get(rectangle.id)
+    if (!writerNode) throw new Error('Expected synced rectangle')
+    const equalStateVector = Y.encodeStateVector(follower.ydoc)
+    writerNode.set('x', 42)
+    const equalUpdate = Y.encodeStateAsUpdate(writer.ydoc, equalStateVector)
+    expect(equalUpdate.byteLength).toBeGreaterThan(2)
+    const sceneVersion = followerStore.state.sceneVersion
+    Y.applyUpdate(follower.ydoc, equalUpdate)
+    expect(followerStore.state.sceneVersion).toBe(sceneVersion)
+
+    const changedStateVector = Y.encodeStateVector(follower.ydoc)
+    writerNode.set('x', 84)
+    Y.applyUpdate(follower.ydoc, Y.encodeStateAsUpdate(writer.ydoc, changedStateVector))
+    expect(followerStore.graph.getNode(rectangle.id)?.x).toBe(84)
+    expect(followerStore.state.sceneVersion).toBe(sceneVersion + 1)
+
+    writer.destroy()
+    follower.destroy()
+  })
+
+  test('does not rescan every synced node for steady-state remote edits', () => {
+    const writerStore = createEditorStore()
+    const pageId = writerStore.state.currentPageId
+    const rectangles = Array.from({ length: 128 }, (_, index) =>
+      writerStore.graph.createNode('RECTANGLE', pageId, {
+        height: 20,
+        width: 20,
+        x: index * 24
+      })
+    )
+    const target = rectangles[0]
+    if (!target) throw new Error('Expected a collaboration performance target')
+    const followerStore = cloneStore(writerStore)
+    const writer = createSyncHarness(writerStore)
+    const follower = createSyncHarness(followerStore)
+    writer.sync.syncAllNodesToYjs()
+    applyMissingUpdate(writer, follower)
+
+    const originalIterator = follower.ynodes[Symbol.iterator].bind(follower.ynodes)
+    let fullNodeMapScans = 0
+    Object.defineProperty(follower.ynodes, Symbol.iterator, {
+      configurable: true,
+      value: () => {
+        fullNodeMapScans += 1
+        return originalIterator()
+      }
+    })
+
+    const writerNode = writer.ynodes.get(target.id)
+    if (!writerNode) throw new Error('Expected a synced collaboration performance target')
+    for (let x = 1; x <= 12; x += 1) {
+      const stateVector = Y.encodeStateVector(follower.ydoc)
+      writerNode.set('x', x)
+      Y.applyUpdate(follower.ydoc, Y.encodeStateAsUpdate(writer.ydoc, stateVector))
+    }
+
+    expect(followerStore.graph.getNode(target.id)?.x).toBe(12)
+    expect(fullNodeMapScans).toBe(0)
+
+    writer.destroy()
+    follower.destroy()
+  })
+
+  test('reconciles remote reparenting without rescanning the complete Yjs node map', () => {
+    const writerStore = createEditorStore()
+    const pageId = writerStore.state.currentPageId
+    const firstParent = writerStore.graph.createNode('FRAME', pageId, {
+      height: 200,
+      width: 200
+    })
+    const secondParent = writerStore.graph.createNode('FRAME', pageId, {
+      height: 200,
+      width: 200,
+      x: 300
+    })
+    const child = writerStore.graph.createNode('RECTANGLE', firstParent.id, {
+      height: 20,
+      width: 20
+    })
+    for (let index = 0; index < 128; index += 1) {
+      writerStore.graph.createNode('RECTANGLE', pageId, {
+        height: 20,
+        width: 20,
+        x: index * 24
+      })
+    }
+    const followerStore = cloneStore(writerStore)
+    const writer = createSyncHarness(writerStore)
+    const follower = createSyncHarness(followerStore)
+    writer.sync.syncAllNodesToYjs()
+    applyMissingUpdate(writer, follower)
+
+    const originalIterator = follower.ynodes[Symbol.iterator].bind(follower.ynodes)
+    let fullNodeMapScans = 0
+    Object.defineProperty(follower.ynodes, Symbol.iterator, {
+      configurable: true,
+      value: () => {
+        fullNodeMapScans += 1
+        return originalIterator()
+      }
+    })
+
+    writerStore.graph.reparentNode(child.id, secondParent.id)
+    const movedChild = writerStore.graph.getNode(child.id)
+    if (!movedChild) throw new Error('Expected reparented child')
+    const stateVector = Y.encodeStateVector(follower.ydoc)
+    writer.sync.syncNodeToYjs(
+      child.id,
+      { parentId: movedChild.parentId, x: movedChild.x, y: movedChild.y },
+      [firstParent.id, secondParent.id]
+    )
+    Y.applyUpdate(follower.ydoc, Y.encodeStateAsUpdate(writer.ydoc, stateVector))
+
+    expect(followerStore.graph.getNode(child.id)?.parentId).toBe(secondParent.id)
+    expect(followerStore.graph.getNode(firstParent.id)?.childIds).not.toContain(child.id)
+    expect(followerStore.graph.getNode(secondParent.id)?.childIds).toContain(child.id)
+    expect(fullNodeMapScans).toBe(0)
+
+    writer.destroy()
+    follower.destroy()
   })
 
   test('persists source transform invalidation in a full reopen Y.Map', () => {

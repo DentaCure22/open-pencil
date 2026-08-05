@@ -12,7 +12,11 @@ import {
   type OutboundDragPreview
 } from '@/app/collab/drag-preview'
 import { createEditorStore } from '@/app/editor/session'
-import { connectObjects, objectGraphReactFlowSnapshot } from '@/app/object-graph'
+import {
+  connectObjects,
+  objectGraphReactFlowSnapshot,
+  resolveObjectGraphConnectionGeometry
+} from '@/app/object-graph'
 
 class FakeDragPreviewTransport implements DragPreviewTransport {
   readonly published: DragPreviewMessage[] = []
@@ -610,7 +614,11 @@ describe('local workspace drag previews', () => {
     )
     const before = objectGraphReactFlowSnapshot(store.graph, store.state.currentPageId)
     const beforeSource = before.nodes.find((node) => node.id === source.id)
-    const beforeEdge = before.edges.find((edge) => edge.id === connection.id)
+    const beforeGeometry = resolveObjectGraphConnectionGeometry(
+      store.graph,
+      store.state.currentPageId,
+      connection
+    )
 
     transport.receive(preview(source.id, store.state.currentPageId, { x: 210, y: 120 }))
     clock.flush(48)
@@ -618,11 +626,17 @@ describe('local workspace drag previews', () => {
     const after = objectGraphReactFlowSnapshot(store.graph, store.state.currentPageId)
     const afterSource = after.nodes.find((node) => node.id === source.id)
     const afterEdge = after.edges.find((edge) => edge.id === connection.id)
+    const afterGeometry = resolveObjectGraphConnectionGeometry(
+      store.graph,
+      store.state.currentPageId,
+      connection
+    )
     expect(afterSource?.position).toEqual({
       x: (beforeSource?.position.x ?? 0) + 200,
       y: (beforeSource?.position.y ?? 0) + 100
     })
-    expect(afterEdge?.data?.sourceAnchor.point).not.toEqual(beforeEdge?.data?.sourceAnchor.point)
+    expect(afterEdge?.id).toBe(connection.id)
+    expect(afterGeometry.sourceAnchor.point).not.toEqual(beforeGeometry.sourceAnchor.point)
     expect(codeObjectCanvasStyle(store, source).transform).toContain('translate3d(210px, 120px')
     expect(store.graph.getNode(source.id)).toMatchObject({
       pluginData: sourcePluginData,

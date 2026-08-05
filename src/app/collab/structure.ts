@@ -58,7 +58,7 @@ export function syncParentChildIdsFromGraph(
       yparent = new Y.Map()
       ynodes.set(parentId, yparent)
       syncFullNode(parent, yparent)
-    } else {
+    } else if (!equalStringArrays(yChildIds(yparent), parent.childIds)) {
       yparent.set('childIds', structuredClone(parent.childIds))
     }
   }
@@ -89,6 +89,14 @@ export function syncPreviousPlacement(
     x: absolutePosition.x - origin.x,
     y: absolutePosition.y - origin.y
   }
+  const previousPlacement = readPreviousPlacement(ynode)
+  if (
+    previousPlacement?.parentId === placement.parentId &&
+    previousPlacement.x === placement.x &&
+    previousPlacement.y === placement.y
+  ) {
+    return
+  }
   ynode.set(Y_PREVIOUS_PLACEMENT, placement)
 }
 
@@ -101,51 +109,29 @@ function readPreviousPlacement(ynode: Y.Map<unknown> | undefined): PreviousPlace
   return { parentId: value.parentId, x: value.x, y: value.y }
 }
 
-function parentMap(ynodes: YNodes): Map<string, string> {
-  const result = new Map<string, string>()
-  for (const [nodeId, ynode] of ynodes) {
-    const parentId = yParentId(ynode)
-    if (parentId && ynodes.has(parentId)) result.set(nodeId, parentId)
-  }
-  return result
-}
-
-function findParentCycles(parents: Map<string, string>): string[][] {
-  const complete = new Set<string>()
-  const cycles: string[][] = []
-  for (const startId of [...parents.keys()].sort()) {
-    if (complete.has(startId)) continue
-    const path: string[] = []
-    const pathIndex = new Map<string, number>()
-    let nodeId: string | undefined = startId
-    while (nodeId && !complete.has(nodeId)) {
-      const cycleStart = pathIndex.get(nodeId)
-      if (cycleStart !== undefined) {
-        cycles.push(path.slice(cycleStart))
-        break
-      }
-      pathIndex.set(nodeId, path.length)
-      path.push(nodeId)
-      nodeId = parents.get(nodeId)
-    }
-    for (const visitedId of path) complete.add(visitedId)
-  }
-  return cycles
-}
-
-function createsCycle(
-  childId: string,
-  parentId: string,
-  parents: ReadonlyMap<string, string>
-): boolean {
+function createsCycle(childId: string, parentId: string, ynodes: YNodes): boolean {
   const visited = new Set([childId])
   let currentId: string | undefined = parentId
   while (currentId) {
     if (visited.has(currentId)) return true
     visited.add(currentId)
-    currentId = parents.get(currentId)
+    currentId = yParentId(ynodes.get(currentId)) ?? undefined
   }
   return false
+}
+
+function parentCycleFrom(startId: string, ynodes: YNodes): string[] {
+  const path: string[] = []
+  const pathIndex = new Map<string, number>()
+  let nodeId: string | undefined = startId
+  while (nodeId && ynodes.has(nodeId)) {
+    const cycleStart = pathIndex.get(nodeId)
+    if (cycleStart !== undefined) return path.slice(cycleStart)
+    pathIndex.set(nodeId, path.length)
+    path.push(nodeId)
+    nodeId = yParentId(ynodes.get(nodeId)) ?? undefined
+  }
+  return []
 }
 
 function compareIds(left: string, right: string): number {
@@ -176,11 +162,7 @@ function fallbackContainerId(ynodes: YNodes, cycle: ReadonlySet<string>): string
   )
 }
 
-function cycleBreak(
-  cycleIds: string[],
-  ynodes: YNodes,
-  parents: Map<string, string>
-): CycleBreak | null {
+function cycleBreak(cycleIds: string[], ynodes: YNodes): CycleBreak | null {
   const cycle = new Set(cycleIds)
   const previousPlacements = cycleIds
     .flatMap((childId) => {
@@ -191,7 +173,7 @@ function cycleBreak(
       ({ childId, placement }) =>
         ynodes.has(placement.parentId) &&
         !cycle.has(placement.parentId) &&
-        !createsCycle(childId, placement.parentId, parents)
+        !createsCycle(childId, placement.parentId, ynodes)
     )
     .sort((left, right) =>
       compareIds(
@@ -205,7 +187,7 @@ function cycleBreak(
   const parentId = fallbackContainerId(ynodes, cycle)
   const childId = [...cycleIds].sort()[0]
   const ychild = childId ? ynodes.get(childId) : undefined
-  if (!childId || !parentId || !ychild || createsCycle(childId, parentId, parents)) return null
+  if (!childId || !parentId || !ychild || createsCycle(childId, parentId, ynodes)) return null
   const x = ychild.get('x')
   const y = ychild.get('y')
   return {
@@ -219,55 +201,94 @@ function cycleBreak(
 }
 
 function breakParentCycles(ynodes: YNodes, targets: StructuralSyncTargets) {
-  const parents = parentMap(ynodes)
-  for (const cycleIds of findParentCycles(parents)) {
-    const repair = cycleBreak(cycleIds, ynodes, parents)
+  const repairedCycles = new Set<string>()
+  for (const startId of [...targets.childIds].sort()) {
+    const cycleIds = parentCycleFrom(startId, ynodes)
+    const cycleKey = [...cycleIds].sort().join('\0')
+    if (cycleIds.length === 0 || repairedCycles.has(cycleKey)) continue
+    repairedCycles.add(cycleKey)
+    const repair = cycleBreak(cycleIds, ynodes)
     if (!repair) continue
     const ychild = ynodes.get(repair.childId)
     if (!ychild) continue
-    const oldParentId = parents.get(repair.childId)
+    const oldParentId = yParentId(ychild)
     ychild.set('parentId', repair.placement.parentId)
     ychild.set('x', repair.placement.x)
     ychild.set('y', repair.placement.y)
-    parents.set(repair.childId, repair.placement.parentId)
     targets.childIds.add(repair.childId)
     if (oldParentId) targets.parentIds.add(oldParentId)
     targets.parentIds.add(repair.placement.parentId)
   }
 }
 
+function indexParentIdsByChildId(parentLists: ReadonlyMap<string, string[]>) {
+  const parentIdsByChildId = new Map<string, Set<string>>()
+  for (const [parentId, childIds] of parentLists) {
+    for (const childId of childIds) {
+      const parentIds = parentIdsByChildId.get(childId) ?? new Set<string>()
+      parentIds.add(parentId)
+      parentIdsByChildId.set(childId, parentIds)
+    }
+  }
+  return parentIdsByChildId
+}
+
+function reconcileParentChildList(
+  childIds: string[],
+  childId: string,
+  shouldContainChild: boolean
+): string[] {
+  if (!shouldContainChild) {
+    return childIds.includes(childId)
+      ? childIds.filter((listedChildId) => listedChildId !== childId)
+      : childIds
+  }
+  const firstIndex = childIds.indexOf(childId)
+  if (firstIndex === -1) return [...childIds, childId]
+  if (childIds.lastIndexOf(childId) === firstIndex) return childIds
+  return childIds.filter(
+    (listedChildId, index) => listedChildId !== childId || index === firstIndex
+  )
+}
+
 export function reconcileYjsParentChildIds(ynodes: YNodes, targets: StructuralSyncTargets) {
   breakParentCycles(ynodes, targets)
-  const parentLists = new Map<string, string[]>()
-  const originalParentLists = new Map<string, string[]>()
-  for (const [parentId, yparent] of ynodes) {
-    const childIds = yChildIds(yparent)
-    parentLists.set(parentId, childIds)
-    originalParentLists.set(parentId, [...childIds])
+  for (const childId of targets.childIds) {
+    const parentId = yParentId(ynodes.get(childId))
+    if (parentId && ynodes.has(parentId)) targets.parentIds.add(parentId)
   }
+  const parentLists = new Map<string, string[]>()
+  for (const parentId of targets.parentIds) {
+    const yparent = ynodes.get(parentId)
+    if (!yparent) continue
+    parentLists.set(parentId, yChildIds(yparent))
+  }
+
+  const parentIdsByChildId = indexParentIdsByChildId(parentLists)
+  const changedParentIds = new Set<string>()
 
   for (const childId of [...targets.childIds].sort()) {
     const desiredParentId = yParentId(ynodes.get(childId))
     const validDesiredParentId =
       desiredParentId && ynodes.has(desiredParentId) ? desiredParentId : null
-    if (validDesiredParentId) targets.parentIds.add(validDesiredParentId)
-    for (const [parentId, childIds] of parentLists) {
-      if (childIds.includes(childId)) targets.parentIds.add(parentId)
-      const keptDesiredIndex = parentId === validDesiredParentId ? childIds.indexOf(childId) : -1
-      const reconciledChildIds = childIds.filter(
-        (listedChildId, index) => listedChildId !== childId || index === keptDesiredIndex
+    const affectedParentIds = parentIdsByChildId.get(childId) ?? new Set<string>()
+    if (validDesiredParentId) affectedParentIds.add(validDesiredParentId)
+    for (const parentId of affectedParentIds) {
+      const childIds = parentLists.get(parentId)
+      if (!childIds) continue
+      const reconciled = reconcileParentChildList(
+        childIds,
+        childId,
+        parentId === validDesiredParentId
       )
-      if (parentId === validDesiredParentId && keptDesiredIndex === -1) {
-        reconciledChildIds.push(childId)
-      }
-      parentLists.set(parentId, reconciledChildIds)
+      if (reconciled === childIds) continue
+      parentLists.set(parentId, reconciled)
+      changedParentIds.add(parentId)
     }
   }
 
-  for (const [parentId, childIds] of parentLists) {
-    const original = originalParentLists.get(parentId) ?? []
-    if (equalStringArrays(original, childIds)) continue
-    ynodes.get(parentId)?.set('childIds', childIds)
+  for (const parentId of changedParentIds) {
+    ynodes.get(parentId)?.set('childIds', parentLists.get(parentId))
     targets.parentIds.add(parentId)
   }
 }

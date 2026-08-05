@@ -54,6 +54,24 @@ function parseGridPlacement(
   }
 }
 
+function layoutAnchorArtifactIndex(
+  artifactIndexes: ReadonlyMap<string, number>,
+  members: readonly string[],
+  anchor: BoardBuildPlanLayoutAnchor,
+  label: string,
+  memberKind: 'flow' | 'grid'
+): number | undefined {
+  if (!('alias' in anchor)) return undefined
+  const anchorIndex = artifactIndexes.get(anchor.alias)
+  if (anchorIndex === undefined) {
+    throw new Error(`${label}.anchor references unknown alias "${anchor.alias}".`)
+  }
+  if (members.includes(anchor.alias)) {
+    throw new Error(`${label}.anchor cannot reference a ${memberKind} member.`)
+  }
+  return anchorIndex
+}
+
 function parseGridLayout(
   value: unknown,
   artifacts: readonly BoardBuildPlanArtifact[]
@@ -83,14 +101,8 @@ function parseGridLayout(
     }
   }
   const anchor = parseLayoutAnchor(value.anchor, `${label}.anchor`)
-  if ('alias' in anchor) {
-    const anchorIndex = artifactIndexes.get(anchor.alias)
-    if (anchorIndex === undefined) {
-      throw new Error(`${label}.anchor references unknown alias "${anchor.alias}".`)
-    }
-    if (members.includes(anchor.alias)) {
-      throw new Error(`${label}.anchor cannot reference a grid member.`)
-    }
+  const anchorIndex = layoutAnchorArtifactIndex(artifactIndexes, members, anchor, label, 'grid')
+  if (anchorIndex !== undefined) {
     const memberIndexes = members.flatMap((member) => {
       const index = artifactIndexes.get(member)
       return index === undefined ? [] : [index]
@@ -161,14 +173,8 @@ function assertFlowArtifacts(
       throw new Error(`${label}.ranks references unknown alias "${member}".`)
     }
   }
-  if ('alias' in anchor) {
-    const anchorIndex = artifactIndexes.get(anchor.alias)
-    if (anchorIndex === undefined) {
-      throw new Error(`${label}.anchor references unknown alias "${anchor.alias}".`)
-    }
-    if (members.includes(anchor.alias)) {
-      throw new Error(`${label}.anchor cannot reference a flow member.`)
-    }
+  const anchorIndex = layoutAnchorArtifactIndex(artifactIndexes, members, anchor, label, 'flow')
+  if (anchorIndex !== undefined) {
     const memberIndexes = members.flatMap((member) => {
       const index = artifactIndexes.get(member)
       return index === undefined ? [] : [index]

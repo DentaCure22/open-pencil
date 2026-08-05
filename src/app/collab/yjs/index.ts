@@ -21,7 +21,10 @@ import {
   type YNodes,
   yParentId
 } from '@/app/collab/structure'
-import { createGraphReplacementPublisher } from '@/app/collab/yjs/graph-replacement'
+import {
+  createGraphReplacementPublisher,
+  syncGraphImagesToYjs
+} from '@/app/collab/yjs/graph-replacement'
 import {
   collabValuesEqual,
   hasStructuralNodeChange,
@@ -44,8 +47,6 @@ export { registerYjsObservers } from '@/app/collab/yjs/observers'
 export { syncNodePropsToYMap } from '@/app/collab/yjs/node-record'
 
 type YImages = Y.Map<Uint8Array>
-
-const SYNC_ALL_NODE_BATCH_SIZE = 64
 
 export type SyncNodeToYjs = (
   nodeId: string,
@@ -203,6 +204,24 @@ export function createYjsGraphSync({
   getYimages,
   setSuppressYjsEvents
 }: YjsGraphSyncOptions) {
+  let indexedYnodes: YNodes | null = null
+  let nodeIdsByMap = new WeakMap<Y.Map<unknown>, string>()
+
+  function refreshYnodeIndex(ynodes: YNodes, events: Y.YEvent<Y.Map<unknown>>[] = []): void {
+    if (indexedYnodes !== ynodes) {
+      indexedYnodes = ynodes
+      nodeIdsByMap = new WeakMap()
+      for (const [nodeId, ynode] of ynodes) nodeIdsByMap.set(ynode, nodeId)
+    }
+    for (const event of events) {
+      if (event.target !== ynodes) continue
+      for (const nodeId of event.changes.keys.keys()) {
+        const ynode = ynodes.get(nodeId)
+        if (ynode) nodeIdsByMap.set(ynode, nodeId)
+      }
+    }
+  }
+
   const syncNodeToYjs: SyncNodeToYjs = (nodeId, changes, relatedParentIds = []) => {
     const store = getStore()
     const ydoc = getYdoc()
@@ -221,6 +240,7 @@ export function createYjsGraphSync({
         if (!ynode) {
           ynode = new Y.Map()
           ynodes.set(nodeId, ynode)
+          if (indexedYnodes === ynodes) nodeIdsByMap.set(ynode, nodeId)
         }
         syncNodeFieldsToYMap(node, changes, ynode, materializingNode)
 
@@ -262,6 +282,18 @@ export function createYjsGraphSync({
     }
   }
 
+  function syncNodeBatchToYjs(nodes: SceneNode[], ynodes: YNodes): void {
+    for (const node of nodes) {
+      let ynode = ynodes.get(node.id)
+      if (!ynode) {
+        ynode = new Y.Map()
+        ynodes.set(node.id, ynode)
+        if (indexedYnodes === ynodes) nodeIdsByMap.set(ynode, node.id)
+      }
+      syncNodePropsToYMap(node, ynode)
+    }
+  }
+
   function syncAllNodesToYjs() {
     const store = getStore()
     const ydoc = getYdoc()
@@ -278,33 +310,15 @@ export function createYjsGraphSync({
             : []
         )
       )
-      for (let index = 0; index < nodes.length; index += SYNC_ALL_NODE_BATCH_SIZE) {
-        ydoc.transact(() => {
-          for (const node of nodes.slice(index, index + SYNC_ALL_NODE_BATCH_SIZE)) {
-            let ynode = ynodes.get(node.id)
-            if (!ynode) {
-              ynode = new Y.Map()
-              ynodes.set(node.id, ynode)
-            }
-            syncNodePropsToYMap(node, ynode)
-          }
-        })
-      }
       ydoc.transact(() => {
+        syncNodeBatchToYjs(nodes, ynodes)
         const records = getObjectGraphYRecords(ydoc)
         for (const page of nodes.filter((node) => node.type === 'CANVAS')) {
           syncObjectGraphPageToYjs(records, page, previousPagePluginData.get(page.id))
         }
+
+        syncGraphImagesToYjs(store, localYimages)
       })
-      if (localYimages) {
-        for (const hash of localYimages.keys()) {
-          if (!store.graph.images.has(hash)) localYimages.delete(hash)
-        }
-        for (const [hash, data] of store.graph.images) {
-          if (collabValuesEqual(localYimages.get(hash), data)) continue
-          ydoc.transact(() => localYimages.set(hash, data))
-        }
-      }
     } catch (error) {
       logCollabSyncError('Failed to sync document', error)
     } finally {
@@ -312,13 +326,19 @@ export function createYjsGraphSync({
     }
   }
 
-  const syncGraphReplacementToYjs = createGraphReplacementPublisher({
+  const publishGraphReplacementToYjs = createGraphReplacementPublisher({
     getStore,
     getYdoc,
     getYnodes,
     getYimages,
     setSuppressYjsEvents
   })
+
+  function syncGraphReplacementToYjs() {
+    publishGraphReplacementToYjs()
+    indexedYnodes = null
+    nodeIdsByMap = new WeakMap()
+  }
 
   function migrateObjectGraphRecordsToYjs() {
     const store = getStore()
@@ -361,18 +381,28 @@ export function createYjsGraphSync({
         for (const [nodeId, change] of event.changes.keys) {
           targets.childIds.add(nodeId)
           targets.parentIds.add(nodeId)
-          addStructuralChildIds(targets, ynodes.get(nodeId)?.get('childIds'))
+          const ynode = ynodes.get(nodeId)
+          addStructuralChildIds(targets, ynode?.get('childIds'))
+          const currentParentId = yParentId(ynode)
+          if (currentParentId) targets.parentIds.add(currentParentId)
           if (change.oldValue instanceof Y.Map) {
             addStructuralChildIds(targets, change.oldValue.get('childIds'))
+            const previousParentId = yParentId(change.oldValue)
+            if (previousParentId) targets.parentIds.add(previousParentId)
           }
         }
         continue
       }
       if (event.target.parent !== ynodes) continue
-      const nodeId = findNodeIdForYMap(event.target)
+      const nodeId = nodeIdsByMap.get(event.target)
       if (!nodeId) continue
       const parentChange = event.changes.keys.get('parentId')
-      if (parentChange) targets.childIds.add(nodeId)
+      if (parentChange) {
+        targets.childIds.add(nodeId)
+        if (typeof parentChange.oldValue === 'string') targets.parentIds.add(parentChange.oldValue)
+        const parentId = yParentId(event.target)
+        if (parentId) targets.parentIds.add(parentId)
+      }
       const childIdsChange = event.changes.keys.get('childIds')
       if (!childIdsChange) continue
       targets.parentIds.add(nodeId)
@@ -387,6 +417,7 @@ export function createYjsGraphSync({
     const ydoc = getYdoc()
     const ynodes = getYnodes()
     if (!ynodes) return
+    refreshYnodeIndex(ynodes, events)
     const structuralTargets = collectStructuralSyncTargets(events, ynodes)
     if (ydoc && structuralTargets.childIds.size > 0) {
       ydoc.transact(
@@ -405,7 +436,7 @@ export function createYjsGraphSync({
           }
         }
       } else if (event.target.parent === ynodes) {
-        const nodeId = findNodeIdForYMap(event.target)
+        const nodeId = nodeIdsByMap.get(event.target)
         if (nodeId) {
           const ynode = ynodes.get(nodeId)
           if (ynode) applyYnodeChangesToGraph(nodeId, ynode, event)
@@ -415,20 +446,9 @@ export function createYjsGraphSync({
     if (structuralTargets.childIds.size > 0 || structuralTargets.parentIds.size > 0) {
       reconcileGraphStructure(store, ynodes, structuralTargets)
     }
-    // Page records can be observed before endpoint nodes when a complete Yjs
-    // document is applied in one update. Reapply the normalized projection
-    // after the node batch so runtime reconciliation never prunes a valid edge
-    // merely because its endpoints were still being materialized.
+    // Reapply page connections after nodes so endpoints exist before runtime reconciliation.
     applyObjectGraphProjection(store.graph.getPages().map((page) => page.id))
-  }
-
-  function findNodeIdForYMap(ymap: Y.Map<unknown>): string | null {
-    const ynodes = getYnodes()
-    if (!ynodes) return null
-    for (const [key, value] of ynodes.entries()) {
-      if (value === ymap) return key
-    }
-    return null
+    ensureCurrentPageExists(store)
   }
 
   function applyYnodeToGraph(nodeId: string, ynode: Y.Map<unknown>) {
@@ -518,8 +538,12 @@ export function createYjsGraphSync({
 
     if (existing) {
       const hasParentChange = Object.hasOwn(props, 'parentId')
-      const nodeChanges = { ...props } as Partial<SceneNode>
-      delete nodeChanges.parentId
+      const nodeChanges = Object.fromEntries(
+        Object.entries(props).filter(
+          ([key, value]) =>
+            key !== 'parentId' && !collabValuesEqual(existing[key as keyof SceneNode], value)
+        )
+      ) as Partial<SceneNode>
       if (hasParentChange && syncedParentId && existing.parentId !== syncedParentId) {
         store.graph.reparentNode(nodeId, syncedParentId)
       }
@@ -531,11 +555,11 @@ export function createYjsGraphSync({
         delete nodeChanges.x
         delete nodeChanges.y
       }
-      store.graph.updateNode(nodeId, nodeChanges)
-      if (hasParentChange && syncedParentId === null) {
+      if (Object.keys(nodeChanges).length > 0) store.graph.updateNode(nodeId, nodeChanges)
+      if (hasParentChange && syncedParentId === null && store.graph.rootId !== nodeId) {
         store.graph.rootId = nodeId
+        store.requestRender()
       }
-      ensureCurrentPageExists(store)
       return
     }
 
@@ -546,7 +570,6 @@ export function createYjsGraphSync({
     // Parent childIds may arrive before or after the child node.
     store.graph.createNodeWithId(nodeId, type, parentId, fullProps as Partial<SceneNode>)
     if (parentId === null) store.graph.rootId = nodeId
-    ensureCurrentPageExists(store)
   }
 
   function ensureCurrentPageExists(store: EditorStore) {

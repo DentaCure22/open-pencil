@@ -6,20 +6,15 @@ import {
   type MutationRequestReceipt
 } from '@/app/automation/bridge/request-receipts'
 import { isUnknownRecord, type AutomationTarget } from '@/app/automation/bridge/target'
-import {
-  waitForCodeObjectRuntimeRender,
-  type WaitForCodeObjectRuntimeRender
-} from '@/app/code-object/compiler'
+import { type WaitForCodeObjectRuntimeRender } from '@/app/code-object/compiler'
 
 import { codeObjectSemanticOwner } from '../mutation'
 import {
-  authoredCodeObjectOwner,
   codeObjectComponentReadback,
   codeObjectHistoricalOnly,
   codeObjectNextAction,
   codeObjectReconciliationFailure,
-  codeObjectRuntimeReadback,
-  completeCodeObjectReadback
+  readAuthoredCodeObject
 } from '../readback'
 import {
   CODE_OBJECT_CONTENT_ROUTE,
@@ -82,7 +77,7 @@ export function expectedCodeObjectFromReceipt(
 export async function codeObjectCreateReadback(
   target: AutomationTarget,
   expected: CodeObjectExpectedReadback,
-  waitForRuntimeRender: WaitForCodeObjectRuntimeRender = waitForCodeObjectRuntimeRender
+  waitForRuntimeRender?: WaitForCodeObjectRuntimeRender
 ): Promise<CodeObjectCreateReadback> {
   const expectedSummary = {
     content_hash: expected.contentHash,
@@ -90,44 +85,37 @@ export async function codeObjectCreateReadback(
     owner_id: expected.ownerId,
     source_hash: expected.sourceHash
   }
-  const owner = authoredCodeObjectOwner(target, expected.ownerId, expectedSummary)
-  if (owner.readback) return owner.readback
-  const { document, frame } = owner
-  const ports = readObjectGraphPorts(frame)
-  const [currentContentHash, currentSourceHash] = await Promise.all([
-    mutationRequestSignature(CODE_OBJECT_CONTENT_ROUTE, {
-      name: document.name,
-      object_key: document.definitionId,
-      ports,
-      props: document.props,
-      source: document.source,
-      state: document.state
-    }),
-    codeObjectSourceHash(document.source)
-  ])
-  const runtime = await codeObjectRuntimeReadback({
-    document,
-    ownerId: expected.ownerId,
-    waitForRuntimeRender
-  })
-  const bounds = nodeBounds(target, frame)
-  const reasons = [
-    ...(document.definitionId === expected.objectKey ? [] : ['object_key_changed']),
-    ...(document.name === expected.name ? [] : ['name_changed']),
-    ...(currentSourceHash === expected.sourceHash ? [] : ['source_changed']),
-    ...(currentContentHash === expected.contentHash ? [] : ['content_changed']),
-    ...(JSON.stringify(ports) === JSON.stringify(expected.ports) ? [] : ['ports_changed']),
-    ...(sameBounds(bounds, expected.bounds) ? [] : ['bounds_changed']),
-    ...(runtime?.status === 'error' ? ['runtime_render_failed'] : []),
-    ...(runtime?.status === 'timeout' ? ['runtime_mount_or_render_timeout'] : [])
-  ]
-  return completeCodeObjectReadback({
-    component: { ...codeObjectComponentReadback(document, currentSourceHash), ports },
+  return readAuthoredCodeObject({
     expected: expectedSummary,
-    frame,
-    reasons,
-    ...(runtime ? { runtime } : {}),
-    target
+    inspect: async (document, frame) => {
+      const ports = readObjectGraphPorts(frame)
+      const [currentContentHash, currentSourceHash] = await Promise.all([
+        mutationRequestSignature(CODE_OBJECT_CONTENT_ROUTE, {
+          name: document.name,
+          object_key: document.definitionId,
+          ports,
+          props: document.props,
+          source: document.source,
+          state: document.state
+        }),
+        codeObjectSourceHash(document.source)
+      ])
+      const bounds = nodeBounds(target, frame)
+      return {
+        component: { ...codeObjectComponentReadback(document, currentSourceHash), ports },
+        reasons: [
+          ...(document.definitionId === expected.objectKey ? [] : ['object_key_changed']),
+          ...(document.name === expected.name ? [] : ['name_changed']),
+          ...(currentSourceHash === expected.sourceHash ? [] : ['source_changed']),
+          ...(currentContentHash === expected.contentHash ? [] : ['content_changed']),
+          ...(JSON.stringify(ports) === JSON.stringify(expected.ports) ? [] : ['ports_changed']),
+          ...(sameBounds(bounds, expected.bounds) ? [] : ['bounds_changed'])
+        ]
+      }
+    },
+    ownerId: expected.ownerId,
+    target,
+    waitForRuntimeRender
   })
 }
 
@@ -146,7 +134,7 @@ function replayReceipt(receipt: MutationRequestReceipt, ownerId: string): Record
 export async function replayStoredCodeObjectCreate(
   target: AutomationTarget,
   receipt: MutationRequestReceipt,
-  waitForRuntimeRender: WaitForCodeObjectRuntimeRender = waitForCodeObjectRuntimeRender
+  waitForRuntimeRender?: WaitForCodeObjectRuntimeRender
 ): Promise<AutomationCodeObjectCreateResult> {
   const expected = expectedCodeObjectFromReceipt(receipt)
   const readback = await codeObjectCreateReadback(target, expected, waitForRuntimeRender)

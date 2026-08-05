@@ -1,6 +1,9 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import type { WaitForCodeObjectRuntimeRender } from '@/app/code-object/compiler'
+import {
+  waitForCodeObjectRuntimeRender,
+  type WaitForCodeObjectRuntimeRender
+} from '@/app/code-object/compiler'
 import { codeObjectDocument, type UserCodeObjectDocument } from '@/app/code-object/model'
 
 import { nodeSummary } from '../board-tools/readback'
@@ -30,7 +33,24 @@ type AuthoredOwnerFailure<TExpected> = {
   readback: CodeObjectReadback<never, TExpected>
 }
 
-export function authoredCodeObjectOwner<TExpected>(
+type CodeObjectReadbackInspection<TComponent> = {
+  component: TComponent
+  reasons: string[]
+}
+
+type ReadAuthoredCodeObjectOptions<TComponent, TExpected> = {
+  afterGeneration?: number
+  expected: TExpected
+  inspect: (
+    document: UserCodeObjectDocument,
+    frame: SceneNode
+  ) => Promise<CodeObjectReadbackInspection<TComponent>>
+  ownerId: string
+  target: AutomationTarget
+  waitForRuntimeRender?: WaitForCodeObjectRuntimeRender
+}
+
+function authoredCodeObjectOwner<TExpected>(
   target: AutomationTarget,
   ownerId: string,
   expected: TExpected
@@ -57,7 +77,7 @@ export function authoredCodeObjectOwner<TExpected>(
   return { document, frame }
 }
 
-export async function codeObjectRuntimeReadback(options: {
+async function codeObjectRuntimeReadback(options: {
   afterGeneration?: number
   document: UserCodeObjectDocument
   ownerId: string
@@ -77,7 +97,7 @@ export async function codeObjectRuntimeReadback(options: {
     : acknowledgement
 }
 
-export function completeCodeObjectReadback<TComponent, TExpected>(options: {
+function completeCodeObjectReadback<TComponent, TExpected>(options: {
   component: TComponent
   expected: TExpected
   frame: SceneNode
@@ -95,6 +115,34 @@ export function completeCodeObjectReadback<TComponent, TExpected>(options: {
     },
     ...(options.runtime ? { runtime: options.runtime } : {})
   }
+}
+
+export async function readAuthoredCodeObject<TComponent, TExpected>(
+  options: ReadAuthoredCodeObjectOptions<TComponent, TExpected>
+): Promise<CodeObjectReadback<TComponent, TExpected>> {
+  const owner = authoredCodeObjectOwner(options.target, options.ownerId, options.expected)
+  if (owner.readback) return owner.readback
+  const { document, frame } = owner
+  const inspection = await options.inspect(document, frame)
+  const runtime = await codeObjectRuntimeReadback({
+    ...(options.afterGeneration === undefined ? {} : { afterGeneration: options.afterGeneration }),
+    document,
+    ownerId: options.ownerId,
+    waitForRuntimeRender: options.waitForRuntimeRender ?? waitForCodeObjectRuntimeRender
+  })
+  const reasons = [
+    ...inspection.reasons,
+    ...(runtime?.status === 'error' ? ['runtime_render_failed'] : []),
+    ...(runtime?.status === 'timeout' ? ['runtime_mount_or_render_timeout'] : [])
+  ]
+  return completeCodeObjectReadback({
+    component: inspection.component,
+    expected: options.expected,
+    frame,
+    reasons,
+    ...(runtime ? { runtime } : {}),
+    target: options.target
+  })
 }
 
 export function codeObjectComponentReadback(document: UserCodeObjectDocument, sourceHash: string) {

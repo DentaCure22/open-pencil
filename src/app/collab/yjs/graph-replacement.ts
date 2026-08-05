@@ -19,6 +19,16 @@ type GraphReplacementPublisherOptions = {
   setSuppressYjsEvents: (value: boolean) => void
 }
 
+export function syncGraphImagesToYjs(store: EditorStore, yimages: Y.Map<Uint8Array> | null) {
+  if (!yimages) return
+  for (const hash of yimages.keys()) {
+    if (!store.graph.images.has(hash)) yimages.delete(hash)
+  }
+  for (const [hash, data] of store.graph.images) {
+    if (!collabValuesEqual(yimages.get(hash), data)) yimages.set(hash, data)
+  }
+}
+
 export function createGraphReplacementPublisher({
   getStore,
   getYdoc,
@@ -66,13 +76,7 @@ export function createGraphReplacementPublisher({
           }
         }
 
-        if (!localYimages) return
-        for (const hash of localYimages.keys()) {
-          if (!store.graph.images.has(hash)) localYimages.delete(hash)
-        }
-        for (const [hash, data] of store.graph.images) {
-          if (!collabValuesEqual(localYimages.get(hash), data)) localYimages.set(hash, data)
-        }
+        syncGraphImagesToYjs(store, localYimages)
       })
     } catch (error) {
       console.error('[Collab] Failed to publish graph replacement:', error)

@@ -18,7 +18,7 @@ export const TEXT_COLOR = '#242521'
 export const MUTED_COLOR = '#6D6B64'
 export const ACCENT_COLOR = '#6954C5'
 export const BORDER_COLOR = '#D9D6CE'
-export const SURFACE_COLOR = '#FCFBF7'
+export const SURFACE_COLOR = '#FFFFFF'
 export const SUBTLE_SURFACE_COLOR = '#F3F1EA'
 
 export interface MarkdownRenderContext {

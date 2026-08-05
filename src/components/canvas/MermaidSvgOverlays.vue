@@ -6,6 +6,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { renderMermaidSvgInBrowser } from '@/app/diagram/mermaid/render'
 import { useEditorStore } from '@/app/editor/active-store'
+import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
 
 type MermaidSvgItem = {
   appearance: MermaidAppearance
@@ -20,6 +21,7 @@ type MermaidSvgRendering = {
 }
 
 const store = useEditorStore()
+const presentationViewport = useEditorPresentationViewport(store)
 const renderings = shallowRef<Record<string, MermaidSvgRendering>>({})
 
 function pluginValue(node: SceneNode, key: string): string | null {
@@ -84,18 +86,7 @@ watch(
 )
 
 function overlayStyle(node: SceneNode) {
-  void store.state.renderVersion
-  const absolute = store.graph.getAbsolutePosition(node.id)
-  const zoom = store.state.zoom
-  return {
-    height: `${Math.max(1, node.height * zoom)}px`,
-    opacity: node.opacity,
-    transform: `translate3d(${absolute.x * zoom + store.state.panX}px, ${
-      absolute.y * zoom + store.state.panY
-    }px, 0) rotate(${node.rotation}deg)`,
-    transformOrigin: 'center center',
-    width: `${Math.max(1, node.width * zoom)}px`
-  }
+  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
 }
 </script>
 

@@ -89,7 +89,7 @@ export function createFollowActions(
     const ch = canvas.height / devicePixelRatio
     store.state.panX = cw / 2 - cursor.x * store.state.zoom
     store.state.panY = ch / 2 - cursor.y * store.state.zoom
-    store.requestRender()
+    store.requestRepaint()
   }
 
   return { followingPeer, followPeer, resetFollow, tickFollow }

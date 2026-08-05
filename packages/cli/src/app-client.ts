@@ -88,13 +88,6 @@ async function rpcOnce<T>(command: string, args: unknown): Promise<T> {
   throw liveRuntimeDisabledError()
 }
 
-async function directRpcOnce<T>(command: string, args: unknown): Promise<T> {
-  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
-    return (await localAuthorityRpcEnvelope<T>(command, args)).result
-  }
-  throw liveRuntimeDisabledError()
-}
-
 async function rpcEnvelopeOnce<T>(command: string, args: unknown): Promise<AppRpcEnvelope<T>> {
   if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
     return localAuthorityRpcEnvelope<T>(command, args)
@@ -129,12 +122,7 @@ export async function rpc<T = unknown>(command: string, args: unknown = {}): Pro
   return withDurableTargetRetry(args, () => rpcOnce<T>(command, args))
 }
 
-export async function rpcDirect<T = unknown>(command: string, args: unknown = {}): Promise<T> {
-  if (classifyRpcExecutionSurface(command, args) === 'persisted_authority') {
-    return directRpcOnce<T>(command, args)
-  }
-  return withDurableTargetRetry(args, () => directRpcOnce<T>(command, args))
-}
+export const rpcDirect = rpc
 
 export async function rpcEnvelope<T = unknown>(
   command: string,

@@ -77,6 +77,11 @@ describe('local workspace authority head synchronizer', () => {
   test('restores the central head and resumes a writable client', async () => {
     const fixture = synchronizerFixture()
 
+    expect(fixture.synchronizer.isAcknowledged()).toBe(true)
+    fixture.touch()
+    expect(fixture.synchronizer.isAcknowledged()).toBe(false)
+    fixture.synchronizer.acknowledge()
+    expect(fixture.synchronizer.isAcknowledged()).toBe(true)
     await expect(fixture.synchronizer.synchronize()).resolves.toBe(true)
     expect(fixture.events).toEqual(['tracking:stop', 'restore', 'writable:true', 'tracking:start'])
   })

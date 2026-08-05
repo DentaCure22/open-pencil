@@ -12,6 +12,7 @@ import {
   finishNarratedTraceSession,
   markNarratedTraceEvidenceFailed,
   narratedTraceAnchorForScreenPoints,
+  narratedTraceCanvasInkNodes,
   narratedTraceAnnotationTool,
   narratedTraceCanvasInkProjections,
   narratedTraceElapsedMs,
@@ -25,6 +26,7 @@ import {
   setNarratedTraceAnnotationTool
 } from '@/app/narrated-trace'
 import { useEditorStore } from '@/app/editor/active-store'
+import { useEditorPresentationViewport } from '@/app/editor/presentation'
 import type {
   NarratedTraceInk,
   NarratedTraceFocusTrailPoint,
@@ -58,6 +60,7 @@ const FOCUS_AURA_OPACITY = 0.2
 
 const root = ref<HTMLElement | null>(null)
 const store = useEditorStore()
+const presentationViewport = useEditorPresentationViewport(store)
 const currentStroke = ref<NarratedTraceInk | null>(null)
 const currentFocus = ref<FocusDraft | null>(null)
 const focusTrails = ref<FocusTrail[]>([])
@@ -65,7 +68,13 @@ const focusClock = ref(0)
 let focusAnimationFrame = 0
 
 const canAnnotate = computed(() => narratedTraceAnnotationTool.value !== 'none')
-const canvasInkProjections = computed(() => narratedTraceCanvasInkProjections(store))
+const canvasInkNodes = computed(() => {
+  void store.state.sceneVersion
+  return narratedTraceCanvasInkNodes(store)
+})
+const canvasInkProjections = computed(() =>
+  narratedTraceCanvasInkProjections(store, presentationViewport.value, canvasInkNodes.value)
+)
 const canSelectCanvasInk = computed(
   () => narratedTraceAnnotationTool.value === 'none' && store.state.activeTool === 'SELECT'
 )

@@ -403,6 +403,8 @@ export const SECTION_DEFAULT_STROKE: Stroke = {
 export const ZOOM_DIVISOR = 50
 export const ZOOM_SCALE_MIN = 0.75
 export const ZOOM_SCALE_MAX = 1.25
+export const DOUBLE_CLICK_FOCUS_MAX_ZOOM = 1.5
+export const DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER = 1.25
 
 export const PEN_CLOSE_THRESHOLD = 8
 export const ROTATION_SNAP_DEGREES = 15

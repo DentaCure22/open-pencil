@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 
 import { expect, test } from '#tests/e2e/fixtures'
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { createTestCodeObject } from '#tests/helpers/object-graph'
 
 const SOURCE = `flowchart LR
   Capture --> Decide --> Build`
@@ -61,6 +62,119 @@ test('updates one Mermaid SVG frame from source without creating native children
     }
   })
   expect(updated).toEqual({ childIds: [], ownerId: original.ownerId, source: UPDATED_SOURCE })
+})
+
+test('keeps Mermaid and Code Object overlays synchronized while panning', async ({ page }) => {
+  await page.goto('/?test&no-rulers')
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await canvas.clearCanvas()
+  await insertMermaid(page)
+
+  const placement = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const mermaidId = [...store.state.selectedIds][0]
+    const mermaid = mermaidId ? store.graph.getNode(mermaidId) : undefined
+    if (!mermaidId || !mermaid) throw new Error('Expected selected Mermaid owner')
+    return {
+      codeObjectX: mermaid.x + mermaid.width + 80,
+      mermaidId,
+      mermaidX: mermaid.x,
+      mermaidY: mermaid.y
+    }
+  })
+  const codeObjectId = await createTestCodeObject(
+    page,
+    'Presentation clock probe',
+    placement.codeObjectX,
+    placement.mermaidY
+  )
+
+  await page.evaluate(
+    ({ codeObjectId, mermaidId }) => {
+      const store = window.openPencil?.getStore?.()
+      const mermaid = store?.graph.getNode(mermaidId)
+      const codeObject = store?.graph.getNode(codeObjectId)
+      if (!store || !mermaid || !codeObject) throw new Error('Expected presentation probe objects')
+      const left = Math.min(mermaid.x, codeObject.x)
+      const right = Math.max(mermaid.x + mermaid.width, codeObject.x + codeObject.width)
+      const top = Math.min(mermaid.y, codeObject.y)
+      const bottom = Math.max(mermaid.y + mermaid.height, codeObject.y + codeObject.height)
+      const zoom = 0.5
+      store.setViewport({
+        panX: 420 - ((left + right) / 2) * zoom,
+        panY: 360 - ((top + bottom) / 2) * zoom,
+        zoom
+      })
+    },
+    { codeObjectId, mermaidId: placement.mermaidId }
+  )
+
+  const mermaidOverlay = page.getByTestId('mermaid-svg-object')
+  const codeObjectOverlay = page.getByTestId(`code-object-${codeObjectId}`)
+  await expect(mermaidOverlay).toBeVisible()
+  await expect(codeObjectOverlay).toBeVisible()
+  await canvas.waitForRender()
+
+  const readOverlayPositions = () =>
+    page.evaluate((frameId) => {
+      const mermaid = document.querySelector('[data-test-id="mermaid-svg-object"]')
+      const codeObject = document.querySelector(`[data-test-id="code-object-${frameId}"]`)
+      if (!mermaid || !codeObject) throw new Error('Presentation probe overlays are unavailable')
+      const mermaidBox = mermaid.getBoundingClientRect()
+      const codeObjectBox = codeObject.getBoundingClientRect()
+      return {
+        codeObject: { x: codeObjectBox.x, y: codeObjectBox.y },
+        mermaid: { x: mermaidBox.x, y: mermaidBox.y }
+      }
+    }, codeObjectId)
+
+  const initial = await readOverlayPositions()
+  const canvasBox = await canvas.canvas.boundingBox()
+  if (!canvasBox) throw new Error('Canvas has no bounding box')
+  const start = {
+    x: canvasBox.x + canvasBox.width / 2,
+    y: canvasBox.y + canvasBox.height - 80
+  }
+  await canvas.selectTool('hand')
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+
+  const samples: Array<Awaited<ReturnType<typeof readOverlayPositions>>> = []
+  let movementDone = false
+  const movement = page.mouse
+    .move(start.x + 120, start.y - 48, { steps: 80 })
+    .finally(() => (movementDone = true))
+  while (!movementDone) {
+    samples.push(await readOverlayPositions())
+    await page.waitForTimeout(2)
+  }
+  await movement
+  await canvas.waitForRender()
+  samples.push(await readOverlayPositions())
+  await page.mouse.up()
+
+  const displacements = samples.map((sample) =>
+    Math.hypot(sample.mermaid.x - initial.mermaid.x, sample.mermaid.y - initial.mermaid.y)
+  )
+  const maximumDrift = Math.max(
+    ...samples.map((sample) => {
+      const mermaidDelta = {
+        x: sample.mermaid.x - initial.mermaid.x,
+        y: sample.mermaid.y - initial.mermaid.y
+      }
+      const codeObjectDelta = {
+        x: sample.codeObject.x - initial.codeObject.x,
+        y: sample.codeObject.y - initial.codeObject.y
+      }
+      return Math.hypot(mermaidDelta.x - codeObjectDelta.x, mermaidDelta.y - codeObjectDelta.y)
+    })
+  )
+  expect(samples.length).toBeGreaterThan(3)
+  expect(Math.max(...displacements)).toBeGreaterThan(100)
+  expect(displacements.some((distance) => distance > 1 && distance < 100)).toBe(true)
+  expect(maximumDrift).toBeLessThan(1)
 })
 
 test('selects, drags, and focuses a Mermaid SVG frame like one normal object', async ({ page }) => {

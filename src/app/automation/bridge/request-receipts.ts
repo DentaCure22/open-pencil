@@ -52,6 +52,8 @@ export type MutationRequestReservation = {
   version: 1
 }
 
+type MutationRequestLedgerEntry = MutationRequestReceipt | MutationRequestReservation
+
 type MutationRequestTombstone = {
   requestId: string
   version: 1
@@ -397,6 +399,22 @@ function boundedResult(value: unknown): unknown {
   }
 }
 
+function boundLedgerEntries(
+  entries: MutationRequestLedgerEntry[],
+  tombstones: MutationRequestTombstone[],
+  saturated: boolean
+): boolean {
+  while (entries.length >= RECEIPT_LEDGER_LIMIT) {
+    const expired = entries.shift()
+    if (expired && !tombstones.some((item) => item.requestId === expired.requestId)) {
+      tombstones.push({ requestId: expired.requestId, version: 1 })
+    }
+  }
+  if (tombstones.length <= RECEIPT_TOMBSTONE_LIMIT) return saturated
+  tombstones.splice(0, tombstones.length - RECEIPT_TOMBSTONE_LIMIT)
+  return true
+}
+
 function receiptPluginData(
   page: Pick<SceneNode, 'pluginData'>,
   receipt: MutationRequestReceipt
@@ -412,17 +430,7 @@ function receiptPluginData(
     (candidate) => candidate.requestId !== receipt.requestId
   )
   const tombstones = [...stored.ledger.tombstones]
-  while (receipts.length >= RECEIPT_LEDGER_LIMIT) {
-    const expired = receipts.shift()
-    if (expired && !tombstones.some((item) => item.requestId === expired.requestId)) {
-      tombstones.push({ requestId: expired.requestId, version: 1 })
-    }
-  }
-  let saturated = stored.ledger.saturated
-  if (tombstones.length > RECEIPT_TOMBSTONE_LIMIT) {
-    tombstones.splice(0, tombstones.length - RECEIPT_TOMBSTONE_LIMIT)
-    saturated = true
-  }
+  const saturated = boundLedgerEntries(receipts, tombstones, stored.ledger.saturated)
   const ledger: MutationRequestLedger = {
     receipts: [...receipts, receipt],
     reservations,
@@ -510,17 +518,7 @@ export function reserveMutationRequest(
   }
   const reservations = [...stored.ledger.reservations]
   const tombstones = [...stored.ledger.tombstones]
-  while (reservations.length >= RECEIPT_LEDGER_LIMIT) {
-    const expired = reservations.shift()
-    if (expired && !tombstones.some((item) => item.requestId === expired.requestId)) {
-      tombstones.push({ requestId: expired.requestId, version: 1 })
-    }
-  }
-  let saturated = stored.ledger.saturated
-  if (tombstones.length > RECEIPT_TOMBSTONE_LIMIT) {
-    tombstones.splice(0, tombstones.length - RECEIPT_TOMBSTONE_LIMIT)
-    saturated = true
-  }
+  const saturated = boundLedgerEntries(reservations, tombstones, stored.ledger.saturated)
   const ledger: MutationRequestLedger = {
     receipts: stored.ledger.receipts,
     reservations: [...reservations, reservation],

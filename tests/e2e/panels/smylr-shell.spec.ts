@@ -26,18 +26,9 @@ async function letAppReceivePointerEvents() {
 
 let selectedTestNodeId = ''
 
-test('Smylr keeps the animated dither behind working-canvas content', async () => {
-  const dither = editor.page.getByTestId('animated-dither-background')
-  const scene = editor.page.getByTestId('scene-canvas-element')
-  await expect(dither).toBeVisible()
-  await expect(dither).toHaveAttribute('data-presentation', 'overlay')
+test('Smylr uses a stable working-canvas background', async () => {
   await expect(editor.page.locator('[data-code-object-id]').first()).toBeVisible()
-  const [ditherZIndex, sceneZIndex] = await Promise.all(
-    [dither, scene].map((element) =>
-      element.evaluate((node) => Number.parseInt(getComputedStyle(node).zIndex, 10))
-    )
-  )
-  expect(ditherZIndex).toBeLessThan(sceneZIndex)
+  await expect(editor.page.getByTestId('animated-dither-background')).toHaveCount(0)
 })
 
 test('Design-mode wheel zoom works over a Code Object', async () => {

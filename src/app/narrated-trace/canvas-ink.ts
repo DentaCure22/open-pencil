@@ -5,6 +5,7 @@ import Matrix from '@open-pencil/scene-graph/matrix'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 import type { EditorStore } from '@/app/editor/active-store'
+import type { EditorPresentationViewport } from '@/app/editor/presentation'
 
 import type { NarratedTraceInk, NarratedTracePoint, NarratedTraceTarget } from './types'
 
@@ -71,6 +72,10 @@ export function isNarratedTraceCanvasInkNode(node: SceneNode | null | undefined)
   )
 }
 
+export function narratedTraceCanvasInkNodes(store: Pick<EditorStore, 'graph'>): SceneNode[] {
+  return [...store.graph.nodes.values()].filter(isNarratedTraceCanvasInkNode)
+}
+
 function canvasInkTarget(store: EditorStore, node: SceneNode): NarratedTraceTarget {
   const page = store.graph.getNode(store.state.currentPageId)
   return {
@@ -128,34 +133,34 @@ export function createNarratedTraceCanvasInk(
   return { node, target: canvasInkTarget(store, node) }
 }
 
-function screenPoint(store: EditorStore, point: Vector) {
+function screenPoint(viewport: EditorPresentationViewport, point: Vector) {
   return {
-    x: point.x * store.state.zoom + store.state.panX,
-    y: point.y * store.state.zoom + store.state.panY
+    x: point.x * viewport.zoom + viewport.panX,
+    y: point.y * viewport.zoom + viewport.panY
   }
 }
 
-function transformedPoint(store: EditorStore, matrix: number[], point: Vector) {
-  return screenPoint(store, Matrix.mapPoint(matrix, point))
+function transformedPoint(viewport: EditorPresentationViewport, matrix: number[], point: Vector) {
+  return screenPoint(viewport, Matrix.mapPoint(matrix, point))
 }
 
-function projectedPath(store: EditorStore, node: SceneNode) {
+function projectedPath(store: EditorStore, node: SceneNode, viewport: EditorPresentationViewport) {
   const network = node.vectorNetwork
   if (!network) return { path: '', points: [] }
   const matrix = getWorldMatrix(node, store.graph)
-  const points = network.vertices.map((vertex) => transformedPoint(store, matrix, vertex))
+  const points = network.vertices.map((vertex) => transformedPoint(viewport, matrix, vertex))
   const path = network.segments
     .map((segment) => {
       const start = network.vertices.at(segment.start)
       const end = network.vertices.at(segment.end)
       if (!start || !end) return ''
-      const startPoint = transformedPoint(store, matrix, start)
-      const endPoint = transformedPoint(store, matrix, end)
-      const controlStart = transformedPoint(store, matrix, {
+      const startPoint = transformedPoint(viewport, matrix, start)
+      const endPoint = transformedPoint(viewport, matrix, end)
+      const controlStart = transformedPoint(viewport, matrix, {
         x: start.x + segment.tangentStart.x,
         y: start.y + segment.tangentStart.y
       })
-      const controlEnd = transformedPoint(store, matrix, {
+      const controlEnd = transformedPoint(viewport, matrix, {
         x: end.x + segment.tangentEnd.x,
         y: end.y + segment.tangentEnd.y
       })
@@ -171,14 +176,15 @@ function projectedPath(store: EditorStore, node: SceneNode) {
 }
 
 export function narratedTraceCanvasInkProjections(
-  store: EditorStore
+  store: EditorStore,
+  viewport: EditorPresentationViewport,
+  nodes: Iterable<SceneNode>
 ): NarratedTraceCanvasInkProjection[] {
-  void store.state.renderVersion
-  return [...store.graph.nodes.values()].flatMap((node) => {
-    if (!isNarratedTraceCanvasInkNode(node) || !node.visible || !node.vectorNetwork) return []
+  return [...nodes].flatMap((node) => {
+    if (!node.visible || !node.vectorNetwork) return []
     const stroke = node.strokes.find((candidate) => candidate.visible)
     if (!stroke) return []
-    const projected = projectedPath(store, node)
+    const projected = projectedPath(store, node, viewport)
     return [
       {
         color: colorToCSS(stroke.color),
@@ -187,7 +193,7 @@ export function narratedTraceCanvasInkProjections(
         path: projected.path,
         points: projected.points,
         selected: store.state.selectedIds.has(node.id),
-        strokeWidth: stroke.weight * store.state.zoom
+        strokeWidth: stroke.weight * viewport.zoom
       }
     ]
   })

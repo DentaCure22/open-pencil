@@ -10,6 +10,7 @@ import {
   type ObjectGraphPortAnchor,
   type ObjectGraphPortDirection,
   type ObjectGraphPortSide,
+  type ResolvedObjectGraphPorts,
   type SceneGraph,
   type SceneNode,
   type Vector
@@ -205,10 +206,10 @@ function projectionMap(
   return new Map(projectedNodes.map(({ node, projection }) => [node.id, projection] as const))
 }
 
-function resolveProjectedConnectionGeometry(
+function requiredProjectedConnectionPorts(
   connection: ObjectGraphConnection,
   projections: ReadonlyMap<string, ObjectGraphNodeProjection>
-): ResolvedObjectGraphConnectionGeometry {
+): ResolvedObjectGraphPorts {
   const sourceProjection = projections.get(connection.sourceNodeId)
   const targetProjection = projections.get(connection.targetNodeId)
   if (!sourceProjection || !targetProjection) {
@@ -218,6 +219,14 @@ function resolveProjectedConnectionGeometry(
   if (!ports) {
     throw new Error(`Object Graph connection ${connection.id} has unavailable named ports`)
   }
+  return ports
+}
+
+function resolveProjectedConnectionGeometry(
+  connection: ObjectGraphConnection,
+  projections: ReadonlyMap<string, ObjectGraphNodeProjection>
+): ResolvedObjectGraphConnectionGeometry {
+  const ports = requiredProjectedConnectionPorts(connection, projections)
   const sourceAnchor = ports.source.anchor
   const targetAnchor = ports.target.anchor
   const [path, labelX, labelY] = getBezierPath({
@@ -255,15 +264,7 @@ function toReactFlowEdge(
   if (!sourceNode || !targetNode) {
     throw new Error(`Object Graph connection ${connection.id} has unavailable endpoints`)
   }
-  const sourceProjection = projections.get(connection.sourceNodeId)
-  const targetProjection = projections.get(connection.targetNodeId)
-  if (!sourceProjection || !targetProjection) {
-    throw new Error(`Object Graph connection ${connection.id} has unavailable endpoints`)
-  }
-  const ports = resolveProjectedObjectGraphPorts(connection, sourceProjection, targetProjection)
-  if (!ports) {
-    throw new Error(`Object Graph connection ${connection.id} has unavailable named ports`)
-  }
+  const ports = requiredProjectedConnectionPorts(connection, projections)
   return {
     ariaLabel: `${connection.kind} connection from ${sourceNode.name} to ${targetNode.name}`,
     deletable: true,
@@ -444,6 +445,25 @@ export function reconcileObjectGraphNodes(
     }
   })
   return changed ? reconciled : current
+}
+
+export function reconcileObjectGraphNodeHandles(
+  current: ObjectGraphReactNode[],
+  hoveredNodeId: string | null,
+  selectedIds: ReadonlySet<string>
+): ObjectGraphReactNode[] {
+  let reconciled = current
+  for (let index = 0; index < current.length; index += 1) {
+    const node = current[index]
+    const showHandles = node.id === hoveredNodeId || selectedIds.has(node.id)
+    if (node.data.showHandles === showHandles) continue
+    if (reconciled === current) reconciled = [...current]
+    reconciled[index] = {
+      ...node,
+      data: { ...node.data, showHandles }
+    }
+  }
+  return reconciled
 }
 
 export function reconcileObjectGraphEdges(

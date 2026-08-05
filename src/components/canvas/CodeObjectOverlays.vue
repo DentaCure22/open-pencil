@@ -2,18 +2,22 @@
 import { useEventListener, useTimeoutFn } from '@vueuse/core'
 import { computed, onMounted, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue'
 
+import {
+  DOUBLE_CLICK_FOCUS_MAX_ZOOM,
+  DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER
+} from '@open-pencil/core/constants'
 import { readContentSource } from '@open-pencil/core/io'
 import { objectGraphEndpointVisualScale, type SceneNode } from '@open-pencil/scene-graph'
 import { assetHashFromReference } from '@open-pencil/scene-graph/images'
 import {
   applyMoveSnap,
   cancelEditorPresentationFrame,
-  scheduleEditorPresentationFrame,
-  type EditorPresentationFrame
+  scheduleEditorPresentationFrame
 } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
 import { forwardFrameSurfaceWheel } from '@/app/editor/canvas/embedded-surface-wheel'
+import { useEditorPresentationViewport } from '@/app/editor/presentation'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import {
   codeObjectDocument,
@@ -55,7 +59,6 @@ import {
   codeObjectRotationHandles,
   codeObjectScreenOverlayStyle,
   createCodeObjectTransformController,
-  type CodeObjectPresentationViewport,
   type CodeObjectViewportPresetId
 } from '@/app/code-object/transform'
 import {
@@ -87,11 +90,7 @@ const modeByFrame = ref<Record<string, CodeObjectInteractionMode>>({})
 const moveDrag = ref<CodeObjectMoveDrag | null>(null)
 const pendingSmylrInteractionFrameId = ref<string | null>(null)
 const smylrClickCandidateFrameId = ref<string | null>(null)
-const presentationViewport = ref<CodeObjectPresentationViewport>({
-  panX: store.state.panX,
-  panY: store.state.panY,
-  zoom: store.state.zoom
-})
+const presentationViewport = useEditorPresentationViewport(store)
 let unsubscribe: Array<() => void> = []
 let unsubscribePortInvalidation: (() => void) | null = null
 let inspectorNotificationFrame: number | null = null
@@ -115,6 +114,10 @@ const shapes = computed(() => {
   void syncTick.value
   void store.state.currentPageId
   return codeObjectFramesForOverlay(store.graph, store.state.currentPageId)
+})
+const documentByFrameId = computed(() => {
+  void store.state.sceneVersion
+  return new Map(shapes.value.map((frame) => [frame.id, codeObjectDocument(frame)]))
 })
 
 const frameTransform = createCodeObjectTransformController(store, scheduleSync)
@@ -155,18 +158,12 @@ function sync() {
   syncTick.value += 1
 }
 
-function syncPresentationFrame(presentation: EditorPresentationFrame) {
+function syncPresentationFrame() {
   const pendingFrameIds = [...pendingPortPresentationFrameIds]
   pendingPortPresentationFrameIds.clear()
   for (const frameId of pendingFrameIds) {
     if (isRuntimeActive(frameId)) refreshCodeObjectRuntimePortPresentation(frameId)
   }
-  presentationViewport.value = {
-    panX: presentation.viewport.x,
-    panY: presentation.viewport.y,
-    zoom: presentation.viewport.zoom
-  }
-  sync()
 }
 
 function scheduleSync() {
@@ -198,11 +195,15 @@ function modeFor(frameId: string): CodeObjectInteractionMode {
 }
 
 function isSmylrProductionFrame(frame: SceneNode) {
-  return isSmylrProductionAppCodeObjectFrame(frame)
+  return documentFor(frame)?.component === 'smylr-production-app'
+}
+
+function documentFor(frame: SceneNode) {
+  return documentByFrameId.value.get(frame.id) ?? null
 }
 
 function smylrProductionRoute(frame: SceneNode) {
-  const document = codeObjectDocument(frame)
+  const document = documentFor(frame)
   return document?.component === 'smylr-production-app' ? document.route : '/'
 }
 
@@ -216,7 +217,7 @@ function isRuntimeActive(frameId: string) {
 }
 
 function codeObjectTitle(frame: SceneNode) {
-  return codeObjectDocument(frame)?.name ?? frame.name
+  return documentFor(frame)?.name ?? frame.name
 }
 
 function isSmylrContainerMode(frame: SceneNode) {
@@ -463,7 +464,10 @@ function scheduleSmylrInteraction(frameId: string) {
 
 function enterSurfaceInteraction(frame: SceneNode) {
   cancelPendingSmylrInteraction()
-  store.zoomToNode(frame.id, editorViewportInsets())
+  store.zoomToNode(frame.id, editorViewportInsets(), {
+    maxZoom: DOUBLE_CLICK_FOCUS_MAX_ZOOM,
+    zoomMultiplier: DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER
+  })
   if (isSmylrProductionFrame(frame)) {
     activateSmylrMode(frame.id, 'interact')
     return
@@ -691,7 +695,7 @@ onUnmounted(() => {
     >
       <SmylrTrustedWebApp
         v-if="
-          codeObjectDocument(frame)?.component === 'smylr-production-app' &&
+          isSmylrProductionFrame(frame) &&
           isRuntimeActive(frame.id) &&
           isSmylrRuntimeResident(frame.id)
         "
@@ -704,7 +708,7 @@ onUnmounted(() => {
         @interaction-start="activatePassiveSmylrFrame(frame.id)"
       />
       <div
-        v-else-if="codeObjectDocument(frame)?.component === 'smylr-production-app'"
+        v-else-if="isSmylrProductionFrame(frame)"
         class="flex size-full items-center justify-center bg-neutral-950 text-xs text-neutral-400"
         data-test-id="smylr-trusted-web-app-paused"
       >

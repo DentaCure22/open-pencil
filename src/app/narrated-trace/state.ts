@@ -129,6 +129,18 @@ function updateContextEntry(
   })
 }
 
+function updateNarratedTraceEvent(
+  eventId: string,
+  update: (event: NarratedTraceEvent) => NarratedTraceEvent
+): void {
+  const session = narratedTraceSession.value
+  if (!session || !session.events.some((event) => event.id === eventId)) return
+  replaceSession({
+    ...session,
+    events: session.events.map((event) => (event.id === eventId ? update(event) : event))
+  })
+}
+
 export function beginNarratedTraceSession(scope?: NarratedTraceScope) {
   stopClock()
   coalescedEvents.clear()
@@ -242,25 +254,15 @@ export function setNarratedTraceInterimText(text: string) {
 }
 
 export function attachNarratedTraceEvidence(eventId: string, evidence: NarratedTraceEvidence) {
-  const session = narratedTraceSession.value
-  if (!session || !session.events.some((event) => event.id === eventId)) return
-  replaceSession({
-    ...session,
-    events: session.events.map((event) =>
-      event.id === eventId ? { ...event, evidence, evidenceStatus: 'ready' } : event
-    )
-  })
+  updateNarratedTraceEvent(eventId, (event) => ({
+    ...event,
+    evidence,
+    evidenceStatus: 'ready'
+  }))
 }
 
 export function markNarratedTraceEvidenceFailed(eventId: string) {
-  const session = narratedTraceSession.value
-  if (!session || !session.events.some((event) => event.id === eventId)) return
-  replaceSession({
-    ...session,
-    events: session.events.map((event) =>
-      event.id === eventId ? { ...event, evidenceStatus: 'failed' } : event
-    )
-  })
+  updateNarratedTraceEvent(eventId, (event) => ({ ...event, evidenceStatus: 'failed' }))
 }
 
 export function setNarratedTraceEventIncluded(eventId: string, included: boolean) {

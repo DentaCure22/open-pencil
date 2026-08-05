@@ -8,6 +8,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { codeObjectCanvasStyle } from '@/app/code-object/transform'
 import { useEditorStore } from '@/app/editor/active-store'
+import { useEditorPresentationViewport } from '@/app/editor/presentation'
 import {
   markdownDocument,
   updateMarkdownDocumentSource,
@@ -15,6 +16,7 @@ import {
 } from '@/app/markdown-document'
 
 const store = useEditorStore()
+const presentationViewport = useEditorPresentationViewport(store)
 const editingId = ref<string | null>(null)
 const draft = ref('')
 const editorRef = templateRef('editorRef')
@@ -36,12 +38,15 @@ watch(
 )
 
 function canvasStyle(node: SceneNode) {
-  void store.state.renderVersion
-  return codeObjectCanvasStyle(store, node)
+  return codeObjectCanvasStyle(store, node, presentationViewport.value)
 }
 
 function isSelected(nodeId: string) {
   return store.state.selectedIds.has(nodeId)
+}
+
+function isReading(nodeId: string) {
+  return store.state.enteredContainerId === nodeId
 }
 
 function isEditing(nodeId: string) {
@@ -74,13 +79,12 @@ function saveEditing(document: MarkdownDocument) {
       v-for="document in documents"
       :key="document.node.id"
       :data-markdown-document-id="document.node.id"
+      :data-markdown-document-mode="isReading(document.node.id) ? 'read' : 'design'"
       :style="canvasStyle(document.node)"
-      class="absolute top-0 left-0 flex flex-col overflow-hidden bg-[#fcfbf7] text-[#242521] shadow-sm"
+      class="absolute top-0 left-0 flex flex-col overflow-hidden bg-white text-[#242521] shadow-sm"
       data-test-id="markdown-document"
     >
-      <header
-        class="flex h-11 shrink-0 items-center gap-2 border-b border-[#d9d6ce] bg-[#f3f1ea] px-4"
-      >
+      <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[#d9d6ce] bg-white px-4">
         <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ document.node.name }}</span>
         <span class="text-[10px] tracking-wide text-[#6d6b64] uppercase">
           {{ document.sourceMode === 'plain-text' ? 'Text' : document.sourceMode }}
@@ -120,7 +124,7 @@ function saveEditing(document: MarkdownDocument) {
         ref="editorRef"
         v-model="draft"
         :aria-label="`Edit ${document.node.name}`"
-        class="pointer-events-auto min-h-0 flex-1 resize-none bg-[#fcfbf7] p-8 font-mono text-[15px] leading-6 outline-none"
+        class="pointer-events-auto min-h-0 flex-1 resize-none bg-white p-8 font-mono text-[15px] leading-6 outline-none"
         data-test-id="markdown-document-source-editor"
         spellcheck="true"
         @keydown.stop
@@ -129,14 +133,32 @@ function saveEditing(document: MarkdownDocument) {
       />
       <pre
         v-else-if="document.sourceMode === 'plain-text'"
-        class="min-h-0 flex-1 overflow-hidden p-10 font-mono text-[15px] leading-6 whitespace-pre-wrap"
+        :class="
+          isReading(document.node.id)
+            ? 'pointer-events-auto overflow-y-auto'
+            : 'pointer-events-none overflow-hidden'
+        "
+        :tabindex="isReading(document.node.id) ? 0 : -1"
+        :aria-label="`${document.node.name} reading surface`"
+        class="min-h-0 flex-1 p-10 font-mono text-[15px] leading-6 whitespace-pre-wrap"
+        data-test-id="markdown-document-preview"
+        @wheel.stop
         >{{ document.metadata.source }}</pre
       >
       <Markdown
         v-else
         :content="document.metadata.source"
         :mermaid="false"
-        class="markdown-document-preview min-h-0 flex-1 overflow-hidden px-12 py-10"
+        :class="
+          isReading(document.node.id)
+            ? 'pointer-events-auto overflow-y-auto'
+            : 'pointer-events-none overflow-hidden'
+        "
+        :tabindex="isReading(document.node.id) ? 0 : -1"
+        :aria-label="`${document.node.name} reading surface`"
+        class="markdown-document-preview min-h-0 flex-1 px-12 py-10"
+        data-test-id="markdown-document-preview"
+        @wheel.stop
       />
 
       <div
@@ -161,7 +183,7 @@ function saveEditing(document: MarkdownDocument) {
 
 <style scoped>
 .markdown-document-preview {
-  --background: #fcfbf7;
+  --background: #ffffff;
   --border: #d9d6ce;
   --foreground: #242521;
   --muted: #f3f1ea;

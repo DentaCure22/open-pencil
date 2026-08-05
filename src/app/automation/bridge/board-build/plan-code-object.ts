@@ -34,7 +34,8 @@ import {
   codeObjectDocument,
   createCodeObject,
   createSmylrProductionAppDocument,
-  createUserCodeObjectDocument
+  createUserCodeObjectDocument,
+  type CodeObjectDocument
 } from '@/app/code-object/model'
 
 import type { BoardBuildPlanInput } from './types'
@@ -53,6 +54,22 @@ export type PlanCodeObjectResult = {
   owner: SceneNode
   readback: Record<string, unknown>
   receipt: Record<string, unknown>
+}
+
+function createPlacedCodeObject(
+  target: AutomationTarget,
+  document: CodeObjectDocument,
+  name: string,
+  placement: BoardPlacementResult
+): SceneNode {
+  return createCodeObject(target.store, {
+    document,
+    height: placement.bounds.height,
+    name,
+    width: placement.bounds.width,
+    x: placement.bounds.x,
+    y: placement.bounds.y
+  })
 }
 
 function existingCodeObjectByKey(target: AutomationTarget, objectKey: string): SceneNode | null {
@@ -259,14 +276,7 @@ export function createPlanCodeObject(
       throw new Error(`Trusted web app "${document.definitionId}" appeared before plan apply.`)
     }
     const placement = codeObjectPlacement(target, artifact, recipe, aliases, convergenceSources)
-    const owner = createCodeObject(target.store, {
-      document,
-      height: placement.bounds.height,
-      name: recipe.name,
-      width: placement.bounds.width,
-      x: placement.bounds.x,
-      y: placement.bounds.y
-    })
+    const owner = createPlacedCodeObject(target, document, recipe.name, placement)
     const current = codeObjectDocument(owner)
     if (
       current?.component !== 'smylr-production-app' ||
@@ -309,14 +319,7 @@ export function createPlanCodeObject(
     source: recipe.source,
     state: recipe.initial_state ?? {}
   })
-  const owner = createCodeObject(target.store, {
-    document,
-    height: placement.bounds.height,
-    name: recipe.name,
-    width: placement.bounds.width,
-    x: placement.bounds.x,
-    y: placement.bounds.y
-  })
+  const owner = createPlacedCodeObject(target, document, recipe.name, placement)
   if (recipe.ports && !setObjectGraphPorts(target.store.graph, owner.id, recipe.ports)) {
     throw new Error(`Plan Code Object "${artifact.alias}" failed to persist named ports.`)
   }

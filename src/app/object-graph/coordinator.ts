@@ -70,7 +70,6 @@ export function createObjectGraphCoordinator(
     editor.onEditorEvent('graph:replaced', () => publish(true)),
     editor.onEditorEvent('page:changed', () => publish(true)),
     editor.onEditorEvent('selection:changed', () => publish(false)),
-    editor.onEditorEvent('hover:changed', () => publish(false)),
     editor.onEditorEvent('node:created', (node) => {
       if (isObjectGraphConnectionNode(node)) publish(true)
       else publish(false)
