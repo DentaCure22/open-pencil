@@ -1,6 +1,7 @@
 import { ConnectorRequestError } from '@/app/connectors'
 import type {
   ConnectorEvidenceRequest,
+  OpenPencilConnector,
   ConnectorRegistry,
   ConnectorTransportEvidence
 } from '@/app/connectors'
@@ -11,46 +12,13 @@ import {
   type EvidenceProviderRun
 } from '@/app/workspace'
 
+import { evidenceIdPart, redactedEvidenceItem, uniqueEvidenceScopes } from './manifest'
 import { collectEvidence } from './service'
 import type { CollectEvidenceInput, EvidenceIntakeResult } from './types'
 
 export type CollectEvidenceWithConnectorsInput = CollectEvidenceInput & {
   connectorRequests: ConnectorEvidenceRequest[]
   connectorRegistry: ConnectorRegistry
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))].sort()
-}
-
-function stablePart(value: string): string {
-  const result = value
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  if (!result) throw new WorkspaceDomainError('validation_failed', 'evidence id is required')
-  return result.slice(0, 100)
-}
-
-function redactedConnectorItem(input: {
-  id: string
-  providerRunId: string
-  requestedScopes: string[]
-  retrievedAt: string
-}): EvidenceManifestItem {
-  return {
-    access: 'redacted',
-    facts: {},
-    freshness: 'unknown',
-    id: input.id,
-    permissionScopes: input.requestedScopes,
-    providerRunId: input.providerRunId,
-    retrievedAt: input.retrievedAt,
-    sourceRef: `redacted://${stablePart(input.id)}`,
-    summary: '',
-    title: 'Evidence unavailable',
-    truthScope: 'derived'
-  }
 }
 
 function connectorFailure(error: unknown): {
@@ -68,6 +36,10 @@ function connectorFailure(error: unknown): {
     }
   }
   return { attemptCount: 1, errorCode: 'unknown' }
+}
+
+function connectorEvidenceReader(connector: OpenPencilConnector) {
+  return connector.readEvidence?.bind(connector)
 }
 
 export async function collectEvidenceWithConnectors(
@@ -90,17 +62,17 @@ export async function collectEvidenceWithConnectors(
   for (const request of input.connectorRequests) {
     const connector = input.connectorRegistry.require(request.connectorId)
     const descriptor = connector.descriptor
-    const requestedScopes = unique([
+    const requestedScopes = uniqueEvidenceScopes([
       ...descriptor.evidenceReadScopes,
       ...(request.requiredScopes ?? [])
     ])
     const grantedScopes = requestedScopes.filter((scope) => input.grant.scopes.includes(scope))
-    const providerRunId = `evidence-provider-run_${stablePart(input.collectionId)}-${stablePart(request.id)}`
+    const providerRunId = `evidence-provider-run_${evidenceIdPart(input.collectionId)}-${evidenceIdPart(request.id)}`
     const missingScope = grantedScopes.length !== requestedScopes.length
-    const readEvidence = connector.readEvidence
+    const readEvidence = connectorEvidenceReader(connector)
     const unsupported = !descriptor.capabilities.evidenceRead || !readEvidence
     if (missingScope || unsupported) {
-      const item = redactedConnectorItem({
+      const item = redactedEvidenceItem({
         id: request.id,
         providerRunId,
         requestedScopes,
@@ -159,7 +131,7 @@ export async function collectEvidenceWithConnectors(
         truthScope: result.truthScope
       }
     } catch (error) {
-      item = redactedConnectorItem({
+      item = redactedEvidenceItem({
         id: request.id,
         providerRunId,
         requestedScopes,

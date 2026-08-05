@@ -10,12 +10,13 @@ import {
   type WorkspaceObject
 } from '@/app/workspace'
 
+import { evidenceIdPart, redactedEvidenceItem, uniqueEvidenceScopes } from './manifest'
 import type {
   CapturedEvidenceRequest,
+  CodeObjectFrameEvidenceRequest,
   CollectEvidenceInput,
   EvidenceIntakeResult,
-  EvidenceSourceRequest,
-  CodeObjectFrameEvidenceRequest
+  EvidenceSourceRequest
 } from './types'
 
 const PROVIDERS: Record<
@@ -68,21 +69,11 @@ const PROVIDERS: Record<
   }
 }
 
-function stablePart(value: string): string {
-  const result = value
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  if (!result) throw new WorkspaceDomainError('validation_failed', 'evidence id is required')
-  return result.slice(0, 100)
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))].sort()
-}
-
 function requiredScopes(request: EvidenceSourceRequest): string[] {
-  return unique([PROVIDERS[request.kind].requiredScope, ...(request.requiredScopes ?? [])])
+  return uniqueEvidenceScopes([
+    PROVIDERS[request.kind].requiredScope,
+    ...(request.requiredScopes ?? [])
+  ])
 }
 
 function grantedScopes(required: string[], grant: CollectEvidenceInput['grant']): string[] {
@@ -99,27 +90,6 @@ function freshnessFor(input: {
   if (input.freshness) return input.freshness
   if (input.staleAt && Date.parse(input.staleAt) <= Date.parse(input.now)) return 'stale'
   return input.observedAt ? 'current' : 'unknown'
-}
-
-function redactedItem(input: {
-  id: string
-  providerRunId: string
-  requestedScopes: string[]
-  retrievedAt: string
-}): EvidenceManifestItem {
-  return {
-    access: 'redacted',
-    facts: {},
-    freshness: 'unknown',
-    id: input.id,
-    permissionScopes: input.requestedScopes,
-    providerRunId: input.providerRunId,
-    retrievedAt: input.retrievedAt,
-    sourceRef: `redacted://${stablePart(input.id)}`,
-    summary: '',
-    title: 'Evidence unavailable',
-    truthScope: 'derived'
-  }
 }
 
 function collectedRun(input: {
@@ -196,7 +166,7 @@ function resolveCodeObjectFrameRequest(
   const document = codeObjectDocument(frame)
   if (!frame || !isCodeObjectFrame(frame) || !document) {
     return {
-      item: redactedItem({
+      item: redactedEvidenceItem({
         id: request.id,
         providerRunId,
         requestedScopes: scopes,
@@ -251,7 +221,7 @@ function resolveAllowedRequest(
     const object = input.workspace?.objects[request.objectId]
     if (!object || object.revision !== request.revision || !object.permissions.canView) {
       return {
-        item: redactedItem({
+        item: redactedEvidenceItem({
           id: request.id,
           providerRunId,
           requestedScopes: scopes,
@@ -300,9 +270,9 @@ export function collectEvidence(input: CollectEvidenceInput): EvidenceIntakeResu
   for (const request of input.requests) {
     const requested = requiredScopes(request)
     const granted = grantedScopes(requested, input.grant)
-    const providerRunId = `evidence-provider-run_${stablePart(input.collectionId)}-${stablePart(request.id)}`
+    const providerRunId = `evidence-provider-run_${evidenceIdPart(input.collectionId)}-${evidenceIdPart(request.id)}`
     if (granted.length !== requested.length) {
-      const item = redactedItem({
+      const item = redactedEvidenceItem({
         id: request.id,
         providerRunId,
         requestedScopes: requested,
@@ -345,8 +315,8 @@ export function collectEvidence(input: CollectEvidenceInput): EvidenceIntakeResu
   const receipt = {
     actorId: input.grant.actorId,
     completedAt: retrievedAt,
-    grantedScopes: unique(input.grant.scopes),
-    id: `evidence-collection_${stablePart(input.collectionId)}`,
+    grantedScopes: uniqueEvidenceScopes(input.grant.scopes),
+    id: `evidence-collection_${evidenceIdPart(input.collectionId)}`,
     providerRuns,
     requestedAt: input.grant.issuedAt
   }

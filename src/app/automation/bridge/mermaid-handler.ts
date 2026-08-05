@@ -7,7 +7,8 @@ import { requestNodes } from '@/app/automation/bridge/board-tools/native/text'
 import {
   coalesceAutomationMutationRequest,
   enqueueAutomationMutation,
-  type AutomationMutationMetadata
+  type AutomationMutationMetadata,
+  type AutomationMutationOutcome
 } from '@/app/automation/bridge/mutation-queue'
 import {
   assertMutationRequestIdFresh,
@@ -517,60 +518,73 @@ function assertNoCrossRouteNativeReceipt(target: AutomationTarget, requestId: st
   }
 }
 
-async function applyDurableMermaidNoChange(
+function assertFreshMermaidRequest(target: AutomationTarget, intent: DurableMermaidIntent): void {
+  assertMutationRequestIdFresh(target, intent.requestId)
+  assertNoCrossRouteNativeReceipt(target, intent.requestId)
+}
+
+function reserveDurableMermaidRequest(
+  target: AutomationTarget,
+  intent: DurableMermaidIntent
+): void {
+  reserveMutationRequest(target, {
+    inputDigest: intent.inputDigest,
+    requestId: intent.requestId,
+    route: intent.route,
+    version: 1
+  })
+}
+
+function recordAppliedMermaidReceipt(
+  target: AutomationTarget,
+  intent: DurableMermaidIntent,
+  objectId: string,
+  result: Record<string, unknown>,
+  touchedProperties: string[]
+): void {
+  recordMutationRequestReceipt(target, {
+    inputDigest: intent.inputDigest,
+    mutationReceipt: {
+      appliedRevision: target.store.state.sceneVersion + 1,
+      enqueuedRevision: intent.expectedRevision,
+      expectedRevision: intent.expectedRevision,
+      requestId: intent.requestId,
+      status: 'applied',
+      touchedProperties,
+      ...(intent.taskId ? { taskId: intent.taskId } : {}),
+      ...(intent.traceId ? { traceId: intent.traceId } : {})
+    },
+    objectIds: [objectId],
+    requestId: intent.requestId,
+    result,
+    route: intent.route,
+    semanticIds: [],
+    ...(intent.taskId ? { taskId: intent.taskId } : {}),
+    ...(intent.traceId ? { traceId: intent.traceId } : {}),
+    version: 1
+  })
+}
+
+function enqueueDurableMermaidMutation<T>(
   target: AutomationTarget,
   args: InsertMermaidArgs,
   intent: DurableMermaidIntent,
-  options: MermaidHandlerOptions
-): Promise<unknown> {
-  const outcome = await enqueueAutomationMutation({
+  run: () => Promise<T> | T
+): Promise<AutomationMutationOutcome<T>> {
+  return enqueueAutomationMutation({
     metadata: intent.metadata,
     target,
     toolArgs: { id: args.owner_id ?? target.pageId, source: args.source },
     toolName: MERMAID_MUTATION_ROUTE,
-    run: async () => {
-      assertMutationRequestIdFresh(target, intent.requestId)
-      assertNoCrossRouteNativeReceipt(target, intent.requestId)
-      const current = exactCurrentOwner(target, args)
-      if (!current) {
-        throw new Error(
-          'The Mermaid owner changed before the no-change receipt could be stored. Reacquire Board context.'
-        )
-      }
-      reserveMutationRequest(target, {
-        inputDigest: intent.inputDigest,
-        requestId: intent.requestId,
-        route: intent.route,
-        version: 1
-      })
-      const receiptBarrier = options.beforeMutationReceiptStorage?.()
-      if (receiptBarrier) await receiptBarrier
-      const value = noChangeValue(current.board, current.readback)
-      recordMutationRequestReceipt(target, {
-        inputDigest: intent.inputDigest,
-        mutationReceipt: {
-          appliedRevision: target.store.state.sceneVersion + 1,
-          enqueuedRevision: intent.expectedRevision,
-          expectedRevision: intent.expectedRevision,
-          requestId: intent.requestId,
-          status: 'applied',
-          touchedProperties: [],
-          ...(intent.taskId ? { taskId: intent.taskId } : {}),
-          ...(intent.traceId ? { traceId: intent.traceId } : {})
-        },
-        objectIds: [current.readback.owner_id],
-        requestId: intent.requestId,
-        result: value,
-        route: intent.route,
-        semanticIds: [],
-        ...(intent.taskId ? { taskId: intent.taskId } : {}),
-        ...(intent.traceId ? { traceId: intent.traceId } : {}),
-        version: 1
-      })
-      return value
-    }
+    run
   })
+}
 
+function durableMermaidOutcome(
+  outcome: AutomationMutationOutcome<Record<string, unknown>>,
+  intent: DurableMermaidIntent,
+  receiptFields: Record<string, unknown> = {}
+): Record<string, unknown> {
   if (outcome.status === 'rejected') {
     return {
       ok: true,
@@ -583,11 +597,38 @@ async function applyDurableMermaidNoChange(
       ...outcome.receipt,
       idempotentReplay: false,
       inputDigest: intent.inputDigest,
-      outcome: 'no_change',
-      status: 'no_change',
-      touchedProperties: []
+      ...receiptFields
     })
   }
+}
+
+async function applyDurableMermaidNoChange(
+  target: AutomationTarget,
+  args: InsertMermaidArgs,
+  intent: DurableMermaidIntent,
+  options: MermaidHandlerOptions
+): Promise<unknown> {
+  const outcome = await enqueueDurableMermaidMutation(target, args, intent, async () => {
+    assertFreshMermaidRequest(target, intent)
+    const current = exactCurrentOwner(target, args)
+    if (!current) {
+      throw new Error(
+        'The Mermaid owner changed before the no-change receipt could be stored. Reacquire Board context.'
+      )
+    }
+    reserveDurableMermaidRequest(target, intent)
+    const receiptBarrier = options.beforeMutationReceiptStorage?.()
+    if (receiptBarrier) await receiptBarrier
+    const value = noChangeValue(current.board, current.readback)
+    recordAppliedMermaidReceipt(target, intent, current.readback.owner_id, value, [])
+    return value
+  })
+
+  return durableMermaidOutcome(outcome, intent, {
+    outcome: 'no_change',
+    status: 'no_change',
+    touchedProperties: []
+  })
 }
 
 async function applyDurableMermaidMutation(
@@ -597,106 +638,57 @@ async function applyDurableMermaidMutation(
   intent: DurableMermaidIntent,
   options: MermaidHandlerOptions
 ): Promise<unknown> {
-  const outcome = await enqueueAutomationMutation({
-    metadata: intent.metadata,
-    target,
-    toolArgs: {
-      id: args.owner_id ?? target.pageId,
-      source: args.source
-    },
-    toolName: MERMAID_MUTATION_ROUTE,
-    run: async () => {
-      assertMutationRequestIdFresh(target, intent.requestId)
-      assertNoCrossRouteNativeReceipt(target, intent.requestId)
-      reserveMutationRequest(target, {
-        inputDigest: intent.inputDigest,
-        requestId: intent.requestId,
-        route: intent.route,
-        version: 1
-      })
-      const board: ResolvedMermaidBoard = {
-        boardName: target.pageName,
-        pageId: target.pageId
+  const outcome = await enqueueDurableMermaidMutation(target, args, intent, async () => {
+    assertFreshMermaidRequest(target, intent)
+    reserveDurableMermaidRequest(target, intent)
+    const board: ResolvedMermaidBoard = {
+      boardName: target.pageName,
+      pageId: target.pageId
+    }
+    const anchorBounds = args.anchor_id ? selectedAnchorBounds(target, args.anchor_id) : undefined
+    const historyLabel = args.owner_id ? 'Update Mermaid diagram' : 'Insert Mermaid diagram'
+    target.store.undo.beginBatch(historyLabel)
+    let applied: ReturnType<typeof applyResolvedMermaidMutation>
+    try {
+      applied = applyResolvedMermaidMutation(target, args, diagram, board, anchorBounds)
+      const receiptBarrier = options.beforeMutationReceiptStorage?.()
+      if (receiptBarrier) await receiptBarrier
+      const readback = applied.value.readback
+      if (!isUnknownRecord(readback) || typeof readback.owner_id !== 'string') {
+        throw new Error('Mermaid mutation readback did not report its semantic owner.')
       }
-      const anchorBounds = args.anchor_id ? selectedAnchorBounds(target, args.anchor_id) : undefined
-      const historyLabel = args.owner_id ? 'Update Mermaid diagram' : 'Insert Mermaid diagram'
-      target.store.undo.beginBatch(historyLabel)
-      let applied: ReturnType<typeof applyResolvedMermaidMutation>
-      try {
-        applied = applyResolvedMermaidMutation(target, args, diagram, board, anchorBounds)
-        const receiptBarrier = options.beforeMutationReceiptStorage?.()
-        if (receiptBarrier) await receiptBarrier
-        const readback = applied.value.readback
-        if (!isUnknownRecord(readback) || typeof readback.owner_id !== 'string') {
-          throw new Error('Mermaid mutation readback did not report its semantic owner.')
-        }
-        recordMutationRequestReceipt(target, {
-          inputDigest: intent.inputDigest,
-          mutationReceipt: {
-            appliedRevision: target.store.state.sceneVersion + 1,
-            enqueuedRevision: intent.expectedRevision,
-            expectedRevision: intent.expectedRevision,
-            requestId: intent.requestId,
-            status: 'applied',
-            touchedProperties: [`${target.pageId}:*`],
-            ...(intent.taskId ? { taskId: intent.taskId } : {}),
-            ...(intent.traceId ? { traceId: intent.traceId } : {})
-          },
-          objectIds: [readback.owner_id],
-          requestId: intent.requestId,
-          result: applied.value,
-          route: intent.route,
-          semanticIds: [],
-          ...(intent.taskId ? { taskId: intent.taskId } : {}),
-          ...(intent.traceId ? { traceId: intent.traceId } : {}),
-          version: 1
-        })
-        target.store.undo.commitBatch()
-      } catch (error) {
-        target.store.undo.rollbackBatch()
-        throw error
-      }
-      try {
-        await (options.finishMutation ?? finishMermaidMutation)(target, args, applied.nodeIds)
-        return applied.value
-      } catch (error) {
-        return {
-          ...applied.value,
-          applied: true,
-          next_action: sameRequestVerifyAction(intent),
-          proof: {
-            error: errorMessage(error),
-            stage: 'finish',
-            status: 'error'
-          },
-          status: {
-            attention_required: true,
-            command: 'unavailable',
-            mutation: 'applied',
-            reason: 'post_apply_finish_failed'
-          }
+      recordAppliedMermaidReceipt(target, intent, readback.owner_id, applied.value, [
+        `${target.pageId}:*`
+      ])
+      target.store.undo.commitBatch()
+    } catch (error) {
+      target.store.undo.rollbackBatch()
+      throw error
+    }
+    try {
+      await (options.finishMutation ?? finishMermaidMutation)(target, args, applied.nodeIds)
+      return applied.value
+    } catch (error) {
+      return {
+        ...applied.value,
+        applied: true,
+        next_action: sameRequestVerifyAction(intent),
+        proof: {
+          error: errorMessage(error),
+          stage: 'finish',
+          status: 'error'
+        },
+        status: {
+          attention_required: true,
+          command: 'unavailable',
+          mutation: 'applied',
+          reason: 'post_apply_finish_failed'
         }
       }
     }
   })
 
-  if (outcome.status === 'rejected') {
-    return {
-      ok: true,
-      result: {
-        applied: false,
-        mutation_receipt: outcome.receipt
-      }
-    }
-  }
-  return {
-    ok: true,
-    result: resultWithReceipt(outcome.value, {
-      ...outcome.receipt,
-      idempotentReplay: false,
-      inputDigest: intent.inputDigest
-    })
-  }
+  return durableMermaidOutcome(outcome, intent)
 }
 
 export function createAutomationMermaidHandler(

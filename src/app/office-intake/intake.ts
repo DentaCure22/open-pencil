@@ -1,17 +1,8 @@
 import { strFromU8, unzipSync } from 'fflate'
 
 import type { Editor } from '@open-pencil/core/editor'
-import {
-  CONTENT_SOURCE_REVISION,
-  contentSourcePluginData,
-  readContentSource
-} from '@open-pencil/core/io'
-import type { SceneNode } from '@open-pencil/scene-graph'
-import {
-  assetHashFromReference,
-  assetReference,
-  computeImageHash
-} from '@open-pencil/scene-graph/images'
+import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
+import { assetReference, computeImageHash } from '@open-pencil/scene-graph/images'
 
 import {
   codeObjectPluginData,
@@ -19,6 +10,12 @@ import {
   createOfficeSpreadsheetDocument,
   type OfficeSpreadsheetCell
 } from '@/app/code-object/model'
+import {
+  captureAssetBackedSurface,
+  placeAssetBackedFiles,
+  type AssetBackedFilePlacementResult,
+  type CreatedAssetBackedSurface
+} from '@/app/file-intake/asset-backed-placement'
 
 const DOCUMENT_WIDTH = 760
 const DOCUMENT_HEIGHT = 900
@@ -34,13 +31,6 @@ type OfficeKind = 'document' | 'spreadsheet'
 type ParsedOfficeSource =
   | { kind: 'document'; text: string }
   | { cells: OfficeSpreadsheetCell[][]; kind: 'spreadsheet' }
-
-type CreatedOfficeSurface = {
-  assetHash: string
-  bytes: Uint8Array
-  root: SceneNode
-  snapshots: SceneNode[]
-}
 
 function decodeXmlText(value: string) {
   return value
@@ -184,33 +174,13 @@ function parseOfficeSource(
   throw new Error('Unsupported Office file')
 }
 
-function assetIsReferenced(editor: Editor, hash: string): boolean {
-  for (const node of editor.graph.getAllNodes()) {
-    const source = readContentSource(node)
-    if (source && assetHashFromReference(source.source) === hash) return true
-    if (node.fills.some((fill) => fill.imageHash === hash)) return true
-  }
-  return false
-}
-
-function restoreSnapshots(editor: Editor, snapshots: SceneNode[]) {
-  for (const snapshot of snapshots) {
-    editor.graph.createNodeWithId(
-      snapshot.id,
-      snapshot.type,
-      snapshot.parentId ?? editor.state.currentPageId,
-      { ...structuredClone(snapshot), childIds: [] }
-    )
-  }
-}
-
 async function createOfficeSurface(
   editor: Editor,
   file: File,
   cx: number,
   cy: number,
   offset: number
-): Promise<CreatedOfficeSurface> {
+): Promise<CreatedAssetBackedSurface> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const parsed = parseOfficeSource(file, bytes)
   const document =
@@ -246,14 +216,7 @@ async function createOfficeSurface(
   editor.graph.updateNode(root.id, {
     pluginData: codeObjectPluginData(root, document)
   })
-  editor.graph.images.set(assetHash, bytes)
-  const persistedRoot = editor.graph.getNode(root.id) ?? root
-  return {
-    assetHash,
-    bytes,
-    root: persistedRoot,
-    snapshots: [structuredClone(persistedRoot)]
-  }
+  return captureAssetBackedSurface(editor, root, assetHash, bytes)
 }
 
 export async function placeOfficeFiles(
@@ -261,40 +224,10 @@ export async function placeOfficeFiles(
   files: File[],
   cx: number,
   cy: number
-): Promise<{ fallbackFiles: File[]; placedIds: string[] }> {
-  const previousSelection = [...editor.state.selectedIds]
-  const created: CreatedOfficeSurface[] = []
-  const fallbackFiles: File[] = []
-  for (const [index, file] of files.entries()) {
-    try {
-      created.push(await createOfficeSurface(editor, file, cx, cy, index))
-    } catch {
-      fallbackFiles.push(file)
-    }
-  }
-  const placedIds = created.map(({ root }) => root.id)
-  if (placedIds.length === 0) return { fallbackFiles, placedIds }
-  editor.select(placedIds)
-  editor.undo.push({
-    forward: () => {
-      for (const item of created) {
-        editor.graph.images.set(item.assetHash, item.bytes)
-        restoreSnapshots(editor, item.snapshots)
-      }
-      editor.select(placedIds)
-      editor.requestRender()
-    },
-    inverse: () => {
-      for (const id of placedIds) editor.graph.deleteNode(id)
-      for (const item of created) {
-        if (!assetIsReferenced(editor, item.assetHash)) editor.graph.images.delete(item.assetHash)
-      }
-      if (previousSelection.length > 0) editor.select(previousSelection)
-      else editor.clearSelection()
-      editor.requestRender()
-    },
-    label: files.length === 1 ? 'Place Office file' : 'Place Office files'
+): Promise<AssetBackedFilePlacementResult> {
+  return placeAssetBackedFiles(editor, files, cx, cy, {
+    createSurface: createOfficeSurface,
+    pluralLabel: 'Place Office files',
+    singularLabel: 'Place Office file'
   })
-  editor.requestRender()
-  return { fallbackFiles, placedIds }
 }

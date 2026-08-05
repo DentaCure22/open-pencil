@@ -1,5 +1,4 @@
 import { estimateTextSize } from '@open-pencil/core/layout'
-import { boardBuildPlanConvergenceAnchor } from '@open-pencil/core/rpc'
 import type { Rect, SceneNode } from '@open-pencil/scene-graph'
 import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 
@@ -9,10 +8,7 @@ import { boundedNumber, requiredString, trimmedString } from '../input'
 import { boardViewportFocusBounds } from '../neighborhood'
 import {
   parsePlacementDirections,
-  requireVisibleBoardAnchor,
   resolveCenteredFreePlacement,
-  resolveNearestFreePlacement,
-  visibleBoardObstacles,
   type BoardFreePlacementTarget,
   type BoardPlacementDirection,
   type BoardPlacementResult,
@@ -20,6 +16,7 @@ import {
   type BoardRelativePlacementOffset
 } from '../placement'
 import { nodeBounds } from '../readback'
+import { resolveNativePlacement } from './placement'
 
 const DEFAULT_CLEARANCE = 48
 const DEFAULT_FONT_SIZE = 18
@@ -48,6 +45,11 @@ export type NativeTextOperation = {
   relativeOffset?: BoardRelativePlacementOffset
   text: string
 }
+
+type NativeTextFreePlacementTarget = Exclude<
+  BoardPlacementTarget,
+  { kind: 'anchor' } | { kind: 'relative' }
+>
 
 function parseFreePlacementTarget(value: unknown): BoardFreePlacementTarget | null {
   if (!isUnknownRecord(value)) return null
@@ -212,6 +214,38 @@ export function nativeTextReconciliation(
   return { reasons, status: reasons.length === 0 ? 'current' : 'diverged' }
 }
 
+function freeTextPlacement(
+  target: AutomationTarget,
+  operation: NativeTextOperation,
+  placementTarget: NativeTextFreePlacementTarget,
+  footprint: Pick<Rect, 'height' | 'width'>,
+  obstacles: Rect[]
+): BoardPlacementResult | null {
+  const center =
+    placementTarget.kind === 'point'
+      ? { x: placementTarget.x, y: placementTarget.y }
+      : (() => {
+          const region =
+            placementTarget.kind === 'region' ? placementTarget : boardViewportFocusBounds(target)
+          return {
+            x: region.x + region.width / 2,
+            y: region.y + region.height / 2
+          }
+        })()
+  let searchRegion: Rect | undefined
+  if (placementTarget.kind === 'region') searchRegion = placementTarget
+  else if (placementTarget.kind === 'auto') searchRegion = boardViewportFocusBounds(target)
+  return resolveCenteredFreePlacement({
+    center,
+    clearance: operation.clearance,
+    footprint,
+    maxRings: placementTarget.kind === 'point' ? 0 : 12,
+    obstacles,
+    preferredDirections: operation.preferredDirections,
+    ...(searchRegion ? { searchRegion } : {})
+  })
+}
+
 export function placementFor(
   target: AutomationTarget,
   operation: NativeTextOperation,
@@ -219,66 +253,17 @@ export function placementFor(
   convergenceSources?: Rect[]
 ): BoardPlacementResult {
   const footprint = measuredText(operation, typography)
-  const obstacles = visibleBoardObstacles(target)
-  const placementTarget = operation.placementTarget
-  const convergenceAnchor = convergenceSources
-    ? boardBuildPlanConvergenceAnchor(
-        convergenceSources,
-        footprint,
-        operation.preferredDirections[0] ?? 'right'
-      )
-    : undefined
-  const placement = convergenceAnchor
-    ? resolveNearestFreePlacement({
-        anchor: convergenceAnchor,
-        clearance: operation.clearance,
-        footprint,
-        obstacles,
-        preferredDirections: operation.preferredDirections
-      })
-    : placementTarget.kind === 'anchor'
-      ? resolveNearestFreePlacement({
-          anchor: nodeBounds(target, requireVisibleBoardAnchor(target, placementTarget.anchorId)),
-          clearance: operation.clearance,
+  const resolution = resolveNativePlacement(target, operation, footprint, convergenceSources)
+  const placement =
+    resolution.kind === 'nearest'
+      ? resolution.placement
+      : freeTextPlacement(
+          target,
+          operation,
+          resolution.placementTarget,
           footprint,
-          obstacles,
-          preferredDirections: operation.preferredDirections,
-          ...(operation.relativeOffset ? { relativeOffset: operation.relativeOffset } : {})
-        })
-      : placementTarget.kind === 'relative'
-        ? resolveNearestFreePlacement({
-            anchor: nodeBounds(target, requireVisibleBoardAnchor(target, placementTarget.objectId)),
-            clearance: operation.clearance,
-            footprint,
-            obstacles,
-            preferredDirections: operation.preferredDirections,
-            ...(operation.relativeOffset ? { relativeOffset: operation.relativeOffset } : {})
-          })
-        : resolveCenteredFreePlacement({
-            center:
-              placementTarget.kind === 'point'
-                ? { x: placementTarget.x, y: placementTarget.y }
-                : (() => {
-                    const region =
-                      placementTarget.kind === 'region'
-                        ? placementTarget
-                        : boardViewportFocusBounds(target)
-                    return {
-                      x: region.x + region.width / 2,
-                      y: region.y + region.height / 2
-                    }
-                  })(),
-            clearance: operation.clearance,
-            footprint,
-            maxRings: placementTarget.kind === 'point' ? 0 : 12,
-            obstacles,
-            preferredDirections: operation.preferredDirections,
-            ...(placementTarget.kind === 'region'
-              ? { searchRegion: placementTarget }
-              : placementTarget.kind === 'auto'
-                ? { searchRegion: boardViewportFocusBounds(target) }
-                : {})
-          })
+          resolution.obstacles
+        )
   if (!placement) {
     throw new Error('No collision-free placement was found within the bounded search region.')
   }

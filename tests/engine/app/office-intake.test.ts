@@ -50,8 +50,16 @@ describe('Office Code Object intake', () => {
 
   test('places Office Code Objects while retaining exact source bytes', async () => {
     const editor = createEditor()
+    const previousSelection = editor.graph.createNode('RECTANGLE', editor.state.currentPageId, {
+      height: 80,
+      width: 120
+    })
+    editor.select([previousSelection.id])
     const documentBytes = docxBytes()
     const spreadsheetBytes = xlsxBytes()
+    const malformedFile = new File([new Uint8Array([1, 2, 3])], 'broken.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    })
     const result = await placeOfficeFiles(
       editor,
       [
@@ -60,13 +68,14 @@ describe('Office Code Object intake', () => {
         }),
         new File([spreadsheetBytes.slice().buffer], 'plan.xlsx', {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        })
+        }),
+        malformedFile
       ],
       900,
       600
     )
 
-    expect(result.fallbackFiles).toHaveLength(0)
+    expect(result.fallbackFiles).toEqual([malformedFile])
     expect(result.placedIds).toHaveLength(2)
     const [documentNode, spreadsheetNode] = result.placedIds.map((id) => editor.graph.getNode(id))
     expect(codeObjectDocument(documentNode)).toMatchObject({
@@ -83,18 +92,24 @@ describe('Office Code Object intake', () => {
       }
     })
 
+    const assetHashes: string[] = []
     for (const [node, bytes] of [
       [documentNode, documentBytes],
       [spreadsheetNode, spreadsheetBytes]
     ] as const) {
       const source = node ? readContentSource(node) : null
       const assetHash = source ? assetHashFromReference(source.source) : null
+      if (assetHash) assetHashes.push(assetHash)
       expect(assetHash ? editor.graph.images.get(assetHash) : undefined).toEqual(bytes)
     }
 
     editor.undo.undo()
     expect(result.placedIds.every((id) => editor.graph.getNode(id) === undefined)).toBe(true)
+    expect(assetHashes.every((hash) => !editor.graph.images.has(hash))).toBe(true)
+    expect([...editor.state.selectedIds]).toEqual([previousSelection.id])
     editor.undo.redo()
     expect(result.placedIds.every((id) => editor.graph.getNode(id) !== undefined)).toBe(true)
+    expect(assetHashes.every((hash) => editor.graph.images.has(hash))).toBe(true)
+    expect([...editor.state.selectedIds]).toEqual(result.placedIds)
   })
 })

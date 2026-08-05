@@ -2,7 +2,6 @@ import { wcagContrast } from 'culori'
 
 import { parseColor } from '@open-pencil/core/color'
 import { estimateTextSize } from '@open-pencil/core/layout'
-import { boardBuildPlanConvergenceAnchor } from '@open-pencil/core/rpc'
 import type { Fill, Rect, SceneNode, Stroke } from '@open-pencil/scene-graph'
 import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 
@@ -12,16 +11,14 @@ import { boundedNumber, requiredString, trimmedString } from '../input'
 import { boardViewportFocusBounds } from '../neighborhood'
 import {
   parsePlacementDirections,
-  requireVisibleBoardAnchor,
   resolveCenteredFreePlacement,
-  resolveNearestFreePlacement,
-  visibleBoardObstacles,
-  type BoardPlacementTarget,
   type BoardPlacementDirection,
   type BoardPlacementResult,
+  type BoardPlacementTarget,
   type BoardRelativePlacementOffset
 } from '../placement'
 import { nodeBounds, nodeSummary } from '../readback'
+import { resolveNativePlacement } from './placement'
 import { CARD_RECEIPT_PLUGIN_KEY, RECEIPT_PLUGIN_ID, type AgentCardReceipt } from './receipts'
 
 export const LOCAL_LEGIBLE_CARD_PROFILE = 'local-legible-card-v1' as const
@@ -47,6 +44,11 @@ type NativeCardPalette = {
 }
 
 type NativeCardTextFit = { body: boolean; title: boolean }
+
+type NativeCardFreePlacementTarget = Exclude<
+  BoardPlacementTarget,
+  { kind: 'anchor' } | { kind: 'relative' }
+>
 
 export type NativeCardOperation = {
   body: string
@@ -196,23 +198,10 @@ function parseFreePlacementTarget(
 function freeCardPlacement(
   target: AutomationTarget,
   operation: NativeCardOperation,
+  placementTarget: NativeCardFreePlacementTarget,
   footprint: Pick<Rect, 'height' | 'width'>,
   obstacles: Rect[]
 ): BoardPlacementResult | null {
-  const placementTarget = operation.placementTarget
-  if (placementTarget.kind === 'anchor') {
-    throw new Error('native_card free placement cannot use an anchor target.')
-  }
-  if (placementTarget.kind === 'relative') {
-    return resolveNearestFreePlacement({
-      anchor: nodeBounds(target, requireVisibleBoardAnchor(target, placementTarget.objectId)),
-      clearance: operation.clearance,
-      footprint,
-      obstacles,
-      preferredDirections: operation.preferredDirections,
-      ...(operation.relativeOffset ? { relativeOffset: operation.relativeOffset } : {})
-    })
-  }
   if (placementTarget.kind === 'point') {
     return resolveCenteredFreePlacement({
       center: { x: placementTarget.x, y: placementTarget.y },
@@ -362,34 +351,18 @@ export function nativeCardPlan(
   if (height > MAX_CARD_HEIGHT) {
     throw new Error(`native_card measured height exceeds ${MAX_CARD_HEIGHT} Board units.`)
   }
-  const obstacles = visibleBoardObstacles(target)
   const footprint = { height, width: operation.width }
-  const placementTarget = operation.placementTarget
-  const convergenceAnchor = convergenceSources
-    ? boardBuildPlanConvergenceAnchor(
-        convergenceSources,
-        footprint,
-        operation.preferredDirections[0] ?? 'right'
-      )
-    : undefined
-  const placement = convergenceAnchor
-    ? resolveNearestFreePlacement({
-        anchor: convergenceAnchor,
-        clearance: operation.clearance,
-        footprint,
-        obstacles,
-        preferredDirections: operation.preferredDirections
-      })
-    : placementTarget.kind === 'anchor'
-      ? resolveNearestFreePlacement({
-          anchor: nodeBounds(target, requireVisibleBoardAnchor(target, placementTarget.anchorId)),
-          clearance: operation.clearance,
+  const resolution = resolveNativePlacement(target, operation, footprint, convergenceSources)
+  const placement =
+    resolution.kind === 'nearest'
+      ? resolution.placement
+      : freeCardPlacement(
+          target,
+          operation,
+          resolution.placementTarget,
           footprint,
-          obstacles,
-          preferredDirections: operation.preferredDirections,
-          ...(operation.relativeOffset ? { relativeOffset: operation.relativeOffset } : {})
-        })
-      : freeCardPlacement(target, operation, footprint, obstacles)
+          resolution.obstacles
+        )
   if (!placement) {
     throw new Error('No collision-free placement was found within the bounded search region.')
   }

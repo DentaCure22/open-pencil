@@ -1,6 +1,6 @@
 import { shallowRef } from 'vue'
 
-import type { Vector } from '@open-pencil/scene-graph'
+import type { Rect, Vector } from '@open-pencil/scene-graph'
 
 import type {
   NarratedTraceQueryEvent,
@@ -122,11 +122,16 @@ function compactSummaryText(value: string, maximum: number) {
   return `${compact.slice(0, maximum - 1).trimEnd()}…`
 }
 
+function centerOfPageRegion(region: Rect): Vector {
+  return {
+    x: region.x + region.width / 2,
+    y: region.y + region.height / 2
+  }
+}
+
 function summarizeEvent(event: NarratedTraceQueryEvent): NarratedTraceRetrievalEventSummary {
   return {
-    ...(event.anchor
-      ? { anchor: { x: event.anchor.pagePoint.x, y: event.anchor.pagePoint.y } }
-      : {}),
+    ...(event.anchor ? { anchor: centerOfPageRegion(event.anchor.pageRegion) } : {}),
     id: event.id,
     kind: event.kind,
     label: compactSummaryText(event.label, MAX_RETRIEVAL_EVENT_LABEL_LENGTH),
@@ -176,13 +181,12 @@ export function summarizeNarratedTraceRetrieval(
   receipt: NarratedTraceQueryReceipt
 ): NarratedTraceRetrievalSummary {
   const events = receipt.result.matches.flatMap((match) => match.events)
-  const anchor = events.find((event) => event.anchor)?.anchor?.pagePoint
+  const anchorRegion = events.find((event) => event.anchor)?.anchor?.pageRegion
   const copy = statusCopy(receipt.result)
-  const firstMatch = receipt.result.matches[0]
   const sourceSpokenTurn = receipt.result.sourceSpokenTurn
   const window = retrievalWindow(receipt.result)
   return {
-    ...(anchor ? { anchor: { x: anchor.x, y: anchor.y } } : {}),
+    ...(anchorRegion ? { anchor: centerOfPageRegion(anchorRegion) } : {}),
     candidateCount: receipt.result.scanned.indexCandidates,
     detail: copy.detail,
     eventCount: events.length,
@@ -190,7 +194,7 @@ export function summarizeNarratedTraceRetrieval(
     eventSummaries: events.slice(0, MAX_RETRIEVAL_EVENT_SUMMARIES).map(summarizeEvent),
     matchCount: receipt.result.matches.length,
     matchedBy: [...new Set(receipt.result.matches.flatMap((match) => match.matchedBy))],
-    matchedTitle: firstMatch?.title,
+    matchedTitle: receipt.result.matches.at(0)?.title,
     scopeLabel: receipt.scope ? scopeLabel(receipt.scope) : 'All Boards',
     ...(sourceSpokenTurn
       ? {

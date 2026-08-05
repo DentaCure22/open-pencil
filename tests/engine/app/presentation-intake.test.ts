@@ -95,16 +95,21 @@ describe('PowerPoint Code Object intake', () => {
   test('places one interactive deck, retains source, and restores the same ID on redo', async () => {
     const editor = createEditor()
     const bytes = pptxBytes()
+    const malformedFile = new File([new Uint8Array([1, 2, 3])], 'broken.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    })
     const result = await placePptxFiles(
       editor,
       [
         new File([bytes.slice().buffer], 'native-deck.pptx', {
           type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-        })
+        }),
+        malformedFile
       ],
       800,
       500
     )
+    expect(result.fallbackFiles).toEqual([malformedFile])
     const rootId = result.placedIds[0]
     const root = editor.graph.getNode(rootId)
     const source = root ? readContentSource(root) : null

@@ -17,6 +17,13 @@ import {
 } from '@open-pencil/scene-graph/images'
 
 import { codeObjectPluginData, createPptxDeckDocument } from '@/app/code-object/model'
+import {
+  captureAssetBackedSurface,
+  placeAssetBackedFiles,
+  restoreSceneNodeSnapshots,
+  type AssetBackedFilePlacementResult,
+  type CreatedAssetBackedSurface
+} from '@/app/file-intake/asset-backed-placement'
 
 import { pptxDeckPluginData } from './source'
 
@@ -24,13 +31,6 @@ const NATIVE_SLIDE_GAP = 48
 const NATIVE_DECK_GAP = 120
 const DECK_CASCADE = 36
 const PPTX_DECK_WIDTH = 1180
-
-type CreatedDeck = {
-  assetHash: string
-  bytes: Uint8Array
-  root: SceneNode
-  snapshots: SceneNode[]
-}
 
 function solidFill(color: string | null): Fill[] {
   if (!color) return []
@@ -145,33 +145,13 @@ function addSlide(
   return [frame, ...slide.elements.flatMap((element) => addElement(editor, frame.id, element))]
 }
 
-function assetIsReferenced(editor: Editor, hash: string): boolean {
-  for (const node of editor.graph.getAllNodes()) {
-    const source = readContentSource(node)
-    if (source && assetHashFromReference(source.source) === hash) return true
-    if (node.fills.some((fill) => fill.imageHash === hash)) return true
-  }
-  return false
-}
-
-function restoreSnapshots(editor: Editor, snapshots: SceneNode[]) {
-  for (const snapshot of snapshots) {
-    editor.graph.createNodeWithId(
-      snapshot.id,
-      snapshot.type,
-      snapshot.parentId ?? editor.state.currentPageId,
-      { ...structuredClone(snapshot), childIds: [] }
-    )
-  }
-}
-
 async function createDeck(
   editor: Editor,
   file: File,
   cx: number,
   cy: number,
   offset: number
-): Promise<CreatedDeck> {
+): Promise<CreatedAssetBackedSurface> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const deck = parsePptx(bytes)
   const deckHeight = Math.round(PPTX_DECK_WIDTH * (deck.height / deck.width))
@@ -200,14 +180,7 @@ async function createDeck(
   editor.graph.updateNode(root.id, {
     pluginData: codeObjectPluginData(root, createPptxDeckDocument())
   })
-  editor.graph.images.set(assetHash, bytes)
-  const persistedRoot = editor.graph.getNode(root.id) ?? root
-  return {
-    assetHash,
-    bytes,
-    root: persistedRoot,
-    snapshots: [structuredClone(persistedRoot)]
-  }
+  return captureAssetBackedSurface(editor, root, assetHash, bytes)
 }
 
 export function convertPptxDeckToDesign(editor: Editor, deckId: string): string | null {
@@ -244,7 +217,7 @@ export function convertPptxDeckToDesign(editor: Editor, deckId: string): string 
   editor.undo.push({
     label: 'Convert PowerPoint to design',
     forward: () => {
-      restoreSnapshots(editor, snapshots)
+      restoreSceneNodeSnapshots(editor, snapshots)
       editor.select([root.id])
       editor.requestRender()
     },
@@ -271,40 +244,10 @@ export async function placePptxFiles(
   files: File[],
   cx: number,
   cy: number
-): Promise<{ fallbackFiles: File[]; placedIds: string[] }> {
-  const previousSelection = [...editor.state.selectedIds]
-  const decks: CreatedDeck[] = []
-  const fallbackFiles: File[] = []
-  for (const [index, file] of files.entries()) {
-    try {
-      decks.push(await createDeck(editor, file, cx, cy, index))
-    } catch {
-      fallbackFiles.push(file)
-    }
-  }
-  const placedIds = decks.map(({ root }) => root.id)
-  if (placedIds.length === 0) return { fallbackFiles, placedIds }
-  editor.select(placedIds)
-  editor.undo.push({
-    forward: () => {
-      for (const deck of decks) {
-        editor.graph.images.set(deck.assetHash, deck.bytes)
-        restoreSnapshots(editor, deck.snapshots)
-      }
-      editor.select(placedIds)
-      editor.requestRender()
-    },
-    inverse: () => {
-      for (const id of placedIds) editor.graph.deleteNode(id)
-      for (const deck of decks) {
-        if (!assetIsReferenced(editor, deck.assetHash)) editor.graph.images.delete(deck.assetHash)
-      }
-      if (previousSelection.length > 0) editor.select(previousSelection)
-      else editor.clearSelection()
-      editor.requestRender()
-    },
-    label: files.length === 1 ? 'Place PowerPoint deck' : 'Place PowerPoint decks'
+): Promise<AssetBackedFilePlacementResult> {
+  return placeAssetBackedFiles(editor, files, cx, cy, {
+    createSurface: createDeck,
+    pluralLabel: 'Place PowerPoint decks',
+    singularLabel: 'Place PowerPoint deck'
   })
-  editor.requestRender()
-  return { fallbackFiles, placedIds }
 }

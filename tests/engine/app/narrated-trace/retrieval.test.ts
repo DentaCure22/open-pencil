@@ -30,9 +30,7 @@ function result(
               events: [
                 {
                   anchor: {
-                    pagePoint: { x: 120.5, y: 240.25 },
-                    pageRegion: { height: 20, width: 20, x: 110.5, y: 230.25 },
-                    viewport: { panX: 0, panY: 0, zoom: 1 }
+                    pageRegion: { height: 20, width: 20, x: 110.5, y: 230.25 }
                   },
                   atMs: 500,
                   id: 'event-a',
@@ -101,9 +99,7 @@ describe('Narrated Trace retrieval readback', () => {
     if (!match) throw new Error('Expected matched Trace fixture')
     match.events = Array.from({ length: 7 }, (_, index) => ({
       anchor: {
-        pagePoint: { x: 100 + index, y: 200 + index },
-        pageRegion: { height: 20, width: 20, x: 90 + index, y: 190 + index },
-        viewport: { panX: 0, panY: 0, zoom: 1 }
+        pageRegion: { height: 20, width: 20, x: 90 + index, y: 190 + index }
       },
       atMs: 500 + index,
       id: `event-${index}`,

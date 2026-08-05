@@ -5,12 +5,37 @@
     "**/dist/**",
     "**/node_modules/**"
   ],
-  "ignoreWorkspaces": ["packages/acp", "packages/demos"],
+  "ignoreWorkspaces": ["packages/demos"],
   "ignoreUnresolved": [
     "~icons/*",
+    "/packages/core/src/kiwi/index.ts",
     "/packages/core/src/text/fonts.ts",
+    "/packages/scene-graph/src/object-graph.ts",
+    "/src/app/code-object/compiler.tsx",
+    "/src/app/code-object/model.ts",
     "/src/app/editor/fonts/index.ts",
+    "/src/app/narrated-trace/controller.ts",
+    "/src/app/narrated-trace/gesture.ts",
+    "/src/app/narrated-trace/index.ts",
+    "/src/app/narrated-trace/panel.ts",
+    "/src/app/narrated-trace/query.ts",
+    "/src/app/narrated-trace/scope.ts",
+    "/src/app/narrated-trace/state.ts",
+    "/src/app/object-graph/actions.ts",
+    "/src/app/workspace-document/identity.ts",
     "#core/*"
   ],
-  "ignoreBinaries": ["figma-use", "identify", "magick", "open", "osascript"]
+  "ignoreBinaries": ["figma-use", "identify", "magick", "open", "osascript"],
+  "workspaces": {
+    ".": {
+      "ignoreDependencies": [
+        "@arethetypeswrong/cli",
+        "@feature-sliced/steiger-plugin",
+        "@iconify-json/lucide",
+        "@types/opentype.js",
+        "mitata",
+        "opentype.js"
+      ]
+    }
+  }
 }
