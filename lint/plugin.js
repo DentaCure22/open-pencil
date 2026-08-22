@@ -1188,7 +1188,8 @@ const noDirectStorageAccess = {
       '/src/app/cache/index.ts',
       '/src/app/shell/layout-storage.ts',
       '/src/app/smylr-production/document-persistence/local-authority/storage.ts',
-      '/packages/vue/src/i18n/locale.ts'
+      '/packages/vue/src/i18n/locale.ts',
+      '/tests/helpers/storage.ts'
     ]
     if (allowedFiles.some((suffix) => file.endsWith(suffix))) return {}
 

@@ -1,4 +1,5 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { mapAxisAlignedRect, rectIntersectionArea } from '@open-pencil/scene-graph/geometry'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 import type { EditorStore } from '@/app/editor/active-store'
@@ -33,27 +34,8 @@ export type NarratedTraceSceneTargetResolution = {
 
 const MAX_GESTURE_CANDIDATES = 64
 
-function intersectionArea(first: Rect, second: Rect) {
-  const width = Math.max(
-    0,
-    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
-  )
-  const height = Math.max(
-    0,
-    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
-  )
-  return width * height
-}
-
 function screenRegionToCanvas(store: EditorStore, region: Rect): Rect {
-  const topLeft = store.screenToCanvas(region.x, region.y)
-  const bottomRight = store.screenToCanvas(region.x + region.width, region.y + region.height)
-  return {
-    height: Math.abs(bottomRight.y - topLeft.y),
-    width: Math.abs(bottomRight.x - topLeft.x),
-    x: Math.min(topLeft.x, bottomRight.x),
-    y: Math.min(topLeft.y, bottomRight.y)
-  }
+  return mapAxisAlignedRect(region, store.screenToCanvas)
 }
 
 function viewportForStore(store: NarratedTraceCoordinateStore): NarratedTraceViewport {
@@ -275,7 +257,7 @@ export function resolveNarratedTraceSceneTargets(
       const owner = pageOwnedOwner(store, node)
       if (!owner) return []
       const bounds = store.graph.getAbsoluteBounds(node.id)
-      const overlapArea = intersectionArea(bounds, canvasRegion)
+      const overlapArea = rectIntersectionArea(bounds, canvasRegion)
       return overlapArea > 0 ? [{ bounds, depth, node, overlapArea, owner }] : []
     })
   if (candidates.length === 0) {

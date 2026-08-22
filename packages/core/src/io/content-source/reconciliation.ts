@@ -1,5 +1,7 @@
 import type { PluginDataEntry, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { pluginDataEntry, pluginDataValues } from '#core/io/plugin-data'
+
 const PLUGIN_ID = 'open-pencil'
 const KEY_PREFIX = 'source-reconciliation/'
 const STATUS_KEY = `${KEY_PREFIX}status`
@@ -23,29 +25,21 @@ export interface SourceReconciliationMetadata {
   revision: number
 }
 
-function entry(key: string, value: string): PluginDataEntry {
-  return { pluginId: PLUGIN_ID, key, value }
-}
-
 function isSourceReconciliationStatus(value: string): value is SourceReconciliationStatus {
   return ['current', 'regenerated', 'conflict', 'unsupported'].includes(value)
-}
-
-function valueFor(node: Pick<SceneNode, 'pluginData'>, key: string): string | null {
-  return (
-    node.pluginData.find((item) => item.pluginId === PLUGIN_ID && item.key === key)?.value ?? null
-  )
 }
 
 export function sourceReconciliationPluginData(
   metadata: SourceReconciliationMetadata
 ): PluginDataEntry[] {
   const data = [
-    entry(STATUS_KEY, metadata.status),
-    entry(MESSAGE_KEY, metadata.message),
-    entry(REVISION_KEY, String(metadata.revision))
+    pluginDataEntry(PLUGIN_ID, STATUS_KEY, metadata.status),
+    pluginDataEntry(PLUGIN_ID, MESSAGE_KEY, metadata.message),
+    pluginDataEntry(PLUGIN_ID, REVISION_KEY, String(metadata.revision))
   ]
-  if (metadata.baseline) data.push(entry(BASELINE_KEY, metadata.baseline))
+  if (metadata.baseline) {
+    data.push(pluginDataEntry(PLUGIN_ID, BASELINE_KEY, metadata.baseline))
+  }
   return data
 }
 
@@ -62,20 +56,21 @@ export function mergeSourceReconciliationPluginData(
 export function readSourceReconciliation(
   node: Pick<SceneNode, 'pluginData'>
 ): SourceReconciliationMetadata | null {
-  const status = valueFor(node, STATUS_KEY)
-  const message = valueFor(node, MESSAGE_KEY)
-  const revisionValue = valueFor(node, REVISION_KEY)
+  const values = pluginDataValues(node, PLUGIN_ID)
+  const status = values.get(STATUS_KEY)
+  const message = values.get(MESSAGE_KEY)
+  const revisionValue = values.get(REVISION_KEY)
   const revision = revisionValue ? Number.parseInt(revisionValue, 10) : Number.NaN
   if (
     !status ||
     !isSourceReconciliationStatus(status) ||
-    message === null ||
+    message === undefined ||
     !Number.isSafeInteger(revision) ||
     revision < 1
   ) {
     return null
   }
-  return { status, message, baseline: valueFor(node, BASELINE_KEY), revision }
+  return { status, message, baseline: values.get(BASELINE_KEY) ?? null, revision }
 }
 
 function visualNodeSnapshot(graph: SceneGraph, node: SceneNode): unknown {
@@ -103,7 +98,7 @@ function canonicalize(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .sort(([left], [right]) => (left < right ? -1 : (left > right ? 1 : 0)))
       .map(([key, item]) => [key, canonicalize(item)])
   )
 }

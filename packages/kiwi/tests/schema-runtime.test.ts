@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   compileSchema,
+  decodeBinarySchema,
+  encodeBinarySchema,
   expectEnumValue,
   expectFieldNumber,
   parseSchema,
@@ -51,5 +53,19 @@ describe('Kiwi schema runtime', () => {
       kind: 'CARD',
       tags: ['kiwi']
     })
+  })
+
+  test('round-trips binary schema type references', () => {
+    const schema = decodeBinarySchema(encodeBinarySchema(parseSchema(schemaText)))
+    const kind = schema.definitions.find((definition) => definition.name === 'Kind')
+    const item = schema.definitions.find((definition) => definition.name === 'Item')
+
+    expect(kind?.fields.every((field) => field.type === null)).toBe(true)
+    expect(item?.fields.map((field) => [field.name, field.type, field.isArray])).toEqual([
+      ['id', 'uint', false],
+      ['name', 'string', false],
+      ['kind', 'Kind', false],
+      ['tags', 'string', true]
+    ])
   })
 })

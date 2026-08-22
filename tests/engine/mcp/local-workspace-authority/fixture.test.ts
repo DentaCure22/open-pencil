@@ -179,7 +179,7 @@ describe('local authority Board fixtures', () => {
       })
     )
     expect(captured).toMatchObject({
-      fixture: { connection_count: 1, node_count: 3, top_level_count: 2 },
+      fixture: { node_count: 3, top_level_count: 2 },
       proof: { authority_owned_token: 'passed', normal_editor_undo: 'not_applicable' },
       status: 'captured'
     })

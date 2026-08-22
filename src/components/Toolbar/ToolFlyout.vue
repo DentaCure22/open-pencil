@@ -4,8 +4,13 @@ import {
   DropdownMenuItem,
   DropdownMenuPortal,
   DropdownMenuRoot,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
+  HoverCardContent,
+  HoverCardPortal,
+  HoverCardRoot,
+  HoverCardTrigger
 } from 'reka-ui'
+import { ref } from 'vue'
 
 import IconChevronDown from '~icons/lucide/chevron-down'
 
@@ -48,9 +53,7 @@ const emit = defineEmits<{
   select: [tool: Tool]
 }>()
 
-defineSlots<{
-  default(props: { label: string }): unknown
-}>()
+const hoverOpen = ref(false)
 
 function isActiveTool(key: Tool) {
   if (suppressActive) return false
@@ -62,35 +65,36 @@ function isActiveTool(key: Tool) {
 function activeKeyForTool() {
   return tool.flyout?.includes(activeTool) ? activeTool : tool.key
 }
+
+function selectTool(key: Tool) {
+  hoverOpen.value = false
+  emit('select', key)
+}
 </script>
 
 <template>
-  <div class="flex items-center">
-    <slot :label="`${toolLabels[activeKeyForTool()]} (${tool.shortcut})`">
-      <ToolButton
-        :data-test-id="toolbarToolTestId(activeKeyForTool(), mobile)"
-        :icon="toolIcons[activeKeyForTool()]"
-        :label="toolLabels[activeKeyForTool()]"
-        :active="isActiveTool(activeKeyForTool())"
-        :mobile="mobile"
-        @click="emit('select', activeKeyForTool())"
-      />
-    </slot>
+  <div v-if="mobile" class="flex items-center">
+    <ToolButton
+      :data-test-id="toolbarToolTestId(activeKeyForTool(), true)"
+      :icon="toolIcons[activeKeyForTool()]"
+      :label="toolLabels[activeKeyForTool()]"
+      :active="isActiveTool(activeKeyForTool())"
+      :pressed="isActiveTool(activeKeyForTool())"
+      mobile
+      @click="emit('select', activeKeyForTool())"
+    />
 
     <DropdownMenuRoot>
       <DropdownMenuTrigger as-child>
         <button
-          v-test-id="toolbarFlyoutTestId(tool.key, mobile)"
+          v-test-id="toolbarFlyoutTestId(tool.key, true)"
           :aria-label="`${toolLabels[activeKeyForTool()]} tool options`"
-          class="flex h-8 w-3 cursor-pointer items-center justify-center border-none transition-colors"
-          :class="[
-            mobile ? 'rounded-[6px] select-none' : 'rounded-lg',
+          class="flex h-8 w-3 cursor-pointer items-center justify-center rounded-[6px] border-none transition-colors select-none"
+          :class="
             isActiveTool(activeKeyForTool())
               ? 'bg-accent text-white'
-              : mobile
-                ? 'bg-transparent text-muted active:bg-hover'
-                : 'bg-transparent text-muted hover:bg-hover hover:text-surface'
-          ]"
+              : 'bg-transparent text-muted active:bg-hover'
+          "
         >
           <IconChevronDown class="size-2.5" />
         </button>
@@ -105,7 +109,7 @@ function activeKeyForTool() {
             :tool="sub"
           >
             <DropdownMenuItem
-              v-test-id="toolbarFlyoutItemTestId(sub, mobile)"
+              v-test-id="toolbarFlyoutItemTestId(sub, true)"
               :class="
                 menu().item({
                   class: !suppressActive && subActive ? 'bg-accent text-white' : undefined
@@ -115,13 +119,66 @@ function activeKeyForTool() {
             >
               <component :is="toolIcons[sub]" class="size-3.5" />
               <span class="flex-1">{{ toolLabels[sub] }}</span>
-              <AppShortcutText v-if="!mobile && toolShortcuts[sub]">
-                {{ toolShortcuts[sub] }}
-              </AppShortcutText>
             </DropdownMenuItem>
           </ToolbarItem>
         </DropdownMenuContent>
       </DropdownMenuPortal>
     </DropdownMenuRoot>
   </div>
+
+  <HoverCardRoot
+    v-else
+    v-model:open="hoverOpen"
+    :open-delay="80"
+    :close-delay="160"
+    :enable-touch="true"
+  >
+    <div v-test-id="toolbarFlyoutTestId(tool.key)" class="flex size-8 items-center justify-center">
+      <HoverCardTrigger as-child>
+        <ToolButton
+          :data-test-id="toolbarToolTestId(activeKeyForTool())"
+          :icon="toolIcons[activeKeyForTool()]"
+          :label="toolLabels[activeKeyForTool()]"
+          :active="isActiveTool(activeKeyForTool())"
+          :pressed="isActiveTool(activeKeyForTool())"
+          @click="selectTool(activeKeyForTool())"
+        />
+      </HoverCardTrigger>
+    </div>
+
+    <HoverCardPortal>
+      <HoverCardContent
+        side="right"
+        :side-offset="8"
+        align="center"
+        :class="
+          menu().content({
+            class: [
+              'origin-left data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:slide-in-from-left-1 data-[state=open]:zoom-in-95 motion-reduce:animate-none',
+              ui?.flyoutContent
+            ]
+          })
+        "
+      >
+        <button
+          v-for="sub in tool.flyout"
+          :key="sub"
+          v-test-id="toolbarFlyoutItemTestId(sub)"
+          type="button"
+          :class="
+            menu().item({
+              class: !suppressActive && sub === activeTool ? 'bg-accent text-white' : undefined
+            })
+          "
+          @click="selectTool(sub)"
+        >
+          <component :is="toolIcons[sub]" class="size-3.5" />
+          <span class="flex-1 text-left">{{ toolLabels[sub] }}</span>
+          <AppShortcutText v-if="toolShortcuts[sub]">
+            {{ toolShortcuts[sub] }}
+          </AppShortcutText>
+        </button>
+      </HoverCardContent>
+    </HoverCardPortal>
+  </HoverCardRoot>
 </template>

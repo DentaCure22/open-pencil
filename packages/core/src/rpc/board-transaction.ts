@@ -1,39 +1,18 @@
-import {
-  canAddObjectGraphConnection,
-  objectGraphConnectionById,
-  objectGraphConnectionsOnPage,
-  SceneGraph,
-  setObjectGraphConnectionsOnPage,
-  type ObjectGraphConnection,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 export type BoardTransactionNodeSnapshot = {
   node: SceneNode
   parentIndex: number
 }
 
-export type BoardTransactionConnectionSnapshot = {
-  connection: ObjectGraphConnection
-  index: number
+export type BoardTransactionChange = {
+  after: BoardTransactionNodeSnapshot | null
+  before: BoardTransactionNodeSnapshot | null
+  entity: 'node'
+  id: string
 }
 
-export type BoardTransactionChange =
-  | {
-      after: BoardTransactionNodeSnapshot | null
-      before: BoardTransactionNodeSnapshot | null
-      entity: 'node'
-      id: string
-    }
-  | {
-      after: BoardTransactionConnectionSnapshot | null
-      before: BoardTransactionConnectionSnapshot | null
-      entity: 'connection'
-      id: string
-    }
-
 export type BoardTransactionState = {
-  connections: Map<string, BoardTransactionConnectionSnapshot>
   nodes: Map<string, BoardTransactionNodeSnapshot>
 }
 
@@ -92,15 +71,7 @@ export function captureBoardTransactionState(
     for (const childId of node.childIds) visit(childId)
   }
   for (const childId of page?.childIds ?? []) visit(childId)
-  return {
-    connections: new Map(
-      objectGraphConnectionsOnPage(graph, pageId).map((connection, index) => [
-        connection.id,
-        { connection: structuredClone(connection), index }
-      ])
-    ),
-    nodes
-  }
+  return { nodes }
 }
 
 export function diffBoardTransactionStates(
@@ -121,21 +92,6 @@ export function diffBoardTransactionStates(
       })
     }
   }
-  const connectionIds = [
-    ...new Set([...before.connections.keys(), ...after.connections.keys()])
-  ].sort()
-  for (const id of connectionIds) {
-    const beforeConnection = before.connections.get(id) ?? null
-    const afterConnection = after.connections.get(id) ?? null
-    if (!deepEqual(beforeConnection, afterConnection)) {
-      changes.push({
-        after: afterConnection ? structuredClone(afterConnection) : null,
-        before: beforeConnection ? structuredClone(beforeConnection) : null,
-        entity: 'connection',
-        id
-      })
-    }
-  }
   return changes
 }
 
@@ -144,12 +100,6 @@ function currentValue(
   pageId: string,
   change: BoardTransactionChange
 ): BoardTransactionChange['before'] {
-  if (change.entity === 'connection') {
-    const connections = objectGraphConnectionsOnPage(graph, pageId)
-    const index = connections.findIndex((connection) => connection.id === change.id)
-    const connection = objectGraphConnectionById(graph, pageId, change.id)
-    return connection && index !== -1 ? { connection: structuredClone(connection), index } : null
-  }
   const node = graph.getNode(change.id)
   return node && graph.isDescendant(node.id, pageId) ? nodeSnapshot(graph, node) : null
 }
@@ -270,54 +220,12 @@ function applyNodeChanges(
   }
 }
 
-function applyConnectionChanges(
-  graph: SceneGraph,
-  pageId: string,
-  changes: readonly Extract<BoardTransactionChange, { entity: 'connection' }>[],
-  direction: BoardTransactionDirection
-): void {
-  const changedIds = new Set(changes.map((change) => change.id))
-  const connections = objectGraphConnectionsOnPage(graph, pageId).filter(
-    (connection) => !changedIds.has(connection.id)
-  )
-  setObjectGraphConnectionsOnPage(graph, pageId, connections)
-  const desiredConnections = changes
-    .map((change) => change[direction])
-    .filter((snapshot): snapshot is BoardTransactionConnectionSnapshot => snapshot !== null)
-    .sort((left, right) => left.index - right.index)
-  for (const desired of desiredConnections) {
-    const connection = desired.connection
-    if (!canAddObjectGraphConnection(graph, pageId, connection, connection.id)) {
-      throw new Error(`Transaction restore conflicts with connection "${connection.id}".`)
-    }
-    connections.splice(desired.index, 0, structuredClone(connection))
-    setObjectGraphConnectionsOnPage(graph, pageId, connections)
-  }
-}
-
 function applyUnchecked(
   graph: SceneGraph,
-  pageId: string,
   changes: readonly BoardTransactionChange[],
   direction: BoardTransactionDirection
 ): void {
-  applyNodeChanges(
-    graph,
-    changes.filter(
-      (change): change is Extract<BoardTransactionChange, { entity: 'node' }> =>
-        change.entity === 'node'
-    ),
-    direction
-  )
-  applyConnectionChanges(
-    graph,
-    pageId,
-    changes.filter(
-      (change): change is Extract<BoardTransactionChange, { entity: 'connection' }> =>
-        change.entity === 'connection'
-    ),
-    direction
-  )
+  applyNodeChanges(graph, changes, direction)
 }
 
 export function applyBoardTransactionChanges(
@@ -333,7 +241,7 @@ export function applyBoardTransactionChanges(
     )
   }
   if (inspection.applicable === 0) return inspection
-  applyUnchecked(cloneGraphForTransaction(graph), pageId, changes, direction)
-  applyUnchecked(graph, pageId, changes, direction)
+  applyUnchecked(cloneGraphForTransaction(graph), changes, direction)
+  applyUnchecked(graph, changes, direction)
   return inspection
 }

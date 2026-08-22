@@ -17,17 +17,9 @@ Otwieraj i zapisuj natywne pliki Figmy bezpośrednio. Pipeline importu/eksportu 
 - **Zmienne** — tokeny projektowe z kolekcjami, trybami (Light/Dark), typami color/float/string/boolean, wiązaniem zmiennych
 - **Sekcje** — kontenery organizacyjne z automatyczną adopcją dzieci i pigułkami tytułu
 
-## Panel właściwości
+## Obszar roboczy i kontrolki obiektu
 
-Kontekstowe karty Design | Kod | AI:
-
-- **Wygląd** — przezroczystość, promień narożnika (jednolity lub per-narożnik), widoczność
-- **Wypełnienie** — jednolite, gradient (liniowy/radialny/kątowy/diamentowy), obraz
-- **Obrys** — kolor, grubość, wyrównanie (wewnątrz/środek/na zewnątrz), grubości per-strona, zakończenie, łączenie, kreska
-- **Efekty** — cień rzutowany, cień wewnętrzny, rozmycie warstwy, rozmycie tła, rozmycie pierwszego planu
-- **Typografia** — wybieracz czcionek z wirtualnym przewijaniem i wyszukiwaniem, grubość, rozmiar, wyrównanie, przyciski stylu
-- **Layout** — kontrolki auto-layoutu gdy włączony
-- **Eksport** — skala, format (PNG/JPG/WEBP/SVG), podgląd na żywo
+Pływający pasek boczny łączy Warstwy, Czaty, Zasoby i Aktywność. Akcje dotyczące obiektu pozostają przy canvasie i w zintegrowanym pasku narzędzi. Na wąskich ekranach mobilna szuflada pokazuje kontrolki Design oraz kod źródłowy obsługiwanych Code Objectów.
 
 ## Renderowanie
 
@@ -63,17 +55,17 @@ Otwieraj wiele dokumentów w kartach. <kbd>⌘</kbd><kbd>T</kbd> nowa karta, <kb
 
 CLI: `openpencil export design.fig -f jsx --style tailwind`
 
-## Chat AI
+## Czat zadań
 
-Naciśnij <kbd>⌘</kbd><kbd>J</kbd> aby otworzyć asystenta AI. 90+ narzędzi do tworzenia kształtów, ustawiania stylów, zarządzania layoutem, pracy z komponentami i zmiennymi, operacji boolowskich, analizy tokenów projektowych i eksportu zasobów. Połącz Anthropic, OpenAI, Google AI, OpenRouter lub dowolny kompatybilny endpoint.
+Otwórz **CHATS** w lewym pasku bocznym, aby rozpocząć lub kontynuować zadanie programistyczne Pi. Pasek boczny i karty Board współdzielą rozmowę, model, narzędzia, załączniki i dalsze polecenia.
 
-Wywołania narzędzi wyświetlane jako zwijane wpisy. Weryfikacja wizualna — asystent renderuje swoją pracę i porównuje z Twoim żądaniem. Pełne wsparcie cofania dla wszystkich mutacji AI.
+Aktywne narzędzia pozostają rozwinięte; zakończona aktywność jest zwijana do krótkiego podsumowania.
 
-Zobacz [Czat AI](/programmable/ai-chat) dla konfiguracji i szczegółów dostawców.
+Zobacz [Czat zadań](/programmable/ai-chat).
 
 ## Serwer MCP
 
-Podłącz Claude Code, Cursor, Windsurf lub dowolnego klienta MCP do odczytu i zapisu plików `.fig` headlessly. 90+ narzędzi. Dwa transporty: stdio i HTTP.
+Podłącz Claude Code, Cursor, Windsurf lub dowolnego klienta MCP do odczytu i zapisu plików `.fig` bez interfejsu. Klienci odkrywają aktualny katalog w czasie działania przez stdio lub HTTP.
 
 ```sh
 npm install -g @open-pencil/mcp

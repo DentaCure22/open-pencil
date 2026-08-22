@@ -10,6 +10,7 @@ import { loadOpenPencilWorkspaceSourceIdentity } from '@/app/workspace-document/
 
 import {
   type LocalWorkspaceAuthorityHead,
+  type LocalWorkspaceAuthorityStatus,
   commitLocalWorkspaceAuthority,
   currentLocalWorkspaceAuthorityStatus,
   initializeLocalWorkspaceAuthority,
@@ -22,6 +23,7 @@ import {
 export type LocalWorkspaceDocumentAuthorityDependencies = {
   applyDocument(store: EditorStore, value: unknown): Promise<boolean>
   readHead(): Promise<LocalWorkspaceAuthorityHead | null>
+  refreshStatus?(): Promise<LocalWorkspaceAuthorityStatus | null>
 }
 
 export type LocalWorkspaceDocumentAuthorityOptions = {
@@ -105,6 +107,7 @@ export function createLocalWorkspaceDocumentAuthority(
   const graphBase = createLocalWorkspaceAuthorityGraphBase()
   const applyDocument = dependencies.applyDocument ?? applySmylrProductionDocument
   const readHead = dependencies.readHead ?? readLocalWorkspaceAuthorityHead
+  const refreshStatus = dependencies.refreshStatus ?? refreshLocalWorkspaceAuthorityStatus
 
   async function restore(
     store: EditorStore,
@@ -147,7 +150,7 @@ export function createLocalWorkspaceDocumentAuthority(
     if (options.isCloudActive()) return true
     if (!options.canWrite()) return false
 
-    const authorityStatus = currentLocalWorkspaceAuthorityStatus()
+    const authorityStatus = (await refreshStatus()) ?? currentLocalWorkspaceAuthorityStatus()
     if (authorityStatus) {
       const document = serializeSmylrProductionDocumentForAuthority(store)
       if (!document) return false

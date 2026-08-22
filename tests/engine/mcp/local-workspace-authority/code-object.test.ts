@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
+  codeObjectSourceHash,
   parseCodeObjectDocument,
   serializeCodeObjectPluginData
 } from '@open-pencil/core/code-object'
@@ -162,45 +163,6 @@ describe('local authority staged Code Objects', () => {
     expect(serialized).not.toContain(STATE_CANARY)
     expect(serialized).toContain('props_hash')
     expect(serialized).toContain('state_hash')
-
-    const inspected = result(
-      await f.runtime.sendRpc({
-        command: 'get_code_object',
-        args: {
-          content_document_id: f.head.identity.documentId,
-          document_id: f.head.identity.documentId,
-          owner_id: ownerId,
-          page_id: f.page.id,
-          runtime_instance_id: `local-authority:${f.head.authorityId}`,
-          workspace_id: f.head.identity.workspaceId
-        }
-      })
-    )
-    expect(inspected).toMatchObject({
-      component: {
-        definition_id: 'authority-proof',
-        name: 'Authority proof',
-        props: { secret: PROPS_CANARY },
-        source: SOURCE,
-        state: { secret: STATE_CANARY }
-      },
-      execution_surface: 'local_workspace_authority',
-      frame: { id: ownerId, name: 'Authority proof', type: 'FRAME' },
-      refinement: {
-        execution: 'staged',
-        normal_editor_undo: 'unavailable',
-        pixels: 'not_evaluated',
-        status: 'available'
-      }
-    })
-    expect(inspected.board_build_refine_recipe_base).toEqual({
-      expected_source_hash: (inspected.component as { source_hash: string }).source_hash,
-      kind: 'code_object',
-      object_key: 'authority-proof',
-      operation: 'refine',
-      owner_id: ownerId,
-      source_format: 'tsx'
-    })
   })
 
   test('refines one exact owner while preserving state, geometry, and unrelated plugin data', async () => {
@@ -239,20 +201,14 @@ describe('local authority staged Code Objects', () => {
     f.runtime = new LocalWorkspaceBoardRuntime(f.store)
     const refineContext = await context(f)
     expect(refineContext.capabilities).toContain('board.build.code_object.tsx.refine.staged')
-    const inspected = result(
-      await f.runtime.sendRpc({
-        command: 'get_code_object',
-        args: {
-          content_document_id: f.head.identity.documentId,
-          document_id: f.head.identity.documentId,
-          owner_id: ownerId,
-          page_id: f.page.id,
-          runtime_instance_id: `local-authority:${f.head.authorityId}`,
-          workspace_id: f.head.identity.workspaceId
-        }
-      })
-    )
-    const recipeBase = inspected.board_build_refine_recipe_base as Record<string, unknown>
+    const recipeBase = {
+      expected_source_hash: await codeObjectSourceHash(SOURCE),
+      kind: 'code_object',
+      object_key: 'authority-proof',
+      operation: 'refine',
+      owner_id: ownerId,
+      source_format: 'tsx'
+    }
     const refineArgs = {
       ...(refineContext.board_build_base as Record<string, unknown>),
       intent: 'Refine the existing interactive proof without replacing its identity',

@@ -1,3 +1,4 @@
+import { IS_BROWSER } from '@open-pencil/core/constants'
 /**
  * Design System tokens — Light board + Dark board (side by side).
  *
@@ -7,7 +8,7 @@
 import type { Color, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { DEMO_COLORS, solid, thinStroke } from '../demo/colors'
-import { blurEffect, dropShadow } from '../demo/effects'
+import { blurEffect, dropShadow, innerShadow } from '../demo/effects'
 import {
   SMYLR_TOKEN_DEFINITIONS,
   tokenPreviewDark,
@@ -139,7 +140,7 @@ function themeValue(token: SmylrTokenDefinition, mode: ThemeMode): string {
 
 function themeShadow(token: SmylrTokenDefinition, mode: ThemeMode) {
   if (mode === 'dark' && token.shadowDark) return token.shadowDark
-  return token.shadow ?? { x: 0, y: 2, blur: 6, spread: 0, a: 0.12 }
+  return token.shadow ?? { x: 0, y: 2, blur: 6, spread: 0, a: 0.12, inset: false }
 }
 
 /** Flat token line: swatch + labels only (no row card). */
@@ -189,7 +190,14 @@ function addFlatToken(
         solid(chrome.mode === 'dark' ? { r: 0.22, g: 0.23, b: 0.26, a: 1 } : DEMO_COLORS.white)
       ],
       cornerRadius: 6,
-      effects: [dropShadow(s.x, s.y, s.blur, s.spread, { r: 0, g: 0, b: 0, a: s.a })],
+      effects: [
+        (s.inset ? innerShadow : dropShadow)(s.x, s.y, s.blur, s.spread, {
+          r: 0,
+          g: 0,
+          b: 0,
+          a: s.a
+        })
+      ],
       pluginData: plugin
     })
   } else if (kind === 'spacing') {
@@ -372,7 +380,6 @@ function buildThemeBoard(
     height: boardH,
     name: `Design System · ${chrome.title}`,
     fills: [solid(chrome.glass, chrome.glassOpacity)],
-    strokes: thinStroke(chrome.hairline),
     cornerRadius: 16,
     clipsContent: true,
     effects: [
@@ -463,7 +470,7 @@ export function isSmylrTokensPageNode(node: SceneNode | null | undefined): boole
 // Vite HMR: when THIS file saves, tell the editor to rebuild boards in place.
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
-    if (typeof window !== 'undefined') {
+    if (IS_BROWSER) {
       window.dispatchEvent(new CustomEvent('smylr-foundations-hmr', { detail: 'tokens' }))
     }
   })

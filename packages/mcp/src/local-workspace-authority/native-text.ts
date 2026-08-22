@@ -249,6 +249,10 @@ function markerBounds(value: unknown): Rect | null {
   return { height, width, x, y }
 }
 
+function isTextMarkerVersion(value: unknown): value is TextMarker['version'] {
+  return value === 2 || value === 3 || value === 4
+}
+
 export function authorityTextMarker(node: SceneNode): TextMarker | null {
   const entry = node.pluginData.find(
     (candidate) => candidate.pluginId === RECEIPT_PLUGIN_ID && candidate.key === RECEIPT_PLUGIN_KEY
@@ -258,7 +262,7 @@ export function authorityTextMarker(node: SceneNode): TextMarker | null {
     const value = JSON.parse(entry.value) as Partial<TextMarker>
     const bounds = markerBounds(value.bounds)
     if (
-      (value.version !== 2 && value.version !== 3 && value.version !== 4) ||
+      !isTextMarkerVersion(value.version) ||
       value.algorithm !== AUTHORITY_PLACEMENT_ALGORITHM ||
       value.route !== 'board_change' ||
       typeof value.inputDigest !== 'string' ||
@@ -368,41 +372,42 @@ export function createAuthorityNativeText(
   requestId: string,
   placementAnchor?: Rect
 ): { owner: SceneNode; placement: AuthorityPlacementResult } {
-  const placement = placementAnchor
-    ? resolveAuthorityAnchoredPlacement({
-        anchor: placementAnchor,
-        clearance: operation.clearance,
-        footprint: authorityNativeTextFootprint(operation),
-        graph: document.graph,
-        pageId,
-        preferredDirections: operation.preferredDirections
-      })
-    : operation.placementTarget.kind === 'anchor'
-      ? (() => {
-          const anchor = requireAuthorityAnchor(
-            document.graph,
-            pageId,
-            operation.placementTarget.anchorId
-          )
-          return resolveAuthorityAnchoredPlacement({
-            anchor: document.graph.getAbsoluteBounds(anchor.id),
-            clearance: operation.clearance,
-            footprint: authorityNativeTextFootprint(operation),
-            graph: document.graph,
-            pageId,
-            preferredDirections: operation.preferredDirections,
-            relativeOffset: operation.relativeOffset
-          })
-        })()
-      : resolveAuthorityFreePlacement({
-          clearance: operation.clearance,
-          footprint: authorityNativeTextFootprint(operation),
-          graph: document.graph,
-          pageId,
-          preferredDirections: operation.preferredDirections,
-          relativeOffset: operation.relativeOffset,
-          target: operation.placementTarget
-        })
+  let placement: AuthorityPlacementResult
+  if (placementAnchor) {
+    placement = resolveAuthorityAnchoredPlacement({
+      anchor: placementAnchor,
+      clearance: operation.clearance,
+      footprint: authorityNativeTextFootprint(operation),
+      graph: document.graph,
+      pageId,
+      preferredDirections: operation.preferredDirections
+    })
+  } else if (operation.placementTarget.kind === 'anchor') {
+    const anchor = requireAuthorityAnchor(
+      document.graph,
+      pageId,
+      operation.placementTarget.anchorId
+    )
+    placement = resolveAuthorityAnchoredPlacement({
+      anchor: document.graph.getAbsoluteBounds(anchor.id),
+      clearance: operation.clearance,
+      footprint: authorityNativeTextFootprint(operation),
+      graph: document.graph,
+      pageId,
+      preferredDirections: operation.preferredDirections,
+      relativeOffset: operation.relativeOffset
+    })
+  } else {
+    placement = resolveAuthorityFreePlacement({
+      clearance: operation.clearance,
+      footprint: authorityNativeTextFootprint(operation),
+      graph: document.graph,
+      pageId,
+      preferredDirections: operation.preferredDirections,
+      relativeOffset: operation.relativeOffset,
+      target: operation.placementTarget
+    })
+  }
   const owner = document.graph.createNode('TEXT', pageId, {
     effects: [
       {

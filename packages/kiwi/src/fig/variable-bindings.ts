@@ -18,6 +18,14 @@ export interface VariableBindingCodec<Paint, NodeChange> {
   encodeNodeChange(nodeChange: NodeChange): Uint8Array
 }
 
+function withoutColorVariableBinding<Paint extends PaintWithVariableBinding>(
+  paint: Paint
+): Omit<Paint, 'colorVariableBinding'> {
+  const cleanPaint = { ...paint }
+  Reflect.deleteProperty(cleanPaint, 'colorVariableBinding')
+  return cleanPaint
+}
+
 export function encodeVarint(value: number): number[] {
   const bytes: number[] = []
   while (value > 0x7f) {
@@ -34,7 +42,7 @@ export function encodePaintWithVariableBinding<Paint extends PaintWithVariableBi
   variableSessionID: number,
   variableLocalID: number
 ): Uint8Array {
-  const { colorVariableBinding: _, ...basePaint } = paint
+  const basePaint = withoutColorVariableBinding(paint)
 
   const baseBytes = codec.encodePaint(basePaint)
   const baseArray = Array.from(baseBytes)
@@ -81,14 +89,10 @@ export function encodeNodeChangeWithVariables<NodeChange extends NodeChangeWithV
 
   const cleanNodeChange = { ...nodeChange }
   if (cleanNodeChange.fillPaints) {
-    cleanNodeChange.fillPaints = cleanNodeChange.fillPaints.map(
-      ({ colorVariableBinding: _, ...rest }) => rest
-    )
+    cleanNodeChange.fillPaints = cleanNodeChange.fillPaints.map(withoutColorVariableBinding)
   }
   if (cleanNodeChange.strokePaints) {
-    cleanNodeChange.strokePaints = cleanNodeChange.strokePaints.map(
-      ({ colorVariableBinding: _, ...rest }) => rest
-    )
+    cleanNodeChange.strokePaints = cleanNodeChange.strokePaints.map(withoutColorVariableBinding)
   }
 
   const baseBytes = codec.encodeNodeChange(cleanNodeChange)

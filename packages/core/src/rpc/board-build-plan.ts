@@ -1,9 +1,7 @@
 export {
-  boardBuildPlanConvergenceAnchor,
-  boardBuildPlanInboundReferences,
   boardBuildPlanReferenceKey,
   resolveBoardBuildPlanOperations
-} from './board-build-plan/connections-operations'
+} from './board-build-plan/operations'
 export { boardBuildPlanDigestInput } from './board-build-plan/digest'
 export {
   boardBuildPlanLayoutMembers,

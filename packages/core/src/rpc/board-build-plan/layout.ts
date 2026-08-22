@@ -424,48 +424,54 @@ function gridAlignmentOffset(
   return 0
 }
 
+type BoardBuildPlanFootprint = Pick<BoardBuildPlanBounds, 'height' | 'width'>
+
+function requiredLayoutFootprint(
+  member: string,
+  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>,
+  layoutKind: 'Flow' | 'Grid'
+): BoardBuildPlanFootprint {
+  const footprint = footprints[member]
+  if (
+    !footprint ||
+    !Number.isFinite(footprint.width) ||
+    !Number.isFinite(footprint.height) ||
+    footprint.width <= 0 ||
+    footprint.height <= 0
+  ) {
+    throw new Error(`${layoutKind} member "${member}" requires a positive finite footprint.`)
+  }
+  return footprint
+}
+
+function spacedAxis(sizes: readonly number[], gap: number): { size: number; starts: number[] } {
+  let cursor = 0
+  const starts = sizes.map((size) => {
+    const start = cursor
+    cursor += size + gap
+    return start
+  })
+  return { size: Math.max(0, cursor - gap), starts }
+}
+
 export function compileBoardBuildPlanGridLayout(
   layout: BoardBuildPlanGridLayout,
-  footprints: Readonly<Record<string, Pick<BoardBuildPlanBounds, 'height' | 'width'>>>
+  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
 ): BoardBuildPlanGridCompilation {
-  const memberFootprints = layout.members.map((member) => {
-    const footprint = footprints[member]
-    if (
-      !footprint ||
-      !Number.isFinite(footprint.width) ||
-      !Number.isFinite(footprint.height) ||
-      footprint.width <= 0 ||
-      footprint.height <= 0
-    ) {
-      throw new Error(`Grid member "${member}" requires a positive finite footprint.`)
-    }
-    return footprint
-  })
+  const memberFootprints = layout.members.map((member) =>
+    requiredLayoutFootprint(member, footprints, 'Grid')
+  )
   const rowCount = Math.ceil(layout.members.length / layout.columns)
-  const columnWidths = Array.from({ length: layout.columns }, (_, column) =>
-    Math.max(
-      0,
-      ...memberFootprints
-        .filter((_, index) => index % layout.columns === column)
-        .map(({ width }) => width)
-    )
-  )
-  const rowHeights = Array.from({ length: rowCount }, (_, row) =>
-    Math.max(
-      ...memberFootprints
-        .slice(row * layout.columns, (row + 1) * layout.columns)
-        .map(({ height }) => height)
-    )
-  )
-  const columnStarts = columnWidths.map(
-    (_, column) =>
-      columnWidths.slice(0, column).reduce((total, width) => total + width, 0) +
-      column * layout.column_gap
-  )
-  const rowStarts = rowHeights.map(
-    (_, row) =>
-      rowHeights.slice(0, row).reduce((total, height) => total + height, 0) + row * layout.row_gap
-  )
+  const columnWidths = Array.from({ length: layout.columns }, () => 0)
+  const rowHeights = Array.from({ length: rowCount }, () => 0)
+  memberFootprints.forEach((footprint, index) => {
+    const column = index % layout.columns
+    const row = Math.floor(index / layout.columns)
+    columnWidths[column] = Math.max(columnWidths[column] ?? 0, footprint.width)
+    rowHeights[row] = Math.max(rowHeights[row] ?? 0, footprint.height)
+  })
+  const columns = spacedAxis(columnWidths, layout.column_gap)
+  const rows = spacedAxis(rowHeights, layout.row_gap)
   const aliases: Record<string, BoardBuildPlanBounds> = {}
   layout.members.forEach((member, index) => {
     const footprint = memberFootprints[index]
@@ -473,8 +479,8 @@ export function compileBoardBuildPlanGridLayout(
     const row = Math.floor(index / layout.columns)
     const columnWidth = columnWidths[column]
     const rowHeight = rowHeights[row]
-    const columnStart = columnStarts[column]
-    const rowStart = rowStarts[row]
+    const columnStart = columns.starts[column]
+    const rowStart = rows.starts[row]
     if (
       !footprint ||
       columnWidth === undefined ||
@@ -493,41 +499,19 @@ export function compileBoardBuildPlanGridLayout(
   })
   return {
     aliases,
-    footprint: {
-      height:
-        rowHeights.reduce((total, height) => total + height, 0) +
-        Math.max(0, rowCount - 1) * layout.row_gap,
-      width:
-        columnWidths.reduce((total, width) => total + width, 0) +
-        Math.max(0, layout.columns - 1) * layout.column_gap
-    }
+    footprint: { height: rows.size, width: columns.size }
   }
-}
-
-function flowMemberFootprint(
-  member: string,
-  footprints: Readonly<Record<string, Pick<BoardBuildPlanBounds, 'height' | 'width'>>>
-): Pick<BoardBuildPlanBounds, 'height' | 'width'> {
-  const footprint = footprints[member]
-  if (
-    !footprint ||
-    !Number.isFinite(footprint.width) ||
-    !Number.isFinite(footprint.height) ||
-    footprint.width <= 0 ||
-    footprint.height <= 0
-  ) {
-    throw new Error(`Flow member "${member}" requires a positive finite footprint.`)
-  }
-  return footprint
 }
 
 export function compileBoardBuildPlanFlowLayout(
   layout: BoardBuildPlanFlowLayout,
-  footprints: Readonly<Record<string, Pick<BoardBuildPlanBounds, 'height' | 'width'>>>
+  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
 ): BoardBuildPlanLayoutCompilation {
   const horizontal = layout.direction === 'left' || layout.direction === 'right'
   const ranks = layout.ranks.map((members) => {
-    const memberFootprints = members.map((member) => flowMemberFootprint(member, footprints))
+    const memberFootprints = members.map((member) =>
+      requiredLayoutFootprint(member, footprints, 'Flow')
+    )
     return {
       members,
       memberFootprints,
@@ -542,19 +526,15 @@ export function compileBoardBuildPlanFlowLayout(
         Math.max(0, memberFootprints.length - 1) * layout.node_gap
     }
   })
-  const primaryStarts = ranks.map(
-    (_, index) =>
-      ranks.slice(0, index).reduce((total, rank) => total + rank.primary, 0) +
-      index * layout.rank_gap
+  const primaryAxis = spacedAxis(
+    ranks.map((rank) => rank.primary),
+    layout.rank_gap
   )
-  const primarySize =
-    ranks.reduce((total, rank) => total + rank.primary, 0) +
-    Math.max(0, ranks.length - 1) * layout.rank_gap
   const secondarySize = Math.max(...ranks.map((rank) => rank.secondary))
   const aliases: Record<string, BoardBuildPlanBounds> = {}
 
   ranks.forEach((rank, rankIndex) => {
-    const primaryStart = primaryStarts[rankIndex]
+    const primaryStart = primaryAxis.starts[rankIndex]
     if (primaryStart === undefined) throw new Error(`Flow rank ${rankIndex} could not be compiled.`)
     let secondaryCursor = gridAlignmentOffset(secondarySize, rank.secondary, layout.align)
     rank.members.forEach((member, memberIndex) => {
@@ -575,8 +555,8 @@ export function compileBoardBuildPlanFlowLayout(
           }
       aliases[member] = {
         ...raw,
-        x: layout.direction === 'left' ? primarySize - raw.x - raw.width : raw.x,
-        y: layout.direction === 'up' ? primarySize - raw.y - raw.height : raw.y
+        x: layout.direction === 'left' ? primaryAxis.size - raw.x - raw.width : raw.x,
+        y: layout.direction === 'up' ? primaryAxis.size - raw.y - raw.height : raw.y
       }
       secondaryCursor += (horizontal ? footprint.height : footprint.width) + layout.node_gap
     })
@@ -585,14 +565,14 @@ export function compileBoardBuildPlanFlowLayout(
   return {
     aliases,
     footprint: horizontal
-      ? { height: secondarySize, width: primarySize }
-      : { height: primarySize, width: secondarySize }
+      ? { height: secondarySize, width: primaryAxis.size }
+      : { height: primaryAxis.size, width: secondarySize }
   }
 }
 
 export function compileBoardBuildPlanLayout(
   layout: BoardBuildPlanLayout,
-  footprints: Readonly<Record<string, Pick<BoardBuildPlanBounds, 'height' | 'width'>>>
+  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
 ): BoardBuildPlanLayoutCompilation {
   return layout.kind === 'grid'
     ? compileBoardBuildPlanGridLayout(layout, footprints)

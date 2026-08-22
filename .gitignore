@@ -49,7 +49,7 @@ blob-report/
 # Copied from node_modules at build time
 public/canvaskit.wasm
 public/canvaskit-webgpu/
-/public/canvaskit 82.wasm
+/public/canvaskit [0-9]*.wasm
 
 # Documentation build/cache output
 packages/docs/.vitepress/cache/

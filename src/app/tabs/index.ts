@@ -60,7 +60,7 @@ export function getTabById(tabId: string): Tab | undefined {
 }
 
 export function getTabForStore(store: EditorStore): Tab | undefined {
-  return tabsRef.value.find((tab) => tab.store === store)
+  return tabsRef.value.find((tab) => tab.store === store || tab.store.graph === store.graph)
 }
 
 export function getTabsSnapshot(): Tab[] {

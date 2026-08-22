@@ -10,11 +10,11 @@ OpenPencil trata los archivos de diseño como datos. Cada operación disponible 
 
 La interfaz del editor y las interfaces de automatización usan el mismo motor. Si puedes hacerlo con un clic, puedes hacerlo con un script.
 
-## Chat con IA
+## Chat de tareas
 
-El asistente integrado tiene acceso a 87 herramientas que cubren toda la superficie del editor. Describe lo que quieres en lenguaje natural — "añade una sombra de 16px a todos los botones", "crea un componente de tarjeta con variante para modo oscuro", "exporta cada frame de esta página a 2×".
+El chat de tareas Pi mantiene el trabajo de programación y los seguimientos en una conversación. La automatización del editor está disponible mediante el catálogo MCP descubierto en tiempo de ejecución.
 
-[Chat con IA →](./ai-chat)
+[Chat de tareas →](./ai-chat)
 
 ## Colaboración
 
@@ -40,7 +40,7 @@ El CLI también se conecta a la aplicación de escritorio en ejecución vía RPC
 
 ## Servidor MCP
 
-Conecta Claude Code, Cursor, Windsurf o cualquier cliente compatible con MCP a OpenPencil. El servidor expone 90 herramientas para leer, crear y modificar diseños — las mismas herramientas que usa el chat con IA integrado. Funciona sobre stdio o HTTP con soporte de sesiones.
+Conecta Claude Code, Cursor, Windsurf o cualquier cliente MCP a OpenPencil. El servidor expone un catálogo descubierto en tiempo de ejecución para leer, crear y modificar diseños mediante stdio o HTTP con soporte de sesiones.
 
 [Servidor MCP →](./mcp-server)
 

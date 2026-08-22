@@ -1,25 +1,27 @@
 ---
-title: Warstwy i strony
-description: Zarządzanie warstwami, stronami i panelem właściwości w OpenPencil.
+title: Warstwy i tablice
+description: Korzystanie z paska bocznego, drzewa warstw i tablic obszaru roboczego w OpenPencil.
 ---
-# Warstwy i strony
 
-## Panel warstw
-Drzewo hierarchii po lewej. Rozwijanie/zwijanie, przeciąganie aby zmienić kolejność, przełączanie widoczności ikoną oka, **dwuklik aby zmienić nazwę** (<kbd>Enter</kbd> lub klik poza polem zatwierdza, <kbd>Escape</kbd> anuluje). Zaznaczenie synchronizuje się z płótnem.
+# Warstwy i tablice
 
-## Panel stron
-- **Zmiana strony** — kliknij na zakładkę
-- **Dodaj** — przycisk dodaj
-- **Usuń** — usuń bieżącą stronę
-- **Zmień nazwę** — dwuklik na nazwie (<kbd>Enter</kbd> lub klik poza polem zatwierdza, <kbd>Escape</kbd> anuluje)
+OpenPencil pozostawia płótno widoczne, a główne widoki umieszcza w pływającym lewym pasku bocznym. Pasek można poszerzyć albo zwinąć, aby uzyskać więcej miejsca.
 
-Każda strona ma własny niezależny stan widoku.
+## Pasek boczny
 
-## Panel właściwości
-Trzy zakładki: **Design** (właściwości kontekstowe), **Kod** (JSX / Tailwind CSS v4), **AI** (chat <kbd>⌘</kbd><kbd>J</kbd>).
+- **Warstwy** — przeglądanie i edycja hierarchii bieżącej tablicy.
+- **Czaty** — uruchamianie i kontynuowanie zadań Pi oraz otwieranie ich kart.
+- **Zasoby** — wstawianie zasobów wielokrotnego użytku.
+- **Aktywność** — przegląd zapisanej aktywności Trace.
 
-Design: wygląd, wypełnienie, obrys, efekty, typografia, layout, eksport.
+## Warstwy
 
-## Układ mobilny
+Rozwijaj kontenery, przeciągaj warstwy, aby zmienić kolejność lub rodzica, ukrywaj je ikoną oka i zmieniaj nazwę dwuklikiem. Zaznaczenie w drzewie i na płótnie jest zsynchronizowane. Przycisk zmiennych otwiera zarządzanie tokenami projektu.
 
-Na urządzeniach mobilnych panele boczne są zastąpione przez wysuwaną szufladę dolną z zakładkami: Warstwy, Właściwości, Design, Kod.
+## Obszary robocze i tablice
+
+Przycisk **Workspace** na pasku narzędzi służy do wyszukiwania tablic, otwierania ostatnich oraz zarządzania projektami i tablicami. Każda tablica zachowuje własną zawartość i widok.
+
+## Mobile
+
+Na małych ekranach pasek boczny zmienia się w dolną szufladę z Warstwami i Designem, a także Kodem dla obiektów z edytowalnym źródłem i mobilnym widokiem AI.

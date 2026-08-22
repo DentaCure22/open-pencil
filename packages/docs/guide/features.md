@@ -17,17 +17,16 @@ Open and save native Figma files directly. The import/export pipeline uses the s
 - **Variables** — design tokens with collections, modes (Light/Dark), color/float/string/boolean types, variable binding
 - **Sections** — organizational containers with auto-adopting children and title pills
 
-## Properties Panel
+## Workspace & Object Controls
 
-Context-sensitive Design | Code | AI tabs:
+The floating sidebar keeps navigation and work in one place:
 
-- **Appearance** — opacity, corner radius (uniform or per-corner), visibility
-- **Fill** — solid, gradient (linear/radial/angular/diamond), image
-- **Stroke** — color, weight, align (inside/center/outside), per-side weights, cap, join, dash
-- **Effects** — drop shadow, inner shadow, layer blur, background blur, foreground blur
-- **Typography** — font picker with virtual scroll and search, weight, size, alignment, style buttons
-- **Layout** — auto-layout controls when enabled
-- **Export** — scale, format (PNG/JPG/WEBP/SVG), live preview
+- **Layers** — document tree, search, visibility, and design-token access
+- **Chats** — Pi tasks and their conversation history
+- **Assets** — reusable components, media, and exports
+- **Activity** — current and durable Trace evidence
+
+Selection-specific actions stay close to the object on the canvas and in the integrated tool rail. On smaller screens, the mobile drawer exposes Design controls and source for Code Objects that own editable code. Export is also available from the context menu and keyboard shortcut.
 
 ## Rendering
 
@@ -63,17 +62,17 @@ Open multiple documents in tabs. <kbd>⌘</kbd><kbd>T</kbd> new tab, <kbd>⌘</k
 
 CLI: `openpencil export design.fig -f jsx --style tailwind`
 
-## AI Chat
+## Task Chat
 
-Press <kbd>⌘</kbd><kbd>J</kbd> to open the AI assistant. 90+ tools that can create shapes, set styles, manage layout, work with components and variables, run boolean operations, analyze design tokens, and export assets. Connect Anthropic, OpenAI, Google AI, OpenRouter, or any compatible endpoint.
+Open **CHATS** in the left sidebar to start or continue a Pi coding task. The sidebar and Board cards share the same conversation history, model choice, ordered tool activity, attachments, and follow-ups.
 
-Tool calls display as collapsible timeline entries. Visual verification — the assistant renders its work and checks it against your request. Full undo support for all AI mutations.
+Active tool calls stay expanded; completed activity collapses into a compact turn summary.
 
-See [AI Chat](/programmable/ai-chat) for setup and provider details.
+See [Task Chat](/programmable/ai-chat) for details.
 
 ## MCP Server
 
-Connect Claude Code, Cursor, Windsurf, or any MCP client to read and write `.fig` files headlessly. 90+ tools. Two transports: stdio and HTTP.
+Connect Claude Code, Cursor, Windsurf, or any MCP client to read and write `.fig` files headlessly. Clients discover the current catalog at runtime over stdio or HTTP.
 
 ```sh
 npm install -g @open-pencil/mcp

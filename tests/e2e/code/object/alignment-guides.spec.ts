@@ -1,5 +1,5 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { createTestCodeObject } from '#tests/helpers/object-graph'
+import { createTestCodeObject } from '#tests/helpers/code-object'
 
 const editor = useEditorSetupWithClear('/?test&no-rulers')
 

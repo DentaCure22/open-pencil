@@ -1,26 +1,8 @@
-import type {
-  ObjectGraphInputEnvelope,
-  ObjectGraphPortDefinition,
-  ObjectGraphSignal
-} from '@open-pencil/scene-graph'
-
 import type { BoardPermission, BoardPermissionDenialReason } from '@/app/board-permissions'
 
 export const CODE_OBJECT_BOARD_API_VERSION = 3 as const
 
-/** @deprecated Read/source compatibility only. Authority is stored on Object Graph records. */
-export type CodeObjectConnectionPermission = 'state.write'
 export type CodeObjectBoardPermission = BoardPermission
-
-/** @deprecated Read/source compatibility only. New connections are page-owned Object Graph records. */
-export type CodeObjectConnection = {
-  id: string
-  label: string
-  permissions: CodeObjectConnectionPermission[]
-  targetFrameId: string
-}
-
-export type CodeObjectConnectionDescriptor = Omit<CodeObjectConnection, 'targetFrameId'>
 
 export type CodeObjectStatePatch = Record<string, unknown>
 
@@ -67,13 +49,6 @@ export type CodeObjectUpdateBoardShapeInput = Partial<
   >
 >
 
-export type CodeObjectStatePatchAction = {
-  connectionId: string
-  sourceStatePatch?: CodeObjectStatePatch
-  targetStatePatch: CodeObjectStatePatch
-  type: 'code-object.state.patch'
-}
-
 export type CodeObjectCreateBoardShapeAction = {
   shape: CodeObjectCreateBoardShapeInput
   type: 'code-object.board-shape.create'
@@ -90,16 +65,9 @@ export type CodeObjectDeleteBoardShapeAction = {
   type: 'code-object.board-shape.delete'
 }
 
-export type CodeObjectGraphEmitAction = {
-  signal: ObjectGraphSignal
-  type: 'code-object.graph.emit'
-}
-
 export type CodeObjectBoardAction =
   | CodeObjectCreateBoardShapeAction
   | CodeObjectDeleteBoardShapeAction
-  | CodeObjectGraphEmitAction
-  | CodeObjectStatePatchAction
   | CodeObjectUpdateBoardShapeAction
 
 export type CodeObjectActionDenialReason =
@@ -108,7 +76,6 @@ export type CodeObjectActionDenialReason =
   | 'invalid-payload'
   | 'shape-limit'
   | 'shape-not-owned'
-  | 'connection-missing'
   | 'cross-page'
   | 'interaction-required'
   | 'permission-denied'
@@ -121,7 +88,6 @@ export type CodeObjectActionReceipt = {
   reason?: CodeObjectActionDenialReason
   status: 'applied' | 'denied' | 'noop'
   targetNodeId?: string
-  targetNodeIds?: string[]
   targetFrameId?: string
   type: CodeObjectBoardAction['type']
   shape?: CodeObjectBoardShapeSnapshot
@@ -133,13 +99,9 @@ export type DispatchCodeObjectBoardAction = (
 
 export type CodeObjectBoardClient = {
   apiVersion: typeof CODE_OBJECT_BOARD_API_VERSION
-  connections: CodeObjectConnectionDescriptor[]
   createShape: (shape: CodeObjectCreateBoardShapeInput) => Promise<CodeObjectActionReceipt>
   deleteShape: (shapeId: string) => Promise<CodeObjectActionReceipt>
-  emitGraphSignal: (signal: ObjectGraphSignal) => Promise<CodeObjectActionReceipt>
-  inputs: ObjectGraphInputEnvelope[]
   permissions: CodeObjectBoardPermission[]
-  ports: ObjectGraphPortDefinition[]
   self: CodeObjectBoardSelfSnapshot
   shapes: CodeObjectBoardShapeSnapshot[]
   updateShape: (

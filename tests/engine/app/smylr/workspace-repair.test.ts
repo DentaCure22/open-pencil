@@ -389,7 +389,7 @@ describe('Smylr production workspace repair', () => {
     ).toHaveLength(1)
 
     stampSmylrFoundationsRevision(store)
-    expect(SMYLR_FOUNDATIONS_REVISION).toBe('2026-07-22-live-react-flow-surfaces-v68')
+    expect(SMYLR_FOUNDATIONS_REVISION).toBe('2026-08-08-native-workspace-surfaces-v69')
     expect(getSmylrFoundationsRevision(store)).toBe(SMYLR_FOUNDATIONS_REVISION)
   })
 })

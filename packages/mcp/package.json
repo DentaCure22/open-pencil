@@ -53,6 +53,7 @@
     "@hono/node-server": "^1.19.11",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@open-pencil/core": "workspace:*",
+    "@open-pencil/scene-graph": "workspace:*",
     "hono": "^4.12.5",
     "mermaid": "11.16.0",
     "package-manager-detector": "^1.6.0",

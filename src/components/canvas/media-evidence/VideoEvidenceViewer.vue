@@ -18,6 +18,7 @@ const { node, selected, source, sourceUrl } = defineProps<{
 
 const emit = defineEmits<{
   error: []
+  focusSurface: []
   ready: []
 }>()
 
@@ -73,6 +74,7 @@ async function captureFrame() {
       data-test-id="media-evidence-video-viewer"
       playsinline
       preload="metadata"
+      @dblclick.stop.prevent="emit('focusSurface')"
       @error="handleError"
       @loadeddata="handleReady"
     />

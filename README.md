@@ -22,17 +22,19 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 
 - **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
 - **AI builds designs** — describe what you want in chat; agents can retrieve prior Boards, place exact reusable objects, and fork Board-specific variants before 90+ tools create or modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
-- **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist full sessions in SQLite, and publish only the latest exact Board targets, connections, region, expiry, and PNG path to a bounded `trace-context.json` for routine agent follow-ups
+- **Agentic viewing** — the Board stays primary while Activity turns human actions, agent mutation receipts, exact targets, and evidence into one quiet spatial story. Reveal jumps back to the objects an agent changed instead of sending work to a separate dashboard
+- **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist history as rotated append-only JSONL, and publish only the latest exact Board targets, region, speech, expiry, and PNG path to a bounded `trace-context.json` for routine agent follow-ups
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
-- **Spatial workspace** — compose native objects, Code Objects, connected workflows, documents, media, and evidence directly across persistent Boards without parallel projection systems
+- **Board-native agent chats** — place worker conversations as persistent, transformable cards that move and zoom with the Board. Sidebar and Board chats share streaming Markdown, safe tool/activity timelines, code, attachments, sources, errors, and prompt controls adapted from AI Elements Vue
+- **Agent task history** — browse worker tasks in a stable half-panel selector and follow up through the same authenticated conversation route
+- **Spatial workspace** — compose native objects, Code Objects, workflows, documents, media, and evidence directly across persistent Boards without parallel projection systems
 - **Flexible Pages and Boards** — group unlimited canvas Boards inside nested Pages, search and rename them inline, and reorganize the workspace with drag and drop
-- **Mermaid diagrams** — paste source or call `insert_mermaid_diagram` from MCP to place Mermaid 11.16 diagrams as one theme-aware SVG-backed Board frame; move or resize the frame normally, then update its retained source to redraw it in place without generated child layers
+- **Mermaid diagrams** — paste source to place Mermaid 11.16 diagrams as one theme-aware SVG-backed Board frame; move or resize the frame normally, then update its retained source to redraw it in place without generated child layers
 - **Workflow boards** — map product areas, journeys, tasks, screen states, recovery paths, and technical systems on ordinary Boards; Mermaid supplies compact diagram-as-code visuals, while app-like experiences use Code Objects
 - **Board Experiences** — optionally coordinate many ordinary objects without creating a new Board type or embedded app; one page-owned runtime can create and connect native objects or Code Object components while identity, selection, transforms, persistence, permissions, and Undo remain under OpenPencil authority
-- **Connected objects** — connect any ordinary native object or Code Object through official React Flow handles and plain Bézier edges, including movement and reconnecting directly on the same Board; the native object remains the one visible identity, React Flow shares OpenPencil's camera instead of creating a second canvas, and links and automatic reactions retain normal persistence, permissions, and Undo/Redo
 - **Code Objects** — author trusted TypeScript/TSX through ReactDOM, or host a first-party full
   program such as Smylr through the trusted-web-app iframe renderer, inside the same ordinary
-  persisted `FRAME`; select, resize with shared Desktop/Laptop/iPad/Phone controls, connect,
+  persisted `FRAME`; select, resize with shared Desktop/Laptop/iPad/Phone controls,
   duplicate, delete, undo, save, and reopen normally, then click or press Enter to interact and
   Escape to return to Design
 - **Rich artifacts** — documents, spreadsheets, presentations, charts, forms, dashboards, and other app-like experiences are frame-owned Code Objects, not separate object systems; exact imported bytes and provenance stay attached to the owning frame
@@ -104,8 +106,8 @@ openpencil import page.html --css styles.css -o page.fig # HTML/CSS → editable
 openpencil import dashboard.tsx --css dashboard.css -o dashboard.fig # React/TSX → editable .fig
 ```
 
-Board automation has its own four-command workflow below: `board search`, `board create`,
-`board build`, and `board present`.
+CLI Board automation has its own workflow below: `board get` / `board ls` / `board nearby` for
+the local file, plus `board search`, `board create`, `board build`, and `board present`.
 
 DOM/CSS input flows through `@open-pencil/dom-css`, so React/TSX, HTML, authored CSS, and Tailwind utility CSS can become editable OpenPencil layers:
 
@@ -119,17 +121,7 @@ ReactDOM root; first-party full programs may use a frame-bound trusted iframe wh
 native auth, router, portals, and scrolling. Trusted web-app runtimes are bounded and volatile:
 OpenPencil keeps the selected frame plus recent comparison frames resident, while the source app
 owns each frame's session-local last view. Runtime routes and scroll positions never become Board
-JSON or Undo entries. Every Code Object and native shape participates in the same typed object
-graph. External or untrusted websites use a sandboxed embed.
-
-Code Objects may declare multiple stable named Object Graph ports. Each port defines its semantic
-ID, label, input/output direction, supported connection kinds, object side, and relative offset.
-Authored TSX can place `data-openpencil-port-id="PORT_ID"` on the rendered row or control that owns a
-port; OpenPencil measures that semantic marker while the Code Object is mounted so the connector
-follows internal layout changes, while the relative offset remains the unloaded-runtime fallback.
-An atomic Board plan can create several components and connect exact port IDs in the same
-transaction; React Flow supplies the aligned handles and edge interaction without owning a second
-canvas or graph store. Existing side-only connections remain supported.
+JSON or Undo entries. External or untrusted websites use a sandboxed embed.
 
 The same plan can place a `canonical_object` artifact from an exact `source_object_id`, or run
 `canonical_object.fork` before a Board-specific semantic edit. This is the sole reuse and divergence
@@ -196,18 +188,28 @@ openpencil eval design.fig -c "figma.currentPage.selection.forEach(n => n.opacit
 
 `eval` always requires a document file. Use `--write` or `--output` to persist its changes.
 
-### Find and edit a persisted Board
+### Persisted Board CLI adapters
 
-Use the compact index only when the Board or object ID is unknown:
+These commands remain available for people and specialized integrations. Pi Board workers use the
+file-native workflow described above instead. Use the compact index only when the Board or object ID
+is unknown:
 
 ```sh
 openpencil board search "pricing decisions" --limit 10 --json
 openpencil board create --name "Agent Sandbox" --request-id "create-agent-sandbox" --json
 ```
 
-Known Board/object IDs skip search. Otherwise `board search` returns compact IDs, names, types, and
-Board locations from a disposable index; load only the selected object. `workspace.json` remains the
-source of truth for normal direct edits.
+Known Board/object IDs skip search. CLI users can run `board search` for a name, then load only the
+selected object with `board get`. `board ls` prints the box on screen
+(id/name/size) then its children; `board nearby` lists the nearest sibling boxes.
+Never dump `workspace.json` — it is tens of megabytes. The file remains the source of
+truth for normal direct edits.
+
+```sh
+openpencil board get 0:35 --json
+openpencil board ls --json
+openpencil board nearby 0:35 --json
+```
 
 For a specialized guarded semantic transaction, `board build` remains available:
 
@@ -232,8 +234,7 @@ openpencil board build --request '{
         "body": "Ready",
         "placement": { "target": { "kind": "auto" } }
       }
-    }],
-    "connections": []
+    }]
   }
 }' --release-summary --json
 ```
@@ -271,14 +272,17 @@ installed locally.
 
 ### MCP server
 
-Connect Claude Code, Cursor, Windsurf, or any MCP client to inspect, modify, and export design documents headlessly. 100+ tools. [Full docs →](https://openpencil.dev/reference/mcp-tools)
+Connect Claude Code, Cursor, Windsurf, or any MCP client to inspect, modify, and export design documents headlessly. 100+ tools. [Full docs →](https://openpencil.dev/programmable/mcp-server)
 
 OpenPencil does not launch MCP automatically. Start it only when you want live MCP tools; normal
 local Board and Trace persistence uses a separate narrow authority without MCP or WebSocket ports.
 
 For normal persisted Board work, coding agents edit the canonical `workspace.json` document directly;
-OpenPencil derives revisions, history, and live synchronization. `board search` is the compact lookup
-path for unknown targets, while CLI/MCP mutation commands remain optional specialized adapters.
+OpenPencil derives revisions, history, and live synchronization. They use ordinary `rg` against the
+disposable `workspace.index.jsonl`, then bounded reads and patches against exact workspace records.
+CLI/MCP mutation commands remain optional specialized adapters, not the worker contract.
+Board workers otherwise remain general Pi agents with their normal tools and connected apps; only the
+live-parent OpenPencil dispatch, camera, and theme server is disabled in their project context.
 When the user points, the same agent reads the bounded adjacent `trace-context.json`, checks its
 status and expiry, and follows its exact object IDs into `workspace.json`; the user's words remain the
 instruction, and the optional PNG path is loaded only when the target needs visual clarification.
@@ -308,7 +312,7 @@ For other MCP clients:
 openpencil-mcp-http   # http://localhost:7600/mcp
 ```
 
-**File access:** Set `OPENPENCIL_MCP_ROOT` to scope file operations (`open_file`, `new_document`, export `path` param) to a directory. Defaults to the current working directory.
+**File access:** Set `OPENPENCIL_MCP_ROOT` to scope export paths to a directory. It defaults to the current working directory.
 
 ### AI agent skill
 

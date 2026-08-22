@@ -1,6 +1,6 @@
-import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 
-const editor = useEditorSetup('/?test&html-source')
+const editor = useEditorSetupWithClear('/?test&html-source')
 
 test('reveals an inserted component asset as the selected layer', async () => {
   const componentId = await editor.page.evaluate(() => {
@@ -67,29 +67,7 @@ test('adds and uses frame-owned Code Object presets through the normal Assets fl
   await expect(orbitWrapper).toHaveAttribute('data-code-object-mode', 'design')
   await expect(editor.page.locator('iframe')).toHaveCount(0)
 
-  await editor.page.getByRole('tab', { name: 'Code' }).click()
-  await expect(editor.page.getByTestId('code-object-code-panel')).toBeVisible()
-  await expect(editor.page.getByText('Selection code')).toHaveCount(0)
-  await expect(editor.page.getByTestId('code-panel-add-code-object')).toHaveCount(0)
-  const orbitSource = editor.page.getByTestId('code-object-source')
-  await expect(orbitSource).toHaveValue(/OrbitLabCodeObject/)
-  await orbitSource.fill(`${await orbitSource.inputValue()}\n// Frame-owned Orbit source.`)
-  await editor.page.getByTestId('code-object-apply').click()
-  await expect
-    .poll(() =>
-      editor.page.evaluate(() => {
-        const store = window.openPencil?.getStore?.()
-        const id = store ? [...store.state.selectedIds][0] : null
-        const node = id ? store?.graph.getNode(id) : null
-        const raw = node?.pluginData.find(
-          (entry) => entry.pluginId === 'openpencil-code-object' && entry.key === 'document'
-        )?.value
-        return raw ? JSON.parse(raw).source : ''
-      })
-    )
-    .toContain('Frame-owned Orbit source')
-
-  await editor.page.getByTestId('code-object-design-hit-target').last().dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').last().click()
   await expect(orbitWrapper).toHaveAttribute('data-code-object-mode', 'interact')
   await editor.page.getByTestId('code-object-orbit-toggle').click()
   await expect(editor.page.getByTestId('code-object-orbit-toggle')).toHaveAttribute(
@@ -139,7 +117,7 @@ test('adds and uses frame-owned Code Object presets through the normal Assets fl
   const chartWrapper = editor.page.locator('[data-code-object-mode]').filter({ has: chart })
   await expect(chart).toBeVisible()
   await expect(chart).toContainText('Activation trend')
-  await editor.page.getByTestId('code-object-design-hit-target').last().dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').last().click()
   await expect(chartWrapper).toHaveAttribute('data-code-object-mode', 'interact')
   await editor.page.getByRole('button', { name: '7d' }).click()
   await expect
@@ -163,30 +141,7 @@ test('adds and uses frame-owned Code Object presets through the normal Assets fl
   const form = editor.page.getByTestId('saved-form')
   const formWrapper = editor.page.locator('[data-code-object-mode]').filter({ has: form })
   await expect(form).toBeVisible()
-  await editor.page.getByRole('tab', { name: 'Code' }).click()
-  await expect(editor.page.getByTestId('code-object-code-panel')).toBeVisible()
-  await expect(editor.page.getByTestId('code-object-source')).toHaveValue(
-    /function InteractiveForm/
-  )
-  const formSource = editor.page.getByTestId('code-object-source')
-  await formSource.fill(
-    `${await formSource.inputValue()}\n// Edited in the shared Code Object inspector.`
-  )
-  await editor.page.getByTestId('code-object-apply').click()
-  await expect
-    .poll(() =>
-      editor.page.evaluate(() => {
-        const store = window.openPencil?.getStore?.()
-        const id = store ? [...store.state.selectedIds][0] : null
-        const node = id ? store?.graph.getNode(id) : null
-        const raw = node?.pluginData.find(
-          (entry) => entry.pluginId === 'openpencil-code-object' && entry.key === 'document'
-        )?.value
-        return raw ? JSON.parse(raw).source : ''
-      })
-    )
-    .toContain('Edited in the shared Code Object inspector')
-  await editor.page.getByTestId('code-object-design-hit-target').last().dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').last().click()
   await expect(formWrapper).toHaveAttribute('data-code-object-mode', 'interact')
   await form.getByLabel('Name').fill('Ari')
   await form.getByLabel('Email').fill('ari@example.com')

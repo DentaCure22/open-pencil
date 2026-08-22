@@ -1,13 +1,7 @@
-import type {
-  PluginDataEntry,
-  SceneGraph,
-  SceneNode,
-  Stroke,
-  StyleRun
-} from '@open-pencil/scene-graph'
+import type { PluginDataEntry, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { colorToFill, parseColor } from '#core/color'
 import type { MermaidSceneSpec } from '#core/diagram'
+import { createTextSceneNode, type TextSceneNodeOptions } from '#core/io/formats/scene'
 
 import type { MarkdownImportOptions, MarkdownInlineLink } from './types'
 
@@ -27,19 +21,7 @@ export interface MarkdownRenderContext {
   resolveImage?: MarkdownImportOptions['resolveImage']
 }
 
-export interface TextNodeOptions {
-  name: string
-  width: number
-  fontSize?: number
-  fontWeight?: number
-  lineHeight?: number
-  color?: string
-  textAlignHorizontal?: SceneNode['textAlignHorizontal']
-  pluginData?: PluginDataEntry[]
-  styleRuns?: StyleRun[]
-  layoutGrow?: number
-  layoutAlignSelf?: SceneNode['layoutAlignSelf']
-}
+export type TextNodeOptions = TextSceneNodeOptions
 
 interface MarkdownMetadataFields {
   language?: string
@@ -75,33 +57,7 @@ export function markdownData(
   return entries
 }
 
-export function solidStroke(color: string, weight = 1): Stroke {
-  const parsed = parseColor(color)
-  return {
-    color: parsed,
-    weight,
-    opacity: parsed.a,
-    visible: parsed.a > 0,
-    align: 'INSIDE',
-    cap: 'NONE',
-    join: 'MITER',
-    dashPattern: []
-  }
-}
-
-function estimatedTextHeight(
-  text: string,
-  fontSize: number,
-  width: number,
-  lineHeight: number
-): number {
-  const averageCharacterWidth = fontSize * 0.56
-  const charactersPerLine = Math.max(1, Math.floor(width / averageCharacterWidth))
-  const lineCount = text
-    .split('\n')
-    .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0)
-  return Math.max(lineHeight, Math.ceil(lineCount * lineHeight))
-}
+export { solidStroke } from '#core/io/formats/scene'
 
 export function createTextNode(
   graph: SceneGraph,
@@ -109,23 +65,10 @@ export function createTextNode(
   text: string,
   options: TextNodeOptions
 ): SceneNode {
-  const fontSize = options.fontSize ?? 16
-  const lineHeight = options.lineHeight ?? fontSize * 1.5
-  return graph.createNode('TEXT', parentId, {
-    name: options.name,
-    width: options.width,
-    height: estimatedTextHeight(text, fontSize, options.width, lineHeight),
-    text,
-    fontSize,
-    fontWeight: options.fontWeight ?? 400,
-    lineHeight,
-    textAutoResize: 'HEIGHT',
-    textAlignHorizontal: options.textAlignHorizontal ?? 'LEFT',
-    fills: [colorToFill(options.color ?? TEXT_COLOR)],
-    pluginData: options.pluginData ?? [],
-    styleRuns: options.styleRuns ?? [],
-    layoutGrow: options.layoutGrow ?? 0,
-    layoutAlignSelf: options.layoutAlignSelf ?? 'STRETCH'
+  return createTextSceneNode(graph, parentId, text, options, {
+    color: TEXT_COLOR,
+    fontSize: 16,
+    lineHeightMultiplier: 1.5
   })
 }
 

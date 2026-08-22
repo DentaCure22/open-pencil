@@ -8,9 +8,8 @@ import { createHead } from '@unhead/vue/client'
 import { createApp } from 'vue'
 
 import './app.css'
-import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { preloadFonts } from '@/app/editor/fonts'
-import { IS_BROWSER, IS_TAURI } from '@/constants'
+import { IS_TAURI } from '@/constants'
 
 import App from './App.vue'
 import router from './router'
@@ -33,11 +32,6 @@ if (smylrEmbed && typeof navigator !== 'undefined' && 'serviceWorker' in navigat
     registerSW({ immediate: true })
     return undefined
   })
-}
-
-// Failsafe: never leave the splash up forever if canvas init stalls.
-if (IS_BROWSER) {
-  window.setTimeout(() => fadeOutGlobalLoader(), 6000)
 }
 
 // Intentionally NO window.location.reload() on dist change.

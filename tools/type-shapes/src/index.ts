@@ -7,7 +7,6 @@ const roots = [
   'packages/cli/src',
   'packages/mcp/src',
   'tests',
-  'scripts',
   'tools'
 ]
 

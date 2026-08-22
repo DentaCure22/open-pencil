@@ -61,9 +61,9 @@ function canvasInkPluginData() {
   return [{ key: CANVAS_INK_KIND_KEY, pluginId: CANVAS_INK_PLUGIN_ID, value: CANVAS_INK_KIND }]
 }
 
-export function isNarratedTraceCanvasInkNode(node: SceneNode | null | undefined) {
+export function isNarratedTraceCanvasInkNode(node: Partial<SceneNode> | null | undefined) {
   return Boolean(
-    node?.pluginData.some(
+    node?.pluginData?.some(
       (entry) =>
         entry.pluginId === CANVAS_INK_PLUGIN_ID &&
         entry.key === CANVAS_INK_KIND_KEY &&

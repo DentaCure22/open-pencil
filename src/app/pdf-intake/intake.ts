@@ -1,6 +1,7 @@
 import type { Editor } from '@open-pencil/core/editor'
 import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { rectIntersectionRatio } from '@open-pencil/scene-graph/geometry'
 import { assetReference, computeImageHash } from '@open-pencil/scene-graph/images'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
@@ -19,19 +20,6 @@ type CreatedPdf = {
   snapshot: SceneNode
 }
 
-function intersectionRatio(first: Rect, second: Rect): number {
-  const width = Math.max(
-    0,
-    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
-  )
-  const height = Math.max(
-    0,
-    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
-  )
-  const smallerArea = Math.min(first.width * first.height, second.width * second.height)
-  return smallerArea > 0 ? (width * height) / smallerArea : 0
-}
-
 function placement(editor: Editor, cx: number, cy: number, offset: number): Rect {
   const pageId = editor.state.currentPageId
   const initial = {
@@ -47,7 +35,7 @@ function placement(editor: Editor, cx: number, cy: number, offset: number): Rect
   for (let attempt = 0; attempt < PDF_CASCADE_ATTEMPTS; attempt++) {
     let overlaps = false
     for (const bounds of occupied) {
-      if (intersectionRatio(candidate, bounds) >= 0.94) {
+      if (rectIntersectionRatio(candidate, bounds) >= 0.94) {
         overlaps = true
         break
       }

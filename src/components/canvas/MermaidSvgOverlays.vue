@@ -6,7 +6,8 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { renderMermaidSvgInBrowser } from '@/app/diagram/mermaid/render'
 import { useEditorStore } from '@/app/editor/active-store'
-import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
+import { useSceneNodeOverlayStyle } from '@/app/editor/presentation'
+import { useAppTheme } from '@/app/shell/theme'
 
 type MermaidSvgItem = {
   appearance: MermaidAppearance
@@ -21,7 +22,8 @@ type MermaidSvgRendering = {
 }
 
 const store = useEditorStore()
-const presentationViewport = useEditorPresentationViewport(store)
+const { resolvedTheme } = useAppTheme()
+const overlayStyle = useSceneNodeOverlayStyle(store)
 const renderings = shallowRef<Record<string, MermaidSvgRendering>>({})
 
 function pluginValue(node: SceneNode, key: string): string | null {
@@ -34,13 +36,18 @@ function pluginValue(node: SceneNode, key: string): string | null {
 const items = computed<MermaidSvgItem[]>(() => {
   void store.state.sceneVersion
   void store.state.currentPageId
+  const theme = resolvedTheme.value
   return Array.from(store.graph.getDescendants(store.state.currentPageId)).flatMap((node) => {
     if (node.type !== 'FRAME' || !node.visible || !isMermaidDiagramContainer(node)) return []
     const source = pluginValue(node, 'mermaid/source')
     if (!source) return []
+    const requestedAppearance = pluginValue(node, 'mermaid/appearance')
     return [
       {
-        appearance: pluginValue(node, 'mermaid/appearance') === 'light' ? 'light' : 'dark',
+        appearance:
+          requestedAppearance === 'light' || requestedAppearance === 'dark'
+            ? requestedAppearance
+            : theme,
         node,
         source
       }
@@ -62,14 +69,15 @@ watch(
       next[item.node.id] = { error: '', key, svg: '' }
       void renderMermaidSvgInBrowser(item.source, item.appearance)
         .then((diagram) => {
-          if (renderings.value[item.node.id]?.key !== key) return
+          if (renderings.value[item.node.id]?.key !== key) return undefined
           renderings.value = {
             ...renderings.value,
             [item.node.id]: { error: '', key, svg: diagram.svg ?? '' }
           }
+          return undefined
         })
         .catch((error: unknown) => {
-          if (renderings.value[item.node.id]?.key !== key) return
+          if (renderings.value[item.node.id]?.key !== key) return undefined
           renderings.value = {
             ...renderings.value,
             [item.node.id]: {
@@ -78,16 +86,13 @@ watch(
               svg: ''
             }
           }
+          return undefined
         })
     }
     renderings.value = next
   },
   { immediate: true }
 )
-
-function overlayStyle(node: SceneNode) {
-  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
-}
 </script>
 
 <template>

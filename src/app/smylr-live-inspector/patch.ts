@@ -180,12 +180,7 @@ export function buildLiveInspectorTokenSuggestions(
     flexDirectionToken(styles['flex-direction']),
     'flex direction'
   )
-  addSuggestion(
-    suggestions,
-    knownTokens,
-    flexWrapToken(styles['flex-wrap']),
-    'wrap'
-  )
+  addSuggestion(suggestions, knownTokens, flexWrapToken(styles['flex-wrap']), 'wrap')
   addSuggestion(suggestions, knownTokens, alignmentToken('items', styles['align-items']), 'align')
   addSuggestion(
     suggestions,
@@ -195,12 +190,7 @@ export function buildLiveInspectorTokenSuggestions(
   )
   addSuggestion(suggestions, knownTokens, spacingToken('gap', styles.gap), 'gap')
   addSuggestion(suggestions, knownTokens, radiusToken(styles['border-radius']), 'radius')
-  addSuggestion(
-    suggestions,
-    knownTokens,
-    shadowToken(styles['box-shadow']),
-    'shadow'
-  )
+  addSuggestion(suggestions, knownTokens, shadowToken(styles['box-shadow']), 'shadow')
   addSuggestion(
     suggestions,
     knownTokens,

@@ -56,10 +56,6 @@ describe('OpenPencil browser RPC runtime routing', () => {
       runtimeInstanceId: 'runtime:hidden',
       status: 'ready'
     })
-    expect(bridge.notifyNavigationRuntime('runtime:hidden')).toBe(true)
-    expect(hidden.sent.at(-1)).toEqual({ type: 'navigation_intent' })
-    expect(bridge.notifyNavigationRuntime('runtime:missing')).toBe(false)
-
     const visible = socketFixture()
     bridge.handleConnection(visible.socket)
     bridge.handleMessage(

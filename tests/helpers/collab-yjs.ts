@@ -3,7 +3,6 @@ import * as Y from 'yjs'
 import { deserializeSceneGraph, serializeSceneGraph } from '@open-pencil/core/kiwi'
 
 import { createCollabHydrationState } from '@/app/collab/hydration'
-import { getObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import { bindCollabGraphEvents, createYjsGraphSync, registerYjsObservers } from '@/app/collab/yjs'
 import { createEditorStore } from '@/app/editor/session'
 import type { EditorStore } from '@/app/editor/session'
@@ -33,13 +32,11 @@ export function createSyncHarness(store: EditorStore, ydoc = new Y.Doc()) {
     store,
     ynodes,
     yimages,
-    yObjectGraphRecords: getObjectGraphYRecords(ydoc),
     getSuppressYjsEvents: () => suppressYjsEvents,
     setSuppressGraphSync: (value) => {
       suppressGraphSync = value
     },
-    applyYjsToGraph: sync.applyYjsToGraph,
-    applyYjsObjectGraphToGraph: sync.applyYjsObjectGraphToGraph
+    applyYjsToGraph: sync.applyYjsToGraph
   })
 
   return {

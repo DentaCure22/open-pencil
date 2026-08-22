@@ -2,14 +2,13 @@ import type { CanvasKit, TypefaceFontProvider } from 'canvaskit-wasm'
 
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
+import { resolveBrowserAssetPath } from '#core/browser-assets'
 import { DEFAULT_FONT_FAMILY, IS_BROWSER } from '#core/constants'
 import { fontFaceRenderFamily, parseFontStyle } from '#core/text/face'
 import { fontFallbackEntry } from '#core/text/fallbacks'
 import type { FontFallbackScript } from '#core/text/fallbacks'
 import { WebFontResolver } from '#core/text/web-fonts'
 import type { WebFontFetch, WebFontProviderId } from '#core/text/web-fonts'
-
-import { resolveBrowserAssetPath } from '../browser-assets'
 
 export interface FontInfo {
   family: string
@@ -268,7 +267,7 @@ export class FontManager {
     if (IS_BROWSER) {
       // Match CanvasKit locateFile: app may be served under a base path
       // (e.g. /open-pencil/) so absolute "/Inter-*.ttf" would 404 and blank all text.
-      const pathname = typeof window === 'undefined' ? '' : window.location.pathname
+      const pathname = globalThis.location.pathname
       const resolved = resolveBrowserAssetPath(url, import.meta.env.BASE_URL || '/', pathname)
       const response = await fetch(resolved)
       if (!response.ok) {

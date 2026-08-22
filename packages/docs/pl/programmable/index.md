@@ -10,11 +10,11 @@ OpenPencil traktuje pliki projektowe jako dane. Każda operacja dostępna w edyt
 
 Interfejs edytora i interfejsy automatyzacji korzystają z tego samego silnika. Jeśli możesz coś zrobić kliknięciem, możesz to zrobić skryptem.
 
-## Czat AI
+## Czat zadań
 
-Wbudowany asystent ma dostęp do 87 narzędzi, które obejmują całą powierzchnię edytora. Opisz czego chcesz w języku naturalnym — „dodaj cień 16px do wszystkich przycisków", „utwórz komponent karty z wariantem ciemnego motywu", „wyeksportuj każdą ramkę na tej stronie w 2×".
+Czat zadań Pi przechowuje pracę programistyczną i dalsze polecenia w jednej rozmowie. Automatyzacja edytora jest dostępna przez katalog MCP odkrywany w czasie działania.
 
-[Czat AI →](./ai-chat)
+[Czat zadań →](./ai-chat)
 
 ## Współpraca
 
@@ -40,7 +40,7 @@ CLI łączy się również z uruchomioną aplikacją desktopową przez RPC, wię
 
 ## Serwer MCP
 
-Połącz Claude Code, Cursor, Windsurf lub dowolnego klienta kompatybilnego z MCP z OpenPencil. Serwer udostępnia 90 narzędzi do odczytywania, tworzenia i modyfikowania projektów — te same narzędzia, z których korzysta wbudowany czat AI. Działa przez stdio lub HTTP z obsługą sesji.
+Połącz Claude Code, Cursor, Windsurf lub dowolnego klienta MCP z OpenPencil. Serwer udostępnia katalog odkrywany w czasie działania do odczytywania, tworzenia i modyfikowania projektów przez stdio lub HTTP z obsługą sesji.
 
 [Serwer MCP →](./mcp-server)
 

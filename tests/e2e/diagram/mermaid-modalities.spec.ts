@@ -54,7 +54,7 @@ test.setTimeout(90_000)
 async function openMermaidDialog(page: Page): Promise<void> {
   const menubar = page.locator('[role="menubar"]')
   if (!(await menubar.isVisible())) await page.getByTestId('app-menu-toggle').click()
-  await page.getByTestId('menubar-insert').click()
+  await page.getByTestId('menubar-file').click()
   await page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
   await expect(page.getByTestId('mermaid-import-dialog')).toBeVisible()
 }

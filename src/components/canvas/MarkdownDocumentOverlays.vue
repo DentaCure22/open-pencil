@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { templateRef } from '@vueuse/core'
-import { Markdown } from 'vue-stream-markdown'
 import 'vue-stream-markdown/index.css'
-
-import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { codeObjectCanvasStyle } from '@/app/code-object/transform'
 import { useEditorStore } from '@/app/editor/active-store'
-import { useEditorPresentationViewport } from '@/app/editor/presentation'
+import { focusCanvasSurface } from '@/app/editor/canvas/surface/focus'
+import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
+import { useEditorNodeOverlayStyle } from '@/app/editor/presentation'
 import {
   markdownDocument,
   updateMarkdownDocumentSource,
   type MarkdownDocument
 } from '@/app/markdown-document'
 
+const MarkdownRenderer = defineAsyncComponent(async () => {
+  const { Markdown } = await import('vue-stream-markdown')
+  return Markdown
+})
+
 const store = useEditorStore()
-const presentationViewport = useEditorPresentationViewport(store)
+const canvasStyle = useEditorNodeOverlayStyle(store, (node) => codeObjectCanvasStyle(store, node))
 const editingId = ref<string | null>(null)
 const draft = ref('')
 const editorRef = templateRef('editorRef')
@@ -37,10 +41,6 @@ watch(
   }
 )
 
-function canvasStyle(node: SceneNode) {
-  return codeObjectCanvasStyle(store, node, presentationViewport.value)
-}
-
 function isSelected(nodeId: string) {
   return store.state.selectedIds.has(nodeId)
 }
@@ -51,6 +51,14 @@ function isReading(nodeId: string) {
 
 function isEditing(nodeId: string) {
   return editingId.value === nodeId
+}
+
+function surfaceAcceptsPointer(): boolean {
+  return canvasSurfaceCanReceivePointer(store.state.activeTool)
+}
+
+function focusDocument(nodeId: string) {
+  focusCanvasSurface(store, nodeId)
 }
 
 async function beginEditing(document: MarkdownDocument) {
@@ -92,7 +100,8 @@ function saveEditing(document: MarkdownDocument) {
         <template v-if="isEditing(document.node.id)">
           <button
             type="button"
-            class="pointer-events-auto rounded px-2 py-1 text-[11px] text-[#6d6b64] hover:bg-black/5"
+            :class="surfaceAcceptsPointer() ? 'pointer-events-auto' : 'pointer-events-none'"
+            class="rounded px-2 py-1 text-[11px] text-[#6d6b64] hover:bg-black/5"
             @pointerdown.stop
             @click.stop="cancelEditing"
           >
@@ -100,7 +109,8 @@ function saveEditing(document: MarkdownDocument) {
           </button>
           <button
             type="button"
-            class="pointer-events-auto rounded bg-[#6954c5] px-2 py-1 text-[11px] font-medium text-white hover:bg-[#5945b5]"
+            :class="surfaceAcceptsPointer() ? 'pointer-events-auto' : 'pointer-events-none'"
+            class="rounded bg-[#6954c5] px-2 py-1 text-[11px] font-medium text-white hover:bg-[#5945b5]"
             @pointerdown.stop
             @click.stop="saveEditing(document)"
           >
@@ -110,7 +120,8 @@ function saveEditing(document: MarkdownDocument) {
         <button
           v-else-if="isSelected(document.node.id)"
           type="button"
-          class="pointer-events-auto rounded bg-white px-2 py-1 text-[11px] font-medium shadow-sm ring-1 ring-black/10 hover:bg-[#f8f7f2]"
+          :class="surfaceAcceptsPointer() ? 'pointer-events-auto' : 'pointer-events-none'"
+          class="rounded bg-white px-2 py-1 text-[11px] font-medium shadow-sm ring-1 ring-black/10 hover:bg-[#f8f7f2]"
           data-test-id="markdown-document-edit"
           @pointerdown.stop
           @click.stop="beginEditing(document)"
@@ -124,7 +135,8 @@ function saveEditing(document: MarkdownDocument) {
         ref="editorRef"
         v-model="draft"
         :aria-label="`Edit ${document.node.name}`"
-        class="pointer-events-auto min-h-0 flex-1 resize-none bg-white p-8 font-mono text-[15px] leading-6 outline-none"
+        :class="surfaceAcceptsPointer() ? 'pointer-events-auto' : 'pointer-events-none'"
+        class="min-h-0 flex-1 resize-none bg-white p-8 font-mono text-[15px] leading-6 outline-none"
         data-test-id="markdown-document-source-editor"
         spellcheck="true"
         @keydown.stop
@@ -134,7 +146,7 @@ function saveEditing(document: MarkdownDocument) {
       <pre
         v-else-if="document.sourceMode === 'plain-text'"
         :class="
-          isReading(document.node.id)
+          isReading(document.node.id) && surfaceAcceptsPointer()
             ? 'pointer-events-auto overflow-y-auto'
             : 'pointer-events-none overflow-hidden'
         "
@@ -142,15 +154,16 @@ function saveEditing(document: MarkdownDocument) {
         :aria-label="`${document.node.name} reading surface`"
         class="min-h-0 flex-1 p-10 font-mono text-[15px] leading-6 whitespace-pre-wrap"
         data-test-id="markdown-document-preview"
+        @dblclick.stop.prevent="focusDocument(document.node.id)"
         @wheel.stop
         >{{ document.metadata.source }}</pre
       >
-      <Markdown
+      <MarkdownRenderer
         v-else
         :content="document.metadata.source"
         :mermaid="false"
         :class="
-          isReading(document.node.id)
+          isReading(document.node.id) && surfaceAcceptsPointer()
             ? 'pointer-events-auto overflow-y-auto'
             : 'pointer-events-none overflow-hidden'
         "
@@ -158,6 +171,7 @@ function saveEditing(document: MarkdownDocument) {
         :aria-label="`${document.node.name} reading surface`"
         class="markdown-document-preview min-h-0 flex-1 px-12 py-10"
         data-test-id="markdown-document-preview"
+        @dblclick.stop.prevent="focusDocument(document.node.id)"
         @wheel.stop
       />
 

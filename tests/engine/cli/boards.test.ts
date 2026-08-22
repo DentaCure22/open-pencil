@@ -104,18 +104,20 @@ describe('Boards CLI', () => {
     expect(() => boardListIndex(listed, { limit: '101' })).toThrow('--limit')
   })
 
-  test('creates through fresh writer context and opens the returned exact page ID', async () => {
+  test('creates through one authority context and verifies the returned exact page ID', async () => {
     const calls: Array<{ args: Record<string, unknown>; command: string }> = []
     const send: BoardRpcSender = async (command, args) => {
       calls.push({ args, command })
       if (command === 'board_context') {
+        const pageId = String(args.page_id)
         return {
           result: {
-            execution_surface: 'browser_local',
+            context_token: `context:${pageId}`,
+            execution_surface: 'local_workspace_authority',
             revisions: { board: 7 },
             runtime: { write_authority: 'writer' }
           },
-          target: rpcTarget('page:source')
+          target: rpcTarget(pageId, pageId === 'page:created' ? 'Agent Sandbox' : 'Source')
         }
       }
       if (command === 'tool') {
@@ -128,16 +130,7 @@ describe('Boards CLI', () => {
           target: rpcTarget('page:source')
         }
       }
-      if (args.page_id === 'page:created') {
-        return {
-          result: { action: 'opened', status: 'completed' },
-          target: rpcTarget('page:created', 'Agent Sandbox')
-        }
-      }
-      return {
-        result: { action: 'opened', status: 'completed' },
-        target: rpcTarget('page:source')
-      }
+      throw new Error(`Unexpected command ${command}`)
     }
 
     const result = await createBoardPage(
@@ -147,26 +140,21 @@ describe('Boards CLI', () => {
 
     expect(result).toMatchObject({
       source_page_id: 'page:source',
-      status: 'completed',
+      status: 'created',
       target: { pageId: 'page:created' }
     })
-    expect(calls.map((call) => call.command)).toEqual([
-      'board_context',
-      'board_open',
-      'board_context',
-      'tool',
-      'board_open'
-    ])
-    expect(calls[3]).toMatchObject({
+    expect(calls.map((call) => call.command)).toEqual(['board_context', 'tool', 'board_context'])
+    expect(calls[1]).toMatchObject({
       args: {
         ...exactRpcTarget,
         args: { name: 'Agent Sandbox' },
+        context_token: 'context:page:source',
         mutation: { expectedRevision: 7, requestId: 'request:create' },
         name: 'create_page'
       },
       command: 'tool'
     })
-    expect(calls[4]?.args.page_id).toBe('page:created')
+    expect(calls[2]?.args.page_id).toBe('page:created')
   })
 
   test('refuses a viewer before sending a mutation', async () => {
@@ -184,7 +172,7 @@ describe('Boards CLI', () => {
         }
       }
       return {
-        result: { action: 'opened', status: 'completed' },
+        result: { action: 'queued', status: 'queued_for_editor' },
         target: rpcTarget('page:source')
       }
     }
@@ -195,38 +183,7 @@ describe('Boards CLI', () => {
     expect(calls).toEqual(['board_context'])
   })
 
-  test('reports applied creation honestly when the created page cannot be opened', async () => {
-    const send: BoardRpcSender = async (command, args) => {
-      if (command === 'board_context') {
-        return {
-          result: {
-            execution_surface: 'browser_local',
-            revisions: { board: 7 },
-            runtime: { write_authority: 'writer' }
-          },
-          target: rpcTarget('page:source')
-        }
-      }
-      if (command === 'tool') {
-        return { result: { id: 'page:created' }, target: rpcTarget('page:source') }
-      }
-      if (args.page_id === 'page:created') throw new Error('runtime disconnected')
-      return {
-        result: { action: 'opened', status: 'completed' },
-        target: rpcTarget('page:source')
-      }
-    }
-
-    await expect(
-      createBoardPage({ ...exactCliTarget, name: 'Partial', 'request-id': 'request:partial' }, send)
-    ).resolves.toMatchObject({
-      creation: { id: 'page:created' },
-      open_error: 'runtime disconnected',
-      status: 'created_not_opened'
-    })
-  })
-
-  test('creates and verifies a page through persisted authority without opening it', async () => {
+  test('creates and verifies a page through persisted authority', async () => {
     const calls: Array<{ args: Record<string, unknown>; command: string }> = []
     const send: BoardRpcSender = async (command, args) => {
       calls.push({ args, command })
@@ -252,8 +209,7 @@ describe('Boards CLI', () => {
       send
     )
     expect(result).toMatchObject({
-      opened: null,
-      status: 'created_headless',
+      status: 'created',
       target: { pageId: 'page:created' }
     })
     expect(result.created_context).not.toHaveProperty('capabilities')
@@ -323,7 +279,7 @@ describe('Boards CLI', () => {
       )
     ).resolves.toMatchObject({
       source_page_id: 'page:source',
-      status: 'created_headless',
+      status: 'created',
       target: { pageId: 'page:created' }
     })
     expect(calls.map((call) => call.command)).toEqual([
@@ -462,7 +418,7 @@ describe('Boards CLI', () => {
         }
       }
       return {
-        result: { action: 'opened', status: 'completed' },
+        result: { action: 'queued', status: 'queued_for_editor' },
         target: rpcTarget('page:source', 'Dental Board')
       }
     }
@@ -490,7 +446,7 @@ describe('Boards CLI', () => {
 
     calls.length = 0
     await expect(openBoardByTarget({ target: 'Dental Board' }, send)).resolves.toMatchObject({
-      status: 'completed',
+      status: 'queued_for_editor',
       target: { pageId: 'page:source' }
     })
     expect(calls).toEqual([
@@ -499,19 +455,19 @@ describe('Boards CLI', () => {
     ])
   })
 
-  test('opens a non-visible exact live Board in one semantic call', async () => {
+  test('queues one exact persisted Board navigation intent', async () => {
     const calls: string[] = []
     const send: BoardRpcSender = async (command) => {
       calls.push(command)
       return {
-        result: { action: 'opened', status: 'completed' },
+        result: { action: 'queued', status: 'queued_for_editor' },
         target: rpcTarget('page:source')
       }
     }
 
     await expect(openBoardPage(exactCliTarget, send)).resolves.toMatchObject({
-      navigation: { action: 'opened' },
-      status: 'completed',
+      navigation: { action: 'queued' },
+      status: 'queued_for_editor',
       target: { pageId: 'page:source' }
     })
     expect(calls).toEqual(['board_open'])
@@ -521,13 +477,11 @@ describe('Boards CLI', () => {
     const calls: string[] = []
     const authorityRuntimeId =
       'local-authority:local-authority-f06b17af-2b12-4b51-8e75-49506e084910'
-    const send: BoardRpcSender = async (command, args) => {
+    const send: BoardRpcSender = async (command) => {
       calls.push(command)
-      expect(args.editor_runtime_instance_id).toBe('runtime:chosen-editor')
       return {
         result: {
           action: 'queued',
-          editor_runtime_instance_id: 'runtime:chosen-editor',
           intent_id: 'board-open:1',
           status: 'queued_for_editor'
         },
@@ -539,7 +493,6 @@ describe('Boards CLI', () => {
       openBoardPage(
         {
           ...exactCliTarget,
-          'editor-runtime-instance-id': 'runtime:chosen-editor',
           'runtime-instance-id': authorityRuntimeId
         },
         send

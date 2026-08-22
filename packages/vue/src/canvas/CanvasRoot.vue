@@ -5,23 +5,32 @@ import { useEditor } from '#vue/editor/context'
 import { useCanvas, type UseCanvasOptions } from '#vue/canvas/surface/use'
 import { provideCanvas } from '#vue/canvas/context'
 
-const { showRulers, preserveDrawingBuffer } = defineProps<UseCanvasOptions>()
+const {
+  onError: onCanvasError,
+  onReady: onCanvasReady,
+  preserveDrawingBuffer,
+  showRulers
+} = defineProps<UseCanvasOptions>()
 
 const editor = useEditor()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const ready = ref(false)
+const error = ref<unknown>(null)
 
-const { renderNow, hitTestSectionTitle, hitTestComponentLabel, hitTestFrameTitle } = useCanvas(
-  canvasRef,
-  editor,
-  {
+const { renderNow, retryCanvasKit, hitTestSectionTitle, hitTestComponentLabel, hitTestFrameTitle } =
+  useCanvas(canvasRef, editor, {
     showRulers,
     preserveDrawingBuffer,
+    onError: (nextError) => {
+      error.value = nextError
+      onCanvasError?.(nextError)
+    },
     onReady: () => {
       ready.value = true
+      error.value = null
+      onCanvasReady?.()
     }
-  }
-)
+  })
 
 provideCanvas({
   canvasRef,
@@ -34,5 +43,11 @@ provideCanvas({
 </script>
 
 <template>
-  <slot :canvas-ref="canvasRef" :ready="ready" :render-now="renderNow" />
+  <slot
+    :canvas-ref="canvasRef"
+    :error="error"
+    :ready="ready"
+    :render-now="renderNow"
+    :retry="retryCanvasKit"
+  />
 </template>

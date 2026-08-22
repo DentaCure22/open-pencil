@@ -1,383 +1,243 @@
-# OpenPencil
+# OpenPencil Project Instructions
 
-Vue 3 + CanvasKit (Skia WASM) + Yoga WASM design editor. Tauri v2 desktop, also runs in browser.
+These instructions apply to the whole repository. A nested `AGENTS.md` may add
+constraints for its subtree. Explicit user instructions and higher-level safety
+rules remain authoritative.
 
-**Roadmap:** `packages/docs/development/roadmap.md` tracks product direction, Figma compatibility gaps, and raw metadata coverage. This file keeps agent-facing architecture, conventions, and commands; detailed public docs live under `packages/docs/**`.
+OpenPencil is a Vue 3 design editor built on CanvasKit and Yoga, delivered as a
+Tauri desktop app and browser application. Read `package.json`, workspace
+package manifests, and live source for exact versions, scripts, exports, and
+enabled libraries. Product direction lives in
+`packages/docs/development/roadmap.md`.
 
-## Monorepo
+## Source-of-truth order
 
-Bun workspace packages:
+1. Explicit user requirements and current project instructions.
+2. Live repository source, package exports, configuration, tests, and schemas.
+3. Rendered or deployed state when the task depends on runtime truth.
+4. Published documentation for supported public behavior.
+5. Historical notes and plans for navigation only; revalidate material claims.
 
-- `packages/scene-graph` — `@open-pencil/scene-graph`: SceneGraph, node types, copy/snap/undo helpers, variables, instances, hit testing. Framework-agnostic.
-- `packages/pen` — `@open-pencil/pen`: Pen/vector editing helpers shared by core/editor surfaces.
-- `packages/kiwi` — `@open-pencil/kiwi`: pure Kiwi schema/runtime/protocol package. Owns low-level Figma Kiwi codec/container/parse helpers and stays SceneGraph-agnostic.
-- `packages/fig` — `@open-pencil/fig`: publishable `.fig` package shell and low-level smoke/test boundary. Production SceneGraph `.fig` policy still lives mostly in core while this package grows.
-- `packages/core` — `@open-pencil/core`: renderer, layout, editor core, Figma API, tools, clipboard, vector conversion, and app/CLI-facing document I/O. Depends on scene-graph/pen/kiwi but keeps browser DOM out of core.
-- `packages/dom-css` — `@open-pencil/dom-css`: DOM/CSS projection layer for HTML/CSS/JSX/Tailwind compatibility. Owns DesignDOM types and browser/headless CSS runtime adapters; keeps DOM/CSS parser dependencies out of core.
-- `packages/vue` — `@open-pencil/vue`: headless Vue 3 SDK (Reka UI-style) for building custom OpenPencil-powered editor shells and embedded editing surfaces. Renderless components and composables. The app is one consumer of the SDK. Component-free services use the targeted `/i18n` and `/presentation` subpaths instead of evaluating the component barrel.
-- `packages/cli` — `@open-pencil/cli`: headless CLI for .fig inspection, export, linting. Uses `citty` + `agentfmt`.
-- `packages/mcp` — `@open-pencil/mcp`: MCP server for AI coding tools. Stdio + HTTP (Hono). Reuses core tools.
-- `packages/docs` — `@open-pencil/docs`: published VitePress documentation site. Run with `bun run docs:dev`.
+Do not infer current behavior from names, old plans, screenshots, or saved Board
+state alone. Preserve `unknown` when evidence is incomplete.
 
-The root app (`src/`) is the Tauri/Vite desktop editor. App-specific editor, document, AI, collaboration, shell, tabs, demo, and automation code lives under `src/app/*`. The app consumes scene graph primitives from `@open-pencil/scene-graph`, editor/rendering services through targeted `@open-pencil/core` subpath exports, and `@open-pencil/vue` through the public Vue SDK entrypoint.
+## Scope and working tree
 
-### Public package exports
+Identify whether the user asked to explain, audit, diagnose, change, or build.
+Reviews and diagnoses do not authorize implementation. Keep changes inside the
+named outcome and its necessary dependencies.
 
-Use public package exports across package/app boundaries. Do not import workspace package internals from app code.
+The worktree may contain substantial unrelated work. Preserve it. Never reset,
+overwrite, stage, format, or commit unrelated changes. Do not move or delete a
+file until references, framework discovery, package exports, and tests have been
+checked. Prefer recoverable operations for broad destructive work.
 
-- `@open-pencil/scene-graph` — SceneGraph, node types, primitives, copy/snap/undo, instance helpers, variable helpers, vector-network types.
-- `@open-pencil/core` — broad compatibility barrel for editor/rendering/tooling APIs.
-- Common targeted core subpaths keep imports smaller and dependency intent clearer: `@open-pencil/core/color`, `/text`, `/vector`, `/figma-api`, `/icons`, `/canvas`, `/design-jsx`, `/editor`, `/tools`, `/kiwi`, `/clipboard`, `/rpc`, `/lint`, `/profiler`, `/io`, `/canvaskit`, `/layout`.
-- Use `@open-pencil/kiwi` for low-level Kiwi/FIG schema-runtime, codec, container, GUID, and parse helpers.
+A prompt sent from an OpenPencil Board card is Board work, even when its wording
+is vague. Activate `/skill:openpencil` before searching. Unless the prompt
+already supplies the exact current page, call read-only
+`openpencil_board_where` once to establish it and prefer any relevant selected
+object IDs it returns. Use `rg` on the compact `workspace.index.jsonl` only when
+the target is still unresolved, read `trace-context.json` and
+`trace-events/*.jsonl` for vague speech or pointing, then use ordinary
+coding-agent file tools on exact `workspace.json` records. Keep reads and
+verification compact instead of printing full nodes. Do not call
+`dispatch_work`, `board_go`, or `set_theme`; do not use mutation helpers, grep
+this repo for Board names, or load the whole Board into model context.
 
-CanvasKit runtime loading is centralized in `@open-pencil/core/canvaskit` for app/browser use. Headless raster export may dynamically load `canvaskit-wasm/full`; elsewhere prefer `import type` and pass the CanvasKit instance in.
+## Projects
 
-### Editor architecture
+Known homes for Board workers. Add a line when a new project joins. Pi starts in
+this Open Pencil workspace; the other entries are exact absolute paths a worker
+may select when the brief requires repo work. They are not automatically
+attached roots. Board names are not a reason to search these repos. Search the
+Board first, then pick from this list only for actual repo work and read that
+repo's `AGENTS.md`. Use the listed path as written. Do not rebuild an Archives
+or MacBook Pro path.
 
-`packages/core/src/editor/` is the framework-agnostic editor core. `createEditor()` in `create.ts` assembles an `EditorContext` plus domain action modules for viewport, selection, pages, shapes, structure, components, clipboard, undo/history, text, variables, layout, color space, graph reads, tool registry, and related helpers. Check the folder before adding editor behavior; keep new actions in the nearest domain module/folder instead of growing unrelated files.
+Board agents run through resident Pi RPC sessions. Sidebar CHATS and Board cards
+share the same local-authority threads. Dispatched Board workers get normal Pi
+file tools plus read-only `board_where` and `board_screenshot`; the parent
+controls remain unavailable.
+General Pi chats may still use connected apps. Do not `require` or `import` from
+a Node workshop.
 
-`Editor` type = `ReturnType<typeof createEditor>`. Core modules should share state through `EditorContext` rather than importing app code or Vue.
+- Open Pencil — `/Users/omar/Documents/Open Pencil` — this repo and native Board work
+- Smylr — `/Users/omar/Documents/Smylr-Elite` — live iframe / dental app
 
-#### Editor event bus
+The Codex plugin MCP exposes `dispatch_work`, `board_where`, `board_screenshot`,
+`board_go`, and `set_theme`. `board_where` and `board_screenshot` are shared
+read-only context. Dispatch, camera hops, and light/dark remain parent-only.
+`dispatch_work` starts a worker directly or continues the exact prior worker.
+Workers edit files and never receive the parent controls. The full MCP catalog
+in `packages/mcp` remains for CLI and tests;
+`board_context` is off the plugin, not deleted from that catalog.
 
-The editor exposes a typed nanoevents emitter. Event names/payloads live in `EditorEvents` in `packages/core/src/editor/types.ts`; graph events are bridged from SceneGraph by `graph-events.ts`. Subscribe with `editor.onEditorEvent(event, handler)`, or in Vue use `useEditorEvent(event, handler)` from `packages/vue/src/editor/events/use.ts`.
+## Monorepo boundaries
 
-Important invariant: all selection mutations in core go through `ctx.setSelectedIds()` and all tool changes go through `ctx.setActiveTool()` so events fire consistently. App-layer code should use editor actions such as `clearSelection()`, `select()`, or `setTool()` — never direct `state.selectedIds =` or `state.activeTool =` assignments.
+- `packages/scene-graph` owns framework-agnostic graph state, node types,
+  primitives, geometry, copy/snap/undo, variables, instances, and hit testing.
+- `packages/pen` owns shared pen and vector-edit helpers.
+- `packages/kiwi` owns low-level Kiwi schema/runtime, codec, container, GUID,
+  and parse helpers without SceneGraph policy.
+- `packages/fig` is the publishable `.fig` package boundary.
+- `packages/core` owns framework-agnostic editor, renderer, layout, Figma API,
+  tools, clipboard, codegen, and document I/O policy.
+- `packages/dom-css` owns DOM/CSS/JSX/Tailwind projection and browser/headless
+  CSS adapters.
+- `packages/vue` is the headless Vue SDK and primitive/composable layer.
+- `packages/cli` owns headless CLI commands and agentfmt output.
+- `packages/mcp` owns the optional MCP server and filesystem/server-only tools.
+- `packages/docs` owns the published VitePress documentation.
+- `src/` owns the Tauri/Vite application shell and app-specific integrations.
 
-The app editor session (`src/app/editor/session/create.ts`) is a Vue wrapper around core: it creates reactive state, calls `createEditor()`, and assembles app-specific document I/O, autosave, export, vector edit, pen resume, flashes, profiler, and mobile clipboard. Tabs live in `src/app/tabs/`; active editor access lives in `src/app/editor/active-store/`.
+Use public workspace exports across package and app boundaries. Do not import
+another package's internal source. Prefer targeted public subpaths when they
+make dependency intent clearer. Keep browser DOM out of core packages.
 
-## Commands
+## Editor architecture
 
-- `bun run check` — type-aware lint + typecheck via oxlint + tsgo + architecture checks (run before committing)
-- `bun run check:arch` — Steiger architecture lint for project-specific import boundaries
-- `bun run check:vue` — vue-tsc type-check for app and Vue SDK .vue files
-- `bun run test:dupes` — jscpd copy-paste detection across product TS sources
-- `bun run test:tools` — tests for private repo tooling under `tools/*`
-- `bun run format` — oxfmt with import sorting
+`packages/core/src/editor/` is the framework-agnostic editor core.
+`createEditor()` assembles `EditorContext` and domain action modules. Add new
+behavior to the nearest domain module rather than growing unrelated files.
+
+Share editor state through `EditorContext`, not app or Vue imports. Route core
+selection changes through `ctx.setSelectedIds()` and tool changes through
+`ctx.setActiveTool()` so typed editor events remain complete. App code should
+use editor actions rather than direct state assignments.
+
+The app editor session under `src/app/editor/session/` wraps core with reactive
+state and app services. Active-editor and tab ownership stay in their existing
+app domains.
+
+## Automation, tools, and AI
+
+- Framework-agnostic tool operations live under `packages/core/src/tools/**`
+  as typed `ToolDef` objects executed against `FigmaAPI`.
+- Add tools to the correct registry so intended AI, eval, CLI, and MCP consumers
+  can discover them.
+- Keep app tool wiring thin and create `FigmaAPI` from the active editor.
+- CLI commands own CLI UX and agentfmt formatting; do not hand-roll output.
+- MCP-only filesystem or server tools remain in `packages/mcp`.
+- Do not make the app silently start optional MCP transports. Their absence is
+  a normal supported state.
+- Keep prompts near their owning core or app domain.
+
+CLI inspection commands should support `--json`. Use the project agentfmt
+helpers rather than raw `console.log` presentation.
+
+## Code Objects and Board Experiences
+
+A trusted app-like Board surface is one persisted Code Object frame owned by
+`src/app/code-object/`. Preserve its source/descriptor, serializable state,
+attachments, transforms, interaction mode, Undo/Redo, duplication, connectors,
+and persistence. Registered UI blocks are configured through serializable props;
+do not copy their component source into generated objects.
+
+A Board Experience under `src/app/board-experience/` coordinates ordinary
+native objects or Code Object frames. It must not create a parallel hidden
+editor, non-selectable HUD, or second mutable Board runtime. Code Objects and
+Board Experiences use `src/app/board-permissions/` for bounded operations.
+
+Mermaid remains one source-backed frame rendered to SVG. Preserve source-owner
+identity and do not materialize generated native diagram children.
+
+## Code organization
+
+- Inspect neighboring ownership and naming before adding or moving files.
+- App services, state, and integrations live under `src/app/**`; route/layout
+  views under `src/views/**`; app UI under `src/components/**`.
+- `src/components/ui/**` is the reusable visual primitive layer and must not
+  import app stores, services, or feature panels.
+- Package-local code uses the package's established alias or nearby relative
+  imports. App cross-directory imports use `@/`.
+- Keep multi-file domains in a domain folder rather than repeated filename
+  prefixes or new root-level component files.
+- Vue component files use PascalCase. Component composables use camelCase.
+  Other domain files and folders use lowercase or kebab-case unless they are
+  conventional entrypoints.
+- Private repository tooling belongs under `tools/<domain>/` with focused tests.
+  `scripts/` is limited to small compatibility entrypoints.
+- Use existing named types and shared primitives. Avoid `any`, non-null
+  assertions, duplicated structural types, and module-level mutable component
+  state.
+- Use `crypto.getRandomValues()` instead of `Math.random()` where stable secure
+  identity is required.
+- Guard browser APIs explicitly in framework-agnostic code.
+- Prefer established dependencies over custom implementations; inspect the
+  relevant package manifest and current upstream documentation first.
+
+Architecture boundaries are enforced by `bun run check:arch` and related
+checks. Fix the boundary instead of bypassing the rule.
+
+## UI conventions
+
+- Use Reka UI and existing wrappers for accessible primitives.
+- Follow the existing `ui`/tailwind-variants slot pattern; do not add families
+  of one-off class props.
+- Prefer `v-model`, emitted events, normal props, or owned UI over imperative
+  slot actions and ref plumbing.
+- Keep shortcut identity in the command registry and format it at render time.
+  Labels and translations must not embed platform-specific shortcut text.
+- Browser and Tauri menus share the canonical menu schema. Regenerate native
+  menu output after changing it.
+- Use Tailwind for ordinary styling. Avoid component `<style>` blocks, native
+  `title` attributes, raw SVG, and Unicode icons when established primitives
+  exist.
+- Preserve pointer ownership, focus, containment, splitter sizing, and keyboard
+  behavior when refactoring interactive controls.
+
+## Rendering and file formats
+
+- Canvas rendering uses CanvasKit, not DOM. Keep repaint-only and scene-mutation
+  versioning separate and avoid subscriptions to repaint state when graph events
+  are sufficient.
+- Preserve zoom-independent selection chrome, unclipped-child visibility,
+  resize throttling, stable reparenting, and immediate layout recomputation.
+- Pixel-affecting renderer changes require targeted committed visual coverage in
+  addition to engine tests.
+- `.fig` low-level schema/runtime belongs in `packages/kiwi`; SceneGraph import,
+  export, and interpretation policy remains in core until deliberately moved.
+- Keep browser fallbacks for file APIs and verify `.fig` round trips when file
+  format behavior changes.
+- Tauri capabilities are explicit. Inspect `desktop/Cargo.toml`,
+  `desktop/capabilities/**`, and `desktop/tauri.conf.json` before adding desktop
+  filesystem or shell behavior.
+
+## Tests and verification
+
+Place tests by ownership:
+
+- app E2E: `tests/e2e/**/*.spec.ts`
+- Figma automation: `tests/figma/**/*.spec.ts`
+- engine/unit: `tests/engine/**/*.test.ts`
+- shared helpers: `tests/helpers/**`
+- standalone packages: their established package `tests/**`
+
+Inspect `package.json` before running commands. Common gates include:
+
+- `bun run check` — lint, type, architecture, and package checks
+- `bun run format` — formatting and import sorting
+- `bun run test:dupes` — source duplication
+- `bun run test:tools` — private tooling tests
 - `bun run test:unit` — engine/unit tests
-- `bun run test` — Playwright E2E and visual regression tests
-- `bun run tauri dev` — desktop app with hot reload
-- `bun open-pencil --help` — list CLI commands. Common commands include `info`, `tree`, `find`, `node`, `pages`, `variables`, `export`, `import`, `convert`, `lint`, `query`, `selection`, `formats`, `analyze ...`, and `eval` for Figma Plugin API scripting.
+- `bun run test` — Playwright E2E and visual tests
 
-## Releases & CI
+Run focused checks first, then broader gates in proportion to risk. Re-read every
+modified file and inspect the final focused diff. Distinguish source/test proof,
+saved Board state, and rendered pixels. Report blocked or unavailable checks as
+unverified, never passed.
 
-### How to release
+## Documentation, releases, and publishing
 
-1. Update version in the root `package.json`, publishable `packages/*/package.json`, `desktop/tauri.conf.json`, and `desktop/Cargo.toml`
-2. Update `CHANGELOG.md` — move "Unreleased" items under new version heading with date
-3. Commit: `Release v0.x.y`
-4. Tag: `git tag v0.x.y && git push --tags`
-5. Ensure GitHub release secrets include `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the updater key is password-protected); the public updater key is configured in `desktop/tauri.conf.json`.
-6. The `build.yml` workflow triggers on `v*` tags and:
-   - Builds Tauri binaries for macOS (arm64 + x64), Windows (x64 + arm64), Linux (x64)
-   - Creates a draft GitHub Release with all platform binaries
-   - Publishes public workspace packages to npm with provenance. Keep the exact package list in sync with `.github/workflows/build.yml`.
-7. The production web app/docs deploy workflows (`app.yml`, `docs.yml`) also trigger on `v*` tags. They do **not** deploy on ordinary `master` pushes.
-8. Go to GitHub Releases → edit the draft → paste changelog section → publish
+Update `CHANGELOG.md` for user-facing changes and `README.md` when public setup
+or capabilities change. Published documentation lives under `packages/docs/**`;
+keep speculative plans out of it.
 
-### CI workflows
+Treat `.github/workflows/**`, package manifests, `desktop/tauri.conf.json`, and
+`CHANGELOG.md` as release truth. Do not duplicate release package lists or
+deployment triggers here. Use Conventional Commits for normal development and
+the established release commit format for releases.
 
-Key workflows live in `.github/workflows/`. Use `build.yml` as the source of truth for release packaging and npm publishing, `ci.yml` / `heavy-tests.yml` for validation gates, and `app.yml` / `docs.yml` for Cloudflare Pages deploys.
-
-Production Cloudflare Pages deploys are intentionally release/manual only: `app.yml` and `docs.yml` run on `v*` tags and `workflow_dispatch`, not on `master` pushes. To deploy manually, run the relevant workflow from GitHub Actions (`Deploy app` or `Deploy docs`) on the desired ref; the workflow deploys to the configured production branch (`master`).
-
-## Documentation
-
-- `CHANGELOG.md` — all user-facing changes, grouped by version. "Unreleased" section at top for in-progress work.
-- `README.md` — user-facing: features, getting started, CLI, project structure. No implementation details.
-- `AGENTS.md` (this file) — contributor/agent reference: architecture, conventions, how to release.
-- `packages/docs/` — VitePress site deployed at `openpencil.dev`. User guide, SDK, automation, reference, and development docs.
-
-When adding features, update `CHANGELOG.md` (Unreleased section) and `README.md` (if user-facing). Update `AGENTS.md` when architecture or conventions change. Do not put speculative/internal implementation plans in `packages/docs/**`; VitePress docs are published. Keep temporary plans in ignored `scratch/` or distill durable public direction into the canonical roadmap.
-
-## Commit messages
-
-Use Conventional Commits for regular development commits: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`.
-
-- Keep the first line short, imperative, and scoped when helpful
-- Put rationale and implementation details in the commit body
-- Keep the commit type lowercase (`fix:`, `feat:`, `docs:`), but start each body line/bullet with an uppercase word
-- Preserve product/domain casing in subjects and bodies: `DOM/CSS`, `CSS`, `HTML`, `JSX`, `Tailwind`, `Kiwi`, `.fig`, `MCP`, `CLI`, `AI`, `ACP`, `i18n`. Do not flatten acronyms to lowercase prose such as `dom css documents`.
-- Prefer scopes that match the project structure: `app`, `tauri`, `core`, `cli`, `dom-css`, `mcp`, `vue`, `docs`, or focused domains like `editor`, `scene-graph`, `canvas`, `tools`, `kiwi`, `io`, `text`, `vector`, `color`, `acp`, `ai`, `collab`, `automation`, `i18n`
-- Use the narrowest honest scope, or omit it if the change spans multiple unrelated areas
-
-Example:
-
-```text
-fix(editor): preserve text edit undo state
-
-- Snapshot both text and styleRuns when editing starts
-- Restore both on undo instead of comparing against the live node
-```
-
-Release commits are the exception: keep using `Release v0.x.y`.
-
-## CLI
-
-- All CLI output must use `agentfmt` formatters — `fmtList`, `fmtHistogram`, `fmtSummary`, `fmtNode`, `fmtTree`, `kv`, `entity`, `bold`, `dim`, etc.
-- Don't hand-roll `console.log` formatting — use the helpers from `packages/cli/src/format.ts` which re-exports agentfmt with project-specific adapters (`nodeToData`, `nodeDetails`, `nodeToTreeNode`, `nodeToListItem`)
-- CLI data/inspection commands should support `--json` for machine-readable output
-
-## Tools (AI / MCP / CLI)
-
-- The canonical local Board is the plain document JSON at
-  `~/.openpencil/local-workspace-authority-v1/workspace.json`. Coding agents may edit its exact
-  `[id, node]` entries directly; the local authority derives revisions, bounded JSON history, and
-  open-editor synchronization. `workspace-state.json` is implementation bookkeeping and SQLite is
-  reserved for indexed Trace history. CLI and MCP are optional adapters, not required mutation
-  authority for direct local Board edits.
-- When the user points, circles, or says “this” or “these,” read the adjacent bounded
-  `trace-context.json` directly. The user's words are the intent; Trace supplies only exact referents.
-  Reject expired or `ambiguous` context, follow its object IDs into `workspace.json`, and open its PNG
-  path only when visual evidence is needed. Never edit this derived file or treat CLI/MCP Trace history
-  as the routine context path.
-- A direct Mermaid creation uses one source-backed `FRAME` with finite geometry and
-  `mermaid/source` plugin data. The Board renders Mermaid's SVG at runtime; there are no generated
-  native children or headless browser materialization. Rewriting the source preserves the frame's
-  identity, position, size, and sibling order.
-- Framework-agnostic tool operations live under `packages/core/src/tools/**` as `ToolDef` objects. Domains include read, create, modify, structure, variables, vector, analyze, describe, codegen, stock-photo, and helpers. Check the existing domain folder before adding a new file.
-- `schema.ts` defines `ToolDef`, `defineTool()`, and shared result helpers. Each tool has a name, description, typed params, and an `execute(figma: FigmaAPI, args)` function.
-- Registries (`registry*.ts`) assemble tool sets. Add new tools to the appropriate registry so AI chat, MCP, and CLI eval paths can see them.
-- AI adapter (`packages/core/src/tools/ai-adapter.ts`) converts ToolDefs to Vercel AI tools with valibot schemas. `src/app/ai/tools/index.ts` is a thin app wire that creates `FigmaAPI` from the active editor.
-- CLI commands in `packages/cli/src/commands/**` are not generated from ToolDefs; they own CLI UX, pagination, and agentfmt formatting. The `eval` command exposes ToolDef operations through `FigmaAPI`.
-- MCP server code lives in `packages/mcp/src/server.ts`. MCP-only tools such as `open_file`, `new_document`, `save_file`, and `get_codegen_prompt` are registered there because they need server filesystem access or are not scene-graph tools.
-- OpenPencil must not auto-launch the MCP HTTP/WebSocket server. Vite development starts only the
-  narrow local workspace authority on port 7602 for canonical Board, revision, navigation, and Trace
-  persistence. The editor may connect to an already-running standalone MCP server on 7600/7601, but
-  absence of that optional server is normal and must stay quiet.
-- `open_file` and `new_document` are only registered when `OPENPENCIL_MCP_ROOT` is set. Export tools can write files under that root when given a `path`.
-- Core codegen prompts live as markdown under `packages/core/src/tools/prompts/`; app chat/ACP prompts live under `src/app/ai/**` markdown files.
-- `FigmaAPI` (`packages/core/src/figma-api/`) is the execution target for tools and CLI eval. It is Figma Plugin API compatible and uses Symbols for hidden internals.
-
-## ACP and collaboration
-
-Keep this section light; implementation details move often.
-
-- ACP UI/transport lives under `src/app/ai/acp/**`; provider definitions live in `packages/core/src/constants.ts`; app prompts live under `src/app/ai/**`. Public docs: `packages/docs/programmable/ai-chat.md` and `packages/docs/programmable/mcp-server.md`.
-- ACP transport uses Tauri shell permissions, so check `desktop/capabilities/**` when changing agent launch behavior.
-- Collaboration lives under `src/app/collab/**` and is documented in `packages/docs/programmable/collaboration.md`. It uses Trystero + Yjs + awareness; preserve crypto-safe room IDs and peer cleanup semantics when changing it.
-
-## Code conventions
-
-- Do not place code or tests ad hoc. Before adding or moving files, inspect the existing folder structure and nearby patterns, then put changes in the established domain-specific location. If no proper location exists, create one deliberately and update docs/conventions as needed.
-- Architecture boundaries are enforced by `bun run check:arch` and related lint rules; keep app/package boundaries clean instead of relying on review to catch private imports. In practice: use public workspace exports across boundaries, keep core framework-agnostic, keep app services separate from component/view layers, keep shared UI free of app stores/services, and keep property-panel internals inside the property panel.
-- Test placement is strict: app E2E in `tests/e2e/**/*.spec.ts`, Figma automation in `tests/figma/**/*.spec.ts`, engine/unit tests in `tests/engine/**/*.test.ts`, shared test utilities in `tests/helpers/**`, and standalone package tests in their package `tests/**` when established. UI-visible behavior belongs in E2E; graph/internal-state assertions belong in engine/unit tests. Do not commit temporary/profile specs.
-
-### File and folder naming
-
-OpenPencil uses domain namespaces rather than full Feature-Sliced Design ceremony:
-
-- App services/state/integration live under `src/app/**`; route/layout views live under `src/views/**`; app UI lives under `src/components/**`.
-- `src/components/ui/**` is the shared app design-system layer. `packages/vue/src/primitives/**` is the headless SDK primitive layer. App wrappers around SDK primitives should stay in app component domains and only move to `ui/**` when genuinely generic.
-- Root-level `src/components/*.vue` is reserved for broad editor panels/surfaces assembled by views or shell layout. Do not add new root-level base controls; create a domain namespace or use `src/components/ui/**` for reusable primitives.
-- App component domain folders should be lowercase or kebab-case (`chat/`, `properties/`, `fill-picker/`, `color-picker-panel/`, `canvas/`, `inputs/`). Avoid adding new `PascalCase/Component.vue` app folders; migrate existing ones gradually when touched.
-- Vue component files stay PascalCase: `ColorPickerRoot.vue`, `ToolbarItem.vue`. Component-scoped composables use camelCase: `useToolbarState.ts`, `usePageList.ts`.
-- Non-component domain folders use lowercase or kebab-case: `scene-graph/`, `figma-api/`, `node-edit/`. Non-component TypeScript files use lowercase or kebab-case unless they are conventional entrypoints such as `index.ts`, `types.ts`, `context.ts`, or `use.ts`.
-- Multi-file root components live inside their component namespace folder, not beside it. When a reusable picker/input/control grows beyond one file, create a namespace instead of leaving related files at `src/components/` root.
-- Use subfolders for multi-file domains instead of sibling files with repeated prefixes. Prefer `selection/container.ts`, `selection/hit-test.ts` over `selection-container.ts`, `selection-hit-test.ts`. When adding a second file for a domain (e.g. `eval-wrap.ts` next to `eval.ts`), create the folder immediately (`eval/index.ts` + `eval/wrap.ts`) instead of prefixing. Oxlint catches sibling prefix files when a sibling folder exists; Steiger catches 3+ sibling files with the same prefix. The convention applies even before either rule triggers.
-
-### Repo tools and scripts
-
-Private repository tooling lives under `tools/<domain>/`, not as ad-hoc root scripts. Use kebab-case domain folders and split by capability inside `src/`:
-
-```text
-tools/<domain>/
-  package.json
-  src/index.ts
-  src/<capability>.ts
-  tests/<capability>.test.ts
-```
-
-Use `scripts/` only for tiny compatibility entrypoint shims that import `../tools/<domain>/src/...`; do not put implementation logic there. Workflow helpers, release packaging helpers, architecture rules, package checks, visual-oracle utilities, and other maintainable programs belong in `tools/` with focused tests when they contain logic. Steiger enforces tool layout and script shims. `bun run check` includes `bun run test:tools`, and lint/format cover `tools/`.
-
-- `@/` import alias for app cross-directory imports; app feature code lives under `src/app/*`
-- Use package-local aliases inside workspace packages: `#vue/*` in `packages/vue`, `#cli/*` in `packages/cli`, `#dom-css/*` in `packages/dom-css`, `#mcp/*` in `packages/mcp`, and `#core/*` when core code needs an alias. Prefer relative imports within nearby core modules when that is clearer than an alias.
-- No `any` — use proper types, generics, declaration merging
-- No `!` non-null assertions — use guards, `?.`, `??`
-- No `Math.random()` — use `crypto.getRandomValues()` everywhere
-- No inline type definitions when a named type exists — use `Color` not `{ r: number; g: number; b: number; a: number }`, use `Vector` not `{ x: number; y: number }`, and import `SceneNode` / `Effect` / `Fill` / `Stroke` from `@open-pencil/scene-graph` instead of re-spelling their shapes.
-- Shared geometry/color primitives live in `packages/scene-graph/src/primitives.ts`; scene/node domain types live in `packages/scene-graph/src/types.ts` and are exported from `@open-pencil/scene-graph`.
-- Window API extensions (showOpenFilePicker, queryLocalFonts) live in `src/global.d.ts` and `packages/core/src/global.d.ts`
-- Use `culori` for color conversions — don't reimplement parseColor/colorToRgba
-- Use `@vueuse/core` hooks — prefer higher-level composables (`useBreakpoints`, `useEventListener`, `onClickOutside`, etc.) over raw APIs (`useMediaQuery`, manual `addEventListener`)
-- Prefer VueUse utilities for simple browser/timer state: `refAutoReset` for temporary copied/saved flags, `promiseTimeout` for async sleeps/retry backoff, `useClipboard`/`useFileDialog`/`useLocalStorage` where they fit the local state model. Don't force VueUse when direct APIs are clearer: one-shot `requestAnimationFrame` focus/defer calls, explicit service-owned reconnect/permission timers, or nanostores-backed state can stay hand-rolled.
-- No module-level mutable state in components — use the editor store
-- Prefer `tw-animate-css` for animations — don't hand-write `<style>` transition keyframes
-- No duplicated component logic — if two components share data (icon maps, util functions, constants), export from one place and import in both
-- `packages/kiwi/src/schema-runtime/` contains the Kiwi codec runtime; keep runtime changes minimal and prefer wrappers/helpers for project-specific validation
-- Core code must guard browser APIs with explicit runtime checks such as `typeof window !== 'undefined'` / `typeof document !== 'undefined'` before using them.
-- Name repeated or cross-feature constants; use `src/constants.ts` for app-wide constants rather than feature-local values.
-
-## Code quality
-
-Before submitting a PR, run the full quality gate and do a self-review:
-
-```sh
-bun run check          # oxlint + tsgo type-aware lint & typecheck — zero errors required
-bun run format         # oxfmt with import sorting
-bun run test:dupes     # jscpd — zero clones required
-bun run test:tools     # private repo tooling tests
-bun run test:unit      # bun:test
-bun run test           # Playwright E2E
-```
-
-Self-review checklist:
-
-- Run `bun run test:dupes` — if duplication rises, extract shared helpers or use existing types
-- No inline type definitions that duplicate named types (Color, Vector, SceneNode, Effect, Fill, Stroke, etc.)
-- No copy-pasted logic — extract into functions. If two components share a util, icon map, or data structure, export from one place. If `jscpd` flags it, fix it.
-- Use precise union types — `'closed' | 'half' | 'full'` not `number | string | null`
-- Files should stay under ~600 lines — split by domain when they grow (see `packages/core/src/tools/` for the pattern)
-- `structuredClone` for deep copies, never shallow spread when mutating nested objects
-- Don't hand-roll what a dependency already does. Check existing deps first (`package.json`, `packages/*/package.json`). If none covers it, find a quality library instead of inlining an implementation — e.g. use `diff` for unified diffs, not a custom line-by-line loop; use `culori` for color math, not manual RGB parsing.
-- Before custom UI/control/composable work, read upstream docs for the relevant dependency instead of guessing from local usage. Prefer their `llms.txt` entrypoints when available:
-  - Reka UI (`https://reka-ui.com/llms.txt`) before building dialogs, popovers, dropdowns, menus, selects, tooltips, toasts, trees, splitters, or other primitives.
-  - VueUse (`https://vueuse.org/llms.txt`) before hand-rolling DOM events, browser APIs, refs/focus, media queries, timers, clipboard, storage, async state, or observers.
-  - Tailwind / tailwind-variants docs before inventing one-off styling prop APIs or variant composition.
-- If upstream docs contradict local patterns, prefer current upstream APIs and update local wrappers deliberately.
-- `es-toolkit` is available in core for small, focused utility helpers when it clearly improves readability. Prefer subpath imports such as `es-toolkit/object`, `es-toolkit/array`, and `es-toolkit/predicate`; good fits include `omit` / `pick` for object key selection, `uniq` for dedupe, and `isNotNil` for typed nullish filtering. Do not replace clear native JavaScript just for consistency, and avoid `es-toolkit/compat` unless deliberately migrating lodash-compatible behavior.
-
-## Rendering
-
-- Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM
-- Trusted app-like board content uses one **Code Object** contract under `src/app/code-object/`:
-  an ordinary persisted `FRAME` owns its editable source or app descriptor, name, serializable
-  properties/state, attachments, Design/Interact, transforms, undo, duplication, connectors, and
-  persistence. Presets insert that same frame-owned contract; renderer subtypes are implementation
-  choices, not scene-node or product object types. Authored TypeScript/TSX uses one ReactDOM root.
-  A first-party full program may use a frame-bound **trusted-web-app** iframe so its native auth,
-  router, portals, and internal scrolling remain source-owned; never reconstruct that program's
-  DOM in OpenPencil. Trusted iframe instances stay bound to one frame and mount generation, use a
-  bounded volatile resident pool, expose semantic Layers only for the Board-selected frame, and
-  keep per-frame route/scroll checkpoints under the source app's origin rather than Board JSON or
-  Undo. External/untrusted websites remain sandboxed embeds. Mermaid persists one source-backed
-  frame and renders Mermaid's SVG without generated native child nodes. Keep
-  `src/app/live-react-surface/` read-compatibility only.
-- Cross-object behavior uses one **Object Graph** contract under `src/app/object-graph/`. Any ordinary
-  native object or Code Object frame may opt into the Graph capability and become an endpoint in a
-  typed `visual`, `data`, or `action` connection. React Flow is a transparent interaction and edge
-  layer on the ordinary Board: it aligns handles with the existing CanvasKit objects and shares the
-  Board viewport instead of rendering cards, a second canvas, a minimap, or a separate camera.
-  CanvasKit, Code Object DOM surfaces, and React Flow must publish from the shared
-  `scheduleEditorPresentationFrame()` clock; never add an Object Graph-local animation frame for
-  geometry or viewport projection.
-  There is no separate Graph tool or mode. Normal OpenPencil selection and transforms remain active;
-  a selected graph-enabled object exposes connection handles in place. Removing it from the graph
-  removes only its Graph capability, not the object.
-  Connections persist as typed page-owned records with stable IDs, not hidden SceneNodes or Layers;
-  React Flow derives its built-in Bézier route from the live endpoint geometry. Connection selection
-  and every React Flow interaction must dispatch to normal editor actions so OpenPencil remains the
-  only authority for Board nodes, selection, transforms, persistence, permissions, and Undo/Redo.
-  Use the upstream React Flow handle and edge presentation: no custom arrow, badge, kind color,
-  shadow, obstacle router, or size-dependent chrome. The Board camera remains the shared viewport;
-  a larger invisible handle hit target is allowed without changing the official visible handle.
-  Never introduce a second graph store.
-- Page-wide coordinated behavior uses one **Board Experience** contract under
-  `src/app/board-experience/`: an ordinary `CANVAS` may persist one experience definition while
-  OpenPencil owns the single page coordinator and event loop. The experience must compose ordinary
-  native objects or Code Object frames for every meaningful visible piece; it must not paint a
-  parallel non-selectable HUD, lane, tool, or app surface over the Board. Created components keep
-  normal selection, transforms, undo/redo, duplication, and persistence. Code Objects and Board
-  Experiences both issue bounded actions through `src/app/board-permissions/`; neither may create a
-  second editor store or hidden mutable board runtime. Board Permissions validates page, target,
-  ownership, create/delete, and field-scoped update access automatically for each operation; callers
-  never issue or revoke permission grants. A Board Experience owns one internal component session
-  only for lifecycle and transient cleanup. Meaningful user actions use normal history.
-- `renderVersion` vs `sceneVersion`: `renderVersion` = canvas repaint (pan/zoom/hover); `sceneVersion` = scene graph mutations. UI that only cares about graph data should avoid watching repaint-only state; use editor events for incremental surfaces such as the layer tree.
-- `requestRender()` bumps both counters; `requestRepaint()` bumps only `renderVersion`
-- `renderNow()` is only for surface recreation and font loading (need immediate draw)
-- Resize observer uses rAF throttle, not debounce — debounce causes canvas skew
-- Viewport culling skips off-screen nodes; unclipped parents are NOT culled (children may extend beyond bounds)
-- Selection border width must be constant regardless of zoom — divide by scale
-- Section/frame title text never scales — render at fixed font size, ellipsize to fit
-- Rulers are rendered on the canvas (not DOM), with selection range badges that don't overlap tick numbers
-- Remote cursors: Figma-style colored arrows with white border + name pill, rendered in screen space
-- Pixel-affecting renderer features need committed visual coverage, not just mock/geometry assertions. Add or update a Playwright canvas snapshot for changes to fills, gradients, images, blend modes, masks, boolean geometry, corners, strokes, shadows, blur, text rendering, or demo showcase scenes. Use targeted snapshot updates such as `bunx playwright test tests/e2e/canvas/renderer-visuals.spec.ts --project=openpencil --update-snapshots` and then rerun the same test without `--update-snapshots`.
-
-## Scene graph
-
-- Nodes live in flat `Map<string, SceneNode>`, tree via `parentIndex` references
-- Frames clip content by default is OFF (unlike what you'd assume)
-- When creating auto-layout, sort children by geometric position first
-- Dragging a child outside a frame should reparent it, not clip it
-- Layer panel tree must react to reparenting — watch for stale children refs
-- Groups: creating a group must preserve children's visual positions
-
-## Components & instances
-
-- Purple (#9747ff) for COMPONENT, COMPONENT_SET, INSTANCE — matches Figma
-- Instance children map to component children via `componentId` for 1:1 sync
-- Override key format: `"childId:propName"` in instance's `overrides` record
-- Editing a component must propagate to instances through the editor/component sync path; do not hand-copy instance fields in app UI code.
-- Instance property copying lives in `@open-pencil/scene-graph` helpers and uses structured copies for nested values.
-
-## Layout
-
-- `computeAllLayouts()` must be called after demo creation and after opening .fig files
-- Yoga WASM handles flexbox; CSS Grid blocked on upstream (facebook/yoga#1893)
-- Auto-layout creation (Shift+A) must recompute layout immediately to update selection bounds
-
-## UI
-
-### Component structure
-
-- `src/components/ui/**` is the app design-system layer: reusable visual primitives, wrappers around Reka UI primitives, low-level styled controls, and UI class helpers. These files must not import app services/stores or feature panels.
-- `src/components/Shell/**` is for app shell chrome and global app services rendered as components (menu bar, toast viewport, update/status chrome). Shell components may use app shell/editor stores.
-- `src/components/properties/**`, `src/components/chat/**`, `src/components/LayerTree/**`, `src/components/Toolbar/**`, and similar folders are feature/domain component namespaces. Keep feature-specific controls there unless they are genuinely reusable UI primitives.
-- Treat existing root-level picker/input/control components as migration candidates when touched; do not expand that pattern.
-- Test hooks should be `data-test-id` attributes owned by the rendered markup or generated internally from semantic component state. Do not add `testId`, `visibilityTestId`, `triggerTestId`, or other test-id props to component APIs.
-
-- Use reka-ui for UI components (Splitter, ContextMenu, DropdownMenu, etc.)
-- Vue UI styling APIs must follow the existing `:ui` / `tailwind-variants` slot pattern. Do not add one-off `fooClass`, `barClass`, `emptyActionClass`, etc. props to components; define a typed `Ui` object with named slots and merge through the local `use*UI()` helper or a `ui` prop.
-- Do not pass imperative setters/actions through slots as `:set-*`, `:update-*`, `:request-*`, `:toggle-*`, etc. unless the component is explicitly a renderless primitive whose whole contract is slot actions. Prefer `v-model`, emitted events, normal component props, or owned default UI. For DOM refs/focus, use VueUse (`templateRef`, `unrefElement`, `useFocus`, etc.) instead of ref callback plumbing through slots.
-- App wrappers around SDK primitives should compose a single `ui` object from shared UI helpers (`useSelectUI`, `usePopoverUI`, etc.) rather than bypassing the design system with raw Tailwind strings spread across multiple props.
-- Editor commands share `packages/vue/src/editor/commands/registry.ts` as the canonical source for shortcut display tokens, keyboard bindings, and context-menu test IDs. Store portable shortcuts such as `MOD+D`, `MOD+SHIFT+H`, and `MOD+ALT+K`; format them with `formatShortcut()` at render time so macOS shows `⌘`/`⌥` and Windows/Linux show `Ctrl`/`Alt`.
-- Labels and translations must not contain shortcut text. Keep labels semantic (`Add auto layout`, `Show/Hide`) and render shortcuts from command metadata. Steiger enforces this for `packages/vue/src/i18n/messages.ts` and locale JSON files.
-- Canvas context-menu structure lives in `packages/vue/src/editor/menu-model/canvas.ts`. Do not hand-build command grouping in `src/components/canvas/CanvasMenu.vue`; the component should render menu entries and provide app-specific actions only when unavoidable.
-- Browser and Tauri menus share `src/app/shell/menu/schema.ts` as the canonical menu model. Do not add menu items directly in `src/components/Shell/AppMenu.vue` or `desktop/src/menu.rs`.
-- Regenerate the native menu with `bun run generate:tauri-menu` after editing the shared menu schema; `desktop/generated/menu.json` is consumed by the Tauri menu builder. Tauri also runs this generator from `desktop/tauri.conf.json` via `beforeDevCommand` and `beforeBuildCommand`.
-- Every shared menu item with an `id` must be handled by `src/app/shell/menu/use.ts`, an editor command, or explicitly marked browser/native-only in the schema.
-- Tailwind 4 for styling — no inline CSS, no component-level `<style>` blocks
-- Use `Tip` / tooltip components for hover help; do not add native `title` attributes in Vue UI.
-- Mac keyboards: use `e.code` not `e.key` for shortcuts with modifiers (Option transforms characters)
-- Icons: use unplugin-icons with Iconify/Lucide (`<icon-lucide-*>`) — don't use raw SVG or Unicode symbols
-- App menu (`src/components/Shell/AppMenu.vue`) — browser-only menu bar using reka-ui Menubar components; Tauri uses native menus, so menu is hidden when `IS_TAURI` is true
-- Preserve established UI gotchas in nearby components before refactoring: splitter handle sizing, ScrubInput pointer ownership, section drag targets, side-panel containment, and global number-spinner styling.
-
-## File format
-
-- `.fig` files use Figma's Kiwi schema and `NodeChange[]` records. Low-level schema/runtime/codec/container/parse helpers live in `packages/kiwi/src/fig/**` and `packages/kiwi/src/schema-runtime/**`.
-- Core still owns SceneGraph `.fig` policy: import/export orchestration in `packages/core/src/io/formats/fig/**`, SceneGraph ⇄ NodeChange conversion in `packages/core/src/kiwi/fig/node-change/**`, and component/instance override interpretation in `packages/core/src/kiwi/fig/instance-overrides/**`.
-- `packages/fig` is the publishable boundary for future `.fig` policy extraction; do not move behavior there without package-local tests and dist smoke.
-- Vector data uses reverse-engineered `vectorNetworkBlob` binary format — encoder/decoder in `packages/core/src/vector/` and scene-graph vector-network types in `@open-pencil/scene-graph`.
-- `showOpenFilePicker` / `showSaveFilePicker` are File System Access API (Chrome/Edge), not Tauri-only; code must keep browser fallbacks.
-- Safari save: no File System Access API → use an `<a>` download fallback with deferred `revokeObjectURL`. SafariBanner warns users about limitations.
-- Tauri detection: use `IS_TAURI` from `@open-pencil/core/constants` / `src/constants.ts`; don't inline `__TAURI_INTERNALS__` checks.
-- `.fig` export compression uses fflate in browser paths and Tauri Rust commands where available.
-- Test `.fig` round-trip by exporting and reimporting in Figma when changing file-format behavior.
-- Test fixtures (`tests/fixtures/*.fig`) are Git LFS. If no `.fig` fixtures changed, `git push --no-verify` can skip the slow LFS pre-push hook; use regular `git push` when fixtures changed.
-
-## Tauri
-
-- Tauri v2 desktop app lives under `desktop/`; check `desktop/Cargo.toml`, `desktop/capabilities/**`, and `desktop/tauri.conf.json` before adding desktop capabilities.
-- File system and shell permissions must be configured explicitly; vague "Internal error" save failures often mean missing permissions.
-- Dev tools: add or use a menu item to toggle, don't rely on keyboard shortcuts.
-
-## Publishing
-
-- `bun publish` from package dirs — resolves `workspace:*` → actual versions
-- Public packages publish built `dist/` output, not runtime TypeScript entrypoints
-- Public workspace packages build before publishing; most use tsdown, and split packages may also run `tsc --emitDeclarationOnly` plus dist smoke checks. Keep release tooling package lists in sync with `.github/workflows/build.yml`.
-- CLI publishes a Node-compatible `bin/openpencil.js` wrapper; do not point package `bin` entries at TypeScript source
-
-## Reference
-
-[figma-use](https://github.com/dannote/figma-use) — historical Figma toolkit reference. Verify current paths/types in that repo before copying assumptions. Useful areas:
-
-- Kiwi binary format, schema, encode/decode (`packages/shared/src/kiwi/`)
-- Figma WebSocket multiplayer protocol (`packages/plugin/src/ws/`)
-- Vector network blob format (`packages/shared/src/vector/`)
-- Node types, paints, effects, layout fields (`packages/shared/src/types/`)
-- MCP tools / design operations (`packages/mcp/`)
-- JSX-to-design renderer (`packages/render/`)
-- Design linter rules (`packages/linter/`)
+Do not commit, tag, publish, deploy, or apply remote changes unless explicitly
+authorized. Completion reports should state what changed, what was verified,
+and any real remaining limitation.

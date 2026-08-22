@@ -6,7 +6,7 @@ description: Esportare immagini (PNG, JPG, WEBP, SVG) e gestire file .fig in Ope
 
 ## Esportazione immagini
 
-Seleziona un nodo e usa la sezione Export nel pannello proprietà.
+Seleziona un nodo e usa la scorciatoia di esportazione o l'azione Esporta nel menu contestuale. Sugli schermi piccoli, le impostazioni sono anche nel cassetto mobile Design.
 
 ### Impostazioni di esportazione
 
@@ -19,7 +19,7 @@ Seleziona un nodo e usa la sezione Export nel pannello proprietà.
 |--------|-----|-----------------|
 | Scorciatoia tastiera | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>E</kbd> |
 | Menu contestuale | Tasto destro <kbd>→</kbd> Esporta… | Tasto destro <kbd>→</kbd> Esporta… |
-| Pannello proprietà | Pulsante "Esporta" | Pulsante "Esporta" |
+| Cassetto mobile Design | Tocca "Esporta" | Tocca "Esporta" |
 
 ## Copia come
 

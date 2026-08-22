@@ -13,7 +13,9 @@ import type { JsonObject } from '@open-pencil/scene-graph/primitives'
 
 import type { FigmaAPI } from '#core/figma-api'
 
-import type { ToolDef, ParamDef, ParamType } from './schema'
+import type { ToolDef, ParamDef } from './schema'
+
+type ValibotSchema = valibot.GenericSchema<unknown, unknown, valibot.BaseIssue<unknown>>
 
 export interface ToolLogEntry {
   tool: string
@@ -173,14 +175,14 @@ export function toolsToAI(
   const result: ToolSet = {}
 
   for (const def of tools) {
-    const shape: Record<string, unknown> = {}
+    const shape: Record<string, ValibotSchema> = {}
     for (const [key, param] of Object.entries(def.params)) {
       shape[key] = paramToValibot(v, param)
     }
 
     const toolOpts: Record<string, unknown> = {
       description: def.description,
-      inputSchema: valibotSchema(v.object(shape as Record<string, never>)),
+      inputSchema: valibotSchema(v.object(shape)),
       execute: async (args: Record<string, unknown>) => {
         const startTime = Date.now()
         const figma = options.getFigma()
@@ -324,28 +326,34 @@ export function buildDebugLog(entries: ToolLogEntry[]): ToolDebugLog {
   return { entries, duplicates, noopMutations, totalResultBytes }
 }
 
-function paramToValibot(v: typeof valibot, param: ParamDef): unknown {
-  const typeMap: Record<ParamType, () => unknown> = {
-    string: () => (param.enum ? v.picklist(param.enum as [string, ...string[]]) : v.string()),
-    number: () => {
-      const pipes: unknown[] = [v.number()]
-      if (param.min !== undefined) pipes.push(v.minValue(param.min))
-      if (param.max !== undefined) pipes.push(v.maxValue(param.max))
-      return pipes.length > 1 ? v.pipe(...(pipes as [never, never, ...never[]])) : v.number()
-    },
-    boolean: () => v.boolean(),
-    color: () => v.pipe(v.string(), v.description('Color value (hex like #ff0000 or #ff000080)')),
-    'string[]': () => v.pipe(v.array(v.string()), v.minLength(1))
+function paramToValibot(v: typeof valibot, param: ParamDef): ValibotSchema {
+  let schema: ValibotSchema
+  if (param.type === 'string') {
+    schema = param.enum ? v.picklist(param.enum as [string, ...string[]]) : v.string()
+  } else if (param.type === 'number') {
+    if (param.min !== undefined && param.max !== undefined) {
+      schema = v.pipe(v.number(), v.minValue(param.min), v.maxValue(param.max))
+    } else if (param.min !== undefined) {
+      schema = v.pipe(v.number(), v.minValue(param.min))
+    } else if (param.max !== undefined) {
+      schema = v.pipe(v.number(), v.maxValue(param.max))
+    } else {
+      schema = v.number()
+    }
+  } else if (param.type === 'boolean') {
+    schema = v.boolean()
+  } else if (param.type === 'color') {
+    schema = v.pipe(v.string(), v.description('Color value (hex like #ff0000 or #ff000080)'))
+  } else {
+    schema = v.pipe(v.array(v.string()), v.minLength(1))
   }
 
-  let schema = typeMap[param.type]()
-
   if (param.description && param.type !== 'color') {
-    schema = v.pipe(schema as never, v.description(param.description))
+    schema = v.pipe(schema, v.description(param.description))
   }
 
   if (!param.required) {
-    schema = v.optional(schema as never, param.default as never)
+    schema = v.optional(schema, param.default)
   }
 
   return schema

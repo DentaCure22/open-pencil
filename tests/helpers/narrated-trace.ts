@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Locator } from '@playwright/test'
 
 export async function readNarratedTraceEvidencePixels(evidence: Locator) {
   return evidence.evaluate(async (element) => {
@@ -22,30 +22,4 @@ export async function readNarratedTraceEvidencePixels(evidence: Locator) {
     }
     return { nonWhite, violet }
   })
-}
-
-export async function startNarratedTraceForTest(page: Page, withSpeech = false) {
-  await page.evaluate(async (speech) => {
-    const trace = await import('/src/app/narrated-trace/controller.ts')
-    const { showTracePanel } = await import('/src/app/narrated-trace/panel.ts')
-    showTracePanel()
-    if (speech) trace.startNarratedTraceRecording()
-    else trace.startNarratedTraceActionRecording()
-  }, withSpeech)
-}
-
-export async function stopNarratedTraceForTest(page: Page) {
-  await page.evaluate(async () => {
-    const { stopNarratedTraceRecording } = await import('/src/app/narrated-trace/controller.ts')
-    stopNarratedTraceRecording()
-  })
-}
-
-export async function continueNarratedTraceForTest(page: Page, sessionId: string) {
-  await page.evaluate(async (id) => {
-    const { continueNarratedTraceRecording } = await import('/src/app/narrated-trace/controller.ts')
-    const { showTracePanel } = await import('/src/app/narrated-trace/panel.ts')
-    showTracePanel()
-    await continueNarratedTraceRecording(id)
-  }, sessionId)
 }

@@ -3,8 +3,10 @@ import { describe, expect, test } from 'bun:test'
 import { createEditorStore } from '@/app/editor/session'
 import {
   createNarratedTraceCanvasInk,
+  isNarratedTraceCanvasInkNode,
   narratedTraceCanvasInkNodes,
-  narratedTraceCanvasInkProjections
+  narratedTraceCanvasInkProjections,
+  snapshotNarratedTraceNode
 } from '@/app/narrated-trace'
 
 describe('Narrated Trace canvas ink', () => {
@@ -27,6 +29,8 @@ describe('Narrated Trace canvas ink', () => {
       strokeWidth: 4
     })
     expect(ink).not.toBeNull()
+    if (!ink) throw new Error('Expected Trace ink creation to succeed')
+    expect(isNarratedTraceCanvasInkNode(snapshotNarratedTraceNode(ink.node))).toBe(true)
 
     const nodes = narratedTraceCanvasInkNodes(store)
     const projections = narratedTraceCanvasInkProjections(
@@ -35,8 +39,8 @@ describe('Narrated Trace canvas ink', () => {
       nodes
     )
 
-    expect(nodes.map((node) => node.id)).toEqual([ink?.node.id])
+    expect(nodes.map((node) => node.id)).toEqual([ink.node.id])
     expect(projections).toHaveLength(1)
-    expect(projections[0]).toMatchObject({ id: ink?.node.id, strokeWidth: 4 })
+    expect(projections[0]).toMatchObject({ id: ink.node.id, strokeWidth: 4 })
   })
 })

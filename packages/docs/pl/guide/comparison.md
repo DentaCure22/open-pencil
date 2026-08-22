@@ -215,7 +215,7 @@ Zarządzanie stanem przez Potok. Cofanie z wektorami zmian odwrotnych (max 50 wp
 
 ## 11. Scripting i rozszerzalność
 
-OpenPencil zawiera [komendę `eval`](/programmable/cli/scripting) oferującą API Plugin kompatybilne z Figmą do skryptowania headless. Ponadto 90 narzędzi AI dostępnych przez wbudowany chat, serwer MCP (stdio + HTTP) i CLI. Penpot ma system pluginów z sandboxem, ale bez API skryptowania headless ani integracji MCP.
+OpenPencil zawiera [komendę `eval`](/programmable/cli/scripting) oferującą API Plugin kompatybilne z Figmą do skryptowania bez interfejsu. Udostępnia też czat zadań Pi i katalog MCP odkrywany w czasie działania. Penpot ma system pluginów z izolowanym wykonaniem, ale bez API skryptowania bez interfejsu ani integracji MCP.
 
 ## Podsumowanie
 
@@ -232,4 +232,4 @@ OpenPencil zawiera [komendę `eval`](/programmable/cli/scripting) oferującą AP
 | **Self-hosting** | Penpot | Gotowy Docker vs tylko desktop |
 | **Dojrzałość ekosystemu** | Penpot | Lata produkcji vs wczesny etap |
 
-Open Pencil jest architektonicznie szczuplejszy — jednoprocesowy renderer CanvasKit w ~26K LOC TypeScript, kompatybilny z Figmą z założenia. Penpot to platforma full-stack z ~299K LOC. Open Pencil ma skryptowanie headless, **90 narzędzi AI/MCP**, eksport SVG i natywną aplikację desktop.
+Open Pencil jest architektonicznie szczuplejszy — jednoprocesowy renderer CanvasKit w TypeScript, kompatybilny z Figmą z założenia. Penpot to platforma full-stack. Open Pencil ma skryptowanie bez interfejsu, czat zadań Pi, katalog MCP odkrywany w czasie działania, eksport SVG i natywną aplikację desktop.

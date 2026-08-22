@@ -5,6 +5,23 @@ import type { EvalTarget } from './schema'
 const STRAIGHT_THROUGH_MODALITIES = new Set(['native_card', 'native_text', 'object_connection'])
 
 type UnknownRecord = Record<string, unknown>
+type Checked<T> = StraightThroughFailure | { status: 'valid'; value: T }
+
+interface ReadyEnvelope {
+  envelope: UnknownRecord
+  persistence: UnknownRecord
+  receipt: UnknownRecord
+  summary: UnknownRecord
+}
+
+type ReadyEnvelopeResult = Checked<ReadyEnvelope> | StraightThroughFallback
+
+interface ValidatedReleaseEvidence {
+  artifacts: number
+  limitations: string[]
+  message: string
+  revision: number
+}
 
 export type StraightThroughFallbackReason =
   | 'browser_required'
@@ -77,7 +94,6 @@ export interface StraightThroughReleaseTarget extends EvalTarget {
 
 export interface StraightThroughReleaseSummary {
   artifact_count: number
-  connection_count: number | null
   contract: 'board-build-release/v1'
   message: string
   proof_limitations: string[]
@@ -222,6 +238,100 @@ function aliasedRevision(recordValue: UnknownRecord, camel: string, snake: strin
   return camelValue ?? snakeValue ?? null
 }
 
+function validateReadyReleaseEnvelope(value: unknown): ReadyEnvelopeResult {
+  const envelope = record(value)
+  const summary = record(envelope?.release_summary)
+  if (!envelope || !summary) {
+    return failure('invalid_envelope', 'The Board release envelope or release_summary is missing.')
+  }
+  if (summary.contract !== 'board-build-release/v1') {
+    return failure('release_contract_mismatch', 'The Board release contract is unsupported.')
+  }
+  if (summary.status === 'stop' || summary.status === 'unknown') {
+    return fallback('release_not_ready', `The Board release status is ${String(summary.status)}.`)
+  }
+  if (summary.status !== 'ready') {
+    return failure('release_status_invalid', 'The Board release status is invalid.')
+  }
+
+  const status = record(envelope.status)
+  if (status?.command !== 'completed') {
+    return failure('command_not_completed', 'The Board command did not complete.')
+  }
+  if (status.mutation !== 'applied' && status.mutation !== 'replayed') {
+    return failure(
+      'mutation_not_applied_or_replayed',
+      'The Board mutation is neither applied nor replayed.'
+    )
+  }
+  const persistence = record(envelope.persistence)
+  if (persistence?.status !== 'durable') {
+    return failure('persistence_not_durable', 'The Board result is not durably persisted.')
+  }
+  const receipt = record(envelope.receipt)
+  if (!receipt) return failure('receipt_missing', 'The Board mutation receipt is missing.')
+  if (receipt.status !== 'applied' && receipt.status !== 'committed') {
+    return failure(
+      'receipt_status_invalid',
+      'The Board mutation receipt is not applied or committed.'
+    )
+  }
+
+  return { status: 'valid', value: { envelope, persistence, receipt, summary } }
+}
+
+function validateReleaseEvidence(
+  summary: UnknownRecord,
+  receipt: UnknownRecord,
+  persistence: UnknownRecord
+): Checked<ValidatedReleaseEvidence> {
+  const summaryRevision = nonNegativeInteger(summary.revision)
+  const receiptRevision = aliasedRevision(receipt, 'appliedRevision', 'applied_revision')
+  const persistenceRevisionValue = persistence.authority_revision
+  const persistenceRevision =
+    persistenceRevisionValue === undefined
+      ? undefined
+      : nonNegativeInteger(persistenceRevisionValue)
+  if (summaryRevision === null || receiptRevision === null || persistenceRevision === null) {
+    return failure('revision_invalid', 'The release revision evidence is missing or invalid.')
+  }
+  if (
+    summaryRevision !== receiptRevision ||
+    (persistenceRevision !== undefined && persistenceRevision !== summaryRevision)
+  ) {
+    return failure(
+      'revision_mismatch',
+      'The release summary, receipt, and persistence revisions do not agree.'
+    )
+  }
+
+  const artifacts = nonNegativeInteger(summary.artifact_count)
+  const owners = receiptOwnerIds(receipt)
+  if (artifacts === null || artifacts === 0 || owners.length === 0) {
+    return failure(
+      'artifact_ownership_missing',
+      'The ready release does not contain nonempty artifact ownership.'
+    )
+  }
+  if (artifacts !== owners.length) {
+    return failure(
+      'artifact_ownership_mismatch',
+      'The artifact count does not match the receipt ownership count.'
+    )
+  }
+  const message = nonEmptyString(summary.message)
+  if (!message) return failure('release_message_missing', 'The deterministic final is empty.')
+  const limitations = stringList(summary.proof_limitations)
+  if (!limitations) {
+    return failure('invalid_envelope', 'The release proof limitations are invalid.')
+  }
+
+  return {
+    status: 'valid',
+    value: { artifacts, limitations, message, revision: summaryRevision }
+  }
+}
+
 export function evaluateStraightThroughEligibility(
   input: StraightThroughRunInput
 ): StraightThroughEligibility {
@@ -285,43 +395,9 @@ export function planStraightThroughRelease(
   const eligibility = evaluateStraightThroughEligibility(input)
   if (eligibility.status !== 'eligible') return eligibility
 
-  const envelope = record(input.envelope)
-  const summary = record(envelope?.release_summary)
-  if (!envelope || !summary) {
-    return failure('invalid_envelope', 'The Board release envelope or release_summary is missing.')
-  }
-  if (summary.contract !== 'board-build-release/v1') {
-    return failure('release_contract_mismatch', 'The Board release contract is unsupported.')
-  }
-  if (summary.status === 'stop' || summary.status === 'unknown') {
-    return fallback('release_not_ready', `The Board release status is ${String(summary.status)}.`)
-  }
-  if (summary.status !== 'ready') {
-    return failure('release_status_invalid', 'The Board release status is invalid.')
-  }
-
-  const status = record(envelope.status)
-  if (status?.command !== 'completed') {
-    return failure('command_not_completed', 'The Board command did not complete.')
-  }
-  if (status.mutation !== 'applied' && status.mutation !== 'replayed') {
-    return failure(
-      'mutation_not_applied_or_replayed',
-      'The Board mutation is neither applied nor replayed.'
-    )
-  }
-  const persistence = record(envelope.persistence)
-  if (persistence?.status !== 'durable') {
-    return failure('persistence_not_durable', 'The Board result is not durably persisted.')
-  }
-  const receipt = record(envelope.receipt)
-  if (!receipt) return failure('receipt_missing', 'The Board mutation receipt is missing.')
-  if (receipt.status !== 'applied' && receipt.status !== 'committed') {
-    return failure(
-      'receipt_status_invalid',
-      'The Board mutation receipt is not applied or committed.'
-    )
-  }
+  const readyEnvelope = validateReadyReleaseEnvelope(input.envelope)
+  if (readyEnvelope.status !== 'valid') return readyEnvelope
+  const { envelope, persistence, receipt, summary } = readyEnvelope.value
 
   const receiptRequestId = aliasedString(receipt, 'requestId', 'request_id')
   const summaryRequestId = nonEmptyString(summary.request_id)
@@ -351,61 +427,17 @@ export function planStraightThroughRelease(
     )
   }
 
-  const summaryRevision = nonNegativeInteger(summary.revision)
-  const receiptRevision = aliasedRevision(receipt, 'appliedRevision', 'applied_revision')
-  const persistenceRevisionValue = persistence.authority_revision
-  const persistenceRevision =
-    persistenceRevisionValue === undefined
-      ? undefined
-      : nonNegativeInteger(persistenceRevisionValue)
-  if (summaryRevision === null || receiptRevision === null || persistenceRevision === null) {
-    return failure('revision_invalid', 'The release revision evidence is missing or invalid.')
-  }
-  if (
-    summaryRevision !== receiptRevision ||
-    (persistenceRevision !== undefined && persistenceRevision !== summaryRevision)
-  ) {
-    return failure(
-      'revision_mismatch',
-      'The release summary, receipt, and persistence revisions do not agree.'
-    )
-  }
-
-  const artifacts = nonNegativeInteger(summary.artifact_count)
-  const connections =
-    summary.connection_count === null ? null : nonNegativeInteger(summary.connection_count)
-  const owners = receiptOwnerIds(receipt)
-  if (artifacts === null || artifacts === 0 || owners.length === 0) {
-    return failure(
-      'artifact_ownership_missing',
-      'The ready release does not contain nonempty artifact ownership.'
-    )
-  }
-  if (artifacts !== owners.length) {
-    return failure(
-      'artifact_ownership_mismatch',
-      'The artifact count does not match the receipt ownership count.'
-    )
-  }
-  if (connections === null && summary.connection_count !== null) {
-    return failure('invalid_envelope', 'The release connection count is invalid.')
-  }
-
-  const message = nonEmptyString(summary.message)
-  if (!message) return failure('release_message_missing', 'The deterministic final is empty.')
-  const limitations = stringList(summary.proof_limitations)
-  if (!limitations) {
-    return failure('invalid_envelope', 'The release proof limitations are invalid.')
-  }
+  const releaseEvidence = validateReleaseEvidence(summary, receipt, persistence)
+  if (releaseEvidence.status !== 'valid') return releaseEvidence
+  const { artifacts, limitations, message, revision } = releaseEvidence.value
 
   const releaseSummary: StraightThroughReleaseSummary = {
     artifact_count: artifacts,
-    connection_count: connections,
     contract: 'board-build-release/v1',
     message,
     proof_limitations: [...limitations],
     request_id: summaryRequestId,
-    revision: summaryRevision,
+    revision,
     status: 'ready',
     target: summaryTarget
   }
@@ -416,7 +448,7 @@ export function planStraightThroughRelease(
       final_origin: 'board_build_release_summary',
       release_summary: releaseSummary,
       request_id: summaryRequestId,
-      revision: summaryRevision,
+      revision,
       target: structuredClone(eligibility.expected_target),
       text: message
     },

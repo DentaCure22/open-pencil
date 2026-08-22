@@ -21,7 +21,16 @@ import type { ToolbarActionItem } from '@/components/Toolbar/types'
 
 const MobileToolbar = defineAsyncComponent(() => import('@/components/Toolbar/MobileToolbar.vue'))
 
-const { sidebarOpen = true } = defineProps<{ sidebarOpen?: boolean }>()
+const {
+  embedded = false,
+  sidebarOpen = true,
+  sidebarTabOnly = false
+} = defineProps<{
+  embedded?: boolean
+  sidebarOpen?: boolean
+  sidebarTabOnly?: boolean
+}>()
+const emit = defineEmits<{ closeSidebar: []; openSidebar: [] }>()
 
 const store = useEditorStore()
 const { isMobile } = useViewportKind()
@@ -82,13 +91,17 @@ function onActionTap(item: ToolbarActionItem) {
     <DesktopToolbar
       v-if="!isMobile"
       :sidebar-open="sidebarOpen"
+      :embedded="embedded"
       :tools="tools"
+      :sidebar-tab-only="sidebarTabOnly"
       :active-tool="activeTool"
       :tool-icons="toolIcons"
       :tool-labels="toolLabels"
       :tool-shortcuts="toolShortcuts"
       :ui="toolbarUi"
       @set-tool="actions.setTool"
+      @close-sidebar="emit('closeSidebar')"
+      @open-sidebar="emit('openSidebar')"
     />
 
     <MobileToolbar

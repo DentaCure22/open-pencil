@@ -110,9 +110,3 @@ export function classifySpatialFile(
 
   return { disposition: 'not-spatial', kind: 'unknown', label: 'Not a spatial source' }
 }
-
-export const CAD_ADAPTER_STAGES = [
-  'Retain exact source bytes, identity, and download access in the generic source object.',
-  'Convert in an isolated worker with a pinned OpenCascade.js build; prove units, assemblies, topology, and deterministic tessellation.',
-  'Expose topology-aware inspection only after fixture round-trips; do not claim native CAD editing before lossless edit/export proof.'
-] as const

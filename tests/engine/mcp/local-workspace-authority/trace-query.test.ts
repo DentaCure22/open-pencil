@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -172,7 +172,11 @@ describe('persisted Trace history query', () => {
           },
           candidates: {
             count: 3,
-            items: [{ stableId: f.first.id }, { stableId: f.nested.id }, { stableId: f.second.id }],
+            items: [
+              { stableId: f.first.id },
+              { ownerId: f.first.id, stableId: f.nested.id },
+              { stableId: f.second.id }
+            ],
             primaryTargetId: f.nested.id,
             truncated: false
           },
@@ -210,10 +214,16 @@ describe('persisted Trace history query', () => {
       evidence: { path: string; status: string }
     }
     expect(beforeEvidence).toMatchObject({
-      contract: 'trace-context/v1',
+      contract: 'trace-context/v2',
       evidence: { status: 'missing' },
       gesture_id: gestureId,
       status: 'ready'
+    })
+    await writeFile(directContextPath, '{"contract":"trace-context/v1"}\n')
+    await f.store.head()
+    expect(JSON.parse(await readFile(directContextPath, 'utf8'))).toMatchObject({
+      contract: 'trace-context/v2',
+      gesture_id: gestureId
     })
     await f.store.recordTraceEvidence({
       bytes: new Uint8Array([1, 2, 3]),
@@ -226,34 +236,13 @@ describe('persisted Trace history query', () => {
       evidence: { path: string; status: string }
     }
     expect(directContext).toMatchObject({
-      connections: [
-        {
-          id: 'connection:trace-context',
-          kind: 'visual',
-          source_id: f.first.id,
-          target_id: f.second.id
-        }
-      ],
-      contract: 'trace-context/v1',
+      contract: 'trace-context/v2',
       evidence: {
         evidence_id: 'evidence:compact',
         mime_type: 'image/png',
         status: 'ready'
       },
       gesture_id: gestureId,
-      objects: [
-        { id: f.first.id, name: 'First card', type: 'FRAME' },
-        { id: f.second.id, name: 'Second card', type: 'FRAME' }
-      ],
-      omissions: {
-        collapsed_object_count: 1,
-        connections_truncated: false,
-        missing_object_count: 0,
-        objects_truncated: false,
-        recorded_object_count: 3,
-        resolved_object_count: 2
-      },
-      primary_object_id: f.first.id,
       scope: {
         document_id: f.head.identity.documentId,
         page_id: f.page.id,
@@ -262,6 +251,12 @@ describe('persisted Trace history query', () => {
       },
       session_id: 'session:compact',
       status: 'ready',
+      targets: {
+        count: 3,
+        items: [{ stable_id: f.first.id }, { stable_id: f.nested.id }, { stable_id: f.second.id }],
+        primary_stable_id: f.nested.id,
+        truncated: false
+      },
       workspace_revision: f.head.revision
     })
     expect(Date.parse((directContext as { expires_at: string }).expires_at)).toBe(
@@ -289,7 +284,6 @@ describe('persisted Trace history query', () => {
           items: [{ stableId: f.first.id }, { stableId: f.second.id }],
           primaryTargetId: f.first.id
         },
-        connections: { count: 1, ids: ['connection:trace-context'] },
         contract: 'trace_context/v1',
         evidence: {
           evidenceId: 'evidence:compact',
@@ -309,24 +303,26 @@ describe('persisted Trace history query', () => {
     const current = await f.store.head()
     if (!current) throw new Error('Expected current local authority head')
     const changed = readAuthorityBoardDocument(current.document)
-    changed.graph.deleteNode(f.first.id)
+    changed.graph.deleteNode(f.nested.id)
     await f.store.commit({
       document: writeAuthorityBoardDocument(changed),
       expectedContentHash: current.contentHash,
       expectedRevision: current.revision,
-      requestId: 'delete-traced-object',
+      requestId: 'delete-precise-traced-object',
       workspaceId: current.identity.workspaceId
     })
     expect(JSON.parse(await readFile(directContextPath, 'utf8'))).toMatchObject({
-      objects: [{ id: f.second.id }],
-      omissions: { missing_object_count: 2, resolved_object_count: 1 },
       reasons: ['target_missing'],
       status: 'ambiguous',
+      targets: {
+        items: [{ stable_id: f.first.id }, { stable_id: f.nested.id }, { stable_id: f.second.id }],
+        primary_stable_id: f.nested.id
+      },
       workspace_revision: current.revision + 1
     })
   })
 
-  test('queries global SQLite history across Boards with bounded results and cursor continuation', async () => {
+  test('queries global JSONL history across Boards with bounded results and cursor continuation', async () => {
     const f = await fixture()
     await persistSession(f, {
       id: 'session:dental',
@@ -390,7 +386,7 @@ describe('persisted Trace history query', () => {
 
   test('resolves saved spoken turns after authority restart by latest, id, and text', async () => {
     const f = await fixture()
-    const startedAt = '2026-08-02T12:00:00.000Z'
+    const startedAt = new Date(Date.now() - 1_000).toISOString()
     const startedAtEpochMs = Date.parse(startedAt) + 200
     const spokenTurn = {
       endedAt: new Date(startedAtEpochMs + 600).toISOString(),

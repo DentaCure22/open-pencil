@@ -15,32 +15,44 @@ export function editorViewportInsets(): ViewportInsets {
   const canvas = visibleElementRect('[data-test-id="canvas-area"]')
   if (!canvas) return {}
 
+  const sidebarShell = visibleElementRect('[data-test-id="layers-shell-motion"]')
   const leftPanel =
     visibleElementRect('[data-test-id="layers-shell"]') ??
     visibleElementRect('[data-test-id="layers-panel"]')
   const rightPanel = visibleElementRect('[data-test-id="properties-panel"]')
   const toolbar = visibleElementRect('[data-test-id="toolbar"]')
-  const boardDock = visibleElementRect('[data-test-id="board-dock"]')
   const mobileDrawer = visibleElementRect('[data-test-id="mobile-drawer"]')
   const canvasCenterX = canvas.left + canvas.width / 2
   const propertiesOnRight = rightPanel && rightPanel.left >= canvasCenterX ? rightPanel : null
+  const verticalToolbar = toolbar && toolbar.height > toolbar.width ? toolbar : null
+  const toolbarOnLeft = !!verticalToolbar && verticalToolbar.left < canvasCenterX
+  const toolbarOnRight = !!verticalToolbar && verticalToolbar.left >= canvasCenterX
   let bottom = VIEWPORT_SAFE_GAP
   if (mobileDrawer) {
     bottom = Math.max(VIEWPORT_SAFE_GAP, canvas.bottom - mobileDrawer.top + VIEWPORT_SAFE_GAP)
-  } else if (boardDock) {
-    bottom = Math.max(VIEWPORT_SAFE_GAP, canvas.bottom - boardDock.top + VIEWPORT_SAFE_GAP)
+  }
+
+  let left = sidebarShell
+    ? Math.max(VIEWPORT_SAFE_GAP, sidebarShell.right - canvas.left + VIEWPORT_SAFE_GAP)
+    : (leftPanel
+        ? Math.max(VIEWPORT_SAFE_GAP, leftPanel.right - canvas.left + VIEWPORT_SAFE_GAP)
+        : VIEWPORT_SAFE_GAP)
+  let right = propertiesOnRight
+    ? Math.max(VIEWPORT_SAFE_GAP, canvas.right - propertiesOnRight.left + VIEWPORT_SAFE_GAP)
+    : VIEWPORT_SAFE_GAP
+  if (toolbarOnLeft && verticalToolbar) {
+    left = Math.max(left, verticalToolbar.right - canvas.left + VIEWPORT_SAFE_GAP)
+  } else if (toolbarOnRight && verticalToolbar) {
+    right = Math.max(right, canvas.right - verticalToolbar.left + VIEWPORT_SAFE_GAP)
   }
 
   return {
     bottom,
-    left: leftPanel
-      ? Math.max(VIEWPORT_SAFE_GAP, leftPanel.right - canvas.left + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP,
-    right: propertiesOnRight
-      ? Math.max(VIEWPORT_SAFE_GAP, canvas.right - propertiesOnRight.left + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP,
-    top: toolbar
-      ? Math.max(VIEWPORT_SAFE_GAP, toolbar.bottom - canvas.top + VIEWPORT_SAFE_GAP)
-      : VIEWPORT_SAFE_GAP
+    left,
+    right,
+    top:
+      toolbar && !verticalToolbar
+        ? Math.max(VIEWPORT_SAFE_GAP, toolbar.bottom - canvas.top + VIEWPORT_SAFE_GAP)
+        : VIEWPORT_SAFE_GAP
   }
 }

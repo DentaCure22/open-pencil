@@ -4,7 +4,7 @@ This OpenPencil component adapts interaction patterns and source structure from:
 
 - **OpenArchFlow** by Rafael Sales — MIT License  
   https://github.com/dmux/OpenArchFlow  
-  Architecture canvas, node registry, connection styling, palette, and React Flow patterns were studied from `src/components/diagram/FlowCanvas.tsx` and adjacent node/edge components.
+  Architecture canvas, node registry, connection styling, and palette were studied from `src/components/diagram/FlowCanvas.tsx` and adjacent node/edge components.
 
 - **OpenSail** by TesslateAI — Apache License 2.0  
   https://github.com/TesslateAI/OpenSail  

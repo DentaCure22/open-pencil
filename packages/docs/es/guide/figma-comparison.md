@@ -12,13 +12,13 @@ Comparación característica por característica de las capacidades de Figma Des
 
 | Característica | Estado | Notas |
 |---------------|--------|-------|
-| Barra de herramientas de diseño | ✅ | Barra inferior (estilo UI3): Seleccionar, Frame, Sección, Rectángulo, Elipse, Línea, Texto, Mano, Pluma |
-| Panel de capas (barra lateral izquierda) | ✅ | Vista de árbol con expandir/colapsar, reordenamiento por arrastre, toggle de visibilidad; ancho redimensionable |
-| Panel de páginas | ✅ | Añadir, eliminar, renombrar páginas; estado de viewport por página |
-| Panel de propiedades (barra lateral derecha) | ✅ | Secciones: Apariencia, Relleno, Trazo, Efectos, Tipografía, Layout, Posición; ancho redimensionable |
+| Barra de herramientas de diseño | ✅ | Barra integrada: Seleccionar, Frame, Sección, Rectángulo, Elipse, Línea, Texto, Mano, Pluma |
+| Panel de capas (barra lateral izquierda) | ✅ | Barra flotante con Capas, Chats, Recursos y Actividad |
+| Panel de páginas | ✅ | El navegador del espacio de trabajo gestiona Boards y conserva su viewport |
+| Panel de propiedades (barra lateral derecha) | 🟡 | No hay panel permanente en escritorio; controles contextuales en el canvas y Diseño en el cajón móvil |
 | Zoom y pan | ✅ | <kbd>Ctrl</kbd> + scroll, pinch, <kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>−</kbd> / <kbd>⌘</kbd><kbd>0</kbd>, espacio+arrastrar, ratón medio, herramienta mano (H) |
 | Reglas del canvas | ✅ | Reglas superior/izquierda con bandas de selección y badges de coordenadas |
-| Color de fondo del canvas | ✅ | Fondo por página vía panel de propiedades |
+| Color de fondo del canvas | 🟡 | El fondo se conserva en el documento; el control de escritorio no está expuesto |
 | Guías del canvas | 🔲 | Figma soporta guías arrastrables desde las reglas |
 | Menú de acciones / paleta de comandos | 🔲 | Búsqueda de acciones rápidas de Figma |
 | Menú contextual | ✅ | Clic derecho con portapapeles, orden-z, agrupación, componente, visibilidad, bloqueo, mover-a-página |
@@ -28,7 +28,7 @@ Comparación característica por característica de las capacidades de Figma Des
 | Miniaturas personalizadas | 🔲 | Miniatura generada en export, pero sin selector de miniatura personalizada |
 | Configuración de valores de nudge | 🔲 | Por defecto 1px/10px; Figma permite valores personalizados |
 | Menú de app (modo navegador) | ✅ | Menús Archivo, Editar, Ver, Objeto, Texto, Organizar; Tauri usa menús nativos |
-| Herramientas IA | 🟡 | 90+ herramientas vía Anthropic, OpenAI, Google AI, OpenRouter + servidor MCP; sin imágenes generadas por IA ni búsqueda IA aún |
+| Herramientas IA | 🟡 | Chat de tareas Pi y catálogo MCP descubierto en tiempo de ejecución; aún sin imágenes generadas por IA ni búsqueda IA |
 
 ## Capas y formas
 
@@ -55,7 +55,7 @@ Comparación característica por característica de las capacidades de Figma Des
 | Selección inteligente (distribuir/alinear) | 🔲 | Espaciar y alinear uniformemente multi-selección |
 | Guías de layout (columnas, filas, grid) | 🔲 | Guías de columna/fila/grid en frames |
 | Medir distancias entre capas | 🔲 | Alt-hover para mostrar distancias |
-| Editar objetos en lote | ✅ | Panel de propiedades multi-selección: editar posición, tamaño, apariencia, relleno, trazo, efectos; valores compartidos normales, diferentes muestran "Mixed" |
+| Editar objetos en lote | ✅ | Los controles contextuales y el cajón móvil de Diseño admiten selección múltiple |
 | Identificar objetos coincidentes | 🔲 | Encontrar capas similares |
 | Copiar/pegar propiedades | 🔲 | Copiar relleno/trazo/efectos entre capas |
 | Relaciones padre-hijo | ✅ | Jerarquía completa con parentIndex, re-parentamiento por arrastre |
@@ -215,7 +215,7 @@ Comparación característica por característica de las capacidades de Figma Des
 | Code Connect | 🔲 | Vincular componentes de diseño a código |
 | Fragmentos de código | 🟡 | Export JSX con resaltado y copia; sin fragmentos CSS/Swift/Kotlin |
 | Figma for VS Code | 🔲 | Integración con plugin de editor |
-| Servidor MCP | ✅ | @open-pencil/mcp con transportes stdio + HTTP; 87 herramientas core + 3 de gestión de archivos = 90+ total |
+| Servidor MCP | ✅ | `@open-pencil/mcp` con transportes stdio + HTTP y catálogo descubierto en tiempo de ejecución |
 | Herramientas CLI | ✅ | CLI headless: info, tree, find, export, analyze, node, pages, variables, eval; servidor MCP |
 
 ## Figma Draw

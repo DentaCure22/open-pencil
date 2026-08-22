@@ -10,10 +10,7 @@ type PersistedCodeObjectProbe = {
 test('persists the authored Code Object record in the shared workspace and restores it on reload', async () => {
   await expect
     .poll(
-      () =>
-        editor.page.evaluate(
-          () => window.openPencil?.getStore?.().state.documentName ?? null
-        ),
+      () => editor.page.evaluate(() => window.openPencil?.getStore?.().state.documentName ?? null),
       { timeout: 30_000 }
     )
     .toBe('OpenPencil Workspace')
@@ -21,9 +18,8 @@ test('persists the authored Code Object record in the shared workspace and resto
   const probe = await editor.page.evaluate<PersistedCodeObjectProbe>(async () => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
-    const { createCodeObjectFromPreset, codeObjectDocument, setCodeObjectDocument } = await import(
-      '/src/app/code-object/model.ts'
-    )
+    const { createCodeObjectFromPreset, codeObjectDocument, setCodeObjectDocument } =
+      await import('/src/app/code-object/model.ts')
     const frame = createCodeObjectFromPreset(store, 'user-code')
     const document = frame ? codeObjectDocument(frame) : null
     if (!frame || document?.component !== 'user-code') {

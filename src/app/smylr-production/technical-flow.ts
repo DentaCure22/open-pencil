@@ -268,7 +268,6 @@ export function syncTechnicalFlowScene(
   if (!page) return { changed: false, ownerId: null, screenIds: [] }
   let owner = findTechnicalOwner(graph, pageId)
   let changed = removeTechnicalOwnedProjection(graph, pageId, owner?.id ?? null)
-  owner = findTechnicalOwner(graph, pageId)
   const mermaidChanged = syncTechnicalMermaid(graph, page)
   owner = findTechnicalOwner(graph, pageId)
   if (!owner) return { changed: changed || mermaidChanged, ownerId: null, screenIds: [] }

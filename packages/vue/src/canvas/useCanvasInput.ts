@@ -186,23 +186,29 @@ export function useCanvasInput(
   }
 
   function onMouseMove(e: MouseEvent) {
+    let coords: ReturnType<typeof getCoords> | null = null
+    const pointerCoords = () => {
+      coords ??= getCoords(e)
+      return coords
+    }
+
     if (onCursorMove) {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = pointerCoords()
       onCursorMove(cx, cy)
     }
 
     if (!drag.value) {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = pointerCoords()
       updatePenHover(cx, cy, editor)
     }
 
     if (!drag.value) {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = pointerCoords()
       updateNodeEditHover(editor, cx, cy)
     }
 
     if (!drag.value && editor.state.activeTool === 'SELECT') {
-      const { cx, cy } = getCoords(e)
+      const { cx, cy } = pointerCoords()
       cursorOverride.value = updateHoverCursor(cx, cy, editor, hitFns)
       editor.setAutoLayoutHover(resolveAutoLayoutHover(cx, cy, editor))
     }
@@ -215,7 +221,7 @@ export function useCanvasInput(
       return
     }
 
-    const { sx, sy, cx, cy } = getCoords(e)
+    const { sx, sy, cx, cy } = pointerCoords()
 
     if (d.type === 'rotate') {
       handleRotateMove(d, cx, cy, e.shiftKey)

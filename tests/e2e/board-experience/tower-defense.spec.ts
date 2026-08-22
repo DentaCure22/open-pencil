@@ -99,19 +99,25 @@ test('composes tower defense from selectable Code Object instances', async () =>
     (component) => component.definitionId === 'openpencil.tower-defense.lane'
   )
   if (!lane) throw new Error('Defense lane component was unavailable')
-  await editor.page.getByLabel('Defense lane. Double-click to interact.', { exact: true }).click()
+  await editor.page
+    .getByLabel('Defense lane. Click to select or interact. Double-click to focus.', {
+      exact: true
+    })
+    .click()
   await expect.poll(selectedIds).toEqual([lane.id])
-  await expect(editor.page.getByTestId('code-object-header')).toHaveCount(1)
-  await expect(editor.page.getByTestId('code-object-header-title')).toHaveText('Defense lane')
+  await expect(editor.page.getByTestId('selection-context-trigger')).toBeVisible()
+
+  const controls = (await experienceReadback()).find(
+    (component) => component.definitionId === 'openpencil.tower-defense.controls'
+  )
+  if (!controls) throw new Error('Tower defense controls were unavailable')
 
   const controlsTarget = editor.page.getByLabel(
-    'Tower defense controls. Double-click to interact.',
+    'Tower defense controls. Click to select or interact. Double-click to focus.',
     { exact: true }
   )
   await controlsTarget.dblclick()
-  await expect(editor.page.getByTestId('code-object-header-title')).toHaveText(
-    'Tower defense controls'
-  )
+  await expect.poll(selectedIds).toEqual([controls.id])
   await editor.page.getByRole('button', { name: 'Add pulse · 45g', exact: true }).click()
   await expect
     .poll(async () => {
@@ -169,7 +175,7 @@ test('composes tower defense from selectable Code Object instances', async () =>
     .getByTestId('code-object-design-hit-target')
     .click()
   await expect.poll(selectedIds).toEqual([enemy.id])
-  await expect(editor.page.getByTestId('code-object-header-title')).toHaveText('Enemy')
+  await expect(editor.page.getByTestId('selection-context-trigger')).toBeVisible()
 
   await controlsTarget.dblclick()
   await editor.page.getByRole('button', { name: 'Exit', exact: true }).click()

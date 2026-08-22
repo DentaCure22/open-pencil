@@ -12,7 +12,7 @@
 | **Dateiformat** | Kiwi-Binär + Zstd | Figmas eigenes Format — kompakt, schnelles Parsen, .fig-kompatibel |
 | **Kollaboration** | Trystero + Yjs | P2P-WebRTC über MQTT-Signalisierung, CRDT-Sync, y-indexeddb-Persistenz |
 | **Farbe** | culori | Farbraum-Konvertierungen (HSV, RGB, Hex) |
-| **KI/MCP** | MCP SDK + Hono | 90+ Tools für KI-Coding-Werkzeuge, stdio- + HTTP-Transporte |
+| **KI/MCP** | Pi + MCP SDK + Hono | Pi-Aufgaben-Chat und zur Laufzeit entdeckte MCP-Werkzeuge über stdio + HTTP |
 | **JSX-Transform** | Sucrase | 201 KB JSX → JS, synchron, browser-kompatibel |
 | **Events** | nanoevents | 108 Bytes, typisierter Event-Emitter für SceneGraph-Mutationen |
 | **Desktop** | Tauri v2 | ~5 MB native App (vs. Electrons ~100 MB), Rust-Backend |

@@ -7,11 +7,20 @@ export type NarratedTraceFocusTrailPoint = NarratedTracePoint & {
 }
 
 export type NarratedTraceAnnotationTool = 'none' | 'ink' | 'focus'
+export type NarratedTraceActiveAnnotationTool = Exclude<NarratedTraceAnnotationTool, 'none'>
+
+export const NARRATED_TRACE_ANNOTATION_SHORTCUTS = {
+  focus: { keybinding: 'KeyG', label: 'G' },
+  ink: { keybinding: 'KeyI', label: 'I' }
+} as const satisfies Record<
+  NarratedTraceActiveAnnotationTool,
+  { keybinding: string; label: string }
+>
 
 export const narratedTraceAnnotationTool = ref<NarratedTraceAnnotationTool>('none')
 export const narratedTraceInkStrokes = shallowRef<NarratedTraceInk[]>([])
 
-export function setNarratedTraceAnnotationTool(tool: NarratedTraceAnnotationTool) {
+export function setNarratedTraceAnnotationToolState(tool: NarratedTraceAnnotationTool) {
   narratedTraceAnnotationTool.value = tool
 }
 
@@ -23,8 +32,8 @@ export function clearNarratedTraceInkStrokes() {
   narratedTraceInkStrokes.value = []
 }
 
-export function resetNarratedTraceAnnotations() {
-  narratedTraceAnnotationTool.value = 'none'
+export function resetNarratedTraceAnnotationState() {
+  setNarratedTraceAnnotationToolState('none')
   narratedTraceInkStrokes.value = []
 }
 

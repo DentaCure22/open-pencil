@@ -3,24 +3,9 @@
  * Full attribution: ./OpenSourceWorkspace.NOTICE.md
  */
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
-import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  Handle,
-  Position,
-  ReactFlow,
-  applyNodeChanges,
-  type Edge,
-  type Node,
-  type NodeChange,
-  type NodeProps
-} from '@xyflow/react'
-import { useEffect, useMemo, useState } from 'react'
 
 import type { OpenSourceArchitectureNode, OpenSourceWorkspaceState } from '../model'
 
-import '@xyflow/react/dist/style.css'
 import './OpenSourceWorkspace.css'
 
 type OpenSourceWorkspaceProps = {
@@ -31,7 +16,6 @@ type OpenSourceWorkspaceProps = {
 
 type ArchitectureState = Extract<OpenSourceWorkspaceState, { piece: 'architecture' }>
 type KanbanState = Extract<OpenSourceWorkspaceState, { piece: 'kanban' }>
-type ArchitectureFlowNode = Node<OpenSourceArchitectureNode, 'architecture-node'>
 
 const NODE_ICONS = {
   api: '</>',
@@ -42,10 +26,9 @@ const NODE_ICONS = {
   worker: '⊞'
 } as const
 
-function ArchitectureNodeCard({ data }: NodeProps<ArchitectureFlowNode>) {
+function ArchitectureNodeCard({ data }: { data: OpenSourceArchitectureNode }) {
   return (
     <article className={`os-architecture-node os-node-${data.kind}`}>
-      <Handle className="os-handle" position={Position.Left} type="target" />
       <span className="os-node-icon" aria-hidden="true">
         {NODE_ICONS[data.kind]}
       </span>
@@ -54,33 +37,8 @@ function ArchitectureNodeCard({ data }: NodeProps<ArchitectureFlowNode>) {
         <small>{data.subtitle}</small>
       </span>
       <span className={`os-status os-status-${data.status}`}>{data.status}</span>
-      <Handle className="os-handle" position={Position.Right} type="source" />
     </article>
   )
-}
-
-function flowNodes(state: ArchitectureState): ArchitectureFlowNode[] {
-  return state.nodes.map((node) => ({
-    data: node,
-    id: node.id,
-    position: { x: node.x, y: node.y },
-    type: 'architecture-node'
-  }))
-}
-
-function flowEdges(state: ArchitectureState): Edge[] {
-  return state.edges.map((edge) => ({
-    animated: edge.kind === 'deploy',
-    data: { kind: edge.kind },
-    id: edge.id,
-    label: edge.label,
-    labelStyle: { fill: '#8f96a1', fontSize: 9, fontWeight: 600 },
-    markerEnd: { color: edgeColor(edge.kind), type: 'arrowclosed' },
-    source: edge.source,
-    style: { stroke: edgeColor(edge.kind), strokeWidth: 2 },
-    target: edge.target,
-    type: 'smoothstep'
-  }))
 }
 
 function edgeColor(kind: ArchitectureState['edges'][number]['kind']) {
@@ -90,51 +48,38 @@ function edgeColor(kind: ArchitectureState['edges'][number]['kind']) {
   return '#6593eb'
 }
 
-function ArchitectureSurface({
-  interactionEnabled,
-  onStateChange,
-  state
-}: OpenSourceWorkspaceProps & { state: ArchitectureState }) {
-  const [nodes, setNodes] = useState<ArchitectureFlowNode[]>(() => flowNodes(state))
-  useEffect(() => setNodes(flowNodes(state)), [state])
-  const edges = useMemo(() => flowEdges(state), [state])
-
-  function changeNodes(changes: NodeChange<ArchitectureFlowNode>[]) {
-    setNodes((current) => applyNodeChanges(changes, current))
-  }
-
-  function commitNodePosition(_: unknown, moved: ArchitectureFlowNode) {
-    onStateChange({
-      ...state,
-      nodes: state.nodes.map((node) =>
-        node.id === moved.id ? { ...node, x: moved.position.x, y: moved.position.y } : node
-      )
-    })
-  }
+function ArchitectureSurface({ state }: OpenSourceWorkspaceProps & { state: ArchitectureState }) {
+  const nodesById = new Map(state.nodes.map((node) => [node.id, node]))
 
   return (
     <div className="os-architecture-surface" data-test-id="open-source-architecture">
-      <ReactFlow
-        edges={edges}
-        fitView
-        fitViewOptions={{ padding: 0.14 }}
-        maxZoom={1.5}
-        minZoom={0.45}
-        nodeTypes={{ 'architecture-node': ArchitectureNodeCard }}
-        nodes={nodes}
-        nodesDraggable={interactionEnabled}
-        nodesFocusable={interactionEnabled}
-        onNodeDragStop={commitNodePosition}
-        onNodesChange={changeNodes}
-        panOnDrag={interactionEnabled}
-        proOptions={{ hideAttribution: true }}
-        zoomOnDoubleClick={false}
-        zoomOnPinch={interactionEnabled}
-        zoomOnScroll={interactionEnabled}
-      >
-        <Background color="#4d5360" gap={22} size={1} variant={BackgroundVariant.Dots} />
-        {interactionEnabled ? <Controls position="bottom-right" showInteractive={false} /> : null}
-      </ReactFlow>
+      <svg aria-hidden="true" className="os-architecture-edges">
+        {state.edges.map((edge) => {
+          const source = nodesById.get(edge.source)
+          const target = nodesById.get(edge.target)
+          if (!source || !target) return null
+          return (
+            <line
+              key={edge.id}
+              stroke={edgeColor(edge.kind)}
+              strokeWidth="2"
+              x1={source.x + 220}
+              x2={target.x}
+              y1={source.y + 30}
+              y2={target.y + 30}
+            />
+          )
+        })}
+      </svg>
+      {state.nodes.map((node) => (
+        <div
+          className="os-architecture-node-position"
+          key={node.id}
+          style={{ left: node.x, top: node.y }}
+        >
+          <ArchitectureNodeCard data={node} />
+        </div>
+      ))}
     </div>
   )
 }

@@ -133,6 +133,7 @@ test('CJK text waits for fallback fonts and repaints after they load', async ({ 
           800,
           600,
           false,
+          window.devicePixelRatio || 1,
           'full'
         )
       })

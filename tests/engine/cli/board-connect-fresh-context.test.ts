@@ -6,7 +6,7 @@ import {
   normalizeFreshBoardConnectLogical,
   type BoardConnectRpcSender
 } from '#cli/board-connect/fresh-context'
-import { boardWithChangeCommand as boardCommand } from '#cli/commands/board'
+import { boardInternalCommand as boardCommand } from '#cli/commands/board'
 
 const exactTarget = {
   'content-document-id': 'content-document:1',
@@ -289,15 +289,14 @@ describe('Board connect fresh-context CLI handshake', () => {
         calls.push(command)
         return { result, target: rpcTarget() }
       }
+      const expectedError =
+        !('connect_objects_base' in result) &&
+        result.capabilities.includes('board.change.object_graph.connect')
+          ? 'did not return connect_objects_base'
+          : 'lacks writer board.change.object_graph.connect capability'
       await expect(
         connectWithFreshContext(exactFreshContextTarget(exactTarget), logical, { send })
-      ).rejects.toThrow(
-        'connect_objects_base' in result
-          ? 'lacks writer board.change.object_graph.connect capability'
-          : result.capabilities.includes('board.change.object_graph.connect')
-            ? 'did not return connect_objects_base'
-            : 'lacks writer board.change.object_graph.connect capability'
-      )
+      ).rejects.toThrow(expectedError)
       expect(calls).toEqual(['board_context'])
     }
   })

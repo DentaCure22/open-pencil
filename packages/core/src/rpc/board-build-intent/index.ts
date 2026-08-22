@@ -25,7 +25,6 @@ export type BoardBuildIntentItem = {
 }
 
 export type BoardBuildIntentRequest = {
-  connector_label?: string
   contract: typeof BOARD_BUILD_INTENT_REQUEST_CONTRACT
   heading: string
   intent: string
@@ -147,14 +146,13 @@ function resolveOutcome(
 }
 
 function parseIntentRequest(value: unknown): {
-  connectorLabel?: string
   heading: string
   intent: string
   items: unknown
   requestedOutcome: BoardBuildIntentRequestedOutcome
 } {
   if (!isRecord(value)) throw new Error('Board build intent request must be an object.')
-  const allowed = new Set(['connector_label', 'contract', 'heading', 'intent', 'items', 'outcome'])
+  const allowed = new Set(['contract', 'heading', 'intent', 'items', 'outcome'])
   const unsupported = Object.keys(value)
     .filter((field) => !allowed.has(field))
     .sort()
@@ -169,15 +167,6 @@ function parseIntentRequest(value: unknown): {
     )
   }
   return {
-    ...(value.connector_label === undefined
-      ? {}
-      : {
-          connectorLabel: requiredString(
-            value.connector_label,
-            'Board build intent connector_label',
-            80
-          )
-        }),
     heading: requiredString(value.heading, 'Board build intent heading', 240),
     intent: requiredString(value.intent, 'Board build intent intent', INTENT_MAX_LENGTH),
     items: value.items,
@@ -191,18 +180,11 @@ export async function compileBoardBuildIntentRequest(
   const request = parseIntentRequest(value)
   const routing = resolveOutcome(request.intent, request.requestedOutcome)
   const route = ROUTES[routing.outcome]
-  if (routing.outcome !== 'process' && request.connectorLabel !== undefined) {
-    throw new Error('Board build intent connector_label is supported only for process outcomes.')
-  }
   const recipe = await compileBoardBuildRecipeRequest({
     contract: BOARD_BUILD_RECIPE_REQUEST_CONTRACT,
     params:
       route.recipeId === 'process_flow'
-        ? {
-            ...(request.connectorLabel ? { connector_label: request.connectorLabel } : {}),
-            heading: request.heading,
-            steps: request.items
-          }
+        ? { heading: request.heading, steps: request.items }
         : {
             cards: request.items,
             ...(route.direction ? { direction: route.direction } : {}),

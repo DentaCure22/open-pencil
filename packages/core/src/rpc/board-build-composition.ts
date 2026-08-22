@@ -1,11 +1,8 @@
 import {
   boardBuildPlanReferenceKey,
-  compileBoardBuildPlanFlowLayout,
   compileBoardBuildPlanGridLayout,
   type BoardBuildPlanBounds,
   type BoardBuildPlanComposition,
-  type BoardBuildPlanConnection,
-  type BoardBuildPlanFlowLayout,
   type BoardBuildPlanGridLayout,
   type BoardBuildPlanReference
 } from './board-build-plan'
@@ -41,53 +38,11 @@ function uniqueKeys(references: readonly BoardBuildPlanReference[]): string[] {
 function orderedMemberKeys(composition: BoardBuildPlanComposition): string[] {
   const preferences = composition.preferences
   const base = composition.members.map(boardBuildPlanReferenceKey)
-  const preferred = preferences?.reading_order
-    ? uniqueKeys(preferences.reading_order)
-    : preferences?.groups
-      ? uniqueKeys(preferences.groups.flat())
-      : preferences?.emphasis
-        ? uniqueKeys(preferences.emphasis)
-        : []
+  let preferred: string[] = []
+  if (preferences?.reading_order) preferred = uniqueKeys(preferences.reading_order)
+  else if (preferences?.groups) preferred = uniqueKeys(preferences.groups.flat())
+  else if (preferences?.emphasis) preferred = uniqueKeys(preferences.emphasis)
   return [...preferred, ...base.filter((key) => !preferred.includes(key))]
-}
-
-function topologyRanks(
-  memberKeys: readonly string[],
-  connections: readonly BoardBuildPlanConnection[]
-): string[][] | undefined {
-  const members = new Set(memberKeys)
-  const outgoing = new Map(memberKeys.map((key) => [key, new Set<string>()]))
-  const indegree = new Map(memberKeys.map((key) => [key, 0]))
-  for (const connection of connections) {
-    const source = boardBuildPlanReferenceKey(connection.source)
-    const target = boardBuildPlanReferenceKey(connection.target)
-    if (!members.has(source) || !members.has(target) || source === target) continue
-    const targets = outgoing.get(source)
-    if (!targets || targets.has(target)) continue
-    targets.add(target)
-    indegree.set(target, (indegree.get(target) ?? 0) + 1)
-  }
-  if ([...outgoing.values()].every((targets) => targets.size === 0)) return undefined
-
-  const depth = new Map(memberKeys.map((key) => [key, 0]))
-  const queue = memberKeys.filter((key) => indegree.get(key) === 0)
-  const visited: string[] = []
-  while (queue.length > 0) {
-    const key = queue.shift()
-    if (!key) break
-    visited.push(key)
-    for (const target of outgoing.get(key) ?? []) {
-      depth.set(target, Math.max(depth.get(target) ?? 0, (depth.get(key) ?? 0) + 1))
-      const nextIndegree = (indegree.get(target) ?? 0) - 1
-      indegree.set(target, nextIndegree)
-      if (nextIndegree === 0) queue.push(target)
-    }
-  }
-  if (visited.length !== memberKeys.length) return undefined
-  const rankCount = Math.max(...depth.values()) + 1
-  return Array.from({ length: rankCount }, (_, rank) =>
-    memberKeys.filter((key) => depth.get(key) === rank)
-  ).filter((rank) => rank.length > 0)
 }
 
 function groupSplitPenalty(
@@ -114,15 +69,14 @@ function gridScore(
   footprint: Pick<BoardBuildPlanBounds, 'height' | 'width'>
 ): number {
   const direction = composition.preferences?.direction
-  const targetRatio = direction === 'horizontal' ? 2.4 : direction === 'vertical' ? 0.55 : 1.3
+  let targetRatio = 1.3
+  if (direction === 'horizontal') targetRatio = 2.4
+  else if (direction === 'vertical') targetRatio = 0.55
   const ratio = footprint.width / Math.max(1, footprint.height)
   const rows = Math.ceil(memberKeys.length / columns)
-  const directionPenalty =
-    direction === 'horizontal'
-      ? Math.max(0, rows - 1) * 0.12
-      : direction === 'vertical'
-        ? Math.max(0, columns - 1) * 0.12
-        : 0
+  let directionPenalty = 0
+  if (direction === 'horizontal') directionPenalty = Math.max(0, rows - 1) * 0.12
+  else if (direction === 'vertical') directionPenalty = Math.max(0, columns - 1) * 0.12
   const extremePenalty =
     memberKeys.length > 6 && (columns === 1 || rows === 1) ? memberKeys.length * 0.15 : 0
   return (
@@ -133,16 +87,24 @@ function gridScore(
   )
 }
 
+function gridCandidateColumns(
+  composition: BoardBuildPlanComposition,
+  memberCount: number
+): number[] {
+  // An explicit direction is a promise: small sets stay on one axis instead of wrapping.
+  const direction = composition.preferences?.direction
+  if (memberCount <= 6 && direction === 'horizontal') return [memberCount]
+  if (memberCount <= 6 && direction === 'vertical') return [1]
+  return Array.from({ length: Math.min(memberCount, 6) }, (_, index) => index + 1)
+}
+
 function compileGrid(
   composition: BoardBuildPlanComposition,
   footprints: CompositionFootprints,
   memberKeys: readonly string[],
   gap: number
 ): BoardBuildPlanCompositionCompilation {
-  const candidates = Array.from(
-    { length: Math.min(memberKeys.length, 6) },
-    (_, index) => index + 1
-  ).map((columns) => {
+  const candidates = gridCandidateColumns(composition, memberKeys.length).map((columns) => {
     const layout: BoardBuildPlanGridLayout = {
       align: 'start',
       anchor: composition.anchor ?? COMPOSITION_LOCAL_ORIGIN,
@@ -196,23 +158,9 @@ export function boardBuildPlanCompositionCurrentBounds(
 
 export function compileBoardBuildPlanComposition(
   composition: BoardBuildPlanComposition,
-  footprints: CompositionFootprints,
-  connections: readonly BoardBuildPlanConnection[] = []
+  footprints: CompositionFootprints
 ): BoardBuildPlanCompositionCompilation {
   const memberKeys = orderedMemberKeys(composition)
   const gap = boardBuildPlanCompositionGap(composition)
-  const ranks = topologyRanks(memberKeys, connections)
-  if (!ranks) return compileGrid(composition, footprints, memberKeys, gap)
-  const direction = composition.preferences?.direction ?? 'horizontal'
-  const layout: BoardBuildPlanFlowLayout = {
-    align: 'center',
-    anchor: composition.anchor ?? COMPOSITION_LOCAL_ORIGIN,
-    direction: direction === 'horizontal' ? 'right' : 'down',
-    kind: 'flow',
-    node_gap: gap,
-    rank_gap: gap * 2,
-    ranks
-  }
-  const compilation = compileBoardBuildPlanFlowLayout(layout, footprints)
-  return { footprint: compilation.footprint, members: compilation.aliases, strategy: 'flow' }
+  return compileGrid(composition, footprints, memberKeys, gap)
 }

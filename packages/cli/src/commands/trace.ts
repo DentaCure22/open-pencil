@@ -37,6 +37,14 @@ type TraceQueryEvent = {
   label: string
 }
 
+type TraceQueryTarget = {
+  frameId?: string
+  name: string
+  path?: string[]
+  route?: string
+  stableId: string
+}
+
 type TraceQueryMatch = {
   endedAt: string
   events: TraceQueryEvent[]
@@ -51,6 +59,7 @@ type TraceQueryMatch = {
   }
   sessionId: string
   startedAt: string
+  targets: TraceQueryTarget[]
   title: string
 }
 
@@ -190,6 +199,13 @@ function printTrace(result: TraceQueryResult, json: boolean) {
             events: match.events.map((event) => `${event.kind}: ${event.label}`).join(' · '),
             matched: match.matchedBy.join(', '),
             score: match.score,
+            targets: match.targets
+              .map((target) =>
+                target.frameId
+                  ? `${target.name} (${target.stableId}, iframe ${target.frameId}${target.route ? ` ${target.route}` : ''})`
+                  : `${target.name} (${target.stableId})`
+              )
+              .join(' · '),
             window: `${match.startedAt} → ${match.endedAt}`
           }
         }))

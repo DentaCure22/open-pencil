@@ -5,23 +5,6 @@ import { openFileInNewTab } from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
 import { IS_BROWSER } from '@/constants'
 
-export const OPENPENCIL_DOCUMENT_EXTENSIONS = [
-  'fig',
-  'pen',
-  'html',
-  'htm',
-  'xhtml',
-  'jsx',
-  'tsx',
-  'md',
-  'markdown',
-  'mdx',
-  'txt',
-  'svg',
-  'json',
-  'csv'
-]
-
 const fileDialog = useFileDialog({
   accept: '*/*',
   multiple: false,

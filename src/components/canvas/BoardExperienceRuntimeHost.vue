@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useEventListener } from '@vueuse/core'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
 
 import {
-  boardExperienceSnapshot,
   disposeBoardExperience,
   subscribeBoardExperience,
   syncBoardExperience,
-  tickBoardExperience
+  type BoardExperienceSession,
+  type BoardExperienceSnapshot
 } from '@/app/board-experience'
 import {
   codeObjectRuntimeActivityIntersects,
@@ -16,21 +16,18 @@ import {
 import { useEditorStore } from '@/app/editor/active-store'
 
 const store = useEditorStore()
-const revision = ref(0)
+const snapshot = shallowRef<BoardExperienceSnapshot | null>(null)
 const runtimeActive = ref(false)
+const EXPERIENCE_TICK_INTERVAL_MS = 1000 / 30
+const MAX_EXPERIENCE_ELAPSED_MS = 100
 let animationFrameId: number | null = null
 let pendingMutationFrame = false
+let session: BoardExperienceSession | null = null
+let accumulatedElapsedMs = 0
 let previousFrameTime = 0
 let unsubscribe: Array<() => void> = []
 
-const snapshot = computed(() => {
-  void revision.value
-  void store.state.currentPageId
-  return boardExperienceSnapshot(store)
-})
-
-function canRunExperience() {
-  const current = snapshot.value
+function canRunExperience(current: BoardExperienceSnapshot | null) {
   return (
     !document.hidden &&
     Boolean(current?.running || pendingMutationFrame) &&
@@ -39,10 +36,6 @@ function canRunExperience() {
 }
 
 function ensureAnimationFrame() {
-  if (!canRunExperience()) {
-    stopAnimationFrame()
-    return
-  }
   runtimeActive.value = true
   if (animationFrameId !== null) return
   animationFrameId = requestAnimationFrame(runFrame)
@@ -52,39 +45,49 @@ function stopAnimationFrame() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId)
   animationFrameId = null
   pendingMutationFrame = false
+  accumulatedElapsedMs = 0
   previousFrameTime = 0
   runtimeActive.value = false
 }
 
 function sync() {
-  const session = syncBoardExperience(store)
-  revision.value += 1
-  if (session && canRunExperience()) ensureAnimationFrame()
+  session = syncBoardExperience(store)
+  snapshot.value = session?.runtime.getSnapshot() ?? null
+  if (canRunExperience(snapshot.value)) ensureAnimationFrame()
   else stopAnimationFrame()
-  return session
 }
 
 function processBoardMutation() {
   pendingMutationFrame = true
-  if (sync()) ensureAnimationFrame()
-  else pendingMutationFrame = false
+  sync()
 }
 
 function runFrame(time: number) {
   animationFrameId = null
-  const session = syncBoardExperience(store)
-  revision.value += 1
-  if (!session || !canRunExperience()) {
+  const currentSession = session
+  const currentSnapshot = snapshot.value
+  if (!currentSession || !currentSnapshot || !canRunExperience(currentSnapshot)) {
     stopAnimationFrame()
     return
   }
-  const running = session.runtime.getSnapshot().running
-  const elapsed = !running || previousFrameTime === 0 ? 0 : time - previousFrameTime
+  const running = currentSnapshot.running
+  const elapsed =
+    !running || previousFrameTime === 0
+      ? 0
+      : Math.min(MAX_EXPERIENCE_ELAPSED_MS, time - previousFrameTime)
   previousFrameTime = time
+  accumulatedElapsedMs += elapsed
+  const processMutation = pendingMutationFrame
   pendingMutationFrame = false
-  tickBoardExperience(store, elapsed)
-  revision.value += 1
-  if (canRunExperience()) ensureAnimationFrame()
+  if (!processMutation && running && accumulatedElapsedMs < EXPERIENCE_TICK_INTERVAL_MS) {
+    ensureAnimationFrame()
+    return
+  }
+
+  currentSession.runtime.tick(accumulatedElapsedMs)
+  accumulatedElapsedMs = 0
+  snapshot.value = currentSession.runtime.getSnapshot()
+  if (canRunExperience(snapshot.value)) ensureAnimationFrame()
   else stopAnimationFrame()
 }
 

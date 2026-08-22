@@ -8,6 +8,7 @@ import {
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '@/app/editor/active-store'
+import { CANVAS_VIEWPORT_TRANSFORM } from '@/app/editor/presentation'
 
 export type FrameCorner = 'nw' | 'ne' | 'se' | 'sw'
 export { CODE_OBJECT_VIEWPORT_PRESETS, type CodeObjectViewportPresetId }
@@ -55,13 +56,42 @@ export const CODE_OBJECT_RESIZE_HANDLE_STYLE = {
 
 export const CODE_OBJECT_ROTATE_HANDLE_STYLE = { height: '18px', width: '18px' } as const
 
-export function codeObjectCanvasStyle(
-  store: EditorStore,
-  frame: SceneNode,
-  viewport: CodeObjectPresentationViewport = store.state
-) {
+/**
+ * Live iframes cannot sit in a paint-contained, will-change transform layer.
+ * Chromium keeps a stale bitmap of the iframe after the document reloads.
+ */
+export function liveIframeHostStyle<T extends CSSProperties>(style: T): T {
+  return {
+    ...style,
+    backfaceVisibility: 'visible',
+    contain: 'layout',
+    willChange: 'auto'
+  }
+}
+
+export function flushLiveIframeSurfaceHost(host: HTMLElement | null): void {
+  if (!host) return
+  const previous = {
+    backfaceVisibility: host.style.backfaceVisibility,
+    contain: host.style.contain,
+    transform: host.style.transform,
+    willChange: host.style.willChange
+  }
+  host.style.contain = 'none'
+  host.style.willChange = 'auto'
+  host.style.backfaceVisibility = 'visible'
+  host.style.transform = previous.transform
+    ? `${previous.transform} translateZ(0.1px)`
+    : 'translateZ(0.1px)'
+  void host.offsetHeight
+  host.style.contain = previous.contain
+  host.style.willChange = previous.willChange
+  host.style.backfaceVisibility = previous.backfaceVisibility
+  host.style.transform = previous.transform
+}
+
+export function codeObjectCanvasStyle(store: EditorStore, frame: SceneNode) {
   const abs = store.graph.getAbsolutePosition(frame.id)
-  const zoom = viewport.zoom
   const centerX = frame.width / 2
   const centerY = frame.height / 2
   return {
@@ -70,11 +100,7 @@ export function codeObjectCanvasStyle(
     contain: 'layout paint',
     height: `${Math.max(1, frame.height)}px`,
     opacity: String(frame.opacity),
-    transform: `translate3d(${abs.x * zoom + viewport.panX}px, ${
-      abs.y * zoom + viewport.panY
-    }px, 0) scale(${zoom}) translate(${centerX}px, ${centerY}px) rotate(${
-      frame.rotation
-    }deg) translate(${-centerX}px, ${-centerY}px)`,
+    transform: `${CANVAS_VIEWPORT_TRANSFORM} translate3d(${abs.x}px, ${abs.y}px, 0) translate(${centerX}px, ${centerY}px) rotate(${frame.rotation}deg) translate(${-centerX}px, ${-centerY}px)`,
     transformOrigin: 'top left',
     width: `${Math.max(1, frame.width)}px`,
     willChange: 'transform'

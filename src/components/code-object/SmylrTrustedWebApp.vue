@@ -7,7 +7,13 @@ import {
   forwardFrameSurfaceWheel,
   isEmbeddedSurfaceWheelMessage
 } from '@/app/editor/canvas/embedded-surface-wheel'
+import { flushLiveIframeSurfaceHost } from '@/app/code-object/transform'
 import { useEditorStore } from '@/app/editor/active-store'
+import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
+import {
+  acquireSmylrDevServerWatch,
+  releaseSmylrDevServerWatch
+} from '@/app/smylr-live-inspector/dev-server-watchdog'
 import {
   smylrFrameBaseUrlFor,
   smylrOpenPencilFrameUrlFor
@@ -30,16 +36,19 @@ import {
 import SmylrLiveContainerOverlay from '@/components/SmylrLiveContainerOverlay.vue'
 import { IS_BROWSER } from '@/constants'
 
-const { active, frameId, interactionEnabled, route, runtimeKey } = defineProps<{
+const { active, componentSurface, frameId, interactionEnabled, route, runtimeKey } = defineProps<{
   active: boolean
+  componentSurface: boolean
   frameId: string
   interactionEnabled: boolean
   route: string
   runtimeKey: string
 }>()
 const emit = defineEmits<{
-  interactionStart: []
+  boardNavigate: [direction: 'up' | 'down' | 'left' | 'right']
   exitInteraction: []
+  focusFrame: []
+  interactionStart: []
 }>()
 
 const store = useEditorStore()
@@ -49,6 +58,8 @@ const UNAVAILABLE_DELAY_MS = 15_000
 const runtimeInstanceId = IS_BROWSER ? globalThis.crypto.randomUUID() : 'server'
 let retryTimer = 0
 let unavailableTimer = 0
+let hoverFrame = 0
+let pendingHoverPoint: { clientX: number; clientY: number } | null = null
 
 const iframeSrc = computed(() => {
   if (!IS_BROWSER) return route
@@ -57,6 +68,7 @@ const iframeSrc = computed(() => {
     openPencilHref: window.location.href,
     params: {
       'smylr-openpencil-frame-key': runtimeKey,
+      'smylr-openpencil-reload-tick': String(liveInspectorReloadTick.value),
       'smylr-openpencil-runtime-instance-id': runtimeInstanceId
     },
     route
@@ -67,11 +79,17 @@ const iframeOrigin = computed(() => {
   return new URL(iframeSrc.value, window.location.href).origin
 })
 const iframeKey = computed(() => `${iframeSrc.value}:${liveInspectorReloadTick.value}`)
-const ownsInspector = computed(() => liveInspectorActiveFrameId.value === frameId)
+const ownsInspector = computed(
+  () => !componentSurface && liveInspectorActiveFrameId.value === frameId
+)
 const selectMode = computed(
   () => ownsInspector.value && liveInspectorInteractionMode.value === 'select'
 )
 const interactMode = computed(() => interactionEnabled)
+const surfaceCanReceivePointer = computed(
+  () => selectMode.value || canvasSurfaceCanReceivePointer(store.state.activeTool)
+)
+const iframeCanReceivePointer = computed(() => interactMode.value && surfaceCanReceivePointer.value)
 
 function dispatchInspectorCommand(command: Omit<SmylrOpenPencilInspectorCommand, 'kind'>) {
   const target = iframeRef.value?.contentWindow ?? null
@@ -81,12 +99,19 @@ function dispatchInspectorCommand(command: Omit<SmylrOpenPencilInspectorCommand,
   return true
 }
 
+function currentInspectorMode() {
+  if (!componentSurface) return liveInspectorInteractionMode.value
+  return interactionEnabled ? 'interact' : 'select'
+}
+
 function postMode() {
-  if (!ownsInspector.value) return
-  setLiveInspectorCommandTarget(iframeRef.value?.contentWindow ?? null, iframeOrigin.value)
+  if (!componentSurface && !ownsInspector.value) return
+  if (ownsInspector.value) {
+    setLiveInspectorCommandTarget(iframeRef.value?.contentWindow ?? null, iframeOrigin.value)
+  }
   dispatchInspectorCommand({
     action: 'set-interaction-mode',
-    mode: liveInspectorInteractionMode.value
+    mode: currentInspectorMode()
   })
 }
 
@@ -101,7 +126,7 @@ async function syncFrameFocus() {
   await nextTick()
   const iframe = iframeRef.value
   if (!iframe) return
-  if (interactMode.value) {
+  if (iframeCanReceivePointer.value) {
     requestAnimationFrame(() => iframe.focus({ preventScroll: true }))
   } else {
     iframe.blur()
@@ -118,6 +143,7 @@ function queueRetry(src: string) {
     ) {
       return
     }
+    postRuntimeActivity()
     postMode()
     dispatchInspectorCommand({ action: 'request-tree' })
     queueRetry(src)
@@ -128,6 +154,7 @@ function requestInspectorTree() {
   if (!ownsInspector.value) return
   const src = iframeSrc.value
   markLiveInspectorFrameLoading(src)
+  postRuntimeActivity()
   postMode()
   dispatchInspectorCommand({ action: 'request-tree' })
   queueRetry(src)
@@ -138,27 +165,54 @@ function requestInspectorTree() {
   )
 }
 
+function flushHostCompositor() {
+  const iframe = iframeRef.value
+  const host =
+    iframe?.closest<HTMLElement>('[data-code-object-id]') ?? iframe?.parentElement ?? null
+  flushLiveIframeSurfaceHost(host)
+}
+
 function handleFrameLoad() {
+  flushHostCompositor()
   postRuntimeActivity()
+  if (componentSurface) postMode()
   if (ownsInspector.value) requestInspectorTree()
 }
 
 function postPointCommand(
   action: 'hover-at-point' | 'select-at-point',
-  event: MouseEvent | PointerEvent
+  point: { clientX: number; clientY: number }
 ) {
   const frame = iframeRef.value
-  if (!frame) return
+  if (!frame) return false
   const rect = frame.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return
-  dispatchInspectorCommand({
+  if (rect.width <= 0 || rect.height <= 0) return false
+  return dispatchInspectorCommand({
     action,
-    x: ((event.clientX - rect.left) * frame.clientWidth) / rect.width,
-    y: ((event.clientY - rect.top) * frame.clientHeight) / rect.height
+    x: ((point.clientX - rect.left) * frame.clientWidth) / rect.width,
+    y: ((point.clientY - rect.top) * frame.clientHeight) / rect.height
+  })
+}
+
+function selectContainerAtPoint(event: MouseEvent | PointerEvent) {
+  postPointCommand('select-at-point', event)
+}
+
+function queuePointHover(event: PointerEvent) {
+  pendingHoverPoint = { clientX: event.clientX, clientY: event.clientY }
+  if (hoverFrame) return
+  hoverFrame = requestAnimationFrame(() => {
+    hoverFrame = 0
+    const point = pendingHoverPoint
+    pendingHoverPoint = null
+    if (point) postPointCommand('hover-at-point', point)
   })
 }
 
 function clearPointHover() {
+  if (hoverFrame) cancelAnimationFrame(hoverFrame)
+  hoverFrame = 0
+  pendingHoverPoint = null
   dispatchInspectorCommand({ action: 'hover-at-point', x: -1, y: -1 })
 }
 
@@ -167,6 +221,22 @@ function handleFrameSurfaceWheel(event: WheelEvent) {
   if (!(source instanceof HTMLElement) || !forwardFrameSurfaceWheel(source, event)) return
   event.preventDefault()
   event.stopPropagation()
+}
+
+function handleHostOnlyInspectorAction(action: string) {
+  if (action === 'interaction-start') {
+    emit('interactionStart')
+    return true
+  }
+  if (action === 'exit-interact') {
+    emit('exitInteraction')
+    return true
+  }
+  if (action === 'focus-frame') {
+    emit('focusFrame')
+    return true
+  }
+  return false
 }
 
 function handleInspectorMessage(event: MessageEvent) {
@@ -185,15 +255,15 @@ function handleInspectorMessage(event: MessageEvent) {
   }
   if (!isSmylrOpenPencilInspectorMessage(event.data)) return
   if (event.data.runtimeInstanceId !== runtimeInstanceId) return
-  if (event.data.action === 'interaction-start') {
-    emit('interactionStart')
+  // Server restart / HMR signals must remount or invalidate this host even
+  // when the frame is passive. The canvas compositor keeps a stale layer
+  // after an in-frame location.reload().
+  if (handleHostOnlyInspectorAction(event.data.action ?? '')) return
+  if (event.data.action === 'board-navigate' && event.data.direction) {
+    emit('boardNavigate', event.data.direction)
     return
   }
   if (!ownsInspector.value) return
-  if (event.data.action === 'exit-interact') {
-    emit('exitInteraction')
-    return
-  }
   if (event.data.action === 'select' && !store.state.selectedIds.has(frameId)) {
     store.select([frameId])
   }
@@ -211,7 +281,7 @@ function handleInspectorMessage(event: MessageEvent) {
 watch(
   () => active,
   (isActive) => {
-    if (!isActive) return
+    if (!isActive || componentSurface) return
     setLiveInspectorActiveFrame(frameId)
     postRuntimeActivity()
     requestInspectorTree()
@@ -220,9 +290,19 @@ watch(
 )
 
 watch(liveInspectorInteractionMode, () => {
+  if (componentSurface) return
   postMode()
   void syncFrameFocus()
 })
+watch(
+  () => interactionEnabled,
+  () => {
+    if (!componentSurface) return
+    postMode()
+    void syncFrameFocus()
+  }
+)
+watch(surfaceCanReceivePointer, () => void syncFrameFocus())
 watch(ownsInspector, () => {
   postRuntimeActivity()
   if (ownsInspector.value) requestInspectorTree()
@@ -234,12 +314,16 @@ watch(iframeKey, () => {
 useEventListener(window, 'message', handleInspectorMessage)
 
 onMounted(() => {
+  acquireSmylrDevServerWatch(iframeOrigin.value)
+  if (componentSurface) return
   if (!liveInspectorActiveFrameId.value) setLiveInspectorActiveFrame(frameId)
 })
 
 onUnmounted(() => {
+  releaseSmylrDevServerWatch()
   window.clearTimeout(retryTimer)
   window.clearTimeout(unavailableTimer)
+  if (hoverFrame) cancelAnimationFrame(hoverFrame)
   if (ownsInspector.value) {
     setLiveInspectorCommandTarget(null)
     setLiveInspectorActiveFrame(null)
@@ -249,7 +333,8 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="relative size-full overflow-hidden bg-white"
+    class="relative size-full overflow-hidden"
+    :class="componentSurface ? 'bg-transparent' : 'bg-white'"
     data-runtime-boundary="trusted-web-app"
     data-test-id="smylr-trusted-web-app"
   >
@@ -261,25 +346,28 @@ onUnmounted(() => {
       data-test-id="smylr-trusted-web-app-frame"
       :src="iframeSrc"
       title="Smylr production app"
-      class="block size-full min-h-0 min-w-0 border-0 bg-white"
-      :class="interactMode ? 'pointer-events-auto' : 'pointer-events-none'"
-      :tabindex="interactMode ? 0 : -1"
-      loading="eager"
+      class="block size-full min-h-0 min-w-0 border-0"
+      :class="[
+        componentSurface ? 'bg-transparent' : 'bg-white',
+        iframeCanReceivePointer ? 'pointer-events-auto' : 'pointer-events-none'
+      ]"
+      :tabindex="iframeCanReceivePointer ? 0 : -1"
+      loading="lazy"
       @load="handleFrameLoad"
     />
 
     <div
-      v-if="selectMode"
+      v-if="selectMode && surfaceCanReceivePointer"
       class="absolute inset-0 z-10 cursor-crosshair"
       data-test-id="smylr-live-select-surface"
-      @click.stop.prevent="postPointCommand('select-at-point', $event)"
+      @click.stop.prevent="selectContainerAtPoint"
       @pointerleave="clearPointHover"
-      @pointermove="postPointCommand('hover-at-point', $event)"
+      @pointermove="queuePointHover"
       @wheel="handleFrameSurfaceWheel"
     />
 
     <div
-      v-if="ownsInspector && liveInspectorStatus === 'unavailable'"
+      v-if="!componentSurface && ownsInspector && liveInspectorStatus === 'unavailable'"
       class="pointer-events-none absolute inset-x-0 top-0 z-20 bg-black/55 px-3 py-2 text-[11px] text-white"
       data-test-id="smylr-live-app-connection-warning"
     >
@@ -287,8 +375,8 @@ onUnmounted(() => {
     </div>
 
     <SmylrLiveContainerOverlay
-      v-if="ownsInspector"
-      @select-at-point="postPointCommand('select-at-point', $event)"
+      v-if="ownsInspector && surfaceCanReceivePointer"
+      @select-at-point="selectContainerAtPoint"
     />
   </div>
 </template>

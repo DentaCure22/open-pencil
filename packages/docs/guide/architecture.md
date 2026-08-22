@@ -6,7 +6,7 @@
 graph TB
     subgraph Tauri["Tauri v2 Shell"]
         subgraph Editor["Editor (Web)"]
-            UI["Vue 3 UI<br/>Toolbar · Panels · Properties<br/>Layers · Color Picker"]
+            UI["Vue 3 UI<br/>Sidebar · Tool rail · Canvas<br/>Layers · Chats · Assets · Activity"]
             Skia["Skia CanvasKit (WASM, 7MB)<br/>Vector rendering · Text shaping<br/>Effects · Export"]
             subgraph Core["Core Engine (TS)"]
                 SG[SceneGraph] --- Layout[Layout - Yoga]
@@ -19,19 +19,19 @@ graph TB
                 Kiwi --- SVG[SVG export]
             end
         end
-        MCP["MCP Server (90 tools, stdio+HTTP)"]
+        MCP["MCP Server (stdio+HTTP)"]
         Collab["P2P Collab (Trystero + Yjs)"]
     end
 ```
 
 ## Editor Layout
 
-The UI follows Figma's UI3 layout — toolbar at the bottom, navigation on the left, properties on the right:
+The editor uses a compact canvas-first layout:
 
-- **Navigation panel (left)** — Layers tree, pages panel
-- **Canvas (center)** — Infinite canvas with CanvasKit rendering, zoom/pan
-- **Properties panel (right)** — Context-sensitive sections: Appearance, Fill, Stroke, Typography, Layout, Position
-- **Toolbar (bottom)** — Tool selection: Select, Frame, Section, Rectangle, Ellipse, Line, Text, Pen, Hand
+- **Sidebar (left)** — Layers, Chats, Assets, and Activity in one floating surface
+- **Tool rail** — Integrated drawing, selection, workspace, and utility controls
+- **Canvas** — Infinite CanvasKit surface with zoom, pan, and contextual object actions
+- **Mobile drawer** — Layers, Design, and Code controls when the viewport is narrow
 
 ## Components
 
@@ -72,11 +72,11 @@ See [File Format Reference](/reference/file-format) for details.
 
 Tools are defined once in `packages/core/src/tools/`, split by domain: read, create, modify, structure, variables, vector, analyze. Each tool has typed params and an `execute(figma, args)` function. Adapters convert them for:
 
-- **AI chat** — valibot schemas, multi-provider (Anthropic, OpenAI, Google AI, OpenRouter, compatible endpoints)
+- **Agent tasks** — Pi-backed task conversations in the sidebar and on Board cards
 - **MCP server** — zod schemas, stdio + HTTP transports
 - **CLI** — available via the `eval` command
 
-90+ core tools + 3 MCP file management tools. Includes XPath query (`query_nodes`), JSX inspection (`get_jsx`, `diff_jsx`), semantic description (`describe`), and vision-based verification (`export_image` returns images to the model).
+The catalog is discovered at runtime rather than documented as a fixed count. It includes XPath query (`query_nodes`), JSX inspection (`get_jsx`, `diff_jsx`), semantic description (`describe`), and visual verification (`export_image` returns images to the model).
 
 ### Undo/Redo
 
@@ -97,10 +97,6 @@ Normal local Board and Trace persistence uses the narrow authority on port 7602 
 MCP.
 
 ## What's Next
-
-### Full figma-use Tool Set
-
-The MCP server currently exposes 90 tools. The reference implementation in [figma-use](https://github.com/dannote/figma-use) has 118. The remaining tools cover advanced layout constraints, prototype connections, advanced component property editing, and bulk document operations.
 
 ### CI Design Tooling
 

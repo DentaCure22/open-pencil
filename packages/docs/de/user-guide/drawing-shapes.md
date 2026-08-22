@@ -5,7 +5,7 @@ description: Rechtecke, Ellipsen, Linien, Frames, Sektionen, Polygone und Sterne
 
 # Formen zeichnen
 
-Die untere Werkzeugleiste bietet Werkzeuge zum Erstellen von Formen, Frames und Sektionen. Wählen Sie ein Werkzeug, dann klicken und ziehen Sie auf dem Canvas.
+Die integrierte Werkzeugleiste bietet Werkzeuge zum Erstellen von Formen, Frames und Sektionen. Wählen Sie ein Werkzeug, dann klicken und ziehen Sie auf dem Canvas.
 
 ## Werkzeugleiste
 

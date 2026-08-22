@@ -9,6 +9,7 @@ export type { Mat3 } from './matrix'
 export { UndoManager, type UndoEntry, type UndoManagerOptions } from './undo'
 export { cloneSceneNode } from './copy'
 export type { HitTestOptions } from './hit-test'
+export type { NodePreviewOptions } from './preview'
 
 import { omit } from 'es-toolkit/object'
 import { createNanoEvents } from 'nanoevents'
@@ -18,7 +19,7 @@ import { bindNodeEvents } from './events'
 import * as HitTest from './hit-test'
 import * as Instances from './instances'
 import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
-import { updateNodePreview } from './preview'
+import { updateNodePreview, type NodePreviewOptions } from './preview'
 import { clearEditedSourceMetadata } from './source-metadata'
 import { TEXT_PICTURE_KEYS } from './text-picture'
 import * as Traversal from './traversal'
@@ -76,6 +77,8 @@ export class SceneGraph {
   variables = new Map<string, Variable>()
   variableCollections = new Map<string, VariableCollection>()
   activeMode = new Map<string, string>()
+  /** Viewer-only variable modes. Never serialize these into the document or Undo history. */
+  presentationMode = new Map<string, string>()
   rootId: string
   figKiwiVersion: number | null = null
   /** Deflated kiwi schema bytes from the original .fig file, preserved for roundtrip fidelity. */
@@ -157,6 +160,10 @@ export class SceneGraph {
 
   setActiveMode(collectionId: string, modeId: string): void {
     Variables.setActiveMode(this, collectionId, modeId)
+  }
+
+  setPresentationMode(collectionId: string, modeId: string | null): boolean {
+    return Variables.setPresentationMode(this, collectionId, modeId)
   }
 
   addMode(collectionId: string, modeId: string, name: string, sourceMode?: string): void {
@@ -404,8 +411,12 @@ export class SceneGraph {
   updateNodePositionPreview(id: string, x: number, y: number): void {
     this.setNodePositionPresentation(id, { x, y })
   }
-  updateNodePreview(id: string, changes: Partial<SceneNode>): void {
-    const appliedChanges = updateNodePreview(this, id, changes)
+  updateNodePreview(
+    id: string,
+    changes: Partial<SceneNode>,
+    options: NodePreviewOptions = {}
+  ): void {
+    const appliedChanges = updateNodePreview(this, id, changes, options)
     if (appliedChanges) this.emitter.emit('node:previewUpdated', id, appliedChanges)
   }
   updateNode(id: string, changes: Partial<SceneNode>): void {

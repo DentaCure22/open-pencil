@@ -1,7 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import type { AddressInfo } from 'node:net'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 
 import { serve } from '@hono/node-server'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -33,8 +31,6 @@ interface MockBrowser {
 interface MockBrowserOptions {
   active?: boolean
 }
-
-const TEST_MCP_ROOT = path.join(tmpdir(), 'open-pencil-mcp-root')
 
 function connectMockBrowser(
   port: number,
@@ -78,12 +74,8 @@ function connectMockBrowser(
             api.currentPage = api.wrapNode(graph.getPages()[0].id)
             result = await def.execute(api, args.args ?? {})
             if (def.mutates) computeAllLayouts(graph)
-          } else if (
-            command === 'save_file' ||
-            command === 'new_document' ||
-            command === 'open_file'
-          ) {
-            result = {}
+          } else if (command === 'set_theme') {
+            result = { theme: (args as { mode?: string } | undefined)?.mode }
           } else {
             result = executeRpcCommand(graph, command, args ?? {})
           }
@@ -215,42 +207,13 @@ describe('MCP server', () => {
     expect(names).toContain('get_page_tree')
     expect(names).toContain('render')
     expect(names).toContain('board_build')
-    expect(names).toContain('insert_mermaid_diagram')
-    expect(names).toContain('query_trace_history')
-    expect(names).toContain('get_codegen_prompt')
+    expect(names).toContain('dispatch_work')
+    expect(names).toContain('set_theme')
+    expect(names).not.toContain('query_trace_history')
+    expect(names).not.toContain('get_codegen_prompt')
     expect(tools.length).toBeGreaterThan(30)
-    const mermaid = tools.find((tool) => tool.name === 'insert_mermaid_diagram')
-    expect(Object.keys(mermaid?.inputSchema.properties ?? {})).toEqual(
-      expect.arrayContaining([
-        'content_document_id',
-        'document_id',
-        'expected_revision',
-        'owner_id',
-        'page_id',
-        'request_id',
-        'runtime_instance_id',
-        'source',
-        'workspace_id',
-        'x',
-        'y'
-      ])
-    )
     const builder = tools.find((tool) => tool.name === 'board_build')
-    expect(Object.keys(builder?.inputSchema.properties ?? {})).toEqual(
-      expect.arrayContaining([
-        'content_document_id',
-        'context_token',
-        'contract',
-        'document_id',
-        'expected_revision',
-        'intent',
-        'page_id',
-        'recipe',
-        'request_id',
-        'runtime_instance_id',
-        'workspace_id'
-      ])
-    )
+    expect(builder?.description).toContain('Board')
   })
 
   test('tools have descriptions and input schemas', async () => {
@@ -394,11 +357,9 @@ describe('MCP server', () => {
     expect(data.count).toBe(2)
   })
 
-  test('get_codegen_prompt returns prompt text', async () => {
-    const result = await client.callTool({ name: 'get_codegen_prompt', arguments: {} })
+  test('set_theme returns ok', async () => {
+    const result = await client.callTool({ name: 'set_theme', arguments: { mode: 'light' } })
     expect(result.isError).not.toBe(true)
-    const data = parseResult(result) as { prompt: string }
-    expect(data.prompt.length).toBeGreaterThan(100)
   })
 })
 
@@ -557,128 +518,6 @@ describe('MCP WebSocket stdio bridge routing', () => {
       passiveBrowser.close()
       closeServer()
     }
-  })
-})
-
-describe('MCP server with mcpRoot', () => {
-  test('registers open_file and new_document tools when mcpRoot is set', async () => {
-    const {
-      app,
-      wss,
-      close: closeServer
-    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
-    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
-    const actualWsPort = await waitForWsListening(wss)
-
-    const graph = new SceneGraph()
-    const browser = await connectMockBrowser(actualWsPort, graph)
-
-    const client = new Client({ name: 'test-root', version: '0.0.0' })
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
-    )
-    await client.connect(transport)
-
-    const { tools } = await client.listTools()
-    const names = tools.map((t) => t.name)
-    expect(names).toContain('open_file')
-    expect(names).toContain('new_document')
-
-    await client.close()
-    browser.close()
-    closeServer()
-    httpServer.close()
-  })
-
-  test('save_file accepts an explicit path inside mcpRoot', async () => {
-    const {
-      app,
-      wss,
-      close: closeServer
-    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
-    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
-    const actualWsPort = await waitForWsListening(wss)
-
-    const graph = new SceneGraph()
-    const browser = await connectMockBrowser(actualWsPort, graph)
-
-    const client = new Client({ name: 'test-root-save', version: '0.0.0' })
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
-    )
-    await client.connect(transport)
-
-    const savePath = path.join(TEST_MCP_ROOT, 'unicode', 'пример.fig')
-    const result = await client.callTool({
-      name: 'save_file',
-      arguments: { path: savePath }
-    })
-
-    expect(result.isError).not.toBe(true)
-    const request = browser.requests.find((item) => item.command === 'save_file')
-    expect(request?.args).toEqual({ path: savePath })
-
-    await client.close()
-    browser.close()
-    closeServer()
-    httpServer.close()
-  })
-
-  test('save_file rejects paths outside mcpRoot', async () => {
-    const {
-      app,
-      wss,
-      close: closeServer
-    } = startServer({ httpPort: 0, wsPort: 0, mcpRoot: TEST_MCP_ROOT })
-    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
-    const actualWsPort = await waitForWsListening(wss)
-
-    const graph = new SceneGraph()
-    const browser = await connectMockBrowser(actualWsPort, graph)
-
-    const client = new Client({ name: 'test-root-save-outside', version: '0.0.0' })
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
-    )
-    await client.connect(transport)
-
-    const result = await client.callTool({
-      name: 'save_file',
-      arguments: { path: path.join(path.dirname(TEST_MCP_ROOT), 'outside.fig') }
-    })
-
-    expect(result.isError).toBe(true)
-    expect(browser.requests.some((item) => item.command === 'save_file')).toBe(false)
-
-    await client.close()
-    browser.close()
-    closeServer()
-    httpServer.close()
-  })
-
-  test('does not register open_file when mcpRoot is null', async () => {
-    const { app, wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
-    const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
-    const actualWsPort = await waitForWsListening(wss)
-
-    const graph = new SceneGraph()
-    const browser = await connectMockBrowser(actualWsPort, graph)
-
-    const client = new Client({ name: 'test-no-root', version: '0.0.0' })
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)
-    )
-    await client.connect(transport)
-
-    const { tools } = await client.listTools()
-    const names = tools.map((t) => t.name)
-    expect(names).not.toContain('open_file')
-    expect(names).not.toContain('new_document')
-
-    await client.close()
-    browser.close()
-    closeServer()
-    httpServer.close()
   })
 })
 

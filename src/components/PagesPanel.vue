@@ -150,6 +150,7 @@ const pageRename = useInlineRename((id, name) => {
     'Rename project'
   )
 })
+const pendingPageRename = ref<SidebarWorkspacePage | null>(null)
 
 function firstRenameInput(input: HTMLInputElement | HTMLInputElement[] | null) {
   return Array.isArray(input) ? (input[0] ?? null) : input
@@ -162,6 +163,14 @@ watch(pageRenameInput, (input) => {
 
 function beginPageRename(page: SidebarWorkspacePage) {
   pageRename.start(page.id, page.name)
+}
+
+function beginPendingPageRename(event: Event) {
+  const page = pendingPageRename.value
+  if (!page) return
+  event.preventDefault()
+  pendingPageRename.value = null
+  beginPageRename(page)
 }
 
 async function beginBoardRename(board: SidebarWorkspaceBoard) {
@@ -306,6 +315,10 @@ async function createPage(parentId: SidebarPageId | null = null) {
   commitWorkspace(result.workspace, parentId ? 'Create subproject' : 'Create project')
   if (parentId) expandedPages.value = new Set([...expandedPages.value, parentId])
   await nextTick()
+  if (parentId) {
+    pendingPageRename.value = result.page
+    return
+  }
   beginPageRename(result.page)
 }
 
@@ -647,7 +660,12 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
-              <DropdownMenuContent :class="menuContentClass" :side-offset="4" align="end">
+              <DropdownMenuContent
+                :class="menuContentClass"
+                :side-offset="4"
+                align="end"
+                @close-auto-focus="beginPendingPageRename"
+              >
                 <DropdownMenuItem
                   :class="menuItemClass"
                   @select="requestBoardCreation(row.page.id)"

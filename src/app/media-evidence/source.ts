@@ -122,10 +122,6 @@ export function mediaEvidenceSource(
   }
 }
 
-export function isSupportedMediaFile(file: Pick<File, 'name' | 'type'>): boolean {
-  return mediaIntakeKind(file) !== null
-}
-
 export function mediaEvidenceFrameSize(kind: MediaEvidenceKind): {
   height: number
   width: number

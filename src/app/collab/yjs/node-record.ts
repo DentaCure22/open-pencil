@@ -22,14 +22,18 @@ export function collabValuesEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function cloneCollabValue<T>(value: T): T {
+  return value !== null && typeof value === 'object' ? structuredClone(value) : value
+}
+
 export function syncNodePropsToYMap(node: SceneNode, ynode: Y.Map<unknown>) {
   const nodeKeys = new Set(Object.keys(node))
   for (const key of ynode.keys()) {
     if (!nodeKeys.has(key) && !isSourceInvalidationYKey(key)) ynode.delete(key)
   }
   for (const [key, value] of Object.entries(node)) {
-    if (!collabValuesEqual(ynode.get(key), value)) {
-      ynode.set(key, structuredClone(value))
+    if (!ynode.has(key) || !collabValuesEqual(ynode.get(key), value)) {
+      ynode.set(key, cloneCollabValue(value))
     }
   }
   syncFullSourceInvalidationState(node, ynode)
@@ -45,7 +49,7 @@ function syncNodeChangesToYMap(
     if (value === undefined) {
       if (ynode.has(key)) ynode.delete(key)
     } else if (!collabValuesEqual(ynode.get(key), value)) {
-      ynode.set(key, structuredClone(value))
+      ynode.set(key, cloneCollabValue(value))
     }
   }
   syncSourceInvalidationsForChanges(node, changes, ynode)
@@ -62,17 +66,6 @@ export function syncNodeFieldsToYMap(
     return
   }
   syncNodeChangesToYMap(node, expandDerivedNodeChanges(node, changes), ynode)
-}
-
-export function shouldSyncObjectGraphPage(
-  node: SceneNode,
-  changes: Partial<SceneNode> | undefined,
-  materializingNode: boolean
-): boolean {
-  return (
-    node.type === 'CANVAS' &&
-    (materializingNode || !changes || Object.hasOwn(changes, 'pluginData'))
-  )
 }
 
 export function hasStructuralNodeChange(

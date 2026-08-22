@@ -12,7 +12,7 @@ import {
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { codeObjectDocument } from '@/app/code-object/model'
-import { disposeCodeObjectsExcept } from '@/app/code-object/runtime'
+import { loadedCodeObjectRuntime } from '@/app/code-object/runtime'
 import {
   clearCodeObjectRuntimeActivity,
   publishCodeObjectRuntimeActivity
@@ -38,8 +38,7 @@ export function useCodeObjectRuntimeResidency({
   let mounted = false
   let viewportObserver: IntersectionObserver | null = null
 
-  const activeFrameIds = computed(() => {
-    if (!documentVisible.value) return new Set<string>()
+  const relevantFrameIds = computed(() => {
     const pinned = pinnedFrameIds()
     return new Set(
       frames.value
@@ -47,6 +46,9 @@ export function useCodeObjectRuntimeResidency({
         .map((frame) => frame.id)
     )
   })
+  const activeFrameIds = computed(() =>
+    documentVisible.value ? relevantFrameIds.value : new Set<string>()
+  )
 
   function updateViewportActivity(entries: IntersectionObserverEntry[]) {
     const nextFrameIds = new Set(viewportActiveFrameIds.value)
@@ -115,7 +117,7 @@ export function useCodeObjectRuntimeResidency({
           return frame && codeObjectDocument(frame)?.component !== 'smylr-production-app'
         })
       )
-      disposeCodeObjectsExcept(reactRuntimeFrameIds)
+      loadedCodeObjectRuntime()?.disposeCodeObjectsExcept(reactRuntimeFrameIds)
     },
     { immediate: true }
   )
@@ -137,5 +139,5 @@ export function useCodeObjectRuntimeResidency({
     clearCodeObjectRuntimeActivity(store)
   })
 
-  return { activeFrameIds, bindSurfaceHost }
+  return { activeFrameIds, bindSurfaceHost, documentVisible, relevantFrameIds }
 }

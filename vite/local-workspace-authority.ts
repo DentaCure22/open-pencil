@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { basename } from 'node:path'
+import { homedir } from 'node:os'
+import { basename, join } from 'node:path'
 import process from 'node:process'
 
 import type { Plugin, ViteDevServer } from 'vite'
@@ -69,6 +70,12 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
         {
           env: {
             ...process.env,
+            PATH: [
+              join(homedir(), '.local', 'share', 'pi-node', 'current', 'bin'),
+              process.env.PATH ?? ''
+            ]
+              .filter(Boolean)
+              .join(':'),
             OPENPENCIL_LOCAL_AUTHORITY_AUTH_TOKEN: authToken,
             OPENPENCIL_LOCAL_AUTHORITY_CORS_ORIGIN: authorityCorsOrigin(host),
             OPENPENCIL_LOCAL_AUTHORITY_PORT: LOCAL_AUTHORITY_PORT,

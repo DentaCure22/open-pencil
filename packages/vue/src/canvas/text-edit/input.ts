@@ -93,6 +93,20 @@ export function createTextEditInput(options: TextEditInputOptions) {
     if (hit?.type !== 'TEXT') focusNode(containerId)
   }
 
+  function enterableSelectedContainerId(selectedId: string | undefined): string | null {
+    if (!selectedId) return null
+    const selectedNode = editor.graph.getNode(selectedId)
+    if (
+      !selectedNode ||
+      !editor.graph.isContainer(selectedId) ||
+      selectedNode.locked ||
+      isMermaidDiagramContainer(selectedNode)
+    ) {
+      return null
+    }
+    return selectedId
+  }
+
   function onDblClick(e: MouseEvent) {
     const nodeEditEditor = editor as Editor & NodeEditMethods
     if (editor.state.editingTextId) return
@@ -101,18 +115,12 @@ export function createTextEditInput(options: TextEditInputOptions) {
 
     const selectedId =
       editor.state.selectedIds.size === 1 ? [...editor.state.selectedIds][0] : undefined
-    const selectedNode = selectedId ? editor.graph.getNode(selectedId) : undefined
-    const canEnter =
-      selectedNode &&
-      selectedId &&
-      editor.graph.isContainer(selectedId) &&
-      !selectedNode.locked &&
-      !isMermaidDiagramContainer(selectedNode)
+    const containerId = enterableSelectedContainerId(selectedId)
 
-    if (canEnter) {
-      const hit = getContainerDescendantHit(selectedId, cx, cy)
-      focusContainerBeforeDrill(selectedId, hit)
-      editor.enterContainer(selectedId)
+    if (containerId) {
+      const hit = getContainerDescendantHit(containerId, cx, cy)
+      focusContainerBeforeDrill(containerId, hit)
+      editor.enterContainer(containerId)
       if (hit?.type === 'TEXT') {
         startTextEditingAt(hit, cx, cy)
       } else if (hit) {

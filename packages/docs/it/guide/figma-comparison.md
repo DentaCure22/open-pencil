@@ -12,13 +12,13 @@ Confronto funzionalità per funzionalità delle capacità di Figma Design con lo
 
 | Funzionalità | Stato | Note |
 |-------------|-------|------|
-| Barra strumenti di design | ✅ | Barra inferiore (stile UI3): Selezione, Frame, Sezione, Rettangolo, Ellisse, Linea, Testo, Mano, Penna |
-| Pannello livelli (barra laterale sinistra) | ✅ | Vista ad albero con espansione/compressione, riordinamento per trascinamento, toggle visibilità; larghezza ridimensionabile |
-| Pannello pagine | ✅ | Aggiungere, eliminare, rinominare pagine; stato viewport per pagina |
-| Pannello proprietà (barra laterale destra) | ✅ | Sezioni: Aspetto, Riempimento, Contorno, Effetti, Tipografia, Layout, Posizione; larghezza ridimensionabile |
+| Barra strumenti di design | ✅ | Barra integrata: Selezione, Frame, Sezione, Rettangolo, Ellisse, Linea, Testo, Mano, Penna |
+| Pannello livelli (barra laterale sinistra) | ✅ | Barra mobile con Livelli, Chat, Risorse e Attività |
+| Pannello pagine | ✅ | Il browser dello spazio di lavoro gestisce i Board e conserva il viewport |
+| Pannello proprietà (barra laterale destra) | 🟡 | Nessun pannello desktop permanente; controlli contestuali sul canvas e Design nel cassetto mobile |
 | Zoom e panoramica | ✅ | <kbd>Ctrl</kbd> + scroll, pinch, <kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>−</kbd> / <kbd>⌘</kbd><kbd>0</kbd>, spazio+trascinamento, mouse centrale, strumento mano (H) |
 | Righelli canvas | ✅ | Righelli superiore/sinistro con bande di selezione e badge di coordinate |
-| Colore di sfondo del canvas | ✅ | Sfondo per pagina tramite pannello proprietà |
+| Colore di sfondo del canvas | 🟡 | Lo sfondo resta nel documento; il controllo desktop non è esposto |
 | Guide del canvas | 🔲 | Figma supporta guide trascinabili dai righelli |
 | Menu azioni / palette comandi | 🔲 | Ricerca azioni rapide di Figma |
 | Menu contestuale | ✅ | Clic destro con appunti, ordine-z, raggruppamento, componente, visibilità, blocco, sposta-a-pagina |
@@ -28,7 +28,7 @@ Confronto funzionalità per funzionalità delle capacità di Figma Design con lo
 | Miniature personalizzate | 🔲 | Miniatura generata all'export, ma nessun selettore personalizzato |
 | Impostazioni valore nudge | 🔲 | Default 1px/10px; Figma consente valori personalizzati |
 | Menu app (modalità browser) | ✅ | Menu File, Modifica, Visualizza, Oggetto, Testo, Disponi; Tauri usa menu nativi |
-| Strumenti IA | 🟡 | 90+ strumenti via Anthropic, OpenAI, Google AI, OpenRouter + server MCP; nessuna immagine generata da IA o ricerca IA ancora |
+| Strumenti IA | 🟡 | Chat attività Pi e catalogo MCP scoperto a runtime; nessuna immagine generata da IA o ricerca IA ancora |
 
 ## Livelli e forme
 
@@ -55,7 +55,7 @@ Confronto funzionalità per funzionalità delle capacità di Figma Design con lo
 | Selezione intelligente (distribuire/allineare) | 🔲 | Spaziare e allineare uniformemente |
 | Guide di layout (colonne, righe, griglia) | 🔲 | Guide colonna/riga/griglia sui frame |
 | Misurare distanze tra livelli | 🔲 | Alt-hover per mostrare distanze |
-| Modificare oggetti in blocco | ✅ | Pannello multi-selezione: valori condivisi normali, valori diversi mostrano "Mixed" |
+| Modificare oggetti in blocco | ✅ | I controlli contestuali e il cassetto mobile Design supportano la selezione multipla |
 | Identificare oggetti corrispondenti | 🔲 | Trovare livelli simili |
 | Copiare/incollare proprietà | 🔲 | Copiare riempimento/contorno/effetti tra livelli |
 | Relazioni genitore-figlio | ✅ | Gerarchia completa con parentIndex, ri-parentamento per trascinamento |
@@ -215,7 +215,7 @@ Confronto funzionalità per funzionalità delle capacità di Figma Design con lo
 | Code Connect | 🔲 | Collegare componenti design al codice |
 | Frammenti di codice | 🟡 | Export JSX con evidenziazione e copia; nessun frammento CSS/Swift/Kotlin |
 | Figma for VS Code | 🔲 | Integrazione plugin editor |
-| Server MCP | ✅ | @open-pencil/mcp con trasporti stdio + HTTP; 87 strumenti core + 3 gestione file = 90+ total |
+| Server MCP | ✅ | `@open-pencil/mcp` con trasporti stdio + HTTP e catalogo scoperto a runtime |
 | Strumenti CLI | ✅ | CLI headless: info, tree, find, export, analyze, node, pages, variables, eval; server MCP |
 
 ## Figma Draw

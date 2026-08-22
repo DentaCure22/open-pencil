@@ -19,7 +19,7 @@ test('toolbar tools expose their names to assistive technology', async () => {
 test('collaboration controls live in the top toolbar', async () => {
   const toolbar = editor.page.getByTestId('toolbar')
   await expect(toolbar.getByTestId('narrated-trace-mic-toggle')).toHaveAccessibleName(
-    'Start Trace microphone'
+    /^Pin microphone on/
   )
   await expect(toolbar.getByTestId('toolbar-collaboration')).toBeVisible()
   await expect(toolbar.getByTestId('collab-local-avatar')).toBeVisible()

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 
-import { objectGraphConnectionsOnPage, type SceneNode } from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 import { cloneSceneNode } from '@open-pencil/scene-graph/copy'
 
 import type { AuthorityBoardDocument } from './document'
@@ -12,7 +12,6 @@ const FIXTURE_RESET_RECEIPT_PREFIX = 'fixture-reset-request:'
 
 export type AuthorityBoardFixture = {
   authorityId: string
-  connectionCount: number
   contentDocumentId: string
   fixtureId: string
   pageId: string
@@ -112,7 +111,6 @@ export function captureAuthorityBoardFixture(
   const semanticHash = authorityFixtureSemanticHash(snapshot)
   return {
     authorityId: options.authorityId,
-    connectionCount: objectGraphConnectionsOnPage(options.document.graph, options.pageId).length,
     contentDocumentId: options.contentDocumentId,
     fixtureId: `authority-fixture:${randomUUID()}`,
     pageId: options.pageId,

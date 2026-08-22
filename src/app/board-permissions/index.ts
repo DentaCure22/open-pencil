@@ -6,7 +6,6 @@ export {
 } from './contracts'
 
 export { boardNodeMatchesOwner, runBoardMutation } from './run'
-export { runBoardTargetMutation } from './target-mutations'
 
 export {
   boundedBoardNumber,
@@ -24,8 +23,6 @@ export type {
   BoardPageReconciliationProvenance,
   BoardPageReconciliationReceipt
 } from './page-reconciliation'
-
-export type { BoardTargetMutation, BoardTargetReceipt } from './target-mutations'
 
 export type {
   BoardMutationReceipt,

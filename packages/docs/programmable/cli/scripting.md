@@ -73,6 +73,9 @@ Live-app `eval` is disabled. Use the guarded Board namespace for exact-target au
 openpencil board list --limit 10 --json
 openpencil board context --workspace-id <workspace> --page-id <page> --json
 openpencil board search "prior pricing work" --limit 10 --json
+openpencil board get 0:35 --json
+openpencil board ls --json
+openpencil board nearby 0:35 --json
 openpencil board create --name "Agent Sandbox" --request-id <stable-id> --json
 ```
 

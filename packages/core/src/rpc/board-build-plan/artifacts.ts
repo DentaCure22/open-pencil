@@ -1,4 +1,5 @@
-import { codeObjectViewportPreset, isCodeObjectViewportPresetId } from '../../code-object/viewport'
+import { resolveCodeObjectUiBlock } from '#core/code-object/ui-block'
+
 import {
   boardBuildPlanReferenceKey,
   boundedNumber,
@@ -11,9 +12,10 @@ import {
   optionalString,
   optionalText,
   parseAlias,
+  parseCodeObjectSurface,
+  parseCodeObjectViewport,
   parseDirections,
   parsePlacement,
-  parsePortDefinitions,
   parseReference,
   preferredDirectionOffset,
   requiredString
@@ -138,10 +140,10 @@ export function parseRecipe(value: unknown, label: string): BoardBuildPlanArtifa
         'object_key',
         'operation',
         'placement',
-        'ports',
         'props',
         'source',
         'source_format',
+        'surface',
         'width'
       ],
       label
@@ -156,7 +158,7 @@ export function parseRecipe(value: unknown, label: string): BoardBuildPlanArtifa
         : boundedNumber(value.height, `${label}.height`, 160, 1_200)
     const initialState = optionalPlainJsonObject(value.initial_state, `${label}.initial_state`)
     const placement = parsePlacement(value.placement, `${label}.placement`, true)
-    const ports = parsePortDefinitions(value.ports, `${label}.ports`)
+    const surface = parseCodeObjectSurface(value.surface, `${label}.surface`)
     const props = optionalPlainJsonObject(value.props, `${label}.props`)
     const width =
       value.width === undefined
@@ -170,11 +172,66 @@ export function parseRecipe(value: unknown, label: string): BoardBuildPlanArtifa
       object_key: requiredString(value.object_key, `${label}.object_key`, 160),
       operation: 'create',
       ...(placement ? { placement } : {}),
-      ...(ports ? { ports } : {}),
       ...(props ? { props } : {}),
       source: requiredString(value.source, `${label}.source`, 100_000),
       source_format: 'tsx',
+      ...(surface ? { surface } : {}),
       ...(width === undefined ? {} : { width })
+    }
+  }
+  if (value.kind === 'ui_block') {
+    exactFields(
+      value,
+      [
+        'block',
+        'config',
+        'height',
+        'initial_state',
+        'kind',
+        'name',
+        'object_key',
+        'operation',
+        'placement',
+        'surface',
+        'width'
+      ],
+      label
+    )
+    if (value.operation !== 'create') throw new Error(`${label}.operation must be create.`)
+    const height =
+      value.height === undefined
+        ? undefined
+        : boundedNumber(value.height, `${label}.height`, 160, 1_200)
+    const initialState = optionalPlainJsonObject(value.initial_state, `${label}.initial_state`)
+    const placement = parsePlacement(value.placement, `${label}.placement`, true)
+    const surface = parseCodeObjectSurface(value.surface, `${label}.surface`)
+    const width =
+      value.width === undefined
+        ? undefined
+        : boundedNumber(value.width, `${label}.width`, 240, 1_600)
+    const resolved = resolveCodeObjectUiBlock(
+      {
+        block: requiredString(value.block, `${label}.block`, 120),
+        config: value.config,
+        height,
+        initialState,
+        surface,
+        width
+      },
+      `${label}.config`
+    )
+    return {
+      block: resolved.block,
+      config: resolved.config,
+      height: resolved.height,
+      initial_state: resolved.initialState,
+      kind: 'ui_block',
+      name: requiredString(value.name, `${label}.name`, 120),
+      object_key: requiredString(value.object_key, `${label}.object_key`, 160),
+      operation: 'create',
+      ...(placement ? { placement } : {}),
+      surface: resolved.surface,
+      width: resolved.width
     }
   }
   if (value.kind === 'trusted_web_app') {
@@ -199,29 +256,18 @@ export function parseRecipe(value: unknown, label: string): BoardBuildPlanArtifa
     if (!/^\/(?!\/)[^\u0000-\u001f\u007f\\]*$/u.test(route)) {
       throw new Error(`${label}.route must be a local path beginning with one slash.`)
     }
-    const viewportPreset = value.viewport_preset
-    if (viewportPreset !== undefined && !isCodeObjectViewportPresetId(viewportPreset)) {
-      throw new Error(`${label}.viewport_preset must be desktop, laptop, tablet, or phone.`)
-    }
-    const viewport = viewportPreset ? codeObjectViewportPreset(viewportPreset) : undefined
-    if (
-      viewport &&
-      ((value.height !== undefined && value.height !== viewport.height) ||
-        (value.width !== undefined && value.width !== viewport.width))
-    ) {
-      throw new Error(`${label}.height and width must match its viewport_preset.`)
-    }
+    const { preset: viewportPreset, viewport } = parseCodeObjectViewport(value, label)
     const height = viewport
       ? viewport.height
-      : value.height === undefined
-        ? undefined
-        : boundedNumber(value.height, `${label}.height`, 160, 1_200)
+      : (value.height === undefined
+          ? undefined
+          : boundedNumber(value.height, `${label}.height`, 160, 1_200))
     const placement = parsePlacement(value.placement, `${label}.placement`, true)
     const width = viewport
       ? viewport.width
-      : value.width === undefined
-        ? undefined
-        : boundedNumber(value.width, `${label}.width`, 240, 1_600)
+      : (value.width === undefined
+          ? undefined
+          : boundedNumber(value.width, `${label}.width`, 240, 1_600))
     return {
       app_id: 'smylr',
       ...(height === undefined ? {} : { height }),
@@ -246,7 +292,7 @@ export function parseRecipe(value: unknown, label: string): BoardBuildPlanArtifa
     }
   }
   throw new Error(
-    `${label}.kind must be canonical_object, native_text, native_card, native_diagram, code_object, or trusted_web_app in plan v1.`
+    `${label}.kind must be canonical_object, native_text, native_card, native_diagram, code_object, ui_block, or trusted_web_app in plan v1.`
   )
 }
 
@@ -344,9 +390,7 @@ export function parseArtifact(
             if (typeof direction !== 'string') return true
             return direction !== targetDirection
           })
-        : rawPreferred === undefined
-          ? []
-          : [rawPreferred]
+        : (rawPreferred === undefined ? [] : [rawPreferred])
       const preferredDirections = parseDirections(
         [target.direction, ...remainingPreferred],
         `${label}.recipe.placement.target.direction`

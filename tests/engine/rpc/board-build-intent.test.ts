@@ -54,7 +54,6 @@ describe('Board build intent compiler', () => {
         supporting_representations: []
       }
     })
-    expect(compilation.plan.connections).toHaveLength(2)
     expect(parseBoardBuildPlan(compilation.plan)).toEqual(compilation.plan)
   })
 
@@ -105,15 +104,9 @@ describe('Board build intent compiler', () => {
     })
   })
 
-  test('rejects authority fields and process-only connector settings before mutation', async () => {
+  test('rejects authority fields before mutation', async () => {
     await expect(
       compileBoardBuildIntentRequest({ ...intentRequest('Explain this'), authority: 'writer' })
     ).rejects.toThrow('unsupported fields: authority')
-    await expect(
-      compileBoardBuildIntentRequest({
-        ...intentRequest('Compare these options'),
-        connector_label: 'Next'
-      })
-    ).rejects.toThrow('supported only for process outcomes')
   })
 })

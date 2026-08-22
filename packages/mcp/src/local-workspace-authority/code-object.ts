@@ -3,19 +3,14 @@ import {
   CODE_OBJECT_PLUGIN_ID,
   codeObjectSourceHash,
   createUserCodeObjectDocument,
+  normalizeCodeObjectSurface,
   parseCodeObjectDocument,
   preflightCodeObjectSource,
   serializeCodeObjectPluginData,
-  type CodeObjectStaticPreflight
+  type CodeObjectStaticPreflight,
+  type CodeObjectSurface
 } from '@open-pencil/core/code-object'
-import {
-  objectGraphPortsPluginData,
-  parseObjectGraphPorts,
-  readObjectGraphPorts,
-  type ObjectGraphPortDefinition,
-  type Rect,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import type { Rect, SceneNode } from '@open-pencil/scene-graph'
 
 import type { AuthorityBoardDocument } from './document'
 import {
@@ -51,11 +46,11 @@ export type AuthorityCodeObjectCreateOperation = {
   objectKey: string
   operation: 'create'
   placementTarget?: AuthorityFreePlacementTarget
-  ports?: ObjectGraphPortDefinition[]
   preferredDirections: AuthorityPlacementDirection[]
   relativeOffset?: AuthorityRelativePlacementOffset
   props: JsonRecord
   source: string
+  surface?: CodeObjectSurface
   width: number
 }
 
@@ -121,10 +116,10 @@ const CREATE_RECIPE_KEYS = new Set([
   'object_key',
   'operation',
   'placement',
-  'ports',
   'props',
   'source',
   'source_format',
+  'surface',
   'width'
 ])
 const REFINE_RECIPE_KEYS = new Set([
@@ -139,6 +134,7 @@ const REFINE_RECIPE_KEYS = new Set([
   'source_format'
 ])
 const PLACEMENT_KEYS = new Set(['clearance', 'preferred_directions', 'relative_offset', 'target'])
+const SURFACE_KEYS = new Set(['background', 'overflow'])
 const SOURCE_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/u
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -170,6 +166,18 @@ function plainJsonObject(value: unknown, field: string): JsonRecord {
     throw new Error(`code_object recipe.${field} must be a plain JSON object.`)
   }
   return structuredClone(value)
+}
+
+function codeObjectSurface(value: unknown): CodeObjectSurface {
+  if (!isRecord(value)) throw new Error('code_object recipe.surface must be an object.')
+  assertSupportedFields(value, SURFACE_KEYS, 'code_object recipe.surface')
+  if (value.background !== 'surface' && value.background !== 'transparent') {
+    throw new Error('code_object recipe.surface.background must be surface or transparent.')
+  }
+  if (value.overflow !== 'clip' && value.overflow !== 'scroll') {
+    throw new Error('code_object recipe.surface.overflow must be clip or scroll.')
+  }
+  return normalizeCodeObjectSurface(value)
 }
 
 function assertSupportedFields(
@@ -212,18 +220,18 @@ function boundedNumber(
 function codeObjectContentHash(options: {
   name: string
   objectKey: string
-  ports: ObjectGraphPortDefinition[]
   props: JsonRecord
   source: string
   state: JsonRecord
+  surface?: CodeObjectSurface
 }): string {
   return authorityMutationInputDigest('code-object-content/v1', {
     name: options.name,
     object_key: options.objectKey,
-    ports: [...options.ports].sort((left, right) => left.id.localeCompare(right.id)),
     props: options.props,
     source: options.source,
-    state: options.state
+    state: options.state,
+    surface: options.surface
   })
 }
 
@@ -231,10 +239,10 @@ function createContentHash(operation: AuthorityCodeObjectCreateOperation): strin
   return codeObjectContentHash({
     name: operation.name,
     objectKey: operation.objectKey,
-    ports: operation.ports ?? [],
     props: operation.props,
     source: operation.source,
-    state: operation.initialState
+    state: operation.initialState,
+    surface: operation.surface
   })
 }
 
@@ -304,10 +312,6 @@ function parseCreateOperation(
   if (relativeOffset && !exactAnchorId && placementTarget?.kind !== 'relative') {
     throw new Error('placement.relative_offset requires an anchor or relative placement.target.')
   }
-  const ports = recipe.ports === undefined ? undefined : parseObjectGraphPorts(recipe.ports)
-  if (recipe.ports !== undefined && !ports) {
-    throw new Error('code_object recipe.ports must contain valid unique named Object Graph ports.')
-  }
   return {
     ...(exactAnchorId ? { anchorId: exactAnchorId } : {}),
     clearance: boundedNumber(
@@ -324,10 +328,10 @@ function parseCreateOperation(
     operation: 'create',
     ...(placementTarget ? { placementTarget } : {}),
     preferredDirections: parseAuthorityPlacementDirections(placement.preferred_directions),
-    ...(ports ? { ports } : {}),
     ...(relativeOffset ? { relativeOffset } : {}),
     props: plainJsonObject(recipe.props ?? {}, 'props'),
     source: requiredString(recipe, 'source', 100_000),
+    ...(recipe.surface === undefined ? {} : { surface: codeObjectSurface(recipe.surface) }),
     width: boundedNumber(recipe.width, DEFAULT_WIDTH, 240, 1_600, 'width')
   }
 }
@@ -457,44 +461,6 @@ function codeObjectNodes(document: AuthorityBoardDocument, pageId: string): Scen
   return matches
 }
 
-export async function readAuthorityCodeObject(
-  document: AuthorityBoardDocument,
-  pageId: string,
-  ownerId: string
-) {
-  const page = document.graph.getNode(pageId)
-  if (page?.type !== 'CANVAS') throw new Error(`Board page "${pageId}" does not exist.`)
-  const owner = document.graph.getNode(ownerId)
-  if (!owner || !document.graph.isDescendant(owner.id, pageId)) {
-    throw new Error(`Code Object owner "${ownerId}" was not found on Board "${page.name}".`)
-  }
-  const codeObject = parseCodeObjectDocument(owner)
-  if (codeObject?.component !== 'user-code') {
-    throw new Error(`Frame "${ownerId}" is not an authored Code Object.`)
-  }
-  return {
-    component: {
-      definition_id: codeObject.definitionId,
-      name: codeObject.name,
-      props: structuredClone(codeObject.props),
-      source: codeObject.source,
-      source_hash: await codeObjectSourceHash(codeObject.source),
-      source_length: codeObject.source.length,
-      state: structuredClone(codeObject.state)
-    },
-    frame: {
-      height: owner.height,
-      id: owner.id,
-      name: owner.name,
-      type: owner.type,
-      width: owner.width,
-      x: owner.x,
-      y: owner.y
-    },
-    ports: readObjectGraphPorts(owner)
-  }
-}
-
 export function assertAuthorityCodeObjectKeyAvailable(
   document: AuthorityBoardDocument,
   pageId: string,
@@ -592,14 +558,11 @@ export function createAuthorityCodeObject(
     name: intent.operation.name,
     props: intent.operation.props,
     source: intent.operation.source,
-    state: intent.operation.initialState
+    state: intent.operation.initialState,
+    surface: intent.operation.surface
   })
   const codeObjectPluginData = serializeCodeObjectPluginData(owner, codeObjectDocument)
-  document.graph.updateNode(owner.id, {
-    pluginData: intent.operation.ports
-      ? objectGraphPortsPluginData({ pluginData: codeObjectPluginData }, intent.operation.ports)
-      : codeObjectPluginData
-  })
+  document.graph.updateNode(owner.id, { pluginData: codeObjectPluginData })
   const receipt: AuthorityCodeObjectCreateReceipt = {
     algorithm: AUTHORITY_PLACEMENT_ALGORITHM,
     appliedRevision: baseRevision + 1,
@@ -650,7 +613,7 @@ function authoredCodeObjectOnPage(
     typeof codeObject.name !== 'string' ||
     typeof codeObject.source !== 'string'
   ) {
-    throw new Error(`Code Object document on "${ownerId}" is unreadable.`)
+    throw new TypeError(`Code Object document on "${ownerId}" is unreadable.`)
   }
   return { codeObject, owner }
 }
@@ -724,10 +687,10 @@ export async function refineAuthorityCodeObject(
     contentHash: codeObjectContentHash({
       name: nextName,
       objectKey: intent.operation.objectKey,
-      ports: readObjectGraphPorts(owner),
       props: nextProps,
       source: intent.operation.source,
-      state: currentState
+      state: currentState,
+      surface: codeObject.surface
     }),
     expectedSourceHash: intent.operation.expectedSourceHash,
     inputDigest: intent.inputDigest,
@@ -804,17 +767,17 @@ export async function authorityCodeObjectReadback(
     isRecord(codeObject?.props) && isPlainJson(codeObject.props) ? codeObject.props : null
   const state =
     isRecord(codeObject?.state) && isPlainJson(codeObject.state) ? codeObject.state : null
+  const surface = codeObject?.surface
   const currentSourceHash = source ? await codeObjectSourceHash(source) : null
-  const ports = readObjectGraphPorts(owner)
   const currentContentHash =
     source && name && definitionId && props && state
       ? codeObjectContentHash({
           name,
           objectKey: definitionId,
-          ports,
           props,
           source,
-          state
+          state,
+          surface
         })
       : null
   const currentPropsHash = props ? valueHash('code-object-props/v1', props) : null
@@ -832,10 +795,10 @@ export async function authorityCodeObjectReadback(
     component: {
       definition_id: definitionId,
       name,
-      ports,
       props_hash: currentPropsHash,
       source_hash: currentSourceHash,
       source_length: source?.length ?? null,
+      surface: surface ?? null,
       state_hash: currentStateHash
     },
     expected,

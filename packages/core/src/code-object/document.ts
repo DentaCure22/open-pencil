@@ -5,8 +5,37 @@ import { isCodeObjectViewportPresetId, type CodeObjectViewportPresetId } from '.
 export const CODE_OBJECT_PLUGIN_ID = 'openpencil-code-object'
 export const CODE_OBJECT_KIND = 'code-object'
 export const CODE_OBJECT_SCHEMA_VERSION = 1 as const
+
+/**
+ * Every runnable Code Object `component` value. Custom TSX always uses `user-code`;
+ * custom identity belongs in `definitionId` and `name`. An unrecognized component
+ * renders nothing, so writers must validate against this list before persisting.
+ */
+export const KNOWN_CODE_OBJECT_COMPONENTS = [
+  'agent-conversation-terminal',
+  'code-starter',
+  'earth-signals',
+  'office-document',
+  'office-spreadsheet',
+  'open-source-workspace',
+  'orbit-lab',
+  'pdf-document',
+  'pptx-deck',
+  'signal-bloom',
+  'smylr-flow-screen',
+  'smylr-production-app',
+  'user-code'
+] as const
+
+export function isKnownCodeObjectComponent(value: string): boolean {
+  return (KNOWN_CODE_OBJECT_COMPONENTS as readonly string[]).includes(value)
+}
 export const SMYLR_PRODUCTION_PLUGIN_ID = 'smylr-production'
 export const SMYLR_CODE_OBJECT_FRAME_KIND = 'smylr-code-object-frame'
+export const DEFAULT_CODE_OBJECT_SURFACE = {
+  background: 'surface',
+  overflow: 'clip'
+} as const satisfies CodeObjectSurface
 export const SMYLR_TRUSTED_WEB_APP_SOURCE = `type SmylrProductionAppProps = {
   interactionEnabled: boolean
   props: {
@@ -32,17 +61,20 @@ export default function SmylrProductionApp({
 
 type JsonRecord = Record<string, unknown>
 
+export type CodeObjectSurface = {
+  background: 'surface' | 'transparent'
+  overflow: 'clip' | 'scroll'
+}
+
 const SMYLR_FRAME_METADATA_KEYS = new Set(['kind', 'pageId', 'route', 'state'])
 
 export type CodeObjectDocument<
   Component extends string = string,
   State extends JsonRecord = JsonRecord,
-  BoardPermission = unknown,
-  Connection = unknown
+  BoardPermission = unknown
 > = {
   boardPermissions: BoardPermission[]
   component: Component
-  connections: Connection[]
   definitionId: string
   name: string
   props: JsonRecord
@@ -50,6 +82,7 @@ export type CodeObjectDocument<
   schemaVersion: typeof CODE_OBJECT_SCHEMA_VERSION
   source: string
   state: State
+  surface?: CodeObjectSurface
   viewport?: {
     preset: CodeObjectViewportPresetId
   }
@@ -60,22 +93,24 @@ export type CodeObjectDocumentEnvelope = JsonRecord & {
   runtime: 'openpencil-code'
   schemaVersion: typeof CODE_OBJECT_SCHEMA_VERSION
   state: JsonRecord
+  surface?: CodeObjectSurface
 }
 
-export type CreateUserCodeObjectDocumentInput<BoardPermission = unknown, Connection = unknown> = {
+export type CreateUserCodeObjectDocumentInput<BoardPermission = unknown> = {
   boardPermissions?: BoardPermission[]
-  connections?: Connection[]
   definitionId: string
   name: string
   props?: JsonRecord
   source: string
   state?: JsonRecord
+  surface?: CodeObjectSurface
 }
 
-export type SmylrTrustedWebAppDocument<
-  BoardPermission = unknown,
-  Connection = unknown
-> = CodeObjectDocument<'smylr-production-app', { view: 'live' }, BoardPermission, Connection> & {
+export type SmylrTrustedWebAppDocument<BoardPermission = unknown> = CodeObjectDocument<
+  'smylr-production-app',
+  { view: 'live' },
+  BoardPermission
+> & {
   label: string
   launch: {
     launcherId: 'smylr'
@@ -86,6 +121,14 @@ export type SmylrTrustedWebAppDocument<
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+export function normalizeCodeObjectSurface(value: unknown): CodeObjectSurface {
+  if (!isRecord(value)) return { ...DEFAULT_CODE_OBJECT_SURFACE }
+  return {
+    background: value.background === 'transparent' ? 'transparent' : 'surface',
+    overflow: value.overflow === 'scroll' ? 'scroll' : 'clip'
+  }
 }
 
 function pluginValue(node: SceneNode, key: string): string | null {
@@ -123,35 +166,31 @@ function smylrTrustedWebAppPluginData(
   ]
 }
 
-export function createUserCodeObjectDocument<BoardPermission = unknown, Connection = unknown>(
-  input: CreateUserCodeObjectDocumentInput<BoardPermission, Connection>
-): CodeObjectDocument<'user-code', JsonRecord, BoardPermission, Connection> {
+export function createUserCodeObjectDocument<BoardPermission = unknown>(
+  input: CreateUserCodeObjectDocumentInput<BoardPermission>
+): CodeObjectDocument<'user-code', JsonRecord, BoardPermission> {
   return {
     boardPermissions: structuredClone(input.boardPermissions ?? []),
     component: 'user-code',
-    connections: structuredClone(input.connections ?? []),
     definitionId: input.definitionId,
     name: input.name,
     props: structuredClone(input.props ?? {}),
     runtime: 'openpencil-code',
     schemaVersion: CODE_OBJECT_SCHEMA_VERSION,
     source: input.source,
-    state: structuredClone(input.state ?? {})
+    state: structuredClone(input.state ?? {}),
+    ...(input.surface ? { surface: normalizeCodeObjectSurface(input.surface) } : {})
   }
 }
 
-export function createSmylrTrustedWebAppDocument<
-  BoardPermission = unknown,
-  Connection = unknown
->(input: {
+export function createSmylrTrustedWebAppDocument<BoardPermission = unknown>(input: {
   label: string
   route: string
   viewportPreset?: CodeObjectViewportPresetId
-}): SmylrTrustedWebAppDocument<BoardPermission, Connection> {
+}): SmylrTrustedWebAppDocument<BoardPermission> {
   return {
     boardPermissions: [],
     component: 'smylr-production-app',
-    connections: [],
     definitionId: `smylr.production.${input.route.replace(/^\/+/, '').replaceAll('/', '.')}`,
     label: input.label,
     launch: {

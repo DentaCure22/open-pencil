@@ -1,7 +1,7 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
-export type NarratedTraceStatus = 'idle' | 'recording' | 'paused' | 'review'
+export type NarratedTraceStatus = 'idle' | 'recording' | 'review'
 
 export type NarratedTraceEventKind =
   | 'transcript'
@@ -56,10 +56,21 @@ export type NarratedTraceScope = {
 
 export type NarratedTraceTarget = {
   bounds?: Rect
+  elementKind?: 'component' | 'container' | 'control'
   frameId?: string
+  hierarchy?: {
+    children: Array<{ label: string; stableId: string }>
+    current: { label: string; stableId: string }
+    parent?: { label: string; stableId: string }
+  }
   name: string
   path: string[]
   route?: string
+  source?: {
+    componentName?: string
+    filePath?: string
+    lineNumber?: number
+  }
   stableId: string
 }
 

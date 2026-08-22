@@ -2,7 +2,7 @@ export const MERMAID_DIAGRAM_REVISION = 4
 export const MERMAID_SVG_PARSER = 'mermaid@11.16.0/svg'
 
 export type MermaidParserName = typeof MERMAID_SVG_PARSER
-export type MermaidAppearance = 'dark' | 'light'
+export type MermaidAppearance = 'auto' | 'dark' | 'light'
 
 export interface MermaidDiagram {
   appearance?: MermaidAppearance

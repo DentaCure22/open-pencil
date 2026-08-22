@@ -63,7 +63,7 @@ Security defaults (HTTP transport):
 
 - Binds to `127.0.0.1` by default (`HOST` to override)
 - `eval` tool is disabled
-- File operations are limited to `OPENPENCIL_MCP_ROOT` (defaults to current working directory)
+- Export paths are limited to `OPENPENCIL_MCP_ROOT` (defaults to current working directory)
 - CORS is disabled by default; set `OPENPENCIL_MCP_CORS_ORIGIN` to allow one origin
 - Optional auth token: `OPENPENCIL_MCP_AUTH_TOKEN` (client sends `Authorization: Bearer <token>` or `x-mcp-token`)
 
@@ -74,12 +74,12 @@ Server starts on port 7600 (override with `PORT` env var). Endpoints:
 
 ## Workflow
 
-1. **Open** — `open_file` to load an existing `.fig`, or `new_document` for a blank canvas
+1. **Discover** — `list_documents`
 2. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`
 3. **Create** — `create_shape`, `render` (JSX)
 4. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`
 5. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`
-6. **Save** — `save_file` to write back to `.fig`
+6. **Export** — use the format-specific export tool when a file is required
 
 ## AI Agent Skill
 
@@ -91,15 +91,15 @@ npx skills add open-pencil/skills@open-pencil
 
 Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [skills](https://skills.sh). The skill covers the CLI, MCP tools, JSX rendering, eval, and the running app's automation bridge.
 
-## Tools (90)
+## Tools
+
+The running server reports the authoritative catalog for its version. The main groups include:
 
 ### Document
 
 | Tool | Description |
 |------|-------------|
-| `open_file` | Open a `.fig` file for editing |
-| `save_file` | Save the current document to a `.fig` file |
-| `new_document` | Create a new empty document |
+| `list_documents` | List open app documents/tabs and their pages |
 
 ### Read
 

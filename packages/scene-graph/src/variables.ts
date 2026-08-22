@@ -104,10 +104,11 @@ export function removeCollection(graph: SceneGraph, id: string): void {
   }
   graph.variableCollections.delete(id)
   graph.activeMode.delete(id)
+  graph.presentationMode.delete(id)
 }
 
 export function getActiveModeId(graph: SceneGraph, collectionId: string): string {
-  const mode = graph.activeMode.get(collectionId)
+  const mode = graph.presentationMode.get(collectionId) ?? graph.activeMode.get(collectionId)
   if (mode) return mode
   const collection = graph.variableCollections.get(collectionId)
   return collection?.defaultModeId ?? ''
@@ -115,6 +116,23 @@ export function getActiveModeId(graph: SceneGraph, collectionId: string): string
 
 export function setActiveMode(graph: SceneGraph, collectionId: string, modeId: string): void {
   graph.activeMode.set(collectionId, modeId)
+}
+
+export function setPresentationMode(
+  graph: SceneGraph,
+  collectionId: string,
+  modeId: string | null
+): boolean {
+  const previous = graph.presentationMode.get(collectionId)
+  if (modeId === null) {
+    return graph.presentationMode.delete(collectionId)
+  }
+  const collection = graph.variableCollections.get(collectionId)
+  if (!collection?.modes.some((mode) => mode.modeId === modeId) || previous === modeId) {
+    return false
+  }
+  graph.presentationMode.set(collectionId, modeId)
+  return true
 }
 
 export function addMode(
@@ -150,6 +168,9 @@ export function removeMode(graph: SceneGraph, collectionId: string, modeId: stri
   }
   if (graph.activeMode.get(collectionId) === modeId) {
     graph.activeMode.set(collectionId, collection.defaultModeId)
+  }
+  if (graph.presentationMode.get(collectionId) === modeId) {
+    graph.presentationMode.delete(collectionId)
   }
 }
 

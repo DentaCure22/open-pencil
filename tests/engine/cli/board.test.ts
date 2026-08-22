@@ -19,6 +19,7 @@ import {
   normalizeFreshBoardPresentLogical,
   presentWithFreshContext
 } from '#cli/board-present/fresh-context'
+import { parseBoardReadCliArgs } from '#cli/board-read/arguments'
 import { readWithFreshContext } from '#cli/board-read/fresh-context'
 import boardCommand, {
   boardBuildUsesAutomaticContext,
@@ -28,17 +29,15 @@ import boardCommand, {
   boardBuildRecipeSource,
   boardBuildRequestSource,
   boardCommandErrorResult,
-  boardChangeRpcArgs,
   boardConnectRpcArgs,
   boardContextRpcArgs,
   boardEditRpcArgs,
   boardPresentFreshTarget,
   boardPresentLogicalRpcArgs,
   boardPresentRpcArgs,
-  boardReadLogicalRpcArgs,
   boardReadRpcArgs,
   boardVerifyRpcArgs,
-  boardWithChangeCommand,
+  boardInternalCommand,
   resolveBoardBuildPlanSource,
   resolveBoardBuildRequest,
   withBoardBuildRecipeCompilation
@@ -83,7 +82,6 @@ function canonicalBuildRequest() {
           }
         }
       ],
-      connections: [],
       contract: 'board-build-plan/v1'
     },
     request_id: 'request:canonical-build',
@@ -136,7 +134,6 @@ describe('semantic Board CLI arguments', () => {
       failure_scope: 'pre_mutation',
       release_summary: {
         artifact_count: 0,
-        connection_count: 0,
         request_id: 'request:invalid-plan',
         status: 'stop'
       },
@@ -235,39 +232,6 @@ describe('semantic Board CLI arguments', () => {
     )
   })
 
-  test('maps the first guarded native text change without implicit targeting', () => {
-    expect(
-      boardChangeRpcArgs({
-        ...exactTarget,
-        'anchor-id': 'node:anchor',
-        clearance: '32',
-        'context-token': 'context:1',
-        'expected-revision': '12',
-        'request-id': 'request:1',
-        'task-id': 'task:1',
-        text: 'Native note',
-        'trace-id': 'trace:1',
-        'visual-profile': 'local-legible-text-v1'
-      })
-    ).toMatchObject({
-      context_token: 'context:1',
-      expected_revision: 12,
-      operation: {
-        anchor_id: 'node:anchor',
-        artifact: { kind: 'native_text', text: 'Native note' },
-        kind: 'artifact.create',
-        placement: { clearance: 32 }
-      },
-      page_id: 'page:1',
-      request_id: 'request:1',
-      runtime_instance_id: 'runtime:1',
-      task_id: 'task:1',
-      trace_id: 'trace:1',
-      visual: { profile: 'local-legible-text-v1' },
-      workspace_id: 'workspace:1'
-    })
-  })
-
   test('maps strict guarded native object edits without raw eval', () => {
     const base = {
       ...exactTarget,
@@ -308,7 +272,7 @@ describe('semantic Board CLI arguments', () => {
       'move requires --x and --y'
     )
     expect(() => boardEditRpcArgs({ ...base, operation: 'update' })).toThrow('--patch is required')
-    expect(boardWithChangeCommand.subCommands?.edit).toBeDefined()
+    expect(boardInternalCommand.subCommands?.edit).toBeDefined()
     expect(boardCommand.subCommands?.change).toBeUndefined()
   })
 
@@ -377,9 +341,9 @@ describe('semantic Board CLI arguments', () => {
         }
       )
     ).rejects.toThrow('lacks writer board.change.object.delete capability')
-    expect(
-      boardWithChangeCommand.subCommands?.edit?.args?.['fresh-context']?.description
-    ).toContain('one CLI process')
+    expect(boardInternalCommand.subCommands?.edit?.args?.['fresh-context']?.description).toContain(
+      'one CLI process'
+    )
   })
 
   test('maps the self-sufficient general builder with optional specialist provenance', () => {
@@ -470,7 +434,12 @@ describe('semantic Board CLI arguments', () => {
   test('exposes one canonical agent-facing Board build input', () => {
     expect(Object.keys(boardCommand.subCommands ?? {})).toEqual([
       'search',
+      'get',
+      'ls',
+      'nearby',
+      'pages',
       'open',
+      'where',
       'create',
       'build',
       'present'
@@ -703,7 +672,6 @@ describe('semantic Board CLI arguments', () => {
           }
         }
       ],
-      connections: [],
       contract: 'board-build-plan/v1'
     }
     expect(
@@ -761,7 +729,6 @@ describe('semantic Board CLI arguments', () => {
           }
         }
       ],
-      connections: [],
       contract: 'board-build-plan/v1'
     }
     const source = await boardBuildPlanSource(
@@ -770,7 +737,7 @@ describe('semantic Board CLI arguments', () => {
         '{"contract":"board-build-plan/v1",',
         '"artifacts":',
         JSON.stringify(plan.artifacts),
-        ',"connections":[]}'
+        '}'
       )
     )
     expect(
@@ -798,7 +765,6 @@ describe('semantic Board CLI arguments', () => {
           }
         }
       ],
-      connections: [],
       contract: 'board-build-plan/v1'
     }
     const inline = JSON.stringify(plan)
@@ -959,7 +925,6 @@ describe('semantic Board CLI arguments', () => {
             }
           }
         ],
-        connections: [],
         contract: 'board-build-plan/v1'
       },
       request_id: 'request:fresh-plan'
@@ -1719,12 +1684,12 @@ describe('semantic Board CLI arguments', () => {
         scope: 'page'
       })
     ).toMatchObject({ limit: 25, scope: 'page' })
-    expect(boardReadLogicalRpcArgs({ 'object-ids': 'node:1, node:2' })).toEqual({
+    expect(parseBoardReadCliArgs({ 'object-ids': 'node:1, node:2' })).toEqual({
       object_ids: ['node:1', 'node:2'],
       scope: 'objects'
     })
     expect(
-      boardReadLogicalRpcArgs({
+      parseBoardReadCliArgs({
         projection: 'summary',
         query: '{"name":"target","types":["FRAME"]}',
         sort: 'x',
@@ -1737,10 +1702,10 @@ describe('semantic Board CLI arguments', () => {
       sort: 'x',
       token_budget: 1_500
     })
-    expect(() => boardReadLogicalRpcArgs({ projection: 'summary', scope: 'page' })).toThrow(
+    expect(() => parseBoardReadCliArgs({ projection: 'summary', scope: 'page' })).toThrow(
       'require query scope'
     )
-    expect(() => boardReadLogicalRpcArgs({ 'object-ids': 'node:1,node:1' })).toThrow('unique IDs')
+    expect(() => parseBoardReadCliArgs({ 'object-ids': 'node:1,node:1' })).toThrow('unique IDs')
     expect(
       boardPresentRpcArgs({
         ...exactTarget,
@@ -1983,26 +1948,5 @@ describe('semantic Board CLI arguments', () => {
         'runtime-instance-id': 'runtime:1'
       })
     ).toThrow('workspace-id')
-    expect(() =>
-      boardChangeRpcArgs({
-        ...exactTarget,
-        'anchor-id': 'node:anchor',
-        'context-token': 'context:1',
-        'expected-revision': '-1',
-        'request-id': 'request:1',
-        text: 'Native note'
-      })
-    ).toThrow('--expected-revision must be between 0 and infinity')
-    expect(() =>
-      boardChangeRpcArgs({
-        ...exactTarget,
-        'anchor-id': 'node:anchor',
-        'context-token': 'context:1',
-        'expected-revision': '1',
-        'request-id': 'request:1',
-        text: 'Native note',
-        'visual-profile': 'unknown-profile'
-      })
-    ).toThrow('local-legible-text-v1')
   })
 })

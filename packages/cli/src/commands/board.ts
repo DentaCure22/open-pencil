@@ -41,12 +41,19 @@ import {
   type FreshBoardPresentLogicalArgs
 } from '#cli/board-present/fresh-context'
 import { parseBoardReadCliArgs, type BoardReadCliArgs } from '#cli/board-read/arguments'
-import { readWithFreshContext, type FreshBoardReadLogicalArgs } from '#cli/board-read/fresh-context'
+import { readWithFreshContext } from '#cli/board-read/fresh-context'
+import {
+  get as getBoardNode,
+  ls as listBoardChildren,
+  nearby as nearbyBoardNodes,
+  pages as listBoardPages
+} from '#cli/commands/board-file'
 import {
   create as createBoard,
   list as listBoards,
   open as openBoard,
-  search as searchBoards
+  search as searchBoards,
+  where as whereBoard
 } from '#cli/commands/boards'
 import { bold, entity, fmtList, printError } from '#cli/format'
 
@@ -66,21 +73,6 @@ type ReadArgs = BoardTargetArgs &
   BoardReadCliArgs & {
     'context-token'?: string
   }
-
-type ChangeArgs = BoardTargetArgs & {
-  'anchor-id'?: string
-  clearance?: string
-  'context-token'?: string
-  'expected-revision'?: string
-  'font-size'?: string
-  'max-width'?: string
-  name?: string
-  'request-id'?: string
-  'task-id'?: string
-  text?: string
-  'trace-id'?: string
-  'visual-profile'?: string
-}
 
 type EditArgs = BoardTargetArgs & {
   'context-token'?: string
@@ -483,66 +475,7 @@ export function boardReadRpcArgs(args: ReadArgs): Record<string, unknown> {
   return {
     ...exactTarget(args, true),
     context_token: required(args['context-token'], '--context-token'),
-    ...boardReadLogicalRpcArgs(args)
-  }
-}
-
-export function boardReadLogicalRpcArgs(args: ReadArgs): FreshBoardReadLogicalArgs {
-  return parseBoardReadCliArgs(args)
-}
-
-export function boardChangeRpcArgs(args: ChangeArgs): Record<string, unknown> {
-  const expectedRevision = numberFlag(args['expected-revision'], '--expected-revision', {
-    integer: true,
-    minimum: 0
-  })
-  if (expectedRevision === undefined) throw new Error('--expected-revision is required.')
-  const visualProfile = args['visual-profile']?.trim()
-  if (visualProfile && visualProfile !== 'local-legible-text-v1') {
-    throw new Error('--visual-profile currently supports only local-legible-text-v1.')
-  }
-  return {
-    ...exactTarget(args, true),
-    context_token: required(args['context-token'], '--context-token'),
-    expected_revision: expectedRevision,
-    operation: {
-      kind: 'artifact.create',
-      anchor_id: required(args['anchor-id'], '--anchor-id'),
-      artifact: {
-        kind: 'native_text',
-        text: required(args.text, '--text'),
-        ...(args.name?.trim() ? { name: args.name.trim() } : {}),
-        ...(args['font-size'] !== undefined
-          ? {
-              font_size: numberFlag(args['font-size'], '--font-size', {
-                maximum: 256,
-                minimum: 8
-              })
-            }
-          : {}),
-        ...(args['max-width'] !== undefined
-          ? {
-              max_width: numberFlag(args['max-width'], '--max-width', {
-                maximum: 2_000,
-                minimum: 48
-              })
-            }
-          : {})
-      },
-      placement:
-        args.clearance === undefined
-          ? {}
-          : {
-              clearance: numberFlag(args.clearance, '--clearance', {
-                maximum: 512,
-                minimum: 0
-              })
-            }
-    },
-    request_id: required(args['request-id'], '--request-id'),
-    ...(args['task-id']?.trim() ? { task_id: args['task-id'].trim() } : {}),
-    ...(args['trace-id']?.trim() ? { trace_id: args['trace-id'].trim() } : {}),
-    ...(visualProfile ? { visual: { profile: visualProfile } } : {})
+    ...parseBoardReadCliArgs(args)
   }
 }
 
@@ -689,6 +622,7 @@ export async function boardBuildRecipeSource(args: BuildArgs): Promise<string> {
   const initialState = args['initial-state']
     ? jsonObject(args['initial-state'], '--initial-state')
     : {}
+  const placement = args.placement ? { target: jsonObject(args.placement, '--placement') } : null
   const recipe = {
     ...(height === undefined ? {} : { height }),
     initial_state: initialState,
@@ -696,11 +630,7 @@ export async function boardBuildRecipeSource(args: BuildArgs): Promise<string> {
     name: required(args['object-name'], '--object-name'),
     object_key: required(args['object-key'], '--object-key'),
     operation: 'create',
-    ...(args['auto-place']
-      ? {}
-      : args.placement
-        ? { placement: { target: jsonObject(args.placement, '--placement') } }
-        : {}),
+    ...(args['auto-place'] || !placement ? {} : { placement }),
     props,
     source: await readFile(sourcePath, 'utf8'),
     source_format: 'tsx',
@@ -1084,7 +1014,7 @@ const read = defineCommand({
       if (!args['context-token']?.trim()) {
         const execution = await readWithFreshContext(
           exactFreshContextTarget(args),
-          boardReadLogicalRpcArgs(args)
+          parseBoardReadCliArgs(args)
         )
         printBoardResult(
           'Board read',
@@ -1154,47 +1084,6 @@ const edit = defineCommand({
     }
   }
 })
-
-const boardEditArgs = {
-  ...exactBoardTargetOptions,
-  'context-token': requiredStringOption('Token returned by board context'),
-  'expected-revision': requiredStringOption('Board revision from context'),
-  'request-id': requiredStringOption('Stable idempotency ID'),
-  'anchor-id': requiredStringOption('Exact singleton selected native object ID'),
-  text: requiredStringOption('Text to create'),
-  name: { type: 'string', description: 'Optional native layer name' },
-  'font-size': { type: 'string', description: 'Font size from 8 to 256' },
-  'max-width': { type: 'string', description: 'Maximum text width from 48 to 2000' },
-  clearance: { type: 'string', description: 'Collision clearance from 0 to 512' },
-  'task-id': { type: 'string', description: 'Optional delegated task attribution' },
-  'trace-id': { type: 'string', description: 'Optional Narrated Trace attribution' },
-  'visual-profile': {
-    type: 'string',
-    description: 'Optional local-legible-text-v1 appearance and verification profile'
-  },
-  json: jsonOption
-} as const
-
-function boardChangeCompatibilityCommand() {
-  return defineCommand({
-    meta: {
-      name: 'change',
-      description:
-        'Deprecated compatibility command for native text; use board build with a native_text recipe'
-    },
-    args: boardEditArgs,
-    run: async ({ args }) => {
-      try {
-        await runBoardCommand('board_change', 'Board edit', args, boardChangeRpcArgs(args))
-      } catch (error) {
-        printBoardCommandError(error, args)
-        process.exit(1)
-      }
-    }
-  })
-}
-
-export const boardChangeCommand = boardChangeCompatibilityCommand()
 
 const build = defineCommand({
   meta: {
@@ -1444,7 +1333,12 @@ const verify = defineCommand({
 
 const boardSubCommands = {
   search: searchBoards,
+  get: getBoardNode,
+  ls: listBoardChildren,
+  nearby: nearbyBoardNodes,
+  pages: listBoardPages,
   open: openBoard,
+  where: whereBoard,
   create: createBoard,
   build,
   present
@@ -1464,25 +1358,24 @@ export const boardDiagnosticCommand = defineCommand({
   }
 })
 
-const boardCompatibilitySubCommands = {
+const boardInternalSubCommands = {
   ...boardSubCommands,
-  change: boardChangeCommand,
   connect,
   edit
 }
 
-export const boardWithChangeCommand = defineCommand({
+export const boardInternalCommand = defineCommand({
   meta: {
     name: 'board',
-    description: 'Search, open, create, build, or present persisted Boards'
+    description: 'Search, get, list, open, create, build, or present persisted Boards'
   },
-  subCommands: boardCompatibilitySubCommands
+  subCommands: boardInternalSubCommands
 })
 
 export default defineCommand({
   meta: {
     name: 'board',
-    description: 'Search, open, create, build, or present persisted Boards'
+    description: 'Search, get, list, open, create, build, or present persisted Boards'
   },
   subCommands: boardSubCommands
 })

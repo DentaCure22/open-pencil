@@ -6,12 +6,18 @@ import { parseColor } from '@open-pencil/core/color'
 import { CANVAS_BG_COLOR, CANVAS_BG_COLOR_DARK, IS_BROWSER } from '@open-pencil/core/constants'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
-import { getActiveEditorStoreOrNull } from '@/app/editor/active-store'
+import {
+  getActiveEditorStoreOrNull,
+  onActiveEditorStoreChanged,
+  type EditorStore
+} from '@/app/editor/active-store'
+
+import { applyBoardThemeToEditor, type ResolvedAppTheme } from './board-theme'
 
 export type AppTheme = 'dark' | 'light' | 'auto'
 
 const THEME_STORAGE_KEY = 'open-pencil:theme'
-const DEFAULT_THEME: AppTheme = 'dark'
+const DEFAULT_THEME: AppTheme = 'auto'
 
 const theme = useLocalStorage<AppTheme>(THEME_STORAGE_KEY, DEFAULT_THEME)
 const prefersDark = usePreferredDark()
@@ -41,10 +47,10 @@ function isDefaultCanvasColor(color: Color): boolean {
   )
 }
 
-function updateCanvasTheme(value: 'dark' | 'light'): void {
+function updateCanvasTheme(value: ResolvedAppTheme, store: EditorStore | null): void {
   if (!IS_BROWSER) return
-  const store = getActiveEditorStoreOrNull()
   if (!store) return
+  applyBoardThemeToEditor(store, value)
   store.state.rulerTheme = readRulerTheme() ?? undefined
   if (isDefaultCanvasColor(store.state.pageColor)) {
     store.setPageColor({ ...(value === 'dark' ? CANVAS_BG_COLOR_DARK : CANVAS_BG_COLOR) })
@@ -53,23 +59,23 @@ function updateCanvasTheme(value: 'dark' | 'light'): void {
   }
 }
 
-function applyTheme(value: 'dark' | 'light', setting: AppTheme): void {
+function applyTheme(value: ResolvedAppTheme, setting: AppTheme): void {
   if (!IS_BROWSER || !('document' in globalThis)) return
   document.documentElement.dataset.theme = value
   document.documentElement.dataset.themeSetting = setting
   document.documentElement.style.colorScheme = value
-  updateCanvasTheme(value)
+  updateCanvasTheme(value, getActiveEditorStoreOrNull())
+}
+
+export function setAppTheme(value: AppTheme): void {
+  theme.value = value
 }
 
 export function useAppTheme() {
-  watch([resolvedTheme, theme], ([value, setting]) => applyTheme(value, setting), {
-    immediate: true
-  })
-
   const isLight = computed(() => resolvedTheme.value === 'light')
 
   function setTheme(value: AppTheme): void {
-    theme.value = value
+    setAppTheme(value)
   }
 
   function toggleTheme(): void {
@@ -79,4 +85,15 @@ export function useAppTheme() {
   return { theme, resolvedTheme, isLight, setTheme, toggleTheme }
 }
 
-applyTheme(resolvedTheme.value, theme.value)
+let stopGraphThemeSync: (() => void) | null = null
+onActiveEditorStoreChanged((store) => {
+  stopGraphThemeSync?.()
+  applyTheme(resolvedTheme.value, theme.value)
+  stopGraphThemeSync = store.onEditorEvent('graph:replaced', () => {
+    updateCanvasTheme(resolvedTheme.value, store)
+  })
+})
+
+watch([resolvedTheme, theme], ([value, setting]) => applyTheme(value, setting), {
+  immediate: true
+})

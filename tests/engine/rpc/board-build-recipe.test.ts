@@ -89,7 +89,6 @@ describe('Board build recipe compiler', () => {
         placement: 'below',
         preferences: { density: 'balanced', direction: 'horizontal' }
       },
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
     expect(parseBoardBuildPlan(first.plan)).toEqual(first.plan)
@@ -105,7 +104,7 @@ describe('Board build recipe compiler', () => {
     expect(second.metadata.expanded_plan_digest).not.toBe(first.metadata.expanded_plan_digest)
   })
 
-  test('compiles process_flow to one semantic flow with real sequential connections', async () => {
+  test('compiles process_flow to one semantic composition', async () => {
     const compilation = await compileBoardBuildRecipeRequest(processFlowRequest())
 
     expect(compilation.metadata).toEqual({
@@ -121,26 +120,6 @@ describe('Board build recipe compiler', () => {
       'step_02',
       'step_03',
       'step_04'
-    ])
-    expect(compilation.plan.connections).toEqual([
-      {
-        kind: 'visual',
-        label: 'Next',
-        source: { alias: 'step_01' },
-        target: { alias: 'step_02' }
-      },
-      {
-        kind: 'visual',
-        label: 'Next',
-        source: { alias: 'step_02' },
-        target: { alias: 'step_03' }
-      },
-      {
-        kind: 'visual',
-        label: 'Next',
-        source: { alias: 'step_03' },
-        target: { alias: 'step_04' }
-      }
     ])
     expect(compilation.plan.composition).toMatchObject({
       anchor: { alias: 'heading' },
@@ -220,12 +199,6 @@ describe('Board build recipe compiler', () => {
         }
       })
     ).rejects.toThrow('steps must contain 2 to 8 steps')
-    await expect(
-      compileBoardBuildRecipeRequest({
-        ...processFlowRequest(),
-        params: { ...processFlowRequest().params, connector_label: 'x'.repeat(81) }
-      })
-    ).rejects.toThrow('connector_label must contain at most 80 characters')
     await expect(
       compileBoardBuildRecipeRequest({
         ...processFlowRequest(),

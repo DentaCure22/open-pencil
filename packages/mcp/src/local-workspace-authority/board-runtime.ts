@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import { boardBuildTracedConnections } from '@open-pencil/core/rpc'
 import { searchBoardMemory } from '@open-pencil/core/tools'
-import type { SceneNode } from '@open-pencil/scene-graph'
+import type { Rect, SceneNode } from '@open-pencil/scene-graph'
 
 import { pageOwnedTraceAncestor } from './agent-context'
 import {
@@ -24,7 +23,6 @@ import {
   authorityCodeObjectReadback,
   authorityCodeObjectRequestMatches,
   createAuthorityCodeObject,
-  readAuthorityCodeObject,
   refineAuthorityCodeObject
 } from './code-object'
 import {
@@ -51,7 +49,6 @@ import {
   createAuthorityArtifact,
   replayAuthorityArtifact
 } from './native-artifact'
-import { readAuthorityMermaidSource } from './native-diagram'
 import {
   applyAuthorityObjectEdit,
   assertAuthorityObjectEditReplay,
@@ -60,20 +57,22 @@ import {
   isAuthorityObjectEditOperation,
   parseAuthorityObjectEditIntent
 } from './object-edit'
-import {
-  connectAuthorityObjects,
-  normalizeAuthorityRpcArgs,
-  verifyAuthorityConnectionRequest
-} from './object-graph'
+import { connectAuthorityObjects, verifyAuthorityConnectionRequest } from './object-graph'
 import {
   authorityPageCreationMarker,
   authorityPageCreationPluginData,
   authorityPageCreationRequestMatches,
   type AuthorityPageCreationMarker
 } from './page-creation'
+import { normalizeAuthorityRpcArgs } from './rpc-args'
+import { renderAuthorityBoardScreenshot } from './screenshot'
 import type { LocalWorkspaceAuthorityStore } from './store'
 import type { LocalWorkspaceTraceGestureRead } from './trace'
-import { queryPersistedTraceHistory } from './trace-query'
+import {
+  queryPersistedTraceHistory,
+  resolvePersistedTraceRequest,
+  searchPersistedTrace
+} from './trace-query'
 import { LOCAL_AUTHORITY_BOARD_CAPABILITIES, type LocalWorkspaceAuthorityHead } from './types'
 
 const EXECUTION_SURFACE = 'local_workspace_authority'
@@ -121,6 +120,12 @@ function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
+function durableReadbackStatus(reconciliation: string): 'diverged' | 'historical_only' | 'passed' {
+  if (reconciliation === 'current') return 'passed'
+  if (reconciliation === 'missing') return 'historical_only'
+  return 'diverged'
+}
+
 function nativeDiagramPlanArgs(args: JsonRecord): JsonRecord | null {
   const recipe = isRecord(args.recipe) ? args.recipe : null
   if (recipe?.kind !== 'native_diagram') return null
@@ -147,7 +152,6 @@ function nativeDiagramPlanArgs(args: JsonRecord): JsonRecord | null {
           recipe: planRecipe
         }
       ],
-      connections: [],
       contract: 'board-build-plan/v1'
     }
   }
@@ -172,15 +176,48 @@ function optionalStringArray(value: JsonRecord, field: string): string[] {
     .filter((entry) => entry.length > 0)
 }
 
+function navigationRegionFrom(args: JsonRecord): Rect | undefined {
+  const raw = args.region
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const record = raw as Partial<Rect>
+  const finite = (candidate: unknown): candidate is number =>
+    typeof candidate === 'number' && Number.isFinite(candidate)
+  if (
+    !finite(record.x) ||
+    !finite(record.y) ||
+    !finite(record.width) ||
+    record.width <= 0 ||
+    !finite(record.height) ||
+    record.height <= 0
+  ) {
+    throw new Error('A navigation region requires finite x, y and positive width, height.')
+  }
+  return { height: record.height, width: record.width, x: record.x, y: record.y }
+}
+
 function requestedObjectIds(args: JsonRecord): string[] {
   if (!Array.isArray(args.object_ids)) {
-    throw new Error('board_read objects scope requires an object_ids array.')
+    throw new TypeError('board_read objects scope requires an object_ids array.')
   }
   const ids = args.object_ids.map((value) => (typeof value === 'string' ? value.trim() : ''))
   if (ids.length === 0 || ids.length > 25 || ids.some((id) => !id)) {
     throw new Error('board_read object_ids must contain from 1 to 25 non-empty strings.')
   }
   if (new Set(ids).size !== ids.length) throw new Error('board_read object_ids must be unique.')
+  return ids
+}
+
+function screenshotObjectIds(args: JsonRecord): string[] {
+  if (!Array.isArray(args.object_ids)) {
+    throw new TypeError('board_screenshot requires an object_ids array.')
+  }
+  const ids = args.object_ids.map((value) => (typeof value === 'string' ? value.trim() : ''))
+  if (ids.length === 0 || ids.length > 8 || ids.some((id) => !id)) {
+    throw new Error('board_screenshot object_ids must contain from 1 to 8 non-empty strings.')
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('board_screenshot object_ids must be unique.')
+  }
   return ids
 }
 
@@ -310,19 +347,6 @@ function traceCandidateIds(args: JsonRecord, primaryTargetId?: string): string[]
   return [...new Set([...(primaryTargetId ? [primaryTargetId] : []), ...requested])].slice(0, 25)
 }
 
-function traceConnectionSummary(
-  connection: ReturnType<typeof boardBuildTracedConnections>[number]
-) {
-  return {
-    connection_id: connection.id,
-    kind: connection.kind,
-    source_id: connection.sourceNodeId,
-    source_port: connection.sourcePortId ?? connection.sourcePort,
-    target_id: connection.targetNodeId,
-    target_port: connection.targetPortId ?? connection.targetPort
-  }
-}
-
 function traceCandidateSummary(document: AuthorityBoardDocument, node: SceneNode) {
   return {
     bounds: document.graph.getAbsoluteBounds(node.id),
@@ -374,11 +398,18 @@ function compactTraceGesture(
       : []
   const resolvedIds = new Set(resolved.map(({ id }) => id))
   const ownerIds = new Set<string>()
+  // Recorded hits inside a container (e.g. Code Object internals) are grouped under their owner
+  // instead of being discarded, so the compact view keeps the precise pointing evidence.
+  const internalIdsByOwner = new Map<string, string[]>()
   const owners =
     document && page
       ? resolved.flatMap((node) => {
           const owner = pageOwnedTraceAncestor(document, page.id, node.id)
-          if (!owner || ownerIds.has(owner.id)) return []
+          if (!owner) return []
+          if (node.id !== owner.id) {
+            internalIdsByOwner.set(owner.id, [...(internalIdsByOwner.get(owner.id) ?? []), node.id])
+          }
+          if (ownerIds.has(owner.id)) return []
           ownerIds.add(owner.id)
           return [owner]
         })
@@ -388,15 +419,6 @@ function compactTraceGesture(
       ? pageOwnedTraceAncestor(document, page.id, gesture.candidates.primaryTargetId)
       : undefined
   const region = gesture.geometry.pageRegion
-  const connections =
-    document && page
-      ? boardBuildTracedConnections(document.graph, page.id, {
-          kind: 'connection.delete_traced',
-          object_ids: owners.map(({ id }) => id),
-          orientation: 'any',
-          region
-        })
-      : []
   const knownOmittedCount = Math.max(0, gesture.candidates.count - gesture.candidates.items.length)
 
   return {
@@ -404,7 +426,15 @@ function compactTraceGesture(
     candidates: {
       collapsedCount: Math.max(0, resolved.length - owners.length),
       count: owners.length,
-      items: document ? owners.map((owner) => traceCandidateSummary(document, owner)) : [],
+      items: document
+        ? owners.map((owner) => {
+            const recordedInternalIds = internalIdsByOwner.get(owner.id)
+            return {
+              ...traceCandidateSummary(document, owner),
+              ...(recordedInternalIds?.length ? { recordedInternalIds } : {})
+            }
+          })
+        : [],
       knownOmittedCount,
       missingCount: requestedIds.filter((id) => !resolvedIds.has(id)).length,
       ...(primaryOwner ? { primaryTargetId: primaryOwner.id } : {}),
@@ -413,12 +443,6 @@ function compactTraceGesture(
       truncated: gesture.candidates.truncated
     },
     capturedAt: gesture.capturedAt,
-    connections: {
-      count: connections.length,
-      ids: connections.map(({ id }) => id),
-      limit: 32,
-      truncated: connections.length === 32
-    },
     contract: 'trace_context/v1' as const,
     ...(gesture.evidence ? { evidence: gesture.evidence } : {}),
     geometry: { kind: gesture.geometry.kind, pageRegion: region },
@@ -658,6 +682,18 @@ export class LocalWorkspaceBoardRuntime {
     }
   }
 
+  private async screenshot(args: JsonRecord) {
+    const head = await this.head()
+    const { document, page } = this.validatedTarget(head, args)
+    const result = await renderAuthorityBoardScreenshot(
+      document,
+      page.id,
+      screenshotObjectIds(args),
+      boundedNumber(args.scale, 1, 0.1, 2, 'scale')
+    )
+    return { ok: true, result, target: targetResult(head, page) }
+  }
+
   private async traceGesture(args: JsonRecord) {
     const persisted = await this.store.traceGesture({
       gestureId: optionalString(args, 'gesture_id'),
@@ -680,6 +716,14 @@ export class LocalWorkspaceBoardRuntime {
 
   private async traceQuery(args: JsonRecord) {
     return { ok: true, result: await queryPersistedTraceHistory(this.store, args) }
+  }
+
+  private async traceResolve(args: JsonRecord) {
+    return { ok: true, result: await resolvePersistedTraceRequest(this.store, args) }
+  }
+
+  private async traceSearch(args: JsonRecord) {
+    return { ok: true, result: await searchPersistedTrace(this.store, args) }
   }
 
   private async prepareTraceEdit(args: JsonRecord) {
@@ -711,13 +755,10 @@ export class LocalWorkspaceBoardRuntime {
       (primaryOwner ? candidates.find((candidate) => candidate.id === primaryOwner.id) : null) ??
       (candidates.length === 1 ? candidates[0] : undefined)
     const currentIds = candidates.map((candidate) => candidate.id)
-    const traceConnections = boardBuildTracedConnections(document.graph, page.id, {
-      kind: 'connection.delete_traced',
-      object_ids: currentIds,
-      orientation: 'any',
-      region
-    })
     const context = this.contextFor(head, page, document)
+    let resolutionStatus: 'ambiguous' | 'none' | 'resolved' = 'none'
+    if (selected) resolutionStatus = 'resolved'
+    else if (candidates.length > 1) resolutionStatus = 'ambiguous'
     return {
       ok: true,
       result: {
@@ -736,13 +777,7 @@ export class LocalWorkspaceBoardRuntime {
           candidate_object_ids: currentIds,
           missing_object_ids: requestedIds.filter((id) => !rawCandidateIds.has(id)),
           ...(selected ? { selected_object_id: selected.id } : {}),
-          status: selected ? 'resolved' : candidates.length > 1 ? 'ambiguous' : 'none'
-        },
-        trace_connections: {
-          count: traceConnections.length,
-          items: traceConnections.map(traceConnectionSummary),
-          limit: 32,
-          truncated: traceConnections.length === 32
+          status: resolutionStatus
         },
         trace_region: region
       },
@@ -752,47 +787,23 @@ export class LocalWorkspaceBoardRuntime {
 
   private async open(args: JsonRecord) {
     const head = await this.head()
-    const { page } = this.validatedTarget(head, args)
-    const editorNavigationStatus = optionalString(args, 'editor_navigation_status')
-    const editorRuntimeInstanceId = optionalString(args, 'editor_runtime_instance_id')
-    const candidateRuntimeIds = optionalStringArray(args, 'editor_candidate_runtime_ids')
-    const resultTarget = {
-      content_document_id: head.identity.documentId,
-      editor_candidate_runtime_ids: candidateRuntimeIds,
-      page_id: page.id,
-      page_name: page.name,
-      workspace_id: head.identity.workspaceId
-    }
-    if (editorNavigationStatus === 'needs_editor') {
-      return {
-        ok: true,
-        result: {
-          ...resultTarget,
-          action: 'not_queued',
-          reason: optionalString(args, 'editor_navigation_reason') ?? 'no_matching_editor',
-          status: 'needs_editor'
-        },
-        target: targetResult(head, page)
+    const { document, page } = this.validatedTarget(head, args)
+    const objectIds = optionalStringArray(args, 'object_ids')
+    if (objectIds && objectIds.length > 0) {
+      const missing = objectIds.filter((id) => {
+        const node = document.graph.getNode(id)
+        return !node || node.type === 'CANVAS' || !document.graph.isDescendant(id, page.id)
+      })
+      if (missing.length > 0) {
+        throw new Error(`Objects are not on Board "${page.name}": ${missing.join(', ')}.`)
       }
     }
-    if (editorNavigationStatus === 'ambiguous_editor') {
-      return {
-        ok: true,
-        result: {
-          ...resultTarget,
-          action: 'not_queued',
-          status: 'ambiguous_editor'
-        },
-        target: targetResult(head, page)
-      }
-    }
-    if (editorNavigationStatus === 'ready' && !editorRuntimeInstanceId) {
-      throw new Error('Ready Board navigation requires one exact editor runtime.')
-    }
+    const region = navigationRegionFrom(args)
     const intent = await this.store.queueNavigationIntent({
       contentDocumentId: head.identity.documentId,
+      ...(objectIds && objectIds.length > 0 ? { objectIds } : {}),
       pageId: page.id,
-      ...(editorRuntimeInstanceId ? { runtimeInstanceId: editorRuntimeInstanceId } : {}),
+      ...(region ? { region } : {}),
       workspaceId: head.identity.workspaceId
     })
     return {
@@ -801,14 +812,12 @@ export class LocalWorkspaceBoardRuntime {
         action: 'queued',
         active: false,
         content_document_id: head.identity.documentId,
-        editor_candidate_runtime_ids: candidateRuntimeIds,
         expires_at: intent.expiresAt,
-        ...(intent.runtimeInstanceId
-          ? { editor_runtime_instance_id: intent.runtimeInstanceId }
-          : {}),
         intent_id: intent.intentId,
+        ...(intent.objectIds ? { object_ids: intent.objectIds } : {}),
         page_id: page.id,
         page_name: page.name,
+        ...(intent.region ? { region: intent.region } : {}),
         sequence: intent.sequence,
         status: 'queued_for_editor',
         workspace_id: head.identity.workspaceId
@@ -976,7 +985,6 @@ export class LocalWorkspaceBoardRuntime {
 
   private fixtureSummary(fixture: AuthorityBoardFixture) {
     return {
-      connection_count: fixture.connectionCount,
       fixture_id: fixture.fixtureId,
       node_count: fixture.snapshot.size - 1,
       page_id: fixture.pageId,
@@ -1348,12 +1356,7 @@ export class LocalWorkspaceBoardRuntime {
               status: 'unavailable'
             },
             proof: {
-              durable_readback:
-                reconciliation === 'current'
-                  ? 'passed'
-                  : reconciliation === 'missing'
-                    ? 'historical_only'
-                    : 'diverged',
+              durable_readback: durableReadbackStatus(reconciliation),
               normal_editor_undo: 'unavailable',
               pixels: 'not_evaluated',
               presentation: 'unavailable',
@@ -1594,12 +1597,7 @@ export class LocalWorkspaceBoardRuntime {
           },
           presentation: { reason: 'no_live_runtime', status: 'unavailable' },
           proof: {
-            durable_readback:
-              reconciliation === 'current'
-                ? 'passed'
-                : reconciliation === 'missing'
-                  ? 'historical_only'
-                  : 'diverged',
+            durable_readback: durableReadbackStatus(reconciliation),
             normal_editor_undo: 'unavailable',
             pixels: 'not_evaluated',
             reconciliation,
@@ -1763,51 +1761,6 @@ export class LocalWorkspaceBoardRuntime {
     }
   }
 
-  private async readCodeObject(args: JsonRecord) {
-    const head = await this.head()
-    const { document, page } = this.validatedTarget(head, args)
-    const result = await readAuthorityCodeObject(
-      document,
-      page.id,
-      requiredString(args, 'owner_id')
-    )
-    return {
-      ok: true,
-      result: {
-        ...result,
-        board_build_refine_recipe_base: {
-          expected_source_hash: result.component.source_hash,
-          kind: 'code_object',
-          object_key: result.component.definition_id,
-          operation: 'refine',
-          owner_id: result.frame.id,
-          source_format: 'tsx'
-        },
-        execution_surface: EXECUTION_SURFACE,
-        refinement: {
-          execution: 'staged',
-          normal_editor_undo: 'unavailable',
-          pixels: 'not_evaluated',
-          status: 'available'
-        }
-      },
-      target: targetResult(head, page)
-    }
-  }
-
-  private async readMermaidSource(args: JsonRecord) {
-    const head = await this.head()
-    const { document, page } = this.validatedTarget(head, args)
-    return {
-      ok: true,
-      result: {
-        ...readAuthorityMermaidSource(document, page.id, requiredString(args, 'owner_id')),
-        execution_surface: EXECUTION_SURFACE
-      },
-      target: targetResult(head, page)
-    }
-  }
-
   async sendRpc(body: Record<string, unknown>): Promise<unknown> {
     const command = optionalString(body, 'command')
     if (!command) throw new Error('RPC command is required.')
@@ -1815,8 +1768,11 @@ export class LocalWorkspaceBoardRuntime {
     if (command === 'list_documents') return this.listDocuments()
     if (command === 'workspace_search') return this.workspaceSearch(args)
     if (command === 'board_context') return this.context(args)
+    if (command === 'board_screenshot') return this.screenshot(args)
     if (command === 'trace_get_gesture') return this.traceGesture(args)
     if (command === 'trace_query') return this.traceQuery(args)
+    if (command === 'trace_resolve') return this.traceResolve(args)
+    if (command === 'trace_search') return this.traceSearch(args)
     if (command === 'board_prepare_edit') return this.prepareTraceEdit(args)
     if (command === 'board_open') return this.open(args)
     if (command === 'board_read') return this.read(args)
@@ -1835,8 +1791,6 @@ export class LocalWorkspaceBoardRuntime {
     }
     if (command === 'board_verify') return this.verify(args)
     if (command === 'board_fixture') return this.fixture(args)
-    if (command === 'get_code_object') return this.readCodeObject(args)
-    if (command === 'get_mermaid_source') return this.readMermaidSource(args)
     if (command === 'tool' && optionalString(args, 'name') === 'search_board_memory') {
       return this.searchMemory(args)
     }

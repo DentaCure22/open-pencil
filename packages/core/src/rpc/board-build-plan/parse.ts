@@ -1,16 +1,10 @@
 import { hasPlacementTarget, parseArtifact } from './artifacts'
-import {
-  boardBuildPlanInboundReferences,
-  connectionKey,
-  parseConnection,
-  parseOperation
-} from './connections-operations'
 import { boardBuildPlanLayoutMembers, parseComposition, parseLayout } from './layout'
+import { parseOperation } from './operations'
 import { exactFields, isRecord } from './parsing'
 import {
   BOARD_BUILD_PLAN_CONTRACT,
   BOARD_BUILD_PLAN_MAX_ARTIFACTS,
-  BOARD_BUILD_PLAN_MAX_CONNECTIONS,
   BOARD_BUILD_PLAN_MAX_OPERATIONS,
   type BoardBuildPlan
 } from './types'
@@ -19,7 +13,7 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
   if (!isRecord(value)) throw new Error('board build plan must be an object.')
   exactFields(
     value,
-    ['artifacts', 'composition', 'connections', 'contract', 'layout', 'operations', 'version'],
+    ['artifacts', 'composition', 'contract', 'layout', 'operations', 'version'],
     'plan'
   )
   if (
@@ -35,14 +29,6 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
   if (!Array.isArray(value.artifacts) || value.artifacts.length > BOARD_BUILD_PLAN_MAX_ARTIFACTS) {
     throw new Error(`plan.artifacts must contain 0 to ${BOARD_BUILD_PLAN_MAX_ARTIFACTS} entries.`)
   }
-  if (
-    !Array.isArray(value.connections) ||
-    value.connections.length > BOARD_BUILD_PLAN_MAX_CONNECTIONS
-  ) {
-    throw new Error(
-      `plan.connections must contain 0 to ${BOARD_BUILD_PLAN_MAX_CONNECTIONS} entries.`
-    )
-  }
   const aliases = new Set<string>()
   const artifacts = value.artifacts.map((artifact, index) => {
     const parsed = parseArtifact(artifact, index, aliases)
@@ -50,23 +36,13 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
     aliases.add(parsed.alias)
     return parsed
   })
-  const connections = value.connections.map((connection, index) =>
-    parseConnection(connection, index, aliases)
-  )
   const rawOperations = value.operations ?? []
   if (!Array.isArray(rawOperations) || rawOperations.length > BOARD_BUILD_PLAN_MAX_OPERATIONS) {
     throw new Error(`plan.operations must contain 0 to ${BOARD_BUILD_PLAN_MAX_OPERATIONS} entries.`)
   }
   const operations = rawOperations.map((operation, index) => parseOperation(operation, index))
-  if (
-    artifacts.length === 0 &&
-    connections.length === 0 &&
-    operations.length === 0 &&
-    value.composition === undefined
-  ) {
-    throw new Error(
-      'plan must contain at least one artifact, composition, connection, or operation.'
-    )
+  if (artifacts.length === 0 && operations.length === 0 && value.composition === undefined) {
+    throw new Error('plan must contain at least one artifact, composition, or operation.')
   }
   const transactionReverts = operations.filter(
     (operation) => operation.kind === 'transaction.revert'
@@ -76,7 +52,6 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
     (transactionReverts.length !== 1 ||
       operations.length !== 1 ||
       artifacts.length > 0 ||
-      connections.length > 0 ||
       value.composition !== undefined)
   ) {
     throw new Error('transaction.revert must be the only effect in a Board plan.')
@@ -98,13 +73,6 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
     }
     if (operation.kind === 'object.delete') deleted.add(operation.object_id)
   }
-  for (const [index, connection] of connections.entries()) {
-    for (const reference of [connection.source, connection.target]) {
-      if ('object_id' in reference && deleted.has(reference.object_id)) {
-        throw new Error(`plan.connections[${index}] references an object deleted by the same plan.`)
-      }
-    }
-  }
   for (const [index, artifact] of artifacts.entries()) {
     const objectIds = [
       artifact.anchor && 'object_id' in artifact.anchor ? artifact.anchor.object_id : undefined,
@@ -117,12 +85,6 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
     if (objectIds.some((objectId) => deleted.has(objectId))) {
       throw new Error(`plan.artifacts[${index}] references an object deleted by the same plan.`)
     }
-  }
-  const connectionKeys = new Set<string>()
-  for (const connection of connections) {
-    const key = connectionKey(connection)
-    if (connectionKeys.has(key)) throw new Error('plan contains a duplicate connection.')
-    connectionKeys.add(key)
   }
   if (value.composition !== undefined && value.layout !== undefined) {
     throw new Error('plan may contain composition or layout, but not both.')
@@ -161,15 +123,15 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
   const plan: BoardBuildPlan = {
     artifacts,
     ...(composition ? { composition } : {}),
-    connections,
     contract: BOARD_BUILD_PLAN_CONTRACT,
     ...(operations.length > 0 ? { operations } : {}),
     ...(layout ? { layout } : {})
   }
   const layoutMembers = new Set(boardBuildPlanLayoutMembers(layout))
-  const compositionMembers = new Set(
-    composition?.members.flatMap((member) => ('alias' in member ? [member.alias] : [])) ?? []
-  )
+  const compositionMembers = new Set<string>()
+  for (const member of composition?.members ?? []) {
+    if ('alias' in member) compositionMembers.add(member.alias)
+  }
   for (const [index, artifact] of artifacts.entries()) {
     if (artifact.recipe.kind === 'native_diagram' && artifact.recipe.owner_id) {
       if (
@@ -209,14 +171,10 @@ export function parseBoardBuildPlan(value: unknown): BoardBuildPlan {
     if (
       artifact.recipe.kind === 'native_card' &&
       !artifact.anchor &&
-      !hasPlacementTarget(artifact.recipe) &&
-      (boardBuildPlanInboundReferences(plan, artifact.alias).length < 2 ||
-        boardBuildPlanInboundReferences(plan, artifact.alias).some(
-          (reference) => !('alias' in reference)
-        ))
+      !hasPlacementTarget(artifact.recipe)
     ) {
       throw new Error(
-        `plan.artifacts[${index}] native_card requires exactly one of anchor or recipe.placement.target unless at least two distinct inbound aliases define convergence placement.`
+        `plan.artifacts[${index}] native_card requires an anchor or recipe.placement.target.`
       )
     }
   }

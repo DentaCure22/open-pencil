@@ -2,10 +2,305 @@
 
 ## Unreleased
 
-- Remove the animated dither from empty and working canvases so the Board rests on a stable,
-  distraction-free surface.
-- Move the desktop tool strip to the top-right and make double-click focus zoom 25% closer while
-  preserving chrome-aware centering and the existing fit behavior used elsewhere.
+- Make agent chat text natively selectable and offer a compact selection action
+  for copying or quoting an excerpt into the current composer. The shared model
+  picker now shows live provider subscription capacity when Pi exposes it, and
+  the context meter keeps a transparent center on every chat surface. TPS now
+  divides provider-reported output tokens by the measured first-token-to-stream-end
+  interval instead of estimating tokens from characters or including time to first token.
+- Simplify Board work to files and ordinary coding-agent tools. `workspace.json`
+  remains canonical; the authority emits a disposable, revisioned
+  `workspace.index.jsonl` for `rg` discovery. Trace now uses append-only rotated
+  JSONL, a bounded `trace-context.json`, and separate PNG evidence instead of
+  SQLite. The live parent launches or continues a Pi worker directly, with no
+  LLM dispatcher turn, and the plugin now has only live-parent and worker roles.
+  Board workers keep normal Pi tools, connected apps, and machine access. They
+  receive only read-only `board_where` and `board_screenshot` from OpenPencil;
+  dispatch, navigation, and theme remain parent-only. Saved-scene screenshots
+  are bounded to exact object IDs and stay inside the expandable tool result
+  that produced them. They load the short file skill explicitly for
+  Board work, and presence includes a bounded current selection for targeting.
+- Make the local authority the only durable Board command engine. The optional
+  browser bridge is now limited to live presentation, selection, export, file,
+  theme, and primitive-tool operations; Board open writes one authority navigation
+  intent instead of choosing between direct browser, HTTP, and persisted paths.
+- Clean up agent conversations to match the Codex task model: CHATS is one quiet
+  task list that opens into one conversation, routing and worker-pool internals stay
+  out of the UI, Board cards use normal thread titles instead of numbered worker names,
+  and live reasoning/tools share one
+  chronological disclosure that stays open after the run finishes unless the user
+  collapses it. Completed steps now
+  use compact action-specific icons, no timeline rail or nested indentation, hover-only
+  right/down disclosure arrows, and smoothly expanding tool and thought details. Consecutive
+  tool calls collapse into one Codex-style action summary between thought traces. Only the
+  current step stays live, Pi tool inputs and results survive completion, and the
+  elapsed-time divider sits at the end of the activity
+  using the whole turn. The shared composer is a compact rounded rectangle instead of
+  a row of oversized chrome circles. Accepted follow-ups now clear immediately while
+  the same composer exposes Stop until the run finishes. Board cards keep the normal
+  complete chat visible in both design and interaction modes. Sidebar threads can be
+  dragged onto the Board to place or reposition that exact conversation, and the New task
+  control can be dragged out to place a fresh chat composer. The composer keeps the context
+  meter, visible model name, and terminal action grouped on the right.
+  The canvas Chats control now opens a Board-grouped switcher for placed chats;
+  selecting one focuses its existing card, while its remove action deletes only
+  the undoable Board card and leaves the task in chat history.
+- Surface Antigravity's safe tool markers, bounded command inputs and edit diffs, and generic
+  thought lifecycle in the shared activity disclosure. Because its bridge reports zero usage,
+  estimate and label context consumption instead of leaving the meter frozen at zero.
+- Board agents run on Pi. Sidebar CHATS and Board cards share one conversation
+  history and the original Vue chat chrome, so a send in either place is the
+  same thread. Each conversation now owns one resident `pi --mode rpc` session,
+  so follow-ups reuse Pi's normal retry and session lifecycle instead of
+  launching a one-shot JSON process and guessing completion from process exit.
+  Pi tool failures remain failures, and a turn without a final answer needs
+  attention instead of receiving successful checkmarks. The model picker follows the live `pi --list-models` catalog and
+  the local Pi default (`xai-auth/grok-4.6`). The picker keeps Cursor Grok and
+  Composer 2.5, xAI Grok 4.6 and Composer 2.5, and Codex Sol, Luna, Terra, and
+  Spark, and now includes authenticated Antigravity CLI models registered by Pi
+  packages. Agent workers include the standard `~/.local/bin` install location,
+  so locally installed provider CLIs remain available to sidebar and Board chats.
+  Sidebar and Board views of the same task now share one model selection.
+- Sending from a running agent chat now uses Pi's native steering channel. The
+  instruction joins the active turn at its next tool boundary without aborting
+  it, creating a replacement job, or waiting in an OpenPencil follow-up queue.
+  Running composers expose the same send-first interaction as Codex with an
+  “Add instructions…” prompt and a Stop action whenever the draft is empty.
+- A frame’s box is its group. Children sitting fully outside that box leave
+  the group when the frame moves, resizes, or is deleted, so they stay on the
+  page instead of traveling or disappearing with it. Dragging a Board app or
+  worker card back onto that box — or moving the box over it — puts it in the
+  group again.
+- Agent cards are created next to the app and then left alone. The overlay no
+  longer resizes the workspace frame, snaps cards back into it, or rearranges
+  them after undo.
+- Agent cards beside a Board app no longer stretch the workspace under the
+  app for a layout that is not used. A tall empty frame shrinks back to the
+  cards.
+- Board document updates now discard renderer pictures from the previous graph,
+  so resized parent frames repaint their fill immediately instead of keeping the
+  old white rectangle until the next interaction.
+- The live Board and `workspace.json` stay one document. A worker file write
+  updates the canvas through the existing file synchronization path.
+- Board workers treat `workspace.json` like a repo file: `rg` the compact
+  `workspace.index.jsonl`, read the exact matching record and its hierarchy,
+  then patch the canonical file with ordinary coding-agent tools.
+- Board worker cards show a live Pi tool log inside one chronological activity
+  disclosure, with the command or path visible while it runs.
+- The disposable JSONL index covers every canonical reachable object by ID,
+  name, bounded text, page, owner, parent, and bounds. Continued workers reload
+  the same small file-native contract instead of receiving a command preamble.
+- Board worker status keeps ticking while a turn is running. After the first
+  tool or thought, the header keeps that activity and adds elapsed time
+  (`Run command… · 48s`) instead of freezing until the recap.
+- Board cards and the selected transcript now show that live activity line
+  instead of only “running”, and keep it moving in the UI between heartbeats.
+- Board worker cards and the selected chat keep the full agent log without
+  dropping empty-text rows on preview polls. Live activity stays expanded and
+  completed activity remains visible until the user collapses it.
+- Board dispatch now starts a Pi worker directly or continues the exact prior
+  thread. Voice, typed comments, and annotations no longer pay for a separate
+  routing-model turn; `$voice-dispatch` still keeps camera and theme on the parent.
+- Board worker cards can render Cursor-native Read/List/Grep/shell turns as they
+  happen, instead of staying quiet until the final message.
+- `board_go` zooms into the target the same way a double-click does, instead of
+  only nudging if the object is already on screen.
+- `dispatch_work` carries the user's exact words, one done sentence, and the
+  spoken turn window. Pi loads `/skill:openpencil` to resolve “this/here” from `trace-context.json`
+  or the rotated Trace JSONL files; empty, ambiguous, stale, truncated, or
+  cross-page context stays fail-closed.
+- Remove the Board worker spiral watchdog. Pi turns are no longer stopped for
+  too many look-only tool calls.
+- Honor the selected model on continue or steer. Pi starts in the configured
+  Open Pencil workspace root; workers use listed absolute project paths only
+  when the brief requires them.
+- Remove the unused Antigravity CLI router, warm-pool settings, and terminal
+  transport. Board chats stay on Pi.
+- Plugin MCP is the live OpenPencil parent: `dispatch_work`, `board_where`,
+  `board_go`, and `set_theme`. An empty `board_go` focuses the live embed on
+  the current Board. A query is a proper name only. Workers still edit files.
+  The fat Board-mutation catalog stays off the plugin.
+- Drop `get_code_object`, `insert_mermaid_diagram`, and `get_mermaid_source` from
+  the MCP tool catalog. Mermaid and Code Objects stay file- or CLI-owned; the
+  live RPC those commands used is unchanged.
+- Keep exactly two plugin roles: `$voice-dispatch` for the live Codex parent and
+  `$openpencil` for the Pi Board worker. Workers pick the project from the brief
+  and the Open Pencil `AGENTS.md` list.
+- Send the live container selector's actual selection with contextual comments:
+  element identity, bounds, layout, class tokens, and the full React owner chain —
+  not just a label and one primitive file:line.
+- Gut the Board agent control plane: direct Pi launch replaces dispatcher routing,
+  page-owner locks, lexical fallback, and fat directed-work packets. Board workers
+  use the JSONL index, Trace files, and ordinary file tools on `workspace.json`;
+  CLI/MCP mutation adapters are not part of their contract.
+- Remount live Smylr Board iframes from the OpenPencil parent when Turbopack
+  reports a real module update. Removed the extra in-iframe HMR socket and the
+  `dev-paint` / `dev-reload` paint-flush protocol — those never updated the
+  canvas. Ignore the noisy `built` hash-0 stream.
+- Keep Board workers as resident Pi sessions with one short `$openpencil` file
+  contract. Dispatch stays Board-only so ordinary Codex work remains in its own task.
+- Keep Worker and embedded Smylr apps attached to the Board camera. Agent hosts no
+  longer use `content-visibility`, so they pan and zoom with the canvas. Entering Interact keeps
+  the same conversation tree and stick-to-bottom viewport instead of remounting the transcript at
+  the top. Nested agent and iframe surfaces now share their parent Board coordinate space and normal
+  stacking order, while workspace repair removes duplicate top-level Smylr frames. Presence skips
+  unchanged heartbeats, and the scene/overlay canvases use their exact capped retina backing ratio
+  so rendered objects, selection chrome, hit testing, and DOM surfaces stay pixel-aligned. Avoid
+  rebuilding unchanged canvas surfaces and rescanning the graph for message-only agent updates.
+  Retained agent chats merge polling previews into the mounted transcript instead of collapsing to
+  three messages and rebuilding from the full response on every turn.
+- Stop an automation register-token loop that could flood the live Board with thousands of
+  WebSocket messages a second whenever more than one OpenPencil window was open, which made the
+  editor feel lagged even while idle.
+- Keep Dispatcher and Worker composers typeable. The prompt was binding a stale destructured
+  `modelValue` and `useTextareaAutosize` was writing that empty string back over every keystroke.
+  The composer now uses a live prop, resizes without resetting the draft, and keys typed while the
+  card is active still land in the input.
+- Give typed contextual comments the same directed-work contract as voice dispatch: exact words,
+  authority, a definition of done, and an honesty rule. Named selections and live containers are
+  already the target, so comments no longer tell the worker to hunt for a code owner.
+- Archive the desktop object inspector from the current sidebar while preserving its Design and
+  Code implementations for a later return. Native selections, Code Objects, source documents,
+  trusted Smylr frames, and agent chats now leave the full sidebar to Layers, Chats, Assets, and
+  Activity.
+- Keep the contextual-comment composer fully below live embedded objects by panning the Board when
+  needed, align the compact model selector with the composer's circular control radius, and enlarge
+  its edge actions inside a 54px shell with the same five-pixel inset on every side.
+- Give Board agent chats and the sidebar conversation the same compact single-line composer: a 48px
+  rounded rectangle, quiet edge actions, inline model selection, and microphone-to-Send handoff. At
+  narrow sidebar widths, retain the row with proportionally smaller actions and an icon-only model
+  trigger instead of wrapping the input vertically. Use one low-contrast hairline around the
+  composer without stacking a second focus ring over it, and keep the inactive controls legible
+  through explicit muted colors instead of washing out the entire control with opacity. Balance the
+  microphone inside its circle with a slightly smaller, lighter-weight glyph, and keep its empty
+  state on the same dark chrome surface as the attachment control so only Send becomes prominent.
+- Match the integrated desktop tool rail to the sidebar surface in both light and dark themes so the
+  shell reads as one continuous piece of chrome instead of a separately tinted strip.
+- Turn the contextual-comment composer into one compact pill with the attachment, text, and model
+  controls on one line; show the microphone while empty and replace it with Send once text exists.
+- Make embedded Board objects direct and legible: one click enters a Code Object or agent chat
+  immediately, double-click still centers the object, dragging moves it, wheel and trackpad gestures
+  stay with the Board before interaction, and Escape returns to the canvas without interaction
+  chrome. With any object selected, including while interacting, hold Space and press an Arrow key
+  to select and center the nearest Board object, even from a focused text box, without surrendering
+  ordinary typing or Arrow keys inside the embedded app. Treat a held Arrow as one move per press so
+  iframe focus, selection, and recentering do not race across several objects. Send lightweight
+  iframe hover highlights without rebuilding and cloning the full live-container tree on every
+  target change, cache live-container lookup geometry between real tree updates, and keep Trace from
+  deep-cloning large Code Object source payloads on selection. Relay trusted-iframe double-clicks to
+  the same chrome-aware canvas focus action used by ordinary Board objects.
+- Add one unified, chat-first Antigravity Board object UI for dispatchers and workers with native selection, transforms, zoom, and history. Use a token-matched AI Elements Vue rendering layer for streaming Markdown, tools, safe provider-emitted activity summaries, attachments, sources, errors, and prompt controls while explicitly excluding hidden chain-of-thought. Keep the scoped PTY transport internal instead of presenting a second terminal-style object, and recover warm runs that never return a completion event.
+- Add a stable overlay thread selector to the native Chats sidebar with scoped historical worker discovery, pinned dispatcher control threads, and individual worker
+  ownership, visible warm-pool decisions, and authenticated follow-ups that serialize same-target
+  writers before using warm or cold overflow capacity.
+
+- Add contextual comments for Board selections and live containers with explicit dictation, cropped screenshot evidence, and agent-router dispatch.
+
+- Turn Trace into a quieter Board Activity surface that combines human/editor history with durable
+  agent mutation receipts, Reveal, receipt detail/copy actions, guarded latest-agent Undo, and
+  repeated-selection compaction.
+  Document the Board-first agentic viewing model around attention, legible state, progressive proof,
+  and bounded liveliness.
+- Let an empty Board enter a blank native canvas without inserting a placeholder, expose exceptional
+  view-only or newer-Board authority states, and make document replacement announce busy state while
+  blocking mutations but preserving safe navigation.
+- Give desktop and mobile tools proper toolbar, pressed, roving-focus, disabled, and accessible-name
+  semantics; keep Layer-tree selection synchronized with canvas selection and use real inspector
+  headings instead of orphan labels.
+- Preserve PWA caches across normal web boots, restore browser zoom, and show a recoverable CanvasKit
+  error state instead of dismissing the loader as if a failed canvas were ready.
+- Cut initial JavaScript by loading automation handlers, React Code Object runtimes, compatibility
+  viewers, PDF.js, Markdown rendering, inspectors, variables, Activity, and the Smylr component
+  catalog only when needed. Bound trusted app residency to four viewport-relevant or pinned iframes,
+  lazy-load those frames, batch Narrated Trace creation timers, rerender only the Code Object whose
+  document changed, reuse unaffected DOM-overlay geometry during preview edits, reuse one canvas
+  coordinate read per pointer move, and frame-coalesce embedded-app hover messages. Enforce a 4.75
+  MB raw / 1.3 MB gzip regression ceiling for the initial JavaScript entry.
+- Let Command-C enter live Container selection when a trusted app frame is selected, including from
+  the native desktop menu, while preserving ordinary Copy everywhere else. Accept current chart and
+  status token metadata so valid live container trees remain visible.
+- Make `Command/Ctrl+C` enter Containers mode for a selected trusted app Code Object. Container
+  clicks now select without copying, while a second `Command/Ctrl+C` copies the selected container's
+  DevTools-style outerHTML.
+- Keep live container selector labels inside the visible app frame by flipping them at top and side
+  edges, while giving long container titles more room and exposing the full title on hover.
+- Preserve each trusted Smylr app's own light or dark preference across iframe reloads, and stop
+  OpenPencil appearance changes from replacing or recoloring the embedded app.
+- Remove the React Flow dependency and the complete Object Graph feature, including connector
+  rendering, editor/runtime integration, Code Object ports and signals, collaboration records,
+  Board automation/Trace contracts, CLI and MCP commands, documentation, and dedicated tests.
+- Let trusted iframe Code Objects open in Full Frame from the object toolset without replacing the
+  running iframe or changing Board geometry. Keep the OpenPencil sidebar above the expanded app,
+  integrate its compact toolset into the sidebar shell, collapse it to a polished edge-arrow tab
+  that can be repositioned vertically, and restore the same route and runtime on exit.
+- Match the Desktop Code Object viewport option to the measured 1728 × 1069 Chrome viewport so
+  trusted-app iframe spacing and responsive sizing match the standalone page.
+- Open Board search from anywhere with Command-K, ready for immediate typing and switching.
+- Show a compact computed box summary for every selected live Smylr container, including distinct
+  padding, margin, border, row/column gap, box-sizing, and unavailable-versus-zero values.
+- Add a shadcn-compatible Code Object UI registry with JSON-configured financial dashboard and
+  connected estimates-list blocks backed by Recharts and TanStack Table. Registered blocks now own
+  strict configuration schemas, default geometry, state, surface behavior, and capabilities so agent
+  plans only need a block ID and domain data. Let Code Objects declare transparent or surfaced
+  backgrounds plus clipped or internally scrollable overflow.
+- Keep active trusted Smylr patient iframes resident when OpenPencil loses document visibility,
+  preserving the live patient view across browser tab and focus changes.
+- Let live Containers selection take pointer control while Trace annotation stays active, and record
+  selected live containers as frame-scoped Trace targets.
+- Preserve distinct trusted-iframe container targets in bounded Trace queries, including their owner
+  frame, internal ID, route, and path, so agents edit Smylr source instead of searching Board JSON.
+- Restore missing SceneNode defaults while loading persisted Boards so one compact or older object
+  cannot crash workspace startup and hide every Board.
+- Close the Design inspector when nothing is selected so Layers, Assets, and Trace reclaim the
+  entire sidebar. Design tokens remain available from the Layers toolbar.
+- Remove the generic Connections section from selected-object properties; connections remain
+  created and manipulated directly through their Board handles and selected edges.
+- Remove the redundant selected-object type, name, and size summary from the standard properties
+  inspector so controls begin immediately below the sidebar title.
+- Move Workspace board search, switching, and creation into the desktop tool rail and remove the
+  bottom Board dock so navigation no longer covers the canvas. Remove the redundant OpenPencil
+  sidebar header and move the application menu behind a theme-aware Settings control pinned to the
+  rail's lower corner. Keep that menu focused on File and application preferences instead of
+  repeating contextual Edit, View, Object, Text, and Arrange controls; retain Media and Mermaid
+  creation inside File. Align the compact popup with the sidebar's bottom edge and use the shell's
+  quieter radius, spacing, and shadow language so it reads as an extension of the rail.
+- Move selected Code Object viewport presets and duplication into a hover-revealed group in the
+  shared desktop tool rail, where object-specific actions stay discoverable without covering the
+  Board with a floating header. Open shape families from their centered rail icon on hover instead
+  of shifting the icon aside for a separate chevron. Give tool changes one stable, spring-driven
+  active indicator with a brief capsule stretch and a compact icon handoff instead of making the
+  rail jump between disconnected selected states.
+- Add a contextual Run/Refresh control beside Code Object tools so a selected trusted application
+  can start its registered local launcher or reload its existing frame in place. Keep trusted Smylr
+  frames on that registered app origin when older Board data contains a stale loopback host or port,
+  while preserving the active loopback hostname for same-site authentication.
+- Move Trace Ink and Focus into that primary tool stack with the same active styling and add I/G
+  shortcuts. Focus now starts its microphone automatically and stopping or switching tools ends the
+  capture, replacing the separate microphone button and second consent step.
+- Center double-click focus against the complete visible sidebar shell and retain a small edge gap,
+  so the selected object lands in the true readable Board area without touching the chrome.
+- Gently zoom out and recenter the single selected object in sync with the opening sidebar, then
+  smoothly restore the original camera when it closes. Reuse the same camera endpoints across
+  repeated or interrupted toggles so the motion stays deterministic and does not drift.
+- Let Markdown documents enter interaction on their first selection click, and let selected Code
+  Objects and videos enter with one click while preserving drag-to-move. Double-click focus now uses
+  the same chrome-aware center-and-zoom action from canvas and active embedded surfaces. Holding Space
+  or using the Hand tool temporarily restores Board panning without leaving interaction state.
+- Navigate between Board objects with unmodified Arrow keys: connected Object Graph neighbors take
+  priority, otherwise the nearest visible object in that direction is selected and centered without
+  changing zoom or adding Undo history. Native container traversal and the live Containers tool take
+  arrow priority over Board objects; Shift+Arrow remains the nudge shortcut outside those modes.
+- Follow system Light/Dark appearance with presentation-only Board variable modes, automatic
+  Mermaid rendering, and a theme prop for authored Code Objects without rewriting Board JSON or
+  adding Undo history.
+- Replace the animated canvas dither with a stable, low-contrast dot grid on the graphite Board
+  background so spatial guidance stays visible without distracting motion or entering exports.
+- Make the compact radial desktop toolset the sidebar's collapsed form, then morph that same shell
+  vertically and horizontally into the full workspace panel while its tool spine stays connected and
+  the compact height grows with the visible tools. Keep the sidebar toggle at the top of that spine
+  in both states, and use a quieter neutral selected-tool treatment. Treat the shell as side chrome
+  so double-click focus fits and centers objects in the readable Board area instead of placing them
+  beneath it.
 - Make source-backed video frames chrome-free and directly draggable in normal Board mode, then
   enable playback controls and frame capture only after entering the media surface. Reconcile media
   assets only when the media inventory changes so ordinary transforms do not rebuild viewer state.
@@ -14,18 +309,25 @@
   instead of rescanning every Board node on each presentation frame. Keep Object Graph camera sync
   imperative and update only changed hover handles so normal pans do not rerender the React surface.
   Seed restored collaboration state atomically and skip duplicate unchanged authority saves during
-  hydration. Remove dormant workspace/proving prototypes with no application consumers, and avoid
-  racing a full authority save against the replacement page during reload. Consolidate repeated
-  fresh-context CLI validation, timing, acquisition, and collaboration image synchronization.
+  hydration. Cache lightweight local-authority status and deliver navigation intents through the
+  existing change stream instead of polling, preventing idle editors and hot reloads from repeatedly
+  parsing or locking the full workspace. Remove dormant workspace/proving prototypes with no
+  application consumers, and avoid racing a full authority save against the replacement page during
+  reload. Consolidate repeated fresh-context CLI validation, timing, acquisition, and collaboration
+  image synchronization.
+  Use the authority change stream as the only local-tab document sync path instead of cloning every
+  restored Board into a second Yjs document. Keep only lightweight authority status in memory,
+  release parsed heads after requests, and encode binary assets during request serialization so a
+  full save no longer creates another complete document copy first.
 - Give source-backed Markdown and text frames white reading surfaces that retain normal Board
   transforms, center on double-click, and scroll after entering the focused reading surface.
 - Replace caller-managed runtime Board Authority grants with automatic, operation-scoped Board
   Permissions. Keep page, target, ownership, field, limit, Undo, and transient-cleanup checks while
   moving Code Object shapes and Board Experience components into their owning domains; the canonical
   `workspace.json` persistence authority remains unchanged.
-- Remove MCP from the active editor and agent workflow for now: no HTTP/WebSocket health checks,
-  ACP injection, provider gating, or live bridge startup. Development starts only the narrow local
-  Board/Trace authority on port 7602, which also owns durable Undo and local app launching.
+- Remove MCP from the agent workflow and keep the editor bridge optional. Development starts only
+  the narrow local Board/Trace authority on port 7602, which owns durable Undo and local app
+  launching; the editor connects only for the small set of live presentation and file operations.
 - Let Board visualization and analytics skills create source-backed chart Code Objects with bundled
   D3 imports, compact reviewed data and provenance, normal frame transforms, and OpenPencil-owned
   targeting, persistence, and proof boundaries instead of host-specific widgets or CDN scripts.
@@ -34,15 +336,18 @@
 - Make source-backed Mermaid frames behave like normal Board objects: their rendered bounds now
   select and drag through the shared canvas controls, and double-click focuses without entering an
   empty container; existing proportional resize, rotation, keyboard movement, and Undo stay shared.
+- Keep Mermaid and other DOM-backed Board surfaces on CanvasKit's shared presentation frame during
+  continuous pan and zoom so their rendered pixels no longer lead or drift away from canvas objects.
 - Isolate invalid Mermaid source to its owning frame so unrelated Boards still open, read, and edit;
   guarded Mermaid builds continue to reject invalid requested source before mutation.
 - Render Mermaid 11.16 source as one SVG-backed Board frame with no generated native children;
   direct source edits preserve frame identity and geometry without a browser or headless compiler.
-- Publish direct canonical JSON graph replacements into the active Yjs document as one delta-only
-  transaction, so agent edits remain simple file changes while connected local editors update live.
+- Publish direct canonical JSON graph replacements through the authority change stream, so agent
+  edits remain simple file changes while open local editors update without a second collaboration
+  document.
 - Make `~/.openpencil/local-workspace-authority-v1/workspace.json` the canonical plain Board
   document: coding agents can edit its node JSON directly while OpenPencil derives revisions,
-  bounded JSON history, and open-editor synchronization. Keep SQLite for indexed Trace history only;
+  bounded JSON history, and open-editor synchronization. Keep Trace history in append-only JSONL;
   CLI and MCP remain optional adapters instead of the normal Board mutation path.
 - Publish the latest completed Trace gesture atomically as a bounded `trace-context.json` beside the
   canonical Board, with exact current object and connector IDs, a finite region, explicit expiry and
@@ -76,9 +381,9 @@
   classifier, persisted Trace history and Mermaid source readback stay on local authority, compact
   receipts omit optional live-proof noise, and editor Undo/Redo can revert durable agent
   transactions after a runtime restart.
-- Make Board discovery index-first: a disposable revision-aware `workspace-search.sqlite3` indexes
-  Boards, objects, canonical identities, and placements while `workspace.json` remains truth;
-  `board search` now returns compact ranked Board/object hits without dumping the workspace.
+- Make Board discovery index-first: a disposable revision- and content-hash-aware
+  `workspace.index.jsonl` lists Boards and objects while `workspace.json` remains truth; agents can
+  use ordinary `rg` without dumping or parsing the canonical workspace into model context.
 - Add generic reversible Board transactions: every successful plan returns a transaction ID,
   `board context` lists recent transactions, and one `transaction.revert` plan restores exact native
   objects and Object Graph records through live Undo/Redo or retained durable authority history.
@@ -153,10 +458,9 @@
   graph edits without rediscovering or retrying a temporary live runtime.
 - Route persisted Board and Trace CLI commands directly through local authority instead of the MCP
   HTTP/live-runtime bridge, while keeping MCP available for external clients and live presentation.
-  Store Board heads, revision history, full Trace sessions, compact gesture targets, and evidence in
-  one transactional local SQLite authority; remove the browser-cache Trace authority and bounded
-  gesture mirror. Detect direct cross-process commits from the canonical revision so open local
-  Boards refresh promptly instead of waiting for the long-poll timeout.
+  Store Board heads and revision history as files; store full Trace sessions in rotated JSONL,
+  compact current targets in `trace-context.json`, and evidence as separate PNGs. Detect direct
+  cross-process Board commits from the canonical revision so open local Boards refresh promptly.
 
 - Keep mixed display creation under the universal `board build` command with an optional
   `--plan-file` contract for atomic native text/card compositions and meaningful Object Graph
@@ -386,8 +690,8 @@
   persisted Yjs room that could resurrect deleted layers or reset Code Objects and connectors.
 - Let arrow keys traverse a selected connector as a focus step between its spatial endpoints, with
   Escape restoring the starting view and Delete disconnecting through normal Undo/Redo; add
-  explicit Enter-to-navigate container traversal while keeping Arrow and Shift+Arrow as ordinary
-  object nudges outside those sessions.
+  explicit Enter-to-navigate container traversal and live-app Containers navigation that take arrow
+  priority over ordinary Board objects.
 - Let users drag a multi-selection from empty space inside its visible group bounds, moving every
   selected object through the normal preview, Undo/Redo, and persistence path.
 - Center containers, non-text native objects, and Code Objects in the unobstructed Board viewport

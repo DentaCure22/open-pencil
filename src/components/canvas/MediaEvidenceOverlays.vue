@@ -1,18 +1,24 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, shallowRef, watch } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { isCodeObjectFrame } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
-import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
+import { forwardFrameSurfaceWheel } from '@/app/editor/canvas/embedded-surface-wheel'
+import { focusCanvasSurface } from '@/app/editor/canvas/surface/focus'
+import { useSceneNodeOverlayStyle } from '@/app/editor/presentation'
+import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
 import {
   mediaEvidenceSource,
   type MediaEvidenceKind,
   type MediaEvidenceSource
 } from '@/app/media-evidence/source'
-import PdfEvidenceViewer from '@/components/canvas/media-evidence/PdfEvidenceViewer.vue'
 import VideoEvidenceViewer from '@/components/canvas/media-evidence/VideoEvidenceViewer.vue'
+
+const PdfEvidenceViewer = defineAsyncComponent(
+  () => import('@/components/canvas/media-evidence/PdfEvidenceViewer.vue')
+)
 
 type MediaEvidenceItem = {
   bytes: Uint8Array
@@ -23,7 +29,7 @@ type MediaEvidenceItem = {
 type ViewerState = 'error' | 'loading' | 'ready'
 
 const store = useEditorStore()
-const presentationViewport = useEditorPresentationViewport(store)
+const overlayStyle = useSceneNodeOverlayStyle(store)
 const assetUrls = shallowRef<Record<string, string>>({})
 const viewerStates = shallowRef<Record<string, ViewerState>>({})
 
@@ -85,10 +91,6 @@ onBeforeUnmount(() => {
   for (const url of Object.values(assetUrls.value)) URL.revokeObjectURL(url)
 })
 
-function overlayStyle(node: SceneNode) {
-  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
-}
-
 function isSelected(nodeId: string): boolean {
   return store.state.selectedIds.has(nodeId)
 }
@@ -98,7 +100,19 @@ function isInteracting(nodeId: string): boolean {
 }
 
 function surfaceAcceptsPointer(item: MediaEvidenceItem): boolean {
+  if (!canvasSurfaceCanReceivePointer(store.state.activeTool)) return false
   return item.source.kind === 'video' ? isInteracting(item.node.id) : isSelected(item.node.id)
+}
+
+function handleSurfaceWheel(item: MediaEvidenceItem, event: WheelEvent) {
+  if (item.source.kind === 'pdf' || !(event.currentTarget instanceof HTMLElement)) return
+  event.preventDefault()
+  event.stopPropagation()
+  forwardFrameSurfaceWheel(event.currentTarget, event)
+}
+
+function focusEvidence(nodeId: string) {
+  focusCanvasSurface(store, nodeId)
 }
 
 function sourceUrl(source: MediaEvidenceSource): string {
@@ -153,6 +167,8 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
           item.source.kind === 'video' ? 'h-full' : 'h-[calc(100%-2rem)]',
           surfaceAcceptsPointer(item) ? 'pointer-events-auto' : 'pointer-events-none'
         ]"
+        @dblclick.stop.prevent="focusEvidence(item.node.id)"
+        @wheel="handleSurfaceWheel(item, $event)"
       >
         <PdfEvidenceViewer
           v-if="item.source.kind === 'pdf'"
@@ -169,6 +185,7 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
           :source="item.source"
           :source-url="sourceUrl(item.source)"
           @error="setViewerState(item.node.id, 'error')"
+          @focus-surface="focusEvidence(item.node.id)"
           @ready="setViewerState(item.node.id, 'ready')"
         />
         <div

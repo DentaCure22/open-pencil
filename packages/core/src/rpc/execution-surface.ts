@@ -7,10 +7,11 @@ type RpcArguments = Record<string, unknown>
 
 const PERSISTED_ONLY_COMMANDS = new Set([
   'board_fixture',
-  'get_mermaid_source',
   'list_documents',
   'trace_get_gesture',
   'trace_query',
+  'trace_resolve',
+  'trace_search',
   'workspace_search'
 ])
 
@@ -21,9 +22,7 @@ const AUTHORITY_DEFAULT_COMMANDS = new Set([
   'board_open',
   'board_prepare_edit',
   'board_read',
-  'board_verify',
-  'connect_objects',
-  'get_code_object'
+  'board_verify'
 ])
 
 const LIVE_ONLY_COMMANDS = new Set([
@@ -38,7 +37,6 @@ const LIVE_ONLY_COMMANDS = new Set([
   'export_jsx',
   'find',
   'info',
-  'insert_mermaid_diagram',
   'new_document',
   'node',
   'open_file',
@@ -46,8 +44,8 @@ const LIVE_ONLY_COMMANDS = new Set([
   'query',
   'save_file',
   'selection',
+  'set_theme',
   'tree',
-  'upsert_code_object',
   'variables'
 ])
 
@@ -86,9 +84,7 @@ export function classifyRpcExecutionSurface(
     return 'live_runtime'
   }
   if (PERSISTED_ONLY_COMMANDS.has(normalizedCommand)) return 'persisted_authority'
-  if (AUTHORITY_DEFAULT_COMMANDS.has(normalizedCommand)) {
-    return explicitRuntimeSurface(normalizedArgs) ?? 'persisted_authority'
-  }
+  if (AUTHORITY_DEFAULT_COMMANDS.has(normalizedCommand)) return 'persisted_authority'
   if (normalizedCommand === 'tool') {
     const name = stringArgument(normalizedArgs, 'name')
     if (!name || !AUTHORITY_DEFAULT_TOOLS.has(name)) return 'live_runtime'

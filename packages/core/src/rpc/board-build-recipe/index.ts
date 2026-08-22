@@ -2,7 +2,7 @@ import {
   BOARD_BUILD_PLAN_CONTRACT,
   parseBoardBuildPlan,
   type BoardBuildPlan
-} from '../board-build-plan'
+} from '#core/rpc/board-build-plan'
 
 export const BOARD_BUILD_RECIPE_REQUEST_CONTRACT = 'board-build-recipe-request/v1' as const
 export const BOARD_BUILD_RECIPE_REGISTRY_VERSION = 1 as const
@@ -28,7 +28,6 @@ export type StructuredCardsRecipeRequest = {
 export type ProcessFlowRecipeStep = BriefGridRecipeCard
 
 export type ProcessFlowRecipeParams = {
-  connector_label?: string
   heading: string
   steps: ProcessFlowRecipeStep[]
 }
@@ -73,8 +72,6 @@ const BRIEF_GRID_MAX_BODY_LENGTH = 550
 const BRIEF_GRID_MAX_CARD_COUNT = 12
 const BRIEF_GRID_MAX_HEADING_LENGTH = 240
 const BRIEF_GRID_MAX_TITLE_LENGTH = 120
-const PROCESS_FLOW_DEFAULT_CONNECTOR_LABEL = 'Next'
-const PROCESS_FLOW_MAX_CONNECTOR_LABEL_LENGTH = 80
 const PROCESS_FLOW_MAX_STEP_COUNT = 8
 const PROCESS_FLOW_MIN_STEP_COUNT = 2
 const RECIPE_KEY_SEPARATOR = '@'
@@ -186,7 +183,6 @@ function compileStructuredCards(value: unknown): RecipeCompilerResult {
       }))
     ],
     ...(useComposition ? { composition: composition(cardAliases, params.direction) } : {}),
-    connections: [],
     contract: BOARD_BUILD_PLAN_CONTRACT
   })
   return { artifactAliases: ['heading', ...cardAliases], plan }
@@ -194,16 +190,8 @@ function compileStructuredCards(value: unknown): RecipeCompilerResult {
 
 function parseProcessFlowParams(value: unknown): ProcessFlowRecipeParams {
   if (!isRecord(value)) throw new Error('process_flow params must be an object.')
-  assertExactFields(value, ['connector_label', 'heading', 'steps'], 'process_flow params')
+  assertExactFields(value, ['heading', 'steps'], 'process_flow params')
   return {
-    connector_label:
-      value.connector_label === undefined
-        ? PROCESS_FLOW_DEFAULT_CONNECTOR_LABEL
-        : boundedString(
-            value.connector_label,
-            'process_flow params.connector_label',
-            PROCESS_FLOW_MAX_CONNECTOR_LABEL_LENGTH
-          ),
     heading: boundedString(
       value.heading,
       'process_flow params.heading',
@@ -238,12 +226,6 @@ function compileProcessFlow(value: unknown): RecipeCompilerResult {
       }))
     ],
     composition: composition(stepAliases, 'horizontal'),
-    connections: stepAliases.slice(0, -1).map((alias, index) => ({
-      kind: 'visual',
-      label: params.connector_label,
-      source: { alias },
-      target: { alias: stepAliases[index + 1] }
-    })),
     contract: BOARD_BUILD_PLAN_CONTRACT
   })
   return { artifactAliases: ['heading', ...stepAliases], plan }

@@ -63,9 +63,9 @@ Each child in an auto-layout frame can have its own sizing mode:
 
 Within an auto-layout frame, drag a child to reorder it among its siblings. A visual insertion indicator shows where the child will be dropped.
 
-## Properties Panel
+## Layout Controls
 
-When an auto-layout frame is selected, the Layout section in the properties panel shows all auto-layout controls: direction, gap, padding, justify, and align.
+When an auto-layout frame is selected, use its contextual controls to change direction, gap, padding, justification, and alignment. On smaller screens, the same controls are available in the mobile Design drawer.
 
 ## Keyboard Shortcuts
 

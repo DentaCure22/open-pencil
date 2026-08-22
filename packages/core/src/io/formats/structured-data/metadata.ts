@@ -1,5 +1,7 @@
 import type { PluginDataEntry, SceneNode } from '@open-pencil/scene-graph'
 
+import { pluginDataEntry, pluginDataValues } from '#core/io/plugin-data'
+
 import type {
   JSONValueType,
   StructuredDataNodeField,
@@ -27,34 +29,34 @@ interface StructuredDataPluginDataInput {
   field?: StructuredDataNodeField
 }
 
-function entry(key: string, value: string): PluginDataEntry {
-  return { pluginId: PLUGIN_ID, key, value }
-}
-
 export function structuredDataPluginData(
   metadata: StructuredDataPluginDataInput
 ): PluginDataEntry[] {
-  const entries = [entry(KIND_KEY, metadata.kind)]
-  if (metadata.path !== undefined) entries.push(entry(PATH_KEY, metadata.path))
-  if (metadata.valueType !== undefined) entries.push(entry(VALUE_TYPE_KEY, metadata.valueType))
-  if (metadata.rowIndex !== undefined) entries.push(entry(ROW_INDEX_KEY, String(metadata.rowIndex)))
-  if (metadata.columnIndex !== undefined) {
-    entries.push(entry(COLUMN_INDEX_KEY, String(metadata.columnIndex)))
+  const entries = [pluginDataEntry(PLUGIN_ID, KIND_KEY, metadata.kind)]
+  if (metadata.path !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, PATH_KEY, metadata.path))
   }
-  if (metadata.columnName !== undefined) entries.push(entry(COLUMN_NAME_KEY, metadata.columnName))
-  if (metadata.field !== undefined) entries.push(entry(FIELD_KEY, metadata.field))
+  if (metadata.valueType !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, VALUE_TYPE_KEY, metadata.valueType))
+  }
+  if (metadata.rowIndex !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, ROW_INDEX_KEY, String(metadata.rowIndex)))
+  }
+  if (metadata.columnIndex !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, COLUMN_INDEX_KEY, String(metadata.columnIndex)))
+  }
+  if (metadata.columnName !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, COLUMN_NAME_KEY, metadata.columnName))
+  }
+  if (metadata.field !== undefined) {
+    entries.push(pluginDataEntry(PLUGIN_ID, FIELD_KEY, metadata.field))
+  }
   return entries
 }
 
-function valueFor(node: Pick<SceneNode, 'pluginData'>, key: string): string | null {
-  return (
-    node.pluginData.find((item) => item.pluginId === PLUGIN_ID && item.key === key)?.value ?? null
-  )
-}
-
-function indexFor(node: Pick<SceneNode, 'pluginData'>, key: string): number | null {
-  const value = valueFor(node, key)
-  if (value === null) return null
+function indexFor(values: ReadonlyMap<string, string>, key: string): number | null {
+  const value = values.get(key)
+  if (value === undefined) return null
   const index = Number.parseInt(value, 10)
   return Number.isSafeInteger(index) && index >= 0 ? index : null
 }
@@ -85,18 +87,19 @@ function isValueType(value: string | null): value is JSONValueType {
 export function readStructuredDataNode(
   node: Pick<SceneNode, 'pluginData'>
 ): StructuredDataNodeMetadata | null {
-  const kind = valueFor(node, KIND_KEY)
+  const values = pluginDataValues(node, PLUGIN_ID)
+  const kind = values.get(KIND_KEY)
   if (!kind || !isNodeKind(kind)) return null
 
-  const valueType = valueFor(node, VALUE_TYPE_KEY)
-  const field = valueFor(node, FIELD_KEY)
+  const valueType = values.get(VALUE_TYPE_KEY) ?? null
+  const field = values.get(FIELD_KEY) ?? null
   return {
     kind,
-    path: valueFor(node, PATH_KEY),
+    path: values.get(PATH_KEY) ?? null,
     valueType: isValueType(valueType) ? valueType : null,
-    rowIndex: indexFor(node, ROW_INDEX_KEY),
-    columnIndex: indexFor(node, COLUMN_INDEX_KEY),
-    columnName: valueFor(node, COLUMN_NAME_KEY),
+    rowIndex: indexFor(values, ROW_INDEX_KEY),
+    columnIndex: indexFor(values, COLUMN_INDEX_KEY),
+    columnName: values.get(COLUMN_NAME_KEY) ?? null,
     field: isNodeField(field) ? field : null
   }
 }

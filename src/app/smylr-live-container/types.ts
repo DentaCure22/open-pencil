@@ -14,9 +14,11 @@ export type SmylrLiveContainerSource = SmylrLiveContainerOwner & {
 
 export type SmylrLiveSemanticTokenCategory =
   | 'border'
+  | 'chart'
   | 'radius'
   | 'shadow'
   | 'spacing'
+  | 'status'
   | 'surface'
   | 'text'
 

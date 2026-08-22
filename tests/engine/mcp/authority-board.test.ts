@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import WebSocket, { WebSocketServer } from 'ws'
+import WebSocket, { type WebSocketServer } from 'ws'
 
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
@@ -206,7 +206,6 @@ describe('local workspace authority Board runtime', () => {
         selected_object_id: anchor.id,
         status: 'resolved'
       },
-      trace_connections: { count: 0 },
       trace_region: { height: 120, width: 240, x: 100, y: 140 }
     })
   })
@@ -236,64 +235,6 @@ describe('local workspace authority Board runtime', () => {
     expect(await f.store.pendingNavigationIntent()).toMatchObject({
       intentId: second.intent_id,
       sequence: 2
-    })
-    expect((await f.store.head())?.revision).toBe(f.head.revision)
-  })
-
-  test('targets one editor and leaves zero or ambiguous editor states unqueued', async () => {
-    const f = await fixture()
-    const needsEditor = responseResult(
-      await f.runtime.sendRpc({
-        command: 'board_open',
-        args: {
-          ...contextArgs(f).args,
-          editor_candidate_runtime_ids: [],
-          editor_navigation_reason: 'no_matching_editor',
-          editor_navigation_status: 'needs_editor'
-        }
-      })
-    )
-    expect(needsEditor).toMatchObject({
-      action: 'not_queued',
-      editor_candidate_runtime_ids: [],
-      status: 'needs_editor'
-    })
-    expect(await f.store.pendingNavigationIntent()).toBeNull()
-
-    const ambiguous = responseResult(
-      await f.runtime.sendRpc({
-        command: 'board_open',
-        args: {
-          ...contextArgs(f).args,
-          editor_candidate_runtime_ids: ['runtime:a', 'runtime:b'],
-          editor_navigation_status: 'ambiguous_editor'
-        }
-      })
-    )
-    expect(ambiguous).toMatchObject({
-      action: 'not_queued',
-      editor_candidate_runtime_ids: ['runtime:a', 'runtime:b'],
-      status: 'ambiguous_editor'
-    })
-    expect(await f.store.pendingNavigationIntent()).toBeNull()
-
-    const queued = responseResult(
-      await f.runtime.sendRpc({
-        command: 'board_open',
-        args: {
-          ...contextArgs(f).args,
-          editor_candidate_runtime_ids: ['runtime:a', 'runtime:b'],
-          editor_navigation_status: 'ready',
-          editor_runtime_instance_id: 'runtime:b'
-        }
-      })
-    )
-    expect(queued).toMatchObject({
-      editor_runtime_instance_id: 'runtime:b',
-      status: 'queued_for_editor'
-    })
-    expect(await f.store.pendingNavigationIntent()).toMatchObject({
-      runtimeInstanceId: 'runtime:b'
     })
     expect((await f.store.head())?.revision).toBe(f.head.revision)
   })
@@ -1233,13 +1174,15 @@ describe('local workspace authority Board runtime', () => {
       })
       expect(await openResponse.json()).toMatchObject({
         ok: true,
-        result: { page_id: f.page.id, status: 'needs_editor' }
+        result: { action: 'queued', page_id: f.page.id, status: 'queued_for_editor' }
       })
 
       const navigationResponse = await server.app.request('/local-workspace/v1/navigation', {
         headers: { Authorization: 'Bearer headless-token' }
       })
-      expect(await navigationResponse.json()).toEqual({ intent: null })
+      expect(await navigationResponse.json()).toMatchObject({
+        intent: { pageId: f.page.id, workspaceId: 'workspace-headless' }
+      })
     } finally {
       server.close()
     }
@@ -1458,17 +1401,15 @@ describe('local workspace authority Board runtime', () => {
       expect(await openResponse.json()).toMatchObject({
         ok: true,
         result: {
-          editor_runtime_instance_id: 'runtime:connected-browser',
+          action: 'queued',
           status: 'queued_for_editor'
         }
       })
       expect(await f.store.pendingNavigationIntent()).toMatchObject({
-        runtimeInstanceId: 'runtime:connected-browser'
+        pageId: f.page.id,
+        workspaceId: 'workspace-headless'
       })
-      for (let attempt = 0; attempt < 20 && navigationNotifications === 0; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 5))
-      }
-      expect(navigationNotifications).toBe(1)
+      expect(navigationNotifications).toBe(0)
       expect(browserRequests).toBe(0)
     } finally {
       browser.close()

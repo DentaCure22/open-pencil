@@ -1,26 +1,27 @@
 ---
-title: Calques et pages
-description: Gérer les calques, pages et le panneau des propriétés dans OpenPencil.
+title: Calques et tableaux
+description: Utiliser la barre latérale, l’arborescence des calques et les tableaux d’espace de travail dans OpenPencil.
 ---
-# Calques et pages
 
-## Panneau calques
-Arborescence hiérarchique à gauche. Déplier/replier, glisser pour réordonner, basculer la visibilité avec l'icône œil, double-clic pour renommer. La sélection se synchronise avec le canevas.
+# Calques et tableaux
 
-## Panneau pages
-- **Changer de page** — clic sur un onglet
-- **Ajouter** — bouton ajouter
-- **Supprimer** — supprimer la page courante
-- **Renommer** — double-clic sur le nom ; Entrée ou clic ailleurs pour valider, Échap pour annuler
+OpenPencil laisse le canevas visible et regroupe les vues principales dans une barre latérale flottante à gauche. Elle peut être redimensionnée ou repliée pour libérer de l’espace.
 
-Chaque page a son propre état de viewport.
+## Barre latérale
 
-## Panneau propriétés
-Trois onglets : **Design** (propriétés contextuelles), **Code** (JSX / Tailwind CSS v4), **IA** (chat <kbd>⌘</kbd><kbd>J</kbd>).
+- **Calques** — consulter et modifier la hiérarchie du tableau actif.
+- **Chats** — démarrer ou poursuivre des tâches Pi et ouvrir leurs cartes.
+- **Ressources** — insérer des ressources réutilisables.
+- **Activité** — consulter l’activité Trace enregistrée.
 
-Design : apparence, remplissage, contour, effets, typographie, mise en page, exportation.
+## Calques
 
-## Disposition mobile
+Dépliez les conteneurs, faites glisser les calques pour les réordonner ou les déplacer, utilisez l’œil pour les masquer et double-cliquez pour les renommer. La sélection reste synchronisée avec le canevas. Le bouton des variables ouvre la gestion des jetons de design.
 
-Sur mobile, les panneaux latéraux sont remplacés par un tiroir inférieur glissable avec onglets : Calques, Propriétés, Design, Code.
+## Espaces de travail et tableaux
 
+Utilisez **Workspace** dans la barre d’outils pour rechercher un tableau, rouvrir un tableau récent ou gérer les projets et tableaux. Chaque tableau conserve son contenu et son viewport.
+
+## Mobile
+
+Sur petit écran, la barre latérale devient un tiroir inférieur avec Calques et Design, ainsi que Code lorsque l’objet possède une source modifiable et la vue IA mobile.

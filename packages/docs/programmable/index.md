@@ -20,7 +20,7 @@ That is why the automation surface matters. The app, the CLI, the AI tools, the 
 
 ## AI Chat
 
-The built-in assistant has access to 87 tools that cover the full surface of the editor. Describe what you want in natural language — "add a 16px drop shadow to all buttons", "create a card component with dark mode variant", "export every frame on this page at 2×".
+The built-in Pi task chat keeps coding work and follow-ups in one conversation. Editor automation is available through the MCP catalog, which clients discover at runtime.
 
 [AI Chat →](./ai-chat)
 
@@ -55,7 +55,7 @@ file-based `eval` remains separate from live Board mutation.
 
 ## MCP Server
 
-Connect Claude Code, Cursor, Windsurf, or any MCP-compatible client to OpenPencil. The server exposes 90 tools for reading, creating, and modifying designs — the same tools the built-in AI chat uses. Runs over stdio or HTTP with session support.
+Connect Claude Code, Cursor, Windsurf, or any MCP-compatible client to OpenPencil. The server exposes a runtime-discovered catalog for reading, creating, and modifying designs over stdio or HTTP with session support.
 
 [MCP Server →](./mcp-server)
 

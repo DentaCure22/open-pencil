@@ -1,5 +1,11 @@
 export const TRUSTED_WEB_APP_LIVE_RUNTIME_CAP = 4
 
+export interface TrustedWebAppResidencyFrameScopeInput {
+  frameIds: readonly string[]
+  relevantFrameIds: ReadonlySet<string>
+  residentFrameIds: ReadonlySet<string>
+}
+
 export interface TrustedWebAppResidencyInput {
   activeFrameId: string | null
   frameIds: readonly string[]
@@ -9,6 +15,16 @@ export interface TrustedWebAppResidencyInput {
 
 function interactionTime(frameId: string, interactedAtByFrame: Readonly<Record<string, number>>) {
   return interactedAtByFrame[frameId] ?? 0
+}
+
+export function trustedWebAppResidencyFrameIds({
+  frameIds,
+  relevantFrameIds,
+  residentFrameIds
+}: TrustedWebAppResidencyFrameScopeInput): string[] {
+  return frameIds.filter(
+    (frameId) => relevantFrameIds.has(frameId) || residentFrameIds.has(frameId)
+  )
 }
 
 /**

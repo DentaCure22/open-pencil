@@ -38,7 +38,7 @@ export function useCanvas(
     shouldShowRulers
   })
 
-  useCanvasSurfaceLifecycle({
+  const lifecycleActions = useCanvasSurfaceLifecycle({
     canvasRef,
     surface,
     lifecycle,
@@ -46,6 +46,7 @@ export function useCanvas(
     setCanvasKit: (value) => {
       ck = value
     },
+    onError: options?.onError,
     onReady: options?.onReady
   })
 
@@ -57,6 +58,7 @@ export function useCanvas(
   return {
     render: surface.markDirty,
     renderNow: surface.renderNow,
+    retryCanvasKit: lifecycleActions.retryCanvasKit,
     hitTestSectionTitle,
     hitTestComponentLabel,
     hitTestFrameTitle

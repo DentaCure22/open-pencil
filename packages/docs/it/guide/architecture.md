@@ -6,7 +6,7 @@
 graph TB
     subgraph Tauri["Tauri v2 Shell"]
         subgraph Editor["Editor (Web)"]
-            UI["Vue 3 UI<br/>Toolbar · Panels · Properties<br/>Layers · Color Picker"]
+            UI["Vue 3 UI<br/>Sidebar · Tool rail · Canvas<br/>Layers · Chats · Assets · Activity"]
             Skia["Skia CanvasKit (WASM, 7MB)<br/>Vector rendering · Text shaping<br/>Effects · Export"]
             subgraph Core["Core Engine (TS)"]
                 SG[SceneGraph] --- Layout[Layout - Yoga]
@@ -19,19 +19,19 @@ graph TB
                 Kiwi --- SVG[SVG export]
             end
         end
-        MCP["MCP Server (90 tools, stdio+HTTP)"]
+        MCP["MCP Server (stdio+HTTP)"]
         Collab["P2P Collab (Trystero + Yjs)"]
     end
 `
 
 ## Layout dell'Editor
 
-L'interfaccia segue il layout UI3 di Figma — barra degli strumenti in basso, navigazione a sinistra, proprietà a destra:
+L'editor usa un layout compatto incentrato sul canvas:
 
-- **Pannello navigazione (sinistra)** — Albero dei livelli, pannello pagine
-- **Canvas (centro)** — Canvas infinito con rendering CanvasKit, zoom/pan
-- **Pannello proprietà (destra)** — Sezioni sensibili al contesto: Aspetto, Riempimento, Bordo, Tipografia, Layout, Posizione
-- **Barra degli strumenti (basso)** — Selezione strumenti: Seleziona, Frame, Sezione, Rettangolo, Ellisse, Linea, Testo, Penna, Mano
+- **Barra laterale (sinistra)** — Livelli, Chat, Risorse e Attività in una superficie mobile
+- **Barra degli strumenti** — Controlli integrati per disegno, selezione, spazio di lavoro e utilità
+- **Canvas** — Superficie CanvasKit infinita con zoom, panoramica e azioni contestuali
+- **Cassetto mobile** — Controlli Livelli, Design e Code nelle viste strette
 
 ## Componenti
 
@@ -72,11 +72,11 @@ Consulta il [riferimento Formato File](/it/reference/file-format) per i dettagli
 
 Gli strumenti sono definiti una sola volta in `packages/core/src/tools/`, suddivisi per dominio: read, create, modify, structure, variables, vector, analyze. Ogni strumento ha parametri tipizzati e una funzione `execute(figma, args)`. Gli adattatori li convertono per:
 
-- **Chat AI** — schema valibot, multi-provider (Anthropic, OpenAI, Google AI, OpenRouter, endpoint compatibili)
+- **Attività agenti** — conversazioni Pi nella barra laterale e nelle schede del Board
 - **Server MCP** — schema zod, trasporti stdio + HTTP
 - **CLI** — disponibili tramite il comando `eval`
 
-90+ strumenti core + 3 strumenti di gestione file MCP. Include query XPath (`query_nodes`), ispezione JSX (`get_jsx`, `diff_jsx`), descrizione semantica (`describe`) e verifica visiva (`export_image` restituisce immagini al modello).
+Il catalogo viene scoperto a runtime invece di essere documentato come numero fisso. Include query XPath (`query_nodes`), ispezione JSX (`get_jsx`, `diff_jsx`), descrizione semantica (`describe`) e verifica visiva (`export_image`).
 
 ### Annulla/Ripristina
 
@@ -92,13 +92,9 @@ Collaborazione peer-to-peer in tempo reale tramite Trystero (WebRTC) + Yjs CRDT.
 
 ### Bridge RPC CLI-App
 
-Quando l'app desktop è in esecuzione, i comandi CLI si connettono tramite WebSocket invece di richiedere un file .fig. Il server di automazione è in esecuzione su `127.0.0.1:7600` (HTTP) e `127.0.0.1:7601` (WebSocket). I comandi vengono eseguiti sullo stato dell'editor live, consentendo a script di automazione e agenti AI di interagire con l'app in esecuzione.
+L'RPC live tra CLI e applicazione è disabilitato per ora. La persistenza locale di Board e Trace usa l'autorità limitata sulla porta 7602 e non richiede MCP.
 
 ## Prossimi Passi
-
-### Set Completo di Strumenti figma-use
-
-Il server MCP attualmente espone 90 strumenti. L'implementazione di riferimento in [figma-use](https://github.com/dannote/figma-use) ne ha 118. Gli strumenti rimanenti coprono vincoli di layout avanzati, connessioni per prototipi, modifica avanzata delle proprietà dei componenti e operazioni in blocco sui documenti.
 
 ### Strumenti di Design per CI
 

@@ -1,25 +1,27 @@
 ---
-title: Capas y páginas
-description: Gestionar capas, páginas y panel de propiedades en OpenPencil.
+title: Capas y tableros
+description: Usar la barra lateral, el árbol de capas y los tableros del espacio de trabajo en OpenPencil.
 ---
-# Capas y páginas
 
-## Panel de capas
-Árbol jerárquico a la izquierda. Expandir/colapsar, arrastrar para reordenar, alternar visibilidad con el icono de ojo, doble clic para renombrar. La selección se sincroniza con el lienzo.
+# Capas y tableros
 
-## Panel de páginas
-- **Cambiar página** — clic en una pestaña
-- **Añadir** — botón añadir
-- **Eliminar** — eliminar página actual
-- **Renombrar** — doble clic en el nombre; <kbd>Enter</kbd> o clic fuera para confirmar, <kbd>Escape</kbd> para cancelar
+OpenPencil mantiene visible el lienzo y reúne las vistas principales en una barra lateral flotante a la izquierda. Puedes redimensionarla o contraerla para dejar más espacio al lienzo.
 
-Cada página tiene su propio estado de viewport.
+## Barra lateral
 
-## Panel de propiedades
-Tres pestañas: **Diseño** (propiedades contextuales), **Código** (JSX / Tailwind CSS v4), **IA** (chat <kbd>⌘</kbd><kbd>J</kbd>).
+- **Capas** — ver y editar la jerarquía del tablero actual.
+- **Chats** — iniciar o continuar tareas de Pi y abrir sus tarjetas.
+- **Recursos** — insertar recursos reutilizables.
+- **Actividad** — revisar la actividad de Trace.
 
-Diseño: apariencia, relleno, trazo, efectos, tipografía, layout, exportación.
+## Capas
 
-## Diseño móvil
+Expande o contrae contenedores, arrastra capas para reordenarlas o cambiar su padre, usa el ojo para ocultarlas y haz doble clic para cambiarles el nombre. La selección del árbol y del lienzo permanece sincronizada. El botón de variables abre la gestión de tokens de diseño.
 
-En móvil y pantallas pequeñas, los paneles laterales se reemplazan por un cajón inferior deslizable con pestañas: Capas, Propiedades, Diseño, Código.
+## Espacios de trabajo y tableros
+
+Usa **Workspace** en la barra de herramientas para buscar tableros, abrir los recientes o administrar proyectos y tableros. Cada tablero conserva su contenido y su posición de vista.
+
+## Móvil
+
+En pantallas pequeñas, la barra lateral se convierte en un cajón inferior con Capas y Diseño, además de Código cuando el objeto tiene una fuente editable y la vista móvil de IA.

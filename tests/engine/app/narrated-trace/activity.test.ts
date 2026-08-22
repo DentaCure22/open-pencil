@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 
 import {
   changesForNarratedTraceNodeUpdate,
-  NARRATED_TRACE_ACTIVITY_KINDS
+  NARRATED_TRACE_ACTIVITY_KINDS,
+  snapshotNarratedTraceNode
 } from '@/app/narrated-trace'
 
 describe('Narrated Trace semantic activity', () => {
@@ -46,5 +48,33 @@ describe('Narrated Trace semantic activity', () => {
     expect(changes.map((change) => change.property)).toEqual(['fills', 'width', 'x'])
     expect(JSON.stringify(changes)).not.toContain('patient note')
     expect(JSON.stringify(changes)).not.toContain('secret')
+  })
+
+  test('retains deleted-node target fields without retaining content', () => {
+    const node = createDefaultNode(() => 'trace-node', 'RECTANGLE', {
+      height: 80,
+      name: 'Patient card',
+      parentId: 'page-1',
+      pluginData: [{ key: 'route', pluginId: 'test', value: '/patients' }],
+      text: 'Private note',
+      width: 120,
+      x: 10,
+      y: 20
+    })
+
+    const snapshot = snapshotNarratedTraceNode(node)
+
+    expect(snapshot).toMatchObject({
+      height: 80,
+      id: 'trace-node',
+      name: 'Patient card',
+      parentId: 'page-1',
+      pluginData: [{ key: 'route', pluginId: 'test', value: '/patients' }],
+      type: 'RECTANGLE',
+      width: 120,
+      x: 10,
+      y: 20
+    })
+    expect(snapshot.text).toBeUndefined()
   })
 })

@@ -1,72 +1,32 @@
 ---
-title: AI Chat
-description: Built-in AI assistant with 90+ tools for creating and modifying designs.
+title: Task Chat
+description: Pi-backed coding tasks shared by the sidebar and Board cards.
 ---
 
-# AI Chat
+# Task Chat
 
-Press <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) to open the AI assistant. Describe what you want — it creates shapes, sets styles, manages layout, works with components, and analyzes your design.
+Open the **CHATS** tab in the left sidebar to start or continue a task. OpenPencil launches Pi directly and keeps each task as one conversation with its model, effort, messages, tool activity, and follow-ups.
 
-## Setup
+## How it works
 
-1. Open the AI chat panel (<kbd>⌘</kbd><kbd>J</kbd>)
-2. Click the settings icon
-3. Choose a provider and enter your API key
-4. Select a model
+- **New task** starts a fresh Pi conversation.
+- **Follow up** continues the selected conversation instead of creating hidden routing work.
+- **Board cards** and the CHATS sidebar show the same local-authority threads.
+- **Attachments** are uploaded with the prompt and remain part of the task context.
+- **Stop** ends the active turn; a completed or failed task can still receive a follow-up when Pi allows it.
 
-### Supported Providers
+There is no dispatcher or alternate backend. The model list comes from Pi's catalog, and connected apps are available through Pi's configured `codex_apps` MCP.
 
-| Provider                 | Models                                          | Setup                                                                                                       |
-| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **OpenRouter**           | Claude, GPT, Gemini, DeepSeek, Qwen, and others | API key from [openrouter.ai](https://openrouter.ai)                                                         |
-| **Anthropic**            | Claude Sonnet 4.6, Claude Opus 4.6              | API key from [console.anthropic.com](https://console.anthropic.com)                                         |
-| **OpenAI**               | GPT-5.3 Codex, GPT-4.1, o3, o4-mini             | API key from [platform.openai.com](https://platform.openai.com)                                             |
-| **Google AI**            | Gemini 3.1 Pro, Gemini 3 Flash                  | API key from [aistudio.google.dev](https://aistudio.google.dev)                                             |
-| **Z.ai**                 | GLM-5.1, GLM-5, GLM-4.7, GLM-4.5 family         | API key from [docs.z.ai](https://docs.z.ai/devpack/quick-start)                                             |
-| **MiniMax**              | MiniMax M2.7, M2.7-highspeed, M2.5, M2.1        | API key from [platform.minimax.io](https://platform.minimax.io/user-center/basic-information/interface-key) |
-| **OpenAI-compatible**    | Any endpoint with OpenAI API format             | Custom base URL + key. Supports Completions and Responses API toggle.                                       |
-| **Anthropic-compatible** | Any endpoint with Anthropic API format          | Custom base URL + key                                                                                       |
+## Activity and timing
 
-No backend, no subscription — your key talks directly to the provider.
+Reasoning and tool calls stay in their original order inside the turn that produced them. Active work is expanded; completed activity collapses to a compact summary with the turn's elapsed time. OpenPencil does not invent per-tool durations when the backend did not record them.
 
-## Trace history
+## Trace evidence
 
-Trace is a separate, time-ordered record of canvas interactions and evidence. Press <kbd>⌘</kbd> + <kbd>⌥</kbd> + <kbd>T</kbd> on macOS or <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> on Windows and Linux to open its current feed and durable history. For the local workspace, OpenPencil also writes only the latest gesture's exact Board targets, relevant connections, region, expiry, omissions, and optional PNG path to `~/.openpencil/local-workspace-authority-v1/trace-context.json`. Coding agents can read that bounded file directly for “this” and “these” follow-ups; the user's words remain the instruction. Assistant clients use `query_trace_history` only when they explicitly need a bounded document-, Board-, or time-scoped historical slice. Trace does not send events through the editor chat.
+Trace is separate from chat. Press <kbd>⌘</kbd> + <kbd>⌥</kbd> + <kbd>T</kbd> on macOS or <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> on Windows and Linux to open the Activity feed and durable history.
 
-## What It Can Do
+The local authority writes the latest gesture's exact Board targets, region, expiry, omissions, and optional PNG path to `~/.openpencil/local-workspace-authority-v1/trace-context.json`. Coding agents can read that bounded file directly for “this” and “these” follow-ups. When historical evidence is explicitly needed, clients can read a bounded slice from `trace-events/*.jsonl`.
 
-The assistant has 90+ tools across these categories:
+## Design automation
 
-- **Create** — frames, shapes, text, components, pages. Renders JSX for complex layouts.
-- **Style** — fills, strokes, effects, opacity, corner radius, blend modes.
-- **Layout** — auto-layout, grid, alignment, spacing, sizing.
-- **Components** — create components, instances, component sets. Manage overrides.
-- **Variables** — create/edit variables, collections, modes. Bind to fills.
-- **Query** — find nodes, XPath selectors, read properties, list pages, fonts, selection.
-- **Inspect** — `get_jsx` for JSX roundtrip view, `diff_jsx` for structural diffs, `describe` for semantic role and design issue detection.
-- **Analyze** — color palette, typography audit, spacing consistency, cluster detection.
-- **Export** — PNG, SVG, JSX with Tailwind classes. Vision-based verification via `export_image`.
-- **Vector** — boolean operations, path manipulation.
-
-## Visual Verification
-
-The assistant can verify its work visually. After creating or modifying designs, it uses `export_image` to capture a screenshot and checks the result against the original request. This catches layout issues, missing elements, and color mismatches that text-only responses would miss.
-
-## Example Prompts
-
-- "Create a card with a title, description, and a blue button"
-- "Make all buttons on this page use the same border radius"
-- "What fonts are used in this file?"
-- "Change the background of the selected frame to a gradient from blue to purple"
-- "Export the selected frame as SVG"
-- "Find all text nodes with font size less than 12"
-- "Describe the selected component — what role does it look like?"
-- "Show me the JSX for this frame"
-
-## Tips
-
-- Select nodes before asking — the assistant knows what's selected.
-- Be specific about colors, sizes, and positions for precise results.
-- The assistant can modify multiple nodes in one message.
-- Use "undo" in the editor if you don't like the result — AI mutations support full undo.
-- All layout is recomputed automatically after each tool execution.
+Task chat and editor automation are separate surfaces. MCP-compatible clients can discover OpenPencil's current design-tool catalog at runtime over stdio or HTTP. See [MCP Server](./mcp-server).

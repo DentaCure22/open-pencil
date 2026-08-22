@@ -19,6 +19,7 @@ import {
   setAPIKey,
   unsplashAccessKey
 } from '@/app/ai/chat/storage'
+import type { createChatSessionManager } from '@/app/ai/chat/transports'
 import { exposeChatTransportOverride } from '@/app/browser-bridge'
 import { getActiveEditorStore } from '@/app/editor/active-store'
 
@@ -26,9 +27,7 @@ export type EditorPanelTab = 'design' | 'code' | 'ai'
 
 const activeTab = ref<EditorPanelTab>('code')
 
-type ChatSessionManager = ReturnType<
-  typeof import('@/app/ai/chat/transports').createChatSessionManager
->
+type ChatSessionManager = ReturnType<typeof createChatSessionManager>
 let chatSessionPromise: Promise<ChatSessionManager> | null = null
 let transportDirty = false
 

@@ -5,14 +5,16 @@ import {
   type PDFDocumentProxy,
   type RenderTask
 } from 'pdfjs-dist'
-import * as pdfWorkerUrlModule from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// Vite's `?url` loader synthesizes this default string export at build time.
+// oxlint-disable-next-line import/default
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 import { IS_BROWSER } from '@open-pencil/core/constants'
 
 import type { ExtractedMediaImage } from '@/app/media-evidence/extraction'
 import { canvasPngBlob } from '@/app/media-evidence/raster'
 
-GlobalWorkerOptions.workerSrc = pdfWorkerUrlModule.default
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 const PDF_PREVIEW_CSS_SCALE = 1.15
 const PDF_PREVIEW_MAX_DIMENSION = 4096

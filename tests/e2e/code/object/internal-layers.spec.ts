@@ -25,38 +25,6 @@ function frameDocument(frameId: string) {
   }, frameId)
 }
 
-function boardFocusGeometry(frameId: string) {
-  return editor.page.evaluate((id) => {
-    const surface = document.querySelector<HTMLElement>(`[data-code-object-id="${id}"]`)
-    const canvas = document.querySelector<HTMLElement>('[data-test-id="canvas-area"]')
-    const layers = document.querySelector<HTMLElement>('[data-test-id="layers-shell"]')
-    const properties = document.querySelector<HTMLElement>('[data-test-id="properties-panel"]')
-    const toolbar = document.querySelector<HTMLElement>('[data-test-id="toolbar"]')
-    const boardDock = document.querySelector<HTMLElement>('[data-test-id="board-dock"]')
-    if (!surface || !canvas || !layers || !toolbar || !boardDock) {
-      throw new Error('Expected Code Object and editor chrome')
-    }
-
-    const surfaceRect = surface.getBoundingClientRect()
-    const canvasRect = canvas.getBoundingClientRect()
-    const layersRect = layers.getBoundingClientRect()
-    const propertiesRect = properties?.getBoundingClientRect()
-    const toolbarRect = toolbar.getBoundingClientRect()
-    const boardDockRect = boardDock.getBoundingClientRect()
-    const rightEdge =
-      propertiesRect && propertiesRect.left >= canvasRect.left + canvasRect.width / 2
-        ? propertiesRect.left
-        : canvasRect.right
-
-    return {
-      targetX: (layersRect.right + rightEdge) / 2,
-      targetY: (toolbarRect.bottom + boardDockRect.top) / 2,
-      x: surfaceRect.left + surfaceRect.width / 2,
-      y: surfaceRect.top + surfaceRect.height / 2
-    }
-  }, frameId)
-}
-
 test('keeps the rounded Smylr iframe and frame chrome aligned during movement', async () => {
   const surface = editor.page.locator('[data-code-object-id]').first()
   await expect(surface).toBeVisible()
@@ -120,7 +88,7 @@ test('keeps the rounded Smylr iframe and frame chrome aligned during movement', 
   await expect.poll(() => frameGeometry(frameId)).toEqual(beforeMoveGeometry)
 })
 
-test('offers the stored start script in the Document row while the local app is down', async () => {
+test('runs or refreshes the selected trusted app from the tool rail', async () => {
   let appStarted = false
   await editor.page.route('http://127.0.0.1:7602/local-apps/v1/smylr/status', async (route) => {
     await route.fulfill({
@@ -154,18 +122,19 @@ test('offers the stored start script in the Document row while the local app is 
   await editor.page.evaluate(() => window.openPencil?.getStore?.().clearSelection())
   await editor.page.evaluate((id) => window.openPencil?.getStore?.().select([id]), frameId)
 
-  const startButton = editor.page.getByTestId('trusted-web-app-start')
-  await expect(startButton).toBeVisible()
-  await editor.page.mouse.move(0, 0)
+  const appControl = editor.page.getByTestId('trusted-web-app-run-refresh')
+  await expect(appControl).toBeVisible()
   await expect(editor.page.getByRole('tooltip')).toHaveCount(0)
-  await startButton.hover()
+  await appControl.hover()
   await expect(
-    editor.page.getByRole('tooltip').filter({ hasText: 'Start app · npm run dev' })
+    editor.page.getByRole('tooltip').filter({ hasText: 'Run Smylr · npm run dev' })
   ).toBeVisible()
-  await startButton.click()
+  await appControl.click()
 
   await expect.poll(() => startRequests).toBe(1)
-  await expect(startButton).toHaveCount(0)
+  await expect(appControl).toHaveAccessibleName('Refresh Smylr')
+  await appControl.click()
+  await expect.poll(() => startRequests).toBe(1)
 })
 
 test('runs the full Smylr web app inside one Board-owned Code Object', async () => {
@@ -186,9 +155,8 @@ test('runs the full Smylr web app inside one Board-owned Code Object', async () 
   const initialDocument = await frameDocument(frameId)
   const initialGeometry = await frameGeometry(frameId)
   expect(initialDocument).toBeTruthy()
-  await expect(editor.page.getByTestId('code-object-header-title')).toHaveText(
-    'Dental Chart / Current'
-  )
+  await editor.page.getByTestId('selection-context-trigger').hover()
+  await expect(editor.page.getByTestId('selection-context-tools')).toBeVisible()
 
   const selectionOverlay = editor.page.getByTestId(`code-object-overlay-${frameId}`)
   await expect(selectionOverlay).toHaveCSS('z-index', '14')
@@ -206,10 +174,11 @@ test('runs the full Smylr web app inside one Board-owned Code Object', async () 
   await editor.page.keyboard.press('Meta+z')
   expect(await frameGeometry(frameId)).toEqual(initialGeometry)
 
+  await editor.page.getByTestId('selection-context-trigger').hover()
   await editor.page.getByTestId('code-object-viewport-desktop').click()
   await expect
     .poll(() => frameGeometry(frameId))
-    .toMatchObject({ height: 900, rotation: 0, width: 1440 })
+    .toMatchObject({ height: 1069, rotation: 0, width: 1728 })
 
   const resizeHandle = editor.page.getByTestId('code-object-resize-se')
   const resizeHandleBounds = await resizeHandle.boundingBox()
@@ -226,27 +195,18 @@ test('runs the full Smylr web app inside one Board-owned Code Object', async () 
   )
   await editor.page.mouse.up()
   const resized = await frameGeometry(frameId)
-  expect(resized.width).toBeGreaterThan(1440)
-  expect(resized.height).toBeGreaterThan(900)
+  expect(resized.width).toBeGreaterThan(1728)
+  expect(resized.height).toBeGreaterThan(1069)
   await editor.page.keyboard.press('Meta+z')
   await expect
     .poll(() => frameGeometry(frameId))
-    .toMatchObject({ height: 900, rotation: 0, width: 1440 })
+    .toMatchObject({ height: 1069, rotation: 0, width: 1728 })
 
   await editor.page.evaluate(() => window.openPencil?.getStore?.().pan(180, -120))
-  await editor.page.getByTestId('code-object-design-hit-target').dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').click()
   await expect(surface).toHaveAttribute('data-code-object-mode', 'interact')
   await expect(iframe).toBeFocused()
   await expect(smylr.locator('html')).toHaveAttribute('data-smylr-openpencil-mode', 'interact')
-  await expect
-    .poll(async () => {
-      const geometry = await boardFocusGeometry(frameId)
-      return Math.max(
-        Math.abs(geometry.x - geometry.targetX),
-        Math.abs(geometry.y - geometry.targetY)
-      )
-    })
-    .toBeLessThan(1)
 
   await smylr.locator('a[href="/patients"]').first().click()
   await expect
@@ -298,7 +258,7 @@ test('runs the full Smylr web app inside one Board-owned Code Object', async () 
 
   await smylr.locator('body').press('Escape')
   await expect(surface).toHaveAttribute('data-code-object-mode', 'design')
-  await expect(editor.page.getByTestId('code-object-header')).toBeVisible()
+  await expect(editor.page.getByTestId('selection-context-trigger')).toBeVisible()
   expect(await frameDocument(frameId)).toBe(initialDocument)
 
   const containersTool = editor.page.getByTestId('smylr-containers-tool')

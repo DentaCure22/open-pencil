@@ -1,11 +1,12 @@
-import type { PluginDataEntry, SceneGraph, SceneNode, Stroke } from '@open-pencil/scene-graph'
+import type { PluginDataEntry, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { colorToFill, parseColor } from '#core/color'
+import { colorToFill } from '#core/color'
 import {
   CONTENT_SOURCE_REVISION,
   contentSourcePluginData,
   sourceReconciliationPluginData
 } from '#core/io/content-source'
+import { createTextSceneNode, solidStroke, type TextSceneNodeOptions } from '#core/io/formats/scene'
 
 import { structuredDataPluginData } from './metadata'
 
@@ -35,15 +36,10 @@ export interface DataDocumentSurface {
   content: SceneNode
 }
 
-export interface DataTextOptions {
-  name: string
-  width: number
-  fontSize?: number
-  fontWeight?: number
-  color?: string
-  pluginData?: PluginDataEntry[]
-  layoutGrow?: number
-}
+export type DataTextOptions = Pick<
+  TextSceneNodeOptions,
+  'color' | 'fontSize' | 'fontWeight' | 'layoutGrow' | 'name' | 'pluginData' | 'width'
+>
 
 export interface DataRowOptions {
   name: string
@@ -52,49 +48,16 @@ export interface DataRowOptions {
   muted?: boolean
 }
 
-function solidStroke(color: string, weight = 1): Stroke {
-  const parsed = parseColor(color)
-  return {
-    color: parsed,
-    weight,
-    opacity: parsed.a,
-    visible: parsed.a > 0,
-    align: 'INSIDE',
-    cap: 'NONE',
-    join: 'MITER',
-    dashPattern: []
-  }
-}
-
-function estimatedTextHeight(text: string, fontSize: number, width: number): number {
-  const lineHeight = fontSize * 1.4
-  const charactersPerLine = Math.max(1, Math.floor(width / (fontSize * 0.56)))
-  const lineCount = text
-    .split('\n')
-    .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0)
-  return Math.max(lineHeight, Math.ceil(lineCount * lineHeight))
-}
-
 export function createDataText(
   graph: SceneGraph,
   parentId: string,
   text: string,
   options: DataTextOptions
 ): SceneNode {
-  const fontSize = options.fontSize ?? 14
-  return graph.createNode('TEXT', parentId, {
-    name: options.name,
-    width: options.width,
-    height: estimatedTextHeight(text, fontSize, options.width),
-    text,
-    fontSize,
-    fontWeight: options.fontWeight ?? 400,
-    lineHeight: fontSize * 1.4,
-    textAutoResize: 'HEIGHT',
-    fills: [colorToFill(options.color ?? TEXT_COLOR)],
-    pluginData: options.pluginData ?? [],
-    layoutGrow: options.layoutGrow ?? 0,
-    layoutAlignSelf: 'STRETCH'
+  return createTextSceneNode(graph, parentId, text, options, {
+    color: TEXT_COLOR,
+    fontSize: 14,
+    lineHeightMultiplier: 1.4
   })
 }
 

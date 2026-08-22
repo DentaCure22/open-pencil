@@ -4,13 +4,13 @@ import { computeAllLayouts } from '@open-pencil/core/layout'
 import { ALL_TOOLS, type ToolDef } from '@open-pencil/core/tools'
 import type { JsonObject, Rect } from '@open-pencil/scene-graph/primitives'
 
-import { requestNodes } from '@/app/automation/bridge/board-tools/native/text'
 import {
   automationMutationPropertyPaths,
   coalesceAutomationMutationRequest,
   enqueueAutomationMutation,
   type AutomationMutationMetadata
 } from '@/app/automation/bridge/mutation-queue'
+import { automationNodeSummary } from '@/app/automation/bridge/node-summary'
 import {
   assertMutationRequestIdFresh,
   mutationRequestLedgerSnapshot,
@@ -23,8 +23,6 @@ import {
 import { isUnknownRecord, type AutomationTarget } from '@/app/automation/bridge/target'
 import { ensureGraphFonts } from '@/app/editor/fonts'
 import { canWriteSmylrProductionDocument } from '@/app/smylr-production/document-state'
-
-import { nodeSummary } from './board-tools/readback'
 
 type FigmaFactory = (store: AutomationTarget['store'], pageId?: string) => FigmaAPI
 type ToolMutationGuard = {
@@ -170,7 +168,7 @@ function storedObjectReplay(
       nodes.push({ id, missing: true })
       continue
     }
-    const summary = nodeSummary(target, node)
+    const summary = automationNodeSummary(target, node)
     const expected = expectedById.get(id)
     if (!target.store.graph.isDescendant(id, target.pageId)) diverged = true
     if (expected) {
@@ -199,10 +197,6 @@ function storedToolMutationReplay(
   target: AutomationTarget,
   guard: ToolMutationGuard
 ): { found: false } | { found: true; response: unknown } {
-  const nativeReceipts = requestNodes(target, guard.requestId)
-  if (nativeReceipts.length > 0) {
-    throw new Error(`Request "${guard.requestId}" was already used for a different mutation.`)
-  }
   const storedReceipts = mutationRequestReceiptsById(target, guard.requestId)
   if (storedReceipts.length > 1) {
     throw new Error(`Request "${guard.requestId}" has duplicate stored mutation receipts.`)

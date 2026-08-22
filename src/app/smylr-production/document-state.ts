@@ -1,4 +1,5 @@
 import { SceneGraph } from '@open-pencil/scene-graph'
+import { hydrateSceneNodeDefaults } from '@open-pencil/scene-graph/node-defaults'
 
 import {
   readCacheJson,
@@ -294,7 +295,9 @@ export function serializeSmylrProductionDocumentForAuthority(
 function deserializeSmylrProductionDocument(cached: CachedSmylrProductionDocument) {
   const graph = new SceneGraph()
   graph.rootId = cached.rootId
-  graph.nodes = new Map(cached.nodes)
+  graph.nodes = new Map(
+    cached.nodes.map(([id, node]) => [id, hydrateSceneNodeDefaults(node)] as const)
+  )
   graph.images = new Map(cached.images)
   graph.variables = new Map(cached.variables)
   graph.variableCollections = new Map(cached.variableCollections)

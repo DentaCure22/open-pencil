@@ -1,10 +1,11 @@
-import { computed, ref, shallowRef } from 'vue'
+import { ref, shallowRef } from 'vue'
 
 import { IS_BROWSER } from '@open-pencil/core/constants'
 import { resolveTraceSpokenTurn } from '@open-pencil/core/rpc'
 
 import type { EditorStore } from '@/app/editor/session'
 import { readOpenPencilWorkspaceIdentity } from '@/app/workspace-document/identity'
+import { persistLocalWorkspaceTraceSpokenTurns } from '@/app/workspace-document/local-authority/client'
 
 import { saveNarratedTraceRecord } from './history'
 import { scrubNarratedTraceQueryReceiptForMicTurns } from './retrieval'
@@ -18,7 +19,6 @@ const MIC_TURN_RETENTION_MS = 15 * 60_000
 
 export type NarratedTraceMicPhase =
   | 'checking'
-  | 'consent'
   | 'denied'
   | 'error'
   | 'idle'
@@ -85,16 +85,12 @@ type ClockSample = {
 }
 
 export const narratedTraceMicPhase = ref<NarratedTraceMicPhase>('idle')
+/** User pinned the mic on: it records continuously, independent of the Focus tool. */
+export const narratedTraceMicPinned = ref(false)
 export const narratedTraceMicLocality = ref<NarratedTraceMicLocality>('browser-service')
 export const narratedTraceMicError = ref<string | null>(null)
 export const narratedTraceMicInterimText = ref('')
 export const narratedTraceMicTurns = shallowRef<NarratedTraceMicTurn[]>([])
-
-export const narratedTraceMicDisclosure = computed(() =>
-  narratedTraceMicLocality.value === 'local'
-    ? 'Speech recognition stays on until you stop it. OpenPencil stores each transcript for 15 minutes, not audio.'
-    : 'Chrome may process speech over the network while the microphone is on. OpenPencil stores each transcript for 15 minutes, not audio.'
-)
 
 let pendingScope: NarratedTraceMicScope | null = null
 let pendingRuntimeTabBindingId: string | null = null
@@ -106,6 +102,7 @@ let speechStartedAt: ClockSample | null = null
 let recognitionStartedAt: ClockSample | null = null
 let stopRequested = false
 let terminalRecognitionFailure = false
+let startAttempt = 0
 
 function recognitionConstructor(): SpeechRecognitionConstructor | null {
   if (!IS_BROWSER) return null
@@ -241,6 +238,14 @@ function finalizeTurn(store: EditorStore, text: string) {
     timeOriginEpochMs: start.timeOriginEpochMs
   }
   addTurn(turn)
+  // The turn itself is persisted immediately and unconditionally: workers must be able to resolve
+  // it even when no Trace session is active or the app disconnects moments later.
+  void persistLocalWorkspaceTraceSpokenTurns([turn]).catch((error: unknown) => {
+    console.warn(
+      '[Narrated Trace] Standalone spoken turn persistence failed:',
+      error instanceof Error ? error.message : error
+    )
+  })
   const traceSession = narratedTraceSession.value
   const spokenTurns = traceSession
     ? sessionSpokenTurns(traceSession, narratedTraceMicTurns.value)
@@ -321,13 +326,17 @@ export function clearNarratedTraceMicTurnsOutsideScope(scope: NarratedTraceScope
   scheduleRetention()
 }
 
-export async function prepareNarratedTraceMic(store: EditorStore) {
-  if (narratedTraceMicPhase.value === 'listening') return false
+export async function startNarratedTraceMic(store: EditorStore) {
+  if (narratedTraceMicPhase.value === 'listening') return true
+  if (narratedTraceMicPhase.value === 'checking') return false
+  const attempt = ++startAttempt
   narratedTraceMicError.value = null
   narratedTraceMicPhase.value = 'checking'
-  pendingScope = exactScopeForStore(store)
-  pendingRuntimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store) ?? null
-  if (!pendingScope || !pendingRuntimeTabBindingId) {
+  const scope = exactScopeForStore(store)
+  const runtimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store) ?? null
+  pendingScope = scope
+  pendingRuntimeTabBindingId = runtimeTabBindingId
+  if (!scope || !runtimeTabBindingId) {
     pendingScope = null
     pendingRuntimeTabBindingId = null
     narratedTraceMicPhase.value = 'error'
@@ -355,39 +364,19 @@ export async function prepareNarratedTraceMic(store: EditorStore) {
       narratedTraceMicLocality.value = 'browser-service'
     }
   }
-  narratedTraceMicPhase.value = 'consent'
-  return true
-}
-
-export function cancelNarratedTraceMicConsent() {
-  if (narratedTraceMicPhase.value !== 'consent') return
-  pendingScope = null
-  pendingRuntimeTabBindingId = null
-  narratedTraceMicError.value = null
-  narratedTraceMicPhase.value = 'idle'
-}
-
-export function startNarratedTraceMic(store: EditorStore) {
-  if (narratedTraceMicPhase.value !== 'consent' || !pendingScope || !pendingRuntimeTabBindingId) {
-    return false
-  }
+  if (attempt !== startAttempt) return false
   const currentScope = exactScopeForStore(store)
   const currentRuntimeTabBindingId = narratedTraceRuntimeTabBindingForStore(store)
-  if (
-    !sameExactScope(pendingScope, currentScope) ||
-    pendingRuntimeTabBindingId !== currentRuntimeTabBindingId
-  ) {
+  if (!sameExactScope(scope, currentScope) || runtimeTabBindingId !== currentRuntimeTabBindingId) {
     narratedTraceMicPhase.value = 'error'
-    narratedTraceMicError.value =
-      'The Board or runtime tab changed before microphone consent completed.'
+    narratedTraceMicError.value = 'The Board or runtime tab changed before the microphone started.'
     pendingScope = null
     pendingRuntimeTabBindingId = null
     return false
   }
 
-  const constructor = recognitionConstructor()
   const clock = clockSample()
-  if (!constructor || !clock) {
+  if (!clock) {
     narratedTraceMicPhase.value = 'unsupported'
     narratedTraceMicError.value = 'Speech recognition or its monotonic clock is unavailable.'
     return false
@@ -428,6 +417,13 @@ export function startNarratedTraceMic(store: EditorStore) {
           next.abort()
         } catch {
           clearRecognition()
+        }
+        // A pinned mic must survive the scope change that invalidated this turn: re-anchor to
+        // the current Board instead of staying dead. The in-flight turn is lost, nothing else.
+        if (narratedTraceMicPinned.value) {
+          setTimeout(() => {
+            if (narratedTraceMicPinned.value) void startNarratedTraceMic(store)
+          }, MIC_RESTART_DELAY_MS)
         }
         return
       }
@@ -476,8 +472,26 @@ export function startNarratedTraceMic(store: EditorStore) {
   }
 }
 
+/**
+ * Restarts recognition anchored to the store's current scope. Used when the pinned mic must keep
+ * recording across a Board or page switch: the old anchor is invalid, but listening continues.
+ */
+export async function reanchorNarratedTraceMic(store: EditorStore) {
+  if (narratedTraceMicPhase.value !== 'listening' && narratedTraceMicPhase.value !== 'checking') {
+    return startNarratedTraceMic(store)
+  }
+  stopNarratedTraceMic()
+  return startNarratedTraceMic(store)
+}
+
 export function stopNarratedTraceMic() {
-  if (narratedTraceMicPhase.value !== 'listening' || !recognition) return
+  startAttempt += 1
+  if (!recognition) {
+    clearRecognition()
+    narratedTraceMicError.value = null
+    narratedTraceMicPhase.value = 'idle'
+    return
+  }
   stopRequested = true
   clearRecognitionRestartTimer()
   narratedTraceMicInterimText.value = ''
@@ -496,6 +510,7 @@ export function stopNarratedTraceMic() {
 }
 
 export function disposeNarratedTraceMic() {
+  startAttempt += 1
   if (recognition) {
     stopRequested = true
     terminalRecognitionFailure = true

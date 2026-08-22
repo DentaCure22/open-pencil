@@ -33,6 +33,8 @@ const position = ref({ x: 0, y: 0 })
 let openTimer: ReturnType<typeof setTimeout> | undefined
 
 const canOpen = computed(() => Boolean(label) && !disabled)
+const openDocumentTarget = computed(() => (open.value ? document : null))
+const openWindowTarget = computed(() => (open.value ? window : null))
 const contentStyle = computed(() => ({
   left: `${position.value.x}px`,
   top: `${position.value.y}px`
@@ -141,10 +143,10 @@ function onPointerDown() {
   hide()
 }
 
-useEventListener(window, 'resize', refreshPosition)
-useEventListener(window, 'scroll', refreshPosition, { capture: true, passive: true })
-useEventListener(document, 'pointerdown', hide, { capture: true })
-useEventListener(document, 'click', hide, { capture: true })
+useEventListener(openWindowTarget, 'resize', refreshPosition)
+useEventListener(openWindowTarget, 'scroll', refreshPosition, { capture: true, passive: true })
+useEventListener(openDocumentTarget, 'pointerdown', hide, { capture: true })
+useEventListener(openDocumentTarget, 'click', hide, { capture: true })
 
 watch(canOpen, (value) => {
   if (!value) hide()

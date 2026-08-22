@@ -6,7 +6,7 @@
 graph TB
     subgraph Tauri["Tauri v2 Shell"]
         subgraph Editor["Editor (Web)"]
-            UI["Vue 3 UI<br/>Toolbar · Panels · Properties<br/>Layers · Color Picker"]
+            UI["Vue 3 UI<br/>Sidebar · Tool rail · Canvas<br/>Layers · Chats · Assets · Activity"]
             Skia["Skia CanvasKit (WASM, 7MB)<br/>Vector rendering · Text shaping<br/>Effects · Export"]
             subgraph Core["Core Engine (TS)"]
                 SG[SceneGraph] --- Layout[Layout - Yoga]
@@ -19,19 +19,19 @@ graph TB
                 Kiwi --- SVG[SVG export]
             end
         end
-        MCP["MCP Server (90 tools, stdio+HTTP)"]
+        MCP["MCP Server (stdio+HTTP)"]
         Collab["P2P Collab (Trystero + Yjs)"]
     end
 `
 
 ## Editor-Layout
 
-Die Oberfläche folgt Figmas UI3-Layout — Werkzeugleiste unten, Navigation links, Eigenschaften rechts:
+Der Editor verwendet ein kompaktes, Canvas-zentriertes Layout:
 
-- **Navigationspanel (links)** — Ebenenbaum, Seitenpanel
-- **Canvas (Mitte)** — Unendlicher Canvas mit CanvasKit-Rendering, Zoom/Pan
-- **Eigenschaftspanel (rechts)** — Kontextsensitive Abschnitte: Darstellung, Füllung, Kontur, Typografie, Layout, Position
-- **Werkzeugleiste (unten)** — Werkzeugauswahl: Auswahl, Frame, Sektion, Rechteck, Ellipse, Linie, Text, Stift, Hand
+- **Seitenleiste (links)** — Ebenen, Chats, Assets und Aktivität in einer schwebenden Oberfläche
+- **Werkzeugleiste** — Integrierte Zeichen-, Auswahl-, Arbeitsbereichs- und Hilfsfunktionen
+- **Canvas** — Unendliche CanvasKit-Fläche mit Zoom, Schwenken und kontextbezogenen Objektaktionen
+- **Mobile Schublade** — Ebenen-, Design- und Code-Steuerungen bei schmalen Ansichten
 
 ## Komponenten
 
@@ -72,11 +72,11 @@ Siehe [Dateiformat-Referenz](/reference/file-format) für Details.
 
 Werkzeuge werden einmal in `packages/core/src/tools/` definiert, aufgeteilt nach Domäne: read, create, modify, structure, variables, vector, analyze. Jedes Werkzeug hat typisierte Parameter und eine `execute(figma, args)`-Funktion. Adapter konvertieren sie für:
 
-- **KI-Chat** — valibot-Schemas, Multi-Provider (Anthropic, OpenAI, Google AI, OpenRouter, kompatible Endpunkte)
+- **Agenten-Aufgaben** — Pi-Konversationen in Seitenleiste und Board-Karten
 - **MCP-Server** — zod-Schemas, stdio + HTTP-Transporte
 - **CLI** — verfügbar über den `eval`-Befehl
 
-90+ Core-Werkzeuge + 3 MCP-Dateiverwaltungswerkzeuge. Enthält XPath-Abfrage (`query_nodes`), JSX-Inspektion (`get_jsx`, `diff_jsx`), semantische Beschreibung (`describe`) und visionsbasierte Überprüfung (`export_image` gibt Bilder an das Modell zurück).
+Der Katalog wird zur Laufzeit entdeckt statt als feste Anzahl dokumentiert. Er enthält XPath-Abfrage (`query_nodes`), JSX-Inspektion (`get_jsx`, `diff_jsx`), semantische Beschreibung (`describe`) und visuelle Überprüfung (`export_image`).
 
 ### Rückgängig/Wiederherstellen
 
@@ -92,13 +92,9 @@ Echtzeit-Peer-to-Peer-Kollaboration über Trystero (WebRTC) + Yjs CRDT. Kein Ser
 
 ### CLI-zu-App RPC-Bridge
 
-Wenn die Desktop-App läuft, verbinden sich CLI-Befehle über WebSocket statt eine .fig-Datei zu benötigen. Der Automatisierungsserver läuft auf `127.0.0.1:7600` (HTTP) und `127.0.0.1:7601` (WebSocket). Befehle werden gegen den Live-Editor-Zustand ausgeführt, sodass Automatisierungsskripte und KI-Agenten mit der laufenden App interagieren können.
+Live-CLI-zu-App-RPC ist derzeit deaktiviert. Lokale Board- und Trace-Persistenz nutzt die schmale Authority auf Port 7602 und benötigt kein MCP.
 
 ## Ausblick
-
-### Vollständiges figma-use-Werkzeugset
-
-Der MCP-Server bietet derzeit 90 Werkzeuge. Die Referenzimplementierung in [figma-use](https://github.com/dannote/figma-use) hat 118. Die verbleibenden Werkzeuge decken erweiterte Layout-Constraints, Prototyp-Verbindungen, erweiterte Komponenteneigenschafts-Bearbeitung und Massen-Dokumentoperationen ab.
 
 ### CI-Design-Werkzeuge
 

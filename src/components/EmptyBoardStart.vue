@@ -8,6 +8,7 @@ import { useEditorStore } from '@/app/editor/active-store'
 import { narratedTraceAnnotationTool } from '@/app/narrated-trace'
 
 const { pageIsEmpty } = defineProps<{ pageIsEmpty: boolean }>()
+const emit = defineEmits<{ startNative: [] }>()
 
 const store = useEditorStore()
 
@@ -33,7 +34,7 @@ function startCodeObject(id: CodeComponentPresetId) {
       </div>
       <h1 class="mt-3 text-[14px] font-semibold tracking-[-0.01em] text-surface">Start a board</h1>
       <p class="mx-auto mt-1 max-w-[250px] text-[10px] leading-4 text-muted">
-        Add one living Code Object or start drawing with native objects.
+        Start with a living app, a native canvas, or a working document.
       </p>
       <button
         type="button"
@@ -43,6 +44,15 @@ function startCodeObject(id: CodeComponentPresetId) {
       >
         <icon-lucide-code-2 class="size-3" />
         New Code Object
+      </button>
+      <button
+        type="button"
+        class="text-muted hover:bg-hover hover:text-surface mt-1.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.025] text-[9px] font-medium transition"
+        data-test-id="native-board-start"
+        @click="emit('startNative')"
+      >
+        <icon-lucide-pen-tool class="size-3" />
+        Blank native canvas
       </button>
       <div class="mt-1.5 grid grid-cols-2 gap-1.5">
         <button

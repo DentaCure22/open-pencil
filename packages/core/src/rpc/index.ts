@@ -45,11 +45,8 @@ export type {
 export {
   BOARD_BUILD_PLAN_CONTRACT,
   BOARD_BUILD_PLAN_MAX_ARTIFACTS,
-  BOARD_BUILD_PLAN_MAX_CONNECTIONS,
   BOARD_BUILD_PLAN_MAX_OPERATIONS,
-  boardBuildPlanConvergenceAnchor,
   boardBuildPlanDigestInput,
-  boardBuildPlanInboundReferences,
   boardBuildPlanLayoutMembers,
   boardBuildPlanReferenceKey,
   compileBoardBuildPlanFlowLayout,
@@ -59,19 +56,12 @@ export {
   resolveBoardBuildPlanOperations
 } from './board-build-plan'
 export {
-  BOARD_BUILD_TRACE_CONNECTION_DELETE_KIND,
   BOARD_BUILD_TRACE_OBJECT_ID,
   BOARD_BUILD_TRACE_REGION_KIND,
-  boardBuildTracedConnections,
   boardBuildTraceContext,
   materializeBoardBuildTrace
 } from './board-build-trace'
-export type {
-  BoardBuildTraceConnectionDelete,
-  BoardBuildTraceConnectionOrientation,
-  BoardBuildTraceContext,
-  BoardBuildTraceMaterialization
-} from './board-build-trace'
+export type { BoardBuildTraceContext, BoardBuildTraceMaterialization } from './board-build-trace'
 export type {
   BoardBuildPlan,
   BoardBuildPlanAbsoluteMoveOperation,
@@ -85,7 +75,6 @@ export type {
   BoardBuildPlanCompositionDirection,
   BoardBuildPlanCompositionGeography,
   BoardBuildPlanCompositionPreferences,
-  BoardBuildPlanConnection,
   BoardBuildPlanDigestMetadata,
   BoardBuildPlanFlowDirection,
   BoardBuildPlanFlowLayout,
@@ -107,7 +96,8 @@ export type {
   BoardBuildPlanRelativeMoveOperation,
   BoardBuildPlanResolvedOperation,
   BoardBuildPlanTargetIdentity,
-  BoardBuildPlanTrustedWebAppRecipe
+  BoardBuildPlanTrustedWebAppRecipe,
+  BoardBuildPlanUiBlockRecipe
 } from './board-build-plan'
 export {
   applyBoardTransactionChanges,
@@ -119,11 +109,25 @@ export {
   buildTraceEmptyResult,
   buildTraceQueryMatch,
   hasTraceSpokenTurnSelector,
+  matchingTraceWindowEvents,
   publicTraceSpokenTurn,
   queryTraceRecords,
   queryTraceSpokenTurnWindow,
-  resolveTraceSpokenTurn
+  resolveTraceSpokenTurn,
+  SPOKEN_TURN_FRESHNESS_MS,
+  traceEventSearchValues,
+  TURN_CONTEXT_BRACKET_MS,
+  turnContextTargets
 } from './trace-query'
+export { resolveTraceRequest } from './trace-resolve'
+export type { TraceResolveInput, TraceResolveResult } from './trace-resolve'
+export { searchTrace } from './trace-search'
+export type {
+  TraceSearchInput,
+  TraceSearchResult,
+  TraceSearchSessionHit,
+  TraceSearchTurnHit
+} from './trace-search'
 export type {
   TraceHistoryEvent,
   TraceHistorySession,
@@ -136,12 +140,13 @@ export type {
   TraceQueryResult,
   TraceQueryScope,
   TraceQuerySpokenTurn,
+  TraceQueryTarget,
   TraceSpokenTurnResolution,
-  TraceSpokenTurnSelector
+  TraceSpokenTurnSelector,
+  TraceWindowEntry
 } from './trace-query'
 export type {
   BoardTransactionChange,
-  BoardTransactionConnectionSnapshot,
   BoardTransactionDirection,
   BoardTransactionInspection,
   BoardTransactionNodeSnapshot,

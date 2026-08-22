@@ -7,6 +7,10 @@ type PreviewGraph = {
   clearAbsPosCache: () => void
 }
 
+export type NodePreviewOptions = {
+  affectsScene?: boolean
+}
+
 const LAYOUT_AFFECTING_KEYS = new Set<string>([
   'x',
   'y',
@@ -64,7 +68,8 @@ const TEXT_PICTURE_KEYS = new Set<string>([
 export function updateNodePreview(
   graph: PreviewGraph,
   id: string,
-  changes: Partial<SceneNode>
+  changes: Partial<SceneNode>,
+  options: NodePreviewOptions = {}
 ): Partial<SceneNode> | null {
   const node = graph.nodes.get(id)
   if (!node) return null
@@ -81,7 +86,7 @@ export function updateNodePreview(
   const normalizedChanges = changes.vectorNetwork
     ? { ...changes, vectorNetwork: normalizeVectorNetwork(changes.vectorNetwork) }
     : changes
-  graph.positionPreviewVersion++
+  if (options.affectsScene !== false) graph.positionPreviewVersion++
   Object.assign(node, normalizedChanges)
   return normalizedChanges
 }

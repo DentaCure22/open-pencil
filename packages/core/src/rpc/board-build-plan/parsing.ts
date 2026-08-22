@@ -1,4 +1,10 @@
-import { parseObjectGraphPorts, type ObjectGraphPortDefinition } from '@open-pencil/scene-graph'
+import { DEFAULT_CODE_OBJECT_SURFACE, type CodeObjectSurface } from '#core/code-object/document'
+import {
+  codeObjectViewportPreset,
+  isCodeObjectViewportPresetId,
+  type CodeObjectViewportPreset,
+  type CodeObjectViewportPresetId
+} from '#core/code-object/viewport'
 
 import type {
   BoardBuildPlanDirection,
@@ -65,7 +71,6 @@ export const DIRECTION_OFFSETS = new Map<string, BoardBuildPlanRelativeOffset>([
   ['upper-left', { column: -1, row: -1 }],
   ['upper-right', { column: 1, row: -1 }]
 ])
-export const PORT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9._/-]{0,127}$/u
 export const OBJECT_PATCH_FIELDS = new Set([
   'cornerRadius',
   'fill',
@@ -92,6 +97,43 @@ export function exactFields(value: JsonRecord, fields: readonly string[], label:
   if (unexpected.length > 0) {
     throw new Error(`${label} contains unsupported fields: ${unexpected.sort().join(', ')}.`)
   }
+}
+
+export function parseCodeObjectViewport(
+  value: JsonRecord,
+  label: string
+): { preset?: CodeObjectViewportPresetId; viewport?: CodeObjectViewportPreset } {
+  const preset = value.viewport_preset
+  if (preset === undefined) return {}
+  if (!isCodeObjectViewportPresetId(preset)) {
+    throw new Error(`${label}.viewport_preset must be desktop, laptop, tablet, or phone.`)
+  }
+  const viewport = codeObjectViewportPreset(preset)
+  if (
+    (value.height !== undefined && value.height !== viewport.height) ||
+    (value.width !== undefined && value.width !== viewport.width)
+  ) {
+    throw new Error(`${label}.height and width must match its viewport_preset.`)
+  }
+  return { preset, viewport }
+}
+
+export function parseCodeObjectSurface(
+  value: unknown,
+  label: string
+): CodeObjectSurface | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
+  exactFields(value, ['background', 'overflow'], label)
+  const background = value.background ?? DEFAULT_CODE_OBJECT_SURFACE.background
+  const overflow = value.overflow ?? DEFAULT_CODE_OBJECT_SURFACE.overflow
+  if (background !== 'surface' && background !== 'transparent') {
+    throw new Error(`${label}.background must be surface or transparent.`)
+  }
+  if (overflow !== 'clip' && overflow !== 'scroll') {
+    throw new Error(`${label}.overflow must be clip or scroll.`)
+  }
+  return { background, overflow }
 }
 
 export function requiredString(value: unknown, label: string, maximum?: number): string {
@@ -168,20 +210,6 @@ export function optionalPlainJsonObject(
   return structuredClone(value)
 }
 
-export function parsePortDefinitions(
-  value: unknown,
-  label: string
-): ObjectGraphPortDefinition[] | undefined {
-  if (value === undefined) return undefined
-  const ports = parseObjectGraphPorts(value)
-  if (!ports) {
-    throw new Error(
-      `${label} must contain at most 256 unique named ports with id, label, direction, kinds, side, and offset.`
-    )
-  }
-  return ports
-}
-
 export function parseAlias(value: unknown, label: string): string {
   const alias = requiredString(value, label, 64)
   if (!ALIAS_PATTERN.test(alias)) {
@@ -218,7 +246,7 @@ export function parseDirections(
   }
   const directions = value.flatMap((direction) => {
     if (typeof direction !== 'string') {
-      throw new Error(`${label} contains an unsupported direction.`)
+      throw new TypeError(`${label} contains an unsupported direction.`)
     }
     const directionKey = direction.replace(' ', '-')
     const expansion = DIRECTION_EXPANSIONS.get(directionKey)

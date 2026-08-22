@@ -120,6 +120,27 @@ export function isSmylrProductionAppCodeObjectFrame(node: SceneNode | null | und
   )
 }
 
+export function resolveSmylrProductionIframeAnchor(
+  graph: SceneGraph,
+  pageId: string
+): SceneNode | null {
+  let anchor: SceneNode | null = null
+  let anchorArea = -1
+  for (const node of graph.getDescendants(pageId)) {
+    if (!isSmylrProductionAppCodeObjectFrame(node)) continue
+    const area = node.width * node.height
+    if (area <= anchorArea) continue
+    anchor = node
+    anchorArea = area
+  }
+  return anchor
+}
+
+export function smylrProductionAppPageId(node: SceneNode | null | undefined): string | undefined {
+  const pageId = node ? pluginValue(node, 'pageId') : undefined
+  return pageId?.trim() || undefined
+}
+
 export function isSmylrFlowPageNode(node: SceneNode | null | undefined): boolean {
   const kind = node ? pluginValue(node, 'kind') : undefined
   return kind === 'smylr-flow-page' || kind === SMYLR_PRODUCT_MAP_PAGE_KIND
@@ -182,20 +203,20 @@ function ensureProductionCodeObjectFrame(
   page: SmylrProductionPage,
   pageNode: SceneNode
 ): boolean {
+  const pageNodes = [...graph.getDescendants(pageNode.id)]
+  const managedFrames = pageNodes.filter(
+    (candidate) =>
+      candidate.type === 'FRAME' &&
+      pluginValue(candidate, 'pageId') === page.id &&
+      pluginValue(candidate, 'state') === 'current'
+  )
+  const nestedManagedFrame = managedFrames.find((candidate) => candidate.parentId !== pageNode.id)
   const frame =
-    graph
-      .getChildren(pageNode.id)
-      .find(
-        (candidate) =>
-          candidate.type === 'FRAME' &&
-          pluginValue(candidate, 'pageId') === page.id &&
-          pluginValue(candidate, 'state') === 'current'
-      ) ??
-    graph
-      .getChildren(pageNode.id)
-      .find(
-        (candidate) => candidate.type === 'FRAME' && candidate.name === `${page.label} / Current`
-      )
+    nestedManagedFrame ??
+    managedFrames[0] ??
+    pageNodes.find(
+      (candidate) => candidate.type === 'FRAME' && candidate.name === `${page.label} / Current`
+    )
   if (!frame) {
     createProductionCodeObjectFrame(graph, page, pageNode)
     return true
@@ -212,6 +233,10 @@ function ensureProductionCodeObjectFrame(
     ...frame.pluginData.filter((entry) => entry.pluginId !== PLUGIN_ID)
   ]
   let changed = false
+  for (const duplicate of managedFrames.filter((candidate) => candidate.id !== frame.id)) {
+    graph.deleteNode(duplicate.id)
+    changed = true
+  }
   if (
     frame.name !== `${page.label} / Current` ||
     frame.cornerRadius !== DEFAULT_CODE_OBJECT_RADIUS ||
@@ -408,7 +433,7 @@ function ensureProductMapPageMetadata(graph: SceneGraph, page: SceneNode): boole
 
 function removeLegacyProductMapProjection(graph: SceneGraph, pageId: string): boolean {
   let changed = false
-  for (const child of [...graph.getChildren(pageId)]) {
+  for (const child of graph.getChildren(pageId)) {
     const isLegacyCapture = child.name.startsWith('Saved capture ·')
     const isLegacyConnector = child.name === 'Line'
     const isLegacyMermaid = child.name === 'Mermaid diagram'
@@ -642,14 +667,11 @@ async function focusWorkspaceViewport(
   isDesignPage: boolean
 ) {
   if (isDesignPage) {
-    await fitDesignBoardsToViewport(
-      store,
-      workspace.selectedFocusIds.length > 0
-        ? workspace.selectedFocusIds
-        : workspace.selectedFocusId
-          ? [workspace.selectedFocusId]
-          : []
-    )
+    const focusIds = workspace.selectedFocusIds.slice()
+    if (focusIds.length === 0 && workspace.selectedFocusId) {
+      focusIds.push(workspace.selectedFocusId)
+    }
+    await fitDesignBoardsToViewport(store, focusIds)
     return
   }
 
@@ -892,18 +914,9 @@ export async function refreshSmylrFoundationsBoardsInPlace(
   }
 
   // Only refresh the page you're looking at (or both if unspecified).
-  const targets: Array<'tokens' | 'brand'> =
-    pageId === SMYLR_BRAND_PAGE_ID
-      ? ['brand']
-      : pageId === SMYLR_TOKENS_PAGE_ID
-        ? ['tokens']
-        : pageId
-          ? pageId === SMYLR_TOKENS_PAGE_ID
-            ? ['tokens']
-            : pageId === SMYLR_BRAND_PAGE_ID
-              ? ['brand']
-              : ['tokens']
-          : ['tokens', 'brand']
+  let targets: Array<'tokens' | 'brand'> = ['tokens', 'brand']
+  if (pageId === SMYLR_BRAND_PAGE_ID) targets = ['brand']
+  else if (pageId) targets = ['tokens']
 
   // Freeze camera
   const savedZoom = store.state.zoom
@@ -1082,17 +1095,14 @@ export async function switchSmylrProductionPage(
       return true
     }
 
+    const pageNodes = [...store.graph.getDescendants(page.id)]
     const focus =
-      store.graph
-        .getChildren(page.id)
-        .find((n) =>
-          n.pluginData.some(
-            (e) =>
-              e.pluginId === PLUGIN_ID &&
-              e.key === 'kind' &&
-              e.value === SMYLR_CODE_OBJECT_FRAME_KIND
-          )
-        ) ?? store.graph.getChildren(page.id).at(0)
+      pageNodes.find((n) =>
+        n.pluginData.some(
+          (e) =>
+            e.pluginId === PLUGIN_ID && e.key === 'kind' && e.value === SMYLR_CODE_OBJECT_FRAME_KIND
+        )
+      ) ?? pageNodes.at(0)
 
     if (focus) {
       store.select([focus.id])
@@ -1109,20 +1119,18 @@ export function findCurrentSmylrCodeObjectFrame(store: EditorStore): SceneNode |
   void store.state.sceneVersion
 
   return (
-    store.graph
-      .getChildren(store.state.currentPageId)
-      .find(
-        (node) => isSmylrCodeObjectFrame(node) && smylrCodeObjectFrameState(node) === 'current'
-      ) ?? null
+    [...store.graph.getDescendants(store.state.currentPageId)].find(
+      (node) => isSmylrCodeObjectFrame(node) && smylrCodeObjectFrameState(node) === 'current'
+    ) ?? null
   )
 }
 
 export function findSmylrCodeObjectFrames(store: EditorStore): SceneNode[] {
   void store.state.currentPageId
   void store.state.sceneVersion
-  return store.graph
-    .getChildren(store.state.currentPageId)
-    .filter((node) => isSmylrCodeObjectFrame(node))
+  return [...store.graph.getDescendants(store.state.currentPageId)].filter((node) =>
+    isSmylrCodeObjectFrame(node)
+  )
 }
 
 export function smylrCodeObjectFrameState(node: SceneNode): string {

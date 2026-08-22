@@ -1,8 +1,11 @@
 import type { Editor } from '@open-pencil/core/editor'
 import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { rectIntersectionRatio } from '@open-pencil/scene-graph/geometry'
 import { assetReference, computeImageHash } from '@open-pencil/scene-graph/images'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
+
+import { restoreAssetNodes } from '@/app/media-evidence/assets'
 
 import { classifySpatialFile } from './classify'
 import { spatialMediaPluginData, spatialMediaSource } from './source'
@@ -32,17 +35,6 @@ function setSelection(editor: Editor, ids: string[]) {
   else editor.clearSelection()
 }
 
-function overlaps(first: Rect, second: Rect): boolean {
-  const overlapLeft = Math.max(first.x, second.x)
-  const overlapTop = Math.max(first.y, second.y)
-  const overlapRight = Math.min(first.x + first.width, second.x + second.width)
-  const overlapBottom = Math.min(first.y + first.height, second.y + second.height)
-  if (overlapRight <= overlapLeft || overlapBottom <= overlapTop) return false
-  const overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop)
-  const smallerArea = Math.min(first.width * first.height, second.width * second.height)
-  return overlapArea >= smallerArea * 0.9
-}
-
 function placementBounds(editor: Editor, count: number, cx: number, cy: number): Rect {
   const width = VIEWER_WIDTH * count + VIEWER_GAP * Math.max(0, count - 1)
   const initial = { height: VIEWER_HEIGHT, width, x: cx - width / 2, y: cy - VIEWER_HEIGHT / 2 }
@@ -56,7 +48,8 @@ function placementBounds(editor: Editor, count: number, cx: number, cy: number):
       x: initial.x + CASCADE_STEP * attempt,
       y: initial.y + CASCADE_STEP * attempt
     }
-    if (!occupied.some((bounds) => overlaps(candidate, bounds))) return candidate
+    if (!occupied.some((bounds) => rectIntersectionRatio(candidate, bounds) >= 0.9))
+      return candidate
   }
   return initial
 }
@@ -160,10 +153,7 @@ export async function placeSpatialMediaFiles(
   editor.undo.push({
     label: 'Place 3D asset',
     forward: () => {
-      for (const item of prepared) editor.graph.images.set(item.hash, item.bytes)
-      for (const snapshot of snapshots) {
-        editor.graph.createNode(snapshot.type, pageId, structuredClone(snapshot))
-      }
+      restoreAssetNodes(editor, pageId, prepared, snapshots)
       setSelection(editor, placedIds)
       editor.requestRender()
     },

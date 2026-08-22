@@ -135,24 +135,38 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets)
   }
 
+  function absoluteNodeBounds(nodeId: string) {
+    const node = ctx.graph.getNode(nodeId)
+    return node ? computeAbsoluteBounds([node], (id) => ctx.graph.getAbsolutePosition(id)) : null
+  }
+
   function zoomToNode(
     nodeId: string,
     insets?: ViewportInsets,
     options: ZoomToBoundsOptions = {}
   ): boolean {
-    const node = ctx.graph.getNode(nodeId)
-    if (!node) return false
-
-    const b = computeAbsoluteBounds([node], (id) => ctx.graph.getAbsolutePosition(id))
+    const b = absoluteNodeBounds(nodeId)
+    if (!b) return false
     zoomToBounds(b.x, b.y, b.x + b.width, b.y + b.height, insets, options)
     return true
   }
 
-  function revealNode(nodeId: string, insets: ViewportInsets = {}, margin = 48): boolean {
-    const node = ctx.graph.getNode(nodeId)
-    if (!node) return false
+  function centerNode(nodeId: string, insets: ViewportInsets = {}): boolean {
+    const b = absoluteNodeBounds(nodeId)
+    if (!b) return false
+    const { width: viewW, height: viewH } = ctx.getViewportSize()
+    const area = resolveViewportArea(viewW, viewH, insets)
+    setViewport({
+      panX: area.centerX - (b.x + b.width / 2) * ctx.state.zoom,
+      panY: area.centerY - (b.y + b.height / 2) * ctx.state.zoom,
+      zoom: ctx.state.zoom
+    })
+    return true
+  }
 
-    const b = computeAbsoluteBounds([node], (id) => ctx.graph.getAbsolutePosition(id))
+  function revealNode(nodeId: string, insets: ViewportInsets = {}, margin = 48): boolean {
+    const b = absoluteNodeBounds(nodeId)
+    if (!b) return false
     const { width: viewW, height: viewH } = ctx.getViewportSize()
     const area = resolveViewportArea(viewW, viewH, insets)
     const safeMargin = Math.max(0, Math.min(margin, area.width / 4, area.height / 4))
@@ -254,6 +268,7 @@ export function createViewportActions(ctx: EditorContext) {
     zoomToBounds,
     zoomToFit,
     zoomToNode,
+    centerNode,
     revealNode,
     zoomTo100,
     zoomToLevel,

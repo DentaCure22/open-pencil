@@ -411,7 +411,7 @@ function updateOwnedBoardComponent(
   if (history === 'undoable') {
     store.updateNodeWithUndo(target.id, changes, owner.labels.update)
   } else {
-    store.graph.updateNodePreview(target.id, changes)
+    store.graph.updateNodePreview(target.id, changes, { affectsScene: false })
     store.requestOverlayRepaint()
   }
   const updated = store.graph.getNode(target.id)

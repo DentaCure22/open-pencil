@@ -119,6 +119,11 @@ export async function loadOpenPencilWorkspaceSourceIdentity(): Promise<OpenPenci
   return preserved ?? browserSourceIdentity ?? identity
 }
 
+const workspaceIdentityByGraph = new WeakMap<
+  SceneGraph,
+  { identity: OpenPencilWorkspaceIdentity | null; serialized: string | undefined }
+>()
+
 export function readOpenPencilWorkspaceIdentity(
   graph: SceneGraph
 ): OpenPencilWorkspaceIdentity | null {
@@ -128,12 +133,18 @@ export function readOpenPencilWorkspaceIdentity(
       entry.pluginId === OPENPENCIL_WORKSPACE_PLUGIN_ID &&
       entry.key === OPENPENCIL_WORKSPACE_IDENTITY_KEY
   )?.value
-  if (!serialized) return null
-  try {
-    return parseOpenPencilWorkspaceIdentity(JSON.parse(serialized))
-  } catch {
-    return null
+  const cached = workspaceIdentityByGraph.get(graph)
+  if (cached && cached.serialized === serialized) return cached.identity
+  let identity: OpenPencilWorkspaceIdentity | null = null
+  if (serialized) {
+    try {
+      identity = parseOpenPencilWorkspaceIdentity(JSON.parse(serialized))
+    } catch {
+      identity = null
+    }
   }
+  workspaceIdentityByGraph.set(graph, { identity, serialized })
+  return identity
 }
 
 export function stampOpenPencilWorkspaceIdentity(

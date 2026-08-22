@@ -3,6 +3,7 @@ export {
   REACT_SHAPE_PRESETS as CODE_COMPONENT_PRESETS,
   REACT_SHAPE_PRESETS as CODE_OBJECT_PRESETS,
   createCodeStarterDocument,
+  createAgentConversationTerminalDocument,
   createEarthSignalsDocument,
   createOfficeDocumentDocument,
   createOfficeSpreadsheetDocument,
@@ -31,22 +32,16 @@ export {
 } from '@/app/code-object/implementation'
 
 export {
-  connectCodeObjects,
   createCodeObjectBoardClient,
-  disconnectCodeObjects,
   dispatchCodeObjectBoardAction,
   setCodeObjectBoardShapeAccess
 } from '@/app/code-object/actions'
-
-export {
-  codeObjectConnectionDescriptors,
-  normalizeLegacyCodeObjectConnections
-} from '@/app/code-object/connection-migration'
 
 export { CODE_OBJECT_BOARD_API_VERSION } from '@/app/code-object/contracts'
 
 export type {
   CreateReactShapeInput as CreateCodeObjectInput,
+  AgentConversationTerminalDocument,
   CodeStarterDocument,
   CodeStarterState,
   EarthSignalsDocument,
@@ -95,13 +90,9 @@ export type {
   CodeObjectBoardSelfSnapshot,
   CodeObjectBoardShapeKind,
   CodeObjectBoardShapeSnapshot,
-  CodeObjectConnection,
-  CodeObjectConnectionDescriptor,
-  CodeObjectConnectionPermission,
   CodeObjectCreateBoardShapeAction,
   CodeObjectCreateBoardShapeInput,
   CodeObjectDeleteBoardShapeAction,
-  CodeObjectStatePatchAction,
   CodeObjectUpdateBoardShapeAction,
   CodeObjectUpdateBoardShapeInput,
   DispatchCodeObjectBoardAction

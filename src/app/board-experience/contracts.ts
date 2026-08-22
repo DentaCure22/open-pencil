@@ -28,7 +28,6 @@ export type BoardExperienceSnapshot = {
 export type BoardExperienceRuntimeContext = {
   board: () => BoardComponentClient
   deactivate: () => void
-  invalidate: () => void
   origin: BoardExperiencePoint
   pageId: string
 }

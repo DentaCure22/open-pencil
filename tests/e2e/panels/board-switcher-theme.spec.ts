@@ -28,7 +28,8 @@ async function setTheme(theme: 'dark' | 'light') {
 async function openSwitcher() {
   await letAppReceivePointerEvents()
   const switcher = editor.page.getByTestId('board-project-browser')
-  if (!(await switcher.isVisible())) await editor.page.getByTestId('board-dock-more').click()
+  if (!(await switcher.isVisible()))
+    await editor.page.getByTestId('workspace-toolbar-button').click()
   const back = switcher.getByTestId('board-switcher-back')
   if (await back.isVisible()) await back.click()
   await expect(switcher).toBeVisible()
@@ -142,7 +143,7 @@ test('uses readable semantic colors in light mode and preserves dark mode', asyn
   await expectTheme(await themeColors())
 })
 
-test('stays open for switcher interactions and closes on Escape or outside click', async () => {
+test('keeps project browsing open and closes after selection, Escape, or outside click', async () => {
   await setTheme('light')
   const switcher = await openSwitcher()
   const projectRows = switcher.getByTestId('board-switcher-project-row')
@@ -154,8 +155,9 @@ test('stays open for switcher interactions and closes on Escape or outside click
   const boardRows = switcher.getByTestId('board-switcher-board-row')
   expect(await boardRows.count()).toBeGreaterThan(0)
   await boardRows.first().click()
-  await expect(switcher).toBeVisible()
+  await expect(switcher).not.toBeVisible()
 
+  await openSwitcher()
   await editor.page.keyboard.press('Escape')
   await expect(switcher).not.toBeVisible()
 

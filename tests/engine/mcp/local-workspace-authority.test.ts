@@ -208,7 +208,13 @@ describe('local workspace authority', () => {
         startedAt: gesture.capturedAt
       },
       summary: {
+        durationMs: 0,
+        eventCount: 1,
+        evidenceCount: 1,
+        gestureCount: 1,
+        gestureIds: [gesture.gestureId],
         id: gesture.sessionId,
+        latestGestureAt: gesture.capturedAt,
         startedAt: gesture.capturedAt,
         title: 'Persisted Trace',
         updatedAt: gesture.capturedAt
@@ -270,9 +276,14 @@ describe('local workspace authority', () => {
       id: 'session:persisted',
       startedAt: gesture.capturedAt
     })
-    expect(await restarted.traceSessionSummaries()).toEqual([
+    expect(await restarted.traceSessionSummaries()).toMatchObject([
       {
+        eventCount: 1,
+        evidenceCount: 1,
+        gestureCount: 1,
+        gestureIds: [gesture.gestureId],
         id: 'session:persisted',
+        latestGestureAt: gesture.capturedAt,
         startedAt: gesture.capturedAt,
         title: 'Persisted Trace',
         updatedAt: gesture.capturedAt
@@ -284,7 +295,92 @@ describe('local workspace authority', () => {
     })
   })
 
-  test('imports the former gesture sidecar once into canonical Trace storage', async () => {
+  test('replaces and deletes all session-owned Trace records during JSONL replay', async () => {
+    const { store } = await createStore()
+    await store.initialize({
+      document: { nodes: ['canonical-copy'] },
+      requestId: 'seed-trace-replay',
+      sourceWorkspaceId: 'workspace-canonical'
+    })
+    const status = await store.status()
+    const sessionId = 'session:replace'
+    const startedAtEpochMs = Date.now() - 1_000
+    const scope = {
+      documentId: status.identity.documentId,
+      pageId: 'page:replace',
+      workspaceId: status.identity.workspaceId
+    }
+    const gesture = (gestureId: string, capturedAtEpochMs: number) => ({
+      boardOrigin: {
+        contentDocumentId: scope.documentId,
+        pageId: scope.pageId,
+        workspaceId: scope.workspaceId
+      },
+      candidates: { count: 1, items: [{ stableId: gestureId }], truncated: false },
+      capturedAt: new Date(capturedAtEpochMs).toISOString(),
+      contract: 'trace-gesture-agent/v1',
+      geometry: {
+        kind: 'focus',
+        pageRegion: { height: 40, width: 80, x: 10, y: 20 }
+      },
+      gestureId,
+      sessionId
+    })
+    const spokenTurn = (id: string, sequence: number, offsetMs: number) => ({
+      endedAt: new Date(startedAtEpochMs + offsetMs + 200).toISOString(),
+      endedAtEpochMs: startedAtEpochMs + offsetMs + 200,
+      id,
+      scope,
+      sequence,
+      startedAt: new Date(startedAtEpochMs + offsetMs).toISOString(),
+      startedAtEpochMs: startedAtEpochMs + offsetMs,
+      text: `Replace Trace turn ${String(sequence)}`
+    })
+    const persist = async (gestureId: string, turnId: string, sequence: number) => {
+      const startedAt = new Date(startedAtEpochMs + sequence * 100).toISOString()
+      await store.recordTraceSession({
+        gestures: [gesture(gestureId, Date.parse(startedAt))],
+        session: {
+          contextDraft: [],
+          durationMs: 500,
+          events: [],
+          id: sessionId,
+          scope,
+          startedAt
+        },
+        spokenTurns: [spokenTurn(turnId, sequence, sequence * 100)],
+        summary: {
+          durationMs: 500,
+          id: sessionId,
+          scope,
+          startedAt,
+          title: `Replacement ${String(sequence)}`,
+          updatedAt: startedAt
+        }
+      })
+    }
+
+    await persist('gesture:old', 'spoken:old', 1)
+    await persist('gesture:new', 'spoken:new', 2)
+
+    expect(await store.traceGesture({ gestureId: 'gesture:old' })).toMatchObject({
+      reason: 'gesture_not_found',
+      status: 'empty'
+    })
+    expect(await store.traceGesture({ gestureId: 'gesture:new' })).toMatchObject({
+      gesture: { gestureId: 'gesture:new' },
+      status: 'matched'
+    })
+    expect((await store.traceSpokenTurns()).map((turn) => (turn as { id: string }).id)).toEqual([
+      'spoken:new'
+    ])
+    expect(await store.deleteTraceSession(sessionId)).toBe(true)
+    expect(await store.traceSession(sessionId)).toBeNull()
+    expect(await store.traceGesture({ latest: true })).toMatchObject({ status: 'empty' })
+    expect(await store.traceSpokenTurns()).toEqual([])
+  })
+
+  test('ignores the retired gesture sidecar instead of silently migrating it', async () => {
     const { root, store } = await createStore()
     await store.initialize({
       document: { nodes: ['canonical-copy'] },
@@ -319,15 +415,12 @@ describe('local workspace authority', () => {
       JSON.stringify({ gestures: [gesture], version: 1 })
     )
 
-    expect(await store.traceGesture({ latest: true })).toMatchObject({
-      gesture: { gestureId: gesture.gestureId, sessionId: gesture.sessionId },
-      scanned: { sessions: 1 },
-      status: 'matched'
+    expect(await store.traceGesture({ latest: true })).toEqual({
+      reason: 'gesture_not_found',
+      scanned: { sessions: 0 },
+      status: 'empty'
     })
-    expect(await store.traceSession(gesture.sessionId)).toMatchObject({
-      id: gesture.sessionId,
-      title: 'Imported Trace target'
-    })
+    expect(await store.traceSession(gesture.sessionId)).toBeNull()
   })
 
   test('accepts only the selected legacy workspace as the initial seed', async () => {
@@ -561,6 +654,35 @@ describe('local workspace authority', () => {
     } finally {
       server.close()
     }
+  })
+
+  test('publishes a bounded current Board selection with presence', async () => {
+    const { store } = await createStore()
+    const status = await store.status()
+    await store.recordPresence({
+      contentDocumentId: status.identity.documentId,
+      pageId: 'page:dental',
+      pageName: 'Dental Chart',
+      selectedIds: ['card:first', 'card:second'],
+      selectionTruncated: false,
+      workspaceId: status.identity.workspaceId
+    })
+
+    expect(await store.readPresence()).toMatchObject({
+      pageId: 'page:dental',
+      selectedIds: ['card:first', 'card:second'],
+      selectionTruncated: false
+    })
+    await expect(
+      store.recordPresence({
+        contentDocumentId: status.identity.documentId,
+        pageId: 'page:dental',
+        pageName: 'Dental Chart',
+        selectedIds: Array.from({ length: 25 }, (_, index) => `card:${String(index)}`),
+        selectionTruncated: true,
+        workspaceId: status.identity.workspaceId
+      })
+    ).rejects.toThrow('at most 24 non-empty IDs')
   })
 
   test('persists the canonical Trace session over HTTP without a browser', async () => {

@@ -1,11 +1,9 @@
 import type { Ref } from 'vue'
 
-import { objectGraphConnectionForSelection } from '@open-pencil/scene-graph'
 import type { useEditorCommands, useViewportKind } from '@open-pencil/vue'
 
 import type { EditorPanelTab } from '@/app/ai/chat/use'
 import type { EditorStore } from '@/app/editor/active-store'
-import { disconnectObjects } from '@/app/object-graph/actions'
 
 type KeyboardActionsOptions = {
   store: EditorStore
@@ -32,15 +30,6 @@ export function createKeyboardActions({
     if (hasNodeEditSelection()) {
       if (altKey) store.nodeEditBreakAtVertex()
       else store.nodeEditDeleteSelected()
-      return
-    }
-    const connection = objectGraphConnectionForSelection(
-      store.graph,
-      store.state.currentPageId,
-      store.state.selectedIds
-    )
-    if (connection) {
-      disconnectObjects(store, connection.id)
       return
     }
     runCommand('selection.delete')
@@ -75,7 +64,6 @@ export function createKeyboardActions({
       store.penCancel()
       return
     }
-    if (store.objectGraphNavigation.returnToOrigin()) return
     if (store.containerNavigation.exit()) return
     if (store.state.enteredContainerId) {
       store.exitContainer()

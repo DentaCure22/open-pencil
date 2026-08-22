@@ -7,10 +7,6 @@ function designPanel() {
   return editor.page.getByTestId('design-panel-single')
 }
 
-function nodeHeader() {
-  return editor.page.getByTestId('design-node-header')
-}
-
 function fillSection() {
   return editor.page.getByTestId('fill-section')
 }
@@ -56,13 +52,12 @@ function getSelectedId() {
   })
 }
 
-test('selecting a rectangle shows design panel with type and name', async () => {
-  await editor.canvas.drawRect(100, 100, 120, 80)
+test('selecting a rectangle shows properties without a redundant summary header', async () => {
+  await editor.canvas.drawRect(500, 100, 120, 80)
   await editor.canvas.waitForRender()
 
   await expect(designPanel()).toBeVisible()
-  await expect(nodeHeader()).toContainText('RECTANGLE')
-  await expect(nodeHeader()).toContainText('Rectangle')
+  await expect(editor.page.getByTestId('design-node-header')).toHaveCount(0)
 })
 
 test('position section shows X, Y, rotation inputs', async () => {
@@ -285,13 +280,6 @@ test('fill stroke and effect visibility toggles update on repeated clicks and su
     expectDefined(await getNode(expectDefined(id, 'selected id')), 'selected node').effects[0]
       ?.visible
   ).toBe(true)
-})
-
-test('deselecting shows empty design panel', async () => {
-  await editor.page.keyboard.press('Escape')
-  await editor.canvas.waitForRender()
-
-  await expect(editor.page.getByTestId('design-panel-empty')).toBeVisible()
 })
 
 test('multi-select shows mixed header and boolean operations', async () => {

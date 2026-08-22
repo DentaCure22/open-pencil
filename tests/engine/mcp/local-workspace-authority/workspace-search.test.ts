@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -66,8 +66,38 @@ describe('local workspace search index', () => {
     })
     const runtime = new LocalWorkspaceBoardRuntime(store)
 
-    expect((await stat(path.join(root, 'workspace-search.sqlite3'))).isFile()).toBe(true)
-    expect((await stat(path.join(root, 'authority.sqlite3'))).isFile()).toBe(true)
+    const indexPath = path.join(root, 'workspace.index.jsonl')
+    expect((await stat(indexPath)).isFile()).toBe(true)
+    const historyFile = (await readdir(path.join(root, 'history')))[0]
+    if (!historyFile) throw new Error('Expected initial workspace history snapshot')
+    const workspaceBefore = await stat(path.join(root, 'workspace.json'), { bigint: true })
+    const historyBefore = await stat(path.join(root, 'history', historyFile), { bigint: true })
+    await unlink(indexPath)
+    await store.initialize({
+      document: savedDocument(graph),
+      requestId: 'seed-search-unchanged',
+      sourceWorkspaceId: 'workspace-search-test'
+    })
+    expect((await stat(indexPath)).isFile()).toBe(true)
+    const workspaceAfter = await stat(path.join(root, 'workspace.json'), { bigint: true })
+    const historyAfter = await stat(path.join(root, 'history', historyFile), { bigint: true })
+    expect([workspaceAfter.ino, workspaceAfter.mtimeNs, workspaceAfter.size]).toEqual([
+      workspaceBefore.ino,
+      workspaceBefore.mtimeNs,
+      workspaceBefore.size
+    ])
+    expect([historyAfter.ino, historyAfter.mtimeNs, historyAfter.size]).toEqual([
+      historyBefore.ino,
+      historyBefore.mtimeNs,
+      historyBefore.size
+    ])
+    await unlink(indexPath)
+    const restarted = new LocalWorkspaceAuthorityStore({
+      preferredWorkspaceId: 'workspace-search-test',
+      root
+    })
+    await restarted.status()
+    expect((await stat(indexPath)).isFile()).toBe(true)
     await expect(
       runtime.sendRpc({ args: { query: card.id }, command: 'workspace_search' })
     ).resolves.toMatchObject({
@@ -89,11 +119,18 @@ describe('local workspace search index', () => {
       type: 'FRAME'
     })
     expect(initialSearch.results.some(({ id }) => id === summary.id)).toBe(false)
+    await expect(
+      store.queueResolvedNavigationIntent({ query: 'Trace Beacon' })
+    ).resolves.toMatchObject({
+      objectIds: [card.id],
+      pageId: board.id
+    })
     expect((await store.searchWorkspace('hand off')).results[0]).toMatchObject({
       board: { id: board.id },
-      id: card.id,
+      id: summary.id,
       kind: 'object',
-      name: 'Trace Beacon'
+      name: 'Workflow summary',
+      owner_id: card.id
     })
 
     const workspacePath = path.join(root, 'workspace.json')

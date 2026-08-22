@@ -80,7 +80,14 @@ const matchedTraceGestureSchema = z.object({
       workspaceId: z.string().trim().min(1).optional()
     }),
     candidates: z.object({
-      items: z.array(z.object({ stableId: z.string().trim().min(1) })).max(64),
+      items: z
+        .array(
+          z.object({
+            ownerId: z.string().trim().min(1).optional(),
+            stableId: z.string().trim().min(1)
+          })
+        )
+        .max(64),
       primaryTargetId: z.string().trim().min(1).optional()
     }),
     geometry: z.object({ pageRegion: pageRegionSchema }),
@@ -154,7 +161,12 @@ function boardPrepareEditArgs(trace: JsonRecord, intent: string): JsonRecord {
   }
   return {
     candidate_object_ids: [
-      ...new Set(candidates.items.map((candidate) => candidate.stableId))
+      ...new Set(
+        candidates.items.flatMap((candidate) => [
+          candidate.stableId,
+          ...(candidate.ownerId ? [candidate.ownerId] : [])
+        ])
+      )
     ].slice(0, 25),
     content_document_id: origin.contentDocumentId,
     ...(origin.documentId ? { document_id: origin.documentId } : {}),
@@ -205,11 +217,9 @@ function traceBuildHandshake(
     contract: 'board-build-trace/v1',
     gesture_id: context.gestureId,
     resolved_placeholders: {
-      connection_scopes: materialized.connectionScopeCount,
       object_references: materialized.objectReferenceCount,
       region_references: materialized.regionReferenceCount
     },
-    traced_connections: context.connectionCount,
     ...(context.selectedObjectId ? { selected_object_id: context.selectedObjectId } : {}),
     semantic_rpc_calls: preparation.semanticRpcCalls
   }

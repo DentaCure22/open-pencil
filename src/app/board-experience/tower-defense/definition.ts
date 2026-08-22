@@ -34,6 +34,12 @@ type Enemy = {
   speed: number
 }
 
+type PathGeometry = {
+  points: BoardExperiencePoint[]
+  segmentLengths: number[]
+  totalLength: number
+}
+
 const LANE_DEFINITION_ID = 'openpencil.tower-defense.lane'
 const CONTROLS_DEFINITION_ID = 'openpencil.tower-defense.controls'
 const TOWER_DEFINITION_ID = 'openpencil.tower-defense.tower'
@@ -74,8 +80,8 @@ function recordBoolean(record: Record<string, unknown>, key: string, fallback = 
   return typeof value === 'boolean' ? value : fallback
 }
 
-function pathPoints(origin: BoardExperiencePoint): BoardExperiencePoint[] {
-  return [
+function pathGeometry(origin: BoardExperiencePoint): PathGeometry {
+  const points = [
     { x: origin.x - 520, y: origin.y - 145 },
     { x: origin.x - 245, y: origin.y - 145 },
     { x: origin.x - 245, y: origin.y + 110 },
@@ -83,20 +89,24 @@ function pathPoints(origin: BoardExperiencePoint): BoardExperiencePoint[] {
     { x: origin.x + 90, y: origin.y - 95 },
     { x: origin.x + 500, y: origin.y - 95 }
   ]
+  const segmentLengths = points.slice(1).map((point, index) => segmentLength(points[index], point))
+  return {
+    points,
+    segmentLengths,
+    totalLength: segmentLengths.reduce((sum, length) => sum + length, 0)
+  }
 }
 
 function segmentLength(start: BoardExperiencePoint, end: BoardExperiencePoint): number {
   return Math.hypot(end.x - start.x, end.y - start.y)
 }
 
-function pointOnPath(points: BoardExperiencePoint[], progress: number): BoardExperiencePoint {
-  const lengths = points.slice(1).map((point, index) => segmentLength(points[index], point))
-  const total = lengths.reduce((sum, length) => sum + length, 0)
-  let remaining = Math.min(1, Math.max(0, progress)) * total
-  for (let index = 0; index < lengths.length; index += 1) {
-    const length = lengths[index] ?? 0
-    const start = points[index]
-    const end = points[index + 1]
+function pointOnPath(path: PathGeometry, progress: number): BoardExperiencePoint {
+  let remaining = Math.min(1, Math.max(0, progress)) * path.totalLength
+  for (let index = 0; index < path.segmentLengths.length; index += 1) {
+    const length = path.segmentLengths[index] ?? 0
+    const start = path.points[index]
+    const end = path.points[index + 1]
     if (!start || !end) continue
     if (remaining <= length) {
       const ratio = length <= 0 ? 0 : remaining / length
@@ -107,7 +117,7 @@ function pointOnPath(points: BoardExperiencePoint[], progress: number): BoardExp
     }
     remaining -= length
   }
-  return points.at(-1) ?? { x: 0, y: 0 }
+  return path.points.at(-1) ?? { x: 0, y: 0 }
 }
 
 function distance(left: BoardExperiencePoint, right: BoardExperiencePoint): number {
@@ -155,10 +165,7 @@ function towerCenter(component: BoardComponentSnapshot): BoardExperiencePoint {
 }
 
 function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): BoardExperienceRuntime {
-  const points = pathPoints(context.origin)
-  const pathLength = points
-    .slice(1)
-    .reduce((total, point, index) => total + segmentLength(points[index], point), 0)
+  const path = pathGeometry(context.origin)
   const towerCooldowns = new Map<string, number>()
   const towerSignals = new Map<string, number>()
   let controlsId: string | null = null
@@ -253,6 +260,13 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
     const controls = board().components.find((component) => component.id === controlsId)
     if (!controls) return
     const current = controlsState(controls)
+    if (
+      (
+        Object.entries(patch) as Array<[keyof ControlsState, ControlsState[keyof ControlsState]]>
+      ).every(([key, value]) => current[key] === value)
+    ) {
+      return
+    }
     board().updateComponent(
       controls.id,
       {
@@ -291,11 +305,10 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
 
   function deleteEnemy(componentId: string) {
     board().deleteComponent(componentId, { history: 'transient' })
-    enemies = enemies.filter((enemy) => enemy.componentId !== componentId)
   }
 
   function clearEnemies() {
-    for (const enemy of enemies.slice()) deleteEnemy(enemy.componentId)
+    for (const enemy of enemies) deleteEnemy(enemy.componentId)
     enemies = []
   }
 
@@ -314,12 +327,11 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
       running: false,
       score
     })
-    context.invalidate()
   }
 
   function spawnEnemy() {
     if (enemies.length >= MAX_ENEMIES) return
-    const start = points[0] ?? context.origin
+    const start = path.points[0] ?? context.origin
     const receipt = board().createComponent(
       {
         cornerRadius: 18,
@@ -374,12 +386,10 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
 
   function updateEnemyComponents(elapsedMs: number) {
     const components = new Map(board().components.map((component) => [component.id, component]))
-    for (const enemy of enemies.slice()) {
+    const survivors: Enemy[] = []
+    for (const enemy of enemies) {
       const component = components.get(enemy.componentId)
-      if (!component) {
-        enemies = enemies.filter((candidate) => candidate.componentId !== enemy.componentId)
-        continue
-      }
+      if (!component) continue
       enemy.health = recordNumber(component.state, 'health', enemy.health)
       if (enemy.health <= 0) {
         deleteEnemy(enemy.componentId)
@@ -388,12 +398,11 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
         continue
       }
       if (!component.selected) {
-        enemy.progress += (enemy.speed * elapsedMs) / 1000 / Math.max(pathLength, 1)
-        const point = pointOnPath(points, enemy.progress)
+        enemy.progress += (enemy.speed * elapsedMs) / 1000 / Math.max(path.totalLength, 1)
+        const point = pointOnPath(path, enemy.progress)
         board().updateComponent(
           component.id,
           {
-            state: { health: enemy.health, maxHealth: 8 },
             x: point.x - component.width / 2,
             y: point.y - component.height / 2
           },
@@ -403,8 +412,11 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
       if (enemy.progress >= 1) {
         deleteEnemy(enemy.componentId)
         lives = Math.max(0, lives - 1)
+        continue
       }
+      survivors.push(enemy)
     }
+    enemies = survivors
   }
 
   function updateTowerComponents(elapsedMs: number) {
@@ -424,21 +436,20 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
       towerCooldowns.set(tower.id, cooldown)
       if (cooldown > 0) continue
       const center = towerCenter(tower)
-      const target = enemies
-        .map((enemy) => ({
-          enemy,
-          point: pointOnPath(points, enemy.progress)
-        }))
-        .filter(({ point }) => distance(center, point) <= TOWER_RANGE[towerKind(tower)])
-        .toSorted((left, right) => right.enemy.progress - left.enemy.progress)[0]
-      if (!target) continue
       const kind = towerKind(tower)
-      target.enemy.health -= TOWER_DAMAGE[kind]
+      let target: Enemy | null = null
+      for (const enemy of enemies) {
+        const point = pointOnPath(path, enemy.progress)
+        if (distance(center, point) > TOWER_RANGE[kind]) continue
+        if (!target || enemy.progress > target.progress) target = enemy
+      }
+      if (!target) continue
+      target.health -= TOWER_DAMAGE[kind]
       towerCooldowns.set(tower.id, TOWER_COOLDOWN[kind])
       towerSignals.set(tower.id, 130)
       currentBoard.updateComponent(
-        target.enemy.componentId,
-        { state: { health: target.enemy.health, maxHealth: 8 } },
+        target.componentId,
+        { state: { health: target.health, maxHealth: 8 } },
         { history: 'transient' }
       )
       currentBoard.updateComponent(
@@ -467,14 +478,11 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
       lives,
       score
     })
-    context.invalidate()
   }
 
   function getSnapshot(): BoardExperienceSnapshot {
-    const currentBoard = board()
-    const controls = controlsId
-      ? currentBoard.components.find((component) => component.id === controlsId)
-      : null
+    const components = board().components
+    const controls = controlsId ? components.find((component) => component.id === controlsId) : null
     return {
       bounds: {
         height: 760,
@@ -482,7 +490,7 @@ function createTowerDefenseRuntime(context: BoardExperienceRuntimeContext): Boar
         x: context.origin.x - 590,
         y: context.origin.y - 450
       },
-      componentIds: currentBoard.components.map((component) => component.id),
+      componentIds: components.map((component) => component.id),
       definitionId: 'tower-defense',
       description: 'Every visible game piece is an ordinary selectable Code Object.',
       running: controlsState(controls ?? null).running,

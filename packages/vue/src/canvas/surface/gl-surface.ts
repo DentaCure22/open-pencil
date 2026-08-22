@@ -1,5 +1,6 @@
 import type { CanvasKit, Surface } from 'canvaskit-wasm'
 
+import { IS_BROWSER } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
 
 import type { UseCanvasOptions } from '#vue/canvas/surface/types'
@@ -8,13 +9,51 @@ type GLContext = ReturnType<CanvasKit['MakeGrContext']>
 
 export type CanvasGLContext = GLContext
 
-export function sizeCanvas(canvas: HTMLCanvasElement, editor: Editor) {
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = canvas.clientWidth * dpr
-  canvas.height = canvas.clientHeight * dpr
+export type CanvasBackingSize = {
+  dpr: number
+  height: number
+  width: number
+}
+
+export function canvasPixelRatio(
+  maxDevicePixelRatio?: number,
+  devicePixelRatio = IS_BROWSER ? window.devicePixelRatio || 1 : 1
+): number {
+  const dpr = devicePixelRatio || 1
+  if (!maxDevicePixelRatio || maxDevicePixelRatio <= 0) return dpr
+  return Math.min(dpr, maxDevicePixelRatio)
+}
+
+export function canvasBackingSize(
+  clientWidth: number,
+  clientHeight: number,
+  maxDevicePixelRatio?: number,
+  devicePixelRatio?: number
+): CanvasBackingSize {
+  const dpr = canvasPixelRatio(maxDevicePixelRatio, devicePixelRatio)
+  return {
+    dpr,
+    height: Math.max(1, Math.floor(clientHeight * dpr)),
+    width: Math.max(1, Math.floor(clientWidth * dpr))
+  }
+}
+
+export function sizeCanvas(
+  canvas: HTMLCanvasElement,
+  editor: Editor,
+  options?: Pick<UseCanvasOptions, 'maxDevicePixelRatio'>
+): CanvasBackingSize {
+  const backing = canvasBackingSize(
+    canvas.clientWidth,
+    canvas.clientHeight,
+    options?.maxDevicePixelRatio
+  )
+  canvas.width = backing.width
+  canvas.height = backing.height
   if ('setViewportSize' in editor && typeof editor.setViewportSize === 'function') {
     editor.setViewportSize(canvas.clientWidth, canvas.clientHeight)
   }
+  return backing
 }
 
 export function makeGLSurface(

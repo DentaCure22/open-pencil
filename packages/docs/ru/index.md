@@ -27,7 +27,7 @@ features:
     details: Headless CLI для инспекции, экспорта и анализа файлов .fig. Figma Plugin API через eval. Экспорт в Tailwind CSS. JSON-вывод для CI.
   - icon: 🤖
     title: ИИ в основе
-    details: Встроенный чат с 90 инструментами — создание фигур, стилизация, управление макетом, анализ токенов. MCP-сервер для Claude Code, Cursor, Windsurf.
+    details: Чат задач Pi для разработки и MCP-сервер для программных операций с дизайном из Claude Code, Cursor и Windsurf.
   - icon: 📖
     title: Открытый исходный код
     details: Лицензия MIT. Читайте и изменяйте всё — редактор, движок, файловый кодек, CLI.

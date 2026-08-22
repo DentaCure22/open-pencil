@@ -2,13 +2,6 @@ import * as Y from 'yjs'
 
 import type { YNodes } from '@/app/collab/structure'
 import { collabValuesEqual, syncNodePropsToYMap } from '@/app/collab/yjs/node-record'
-import {
-  getObjectGraphYRecords,
-  isObjectGraphPageMigrated,
-  readYNodePluginData,
-  syncObjectGraphPageToYjs,
-  tombstoneObjectGraphPageInYjs
-} from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 
 type GraphReplacementPublisherOptions = {
@@ -48,32 +41,18 @@ export function createGraphReplacementPublisher({
     setSuppressYjsEvents(true)
     try {
       ydoc.transact(() => {
-        const records = getObjectGraphYRecords(ydoc)
-        for (const [nodeId, ynode] of ynodes) {
+        for (const [nodeId] of ynodes) {
           if (nodeIds.has(nodeId)) continue
-          if (ynode.get('type') === 'CANVAS') {
-            tombstoneObjectGraphPageInYjs(records, nodeId, readYNodePluginData(ynode))
-          }
           ynodes.delete(nodeId)
         }
 
         for (const node of nodes) {
           let ynode = ynodes.get(node.id)
-          const materializingNode = !ynode
           if (!ynode) {
             ynode = new Y.Map()
             ynodes.set(node.id, ynode)
           }
-          const previousPluginData = readYNodePluginData(ynode)
           syncNodePropsToYMap(node, ynode)
-          if (
-            node.type === 'CANVAS' &&
-            (materializingNode ||
-              !isObjectGraphPageMigrated(records, node.id) ||
-              !collabValuesEqual(previousPluginData, node.pluginData))
-          ) {
-            syncObjectGraphPageToYjs(records, node, previousPluginData)
-          }
         }
 
         syncGraphImagesToYjs(store, localYimages)

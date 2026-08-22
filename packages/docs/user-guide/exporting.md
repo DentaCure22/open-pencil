@@ -9,7 +9,7 @@ Export individual nodes as images or `.fig` subsets, and open full `.fig` or `.p
 
 ## Image Export
 
-Select a node and use the Export section in the properties panel.
+Select a node and use the export shortcut or the context-menu Export action. On smaller screens, export settings are also available in the mobile Design drawer.
 
 ### Export Settings
 
@@ -24,7 +24,7 @@ You can add multiple export settings to export the same node at different scales
 |--------|-----|-----------------|
 | Keyboard shortcut | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>E</kbd> |
 | Context menu | Right-click <kbd>→</kbd> Export… | Right-click <kbd>→</kbd> Export… |
-| Properties panel | Click "Export" button | Click "Export" button |
+| Mobile Design drawer | Tap "Export" | Tap "Export" |
 
 The exported file is saved via a native dialog (desktop) or browser download.
 

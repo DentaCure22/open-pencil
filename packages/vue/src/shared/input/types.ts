@@ -27,6 +27,7 @@ export interface DragMove {
   duplicatedPreviousSelection?: Set<string>
   autoLayoutParentId?: string
   brokeFromAutoLayout?: boolean
+  overflowDetached?: Array<{ id: string; parentId: string }>
 }
 
 export interface DragPan {

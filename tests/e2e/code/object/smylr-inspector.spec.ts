@@ -2,7 +2,7 @@ import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
 
 const editor = useEditorSetup('/?test&html-source&smylr-app=&smylr-page=dental-chart')
 
-test('keeps the Smylr production Design inspector free of extra chrome', async () => {
+test('keeps the archived Design inspector closed for Smylr production frames', async () => {
   const surface = editor.page.locator('[data-code-object-id]').first()
   await expect(surface).toBeVisible()
   const frameId = await surface.getAttribute('data-code-object-id')
@@ -14,10 +14,6 @@ test('keeps the Smylr production Design inspector free of extra chrome', async (
     store.select([id])
   }, frameId)
 
-  await expect(editor.page.getByTestId('sidebar-context-inspector')).toBeVisible()
-  await expect(editor.page.getByTestId('design-panel-single')).toBeVisible()
-  await expect(editor.page.getByTestId('sidebar-context-header')).toHaveCount(0)
-  await expect(editor.page.getByTestId('sidebar-context-code')).toHaveCount(0)
-  await expect(editor.page.getByTestId('object-graph-section')).toHaveCount(0)
-  await expect(editor.page.getByText('Position', { exact: true })).toBeVisible()
+  await expect(editor.page.getByTestId('design-panel-single')).toHaveCount(0)
+  await expect(editor.page.getByTestId('left-panel-utility-area')).toBeVisible()
 })

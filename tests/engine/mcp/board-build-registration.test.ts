@@ -83,14 +83,6 @@ describe('general bounded Board builder MCP registration', () => {
             recipe: { kind: 'native_text', text: 'Then verify.' }
           }
         ],
-        connections: [
-          {
-            kind: 'visual',
-            label: 'then',
-            source: { alias: 'start' },
-            target: { alias: 'note' }
-          }
-        ],
         contract: 'board-build-plan/v1'
       }
     }
@@ -130,7 +122,6 @@ describe('general bounded Board builder MCP registration', () => {
             recipe: { body: 'Second item.', height: 236, kind: 'native_card', title: 'Two' }
           }
         ],
-        connections: [],
         contract: 'board-build-plan/v1',
         composition: {
           anchor: { alias: 'title' },
@@ -176,7 +167,6 @@ describe('general bounded Board builder MCP registration', () => {
           members: [{ alias: 'one' }, { alias: 'two' }],
           preferences: { direction: 'horizontal' }
         },
-        connections: [],
         contract: 'board-build-plan/v1'
       }
     }
@@ -221,7 +211,6 @@ describe('general bounded Board builder MCP registration', () => {
             }
           }
         ],
-        connections: [],
         contract: 'board-build-plan/v1'
       }
     }
@@ -343,7 +332,6 @@ describe('general bounded Board builder MCP registration', () => {
             }
           }
         ],
-        connections: [],
         contract: 'board-build-plan/v1'
       }
     }
@@ -554,7 +542,6 @@ describe('general bounded Board builder MCP registration', () => {
     expect(registered.description).toContain('trusted in-process code, not a security sandbox')
     expect(registered.description).toContain('Never use external or untrusted source')
     expect(registered.description).toContain('without another context call')
-    expect(registered.description).toContain('connect_objects_base')
     expect(registered.description).toContain('stop unless the outcome is unknown')
     expect(registered.description).toContain('same request_id for recovery')
     expect(registered.description).toContain('Specialists are optional advice and never authority')

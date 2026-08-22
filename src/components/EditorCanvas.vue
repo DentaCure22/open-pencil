@@ -22,11 +22,17 @@ import {
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
 import { isCodeObjectFrame } from '@/app/code-object/model'
+import { useAgentConversationDrop } from '@/app/agent-terminal/drag'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useAssetVariantDrop } from '@/app/editor/assets/drag'
 import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaboration-awareness'
 import { createCanvasContextSelection } from '@/app/editor/canvas/context-selection'
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
+import { useCanvasSurfaceEntry } from '@/app/editor/canvas/surface/entry'
+import {
+  useCanvasViewportCssVariables,
+  useEditorPresentationViewport
+} from '@/app/editor/presentation'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
 import IconLucidePanelBottom from '~icons/lucide/panel-bottom'
@@ -34,13 +40,15 @@ import IconLucidePanelLeft from '~icons/lucide/panel-left'
 import IconLucidePanelRight from '~icons/lucide/panel-right'
 import IconLucidePanelTop from '~icons/lucide/panel-top'
 import BoardExperienceRuntimeHost from './canvas/BoardExperienceRuntimeHost.vue'
+import AgentTerminalOverlays from './agent-terminal/AgentTerminalOverlays.vue'
 import CanvasMenu from './canvas/CanvasMenu.vue'
 import CodeObjectOverlays from './canvas/CodeObjectOverlays.vue'
 import ContainerNavigationStatus from './canvas/ContainerNavigationStatus.vue'
+import ContextCommentComposer from './context-comment/ContextCommentComposer.vue'
+import ContextCommentCropOverlay from './context-comment/ContextCommentCropOverlay.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
 import MarkdownDocumentOverlays from './canvas/MarkdownDocumentOverlays.vue'
 import MermaidSvgOverlays from './canvas/MermaidSvgOverlays.vue'
-import ObjectGraphRuntimeHost from './canvas/ObjectGraphRuntimeHost.vue'
 import NarratedTraceAnnotationOverlay from './narrated-trace/NarratedTraceAnnotationOverlay.vue'
 import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
 import SourceObjectOverlays from './canvas/SourceObjectOverlays.vue'
@@ -51,24 +59,85 @@ const collab = useCollabInjected()
 const canvasAreaRef = ref<HTMLDivElement | null>(null)
 const sceneCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+type CanvasLayer = 'overlays' | 'scene'
+const canvasLoadErrors = ref<Partial<Record<CanvasLayer, string>>>({})
+const canvasRetrying = ref(false)
+const presentationViewport = useEditorPresentationViewport(store)
+useCanvasViewportCssVariables(store, canvasAreaRef)
+
+const BASE_GRID_STEP = 24
+const MIN_GRID_STEP_PX = 18
+const MAX_GRID_STEP_PX = 36
+
+const canvasGridStyle = computed(() => {
+  const viewport = presentationViewport.value
+  const zoom = Math.max(viewport.zoom, 0.02)
+  let worldStep = BASE_GRID_STEP
+  while (worldStep * zoom < MIN_GRID_STEP_PX) worldStep *= 2
+  while (worldStep * zoom > MAX_GRID_STEP_PX) worldStep /= 2
+  const screenStep = worldStep * zoom
+
+  return {
+    backgroundColor: 'var(--color-canvas)',
+    backgroundImage: 'radial-gradient(circle, var(--color-canvas-grid) 0 1px, transparent 1.2px)',
+    backgroundPosition: `${viewport.panX}px ${viewport.panY}px`,
+    backgroundSize: `${screenStep}px ${screenStep}px`
+  }
+})
 
 const { updateCursor } = useCanvasCollaborationAwareness(store, collab)
 const { selectAtContextPoint } = createCanvasContextSelection(canvasRef, store)
+useCanvasSurfaceEntry(canvasRef, store)
 
-useCanvas(sceneCanvasRef, store, {
+const canvasLoadError = computed(
+  () => canvasLoadErrors.value.scene ?? canvasLoadErrors.value.overlays ?? null
+)
+
+function canvasErrorMessage(error: unknown) {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : 'The rendering engine could not be initialized.'
+}
+
+function markCanvasReady(layer: CanvasLayer) {
+  const { [layer]: _removed, ...remaining } = canvasLoadErrors.value
+  canvasLoadErrors.value = remaining
+  if (layer === 'scene') fadeOutGlobalLoader()
+}
+
+function markCanvasError(layer: CanvasLayer, error: unknown) {
+  canvasLoadErrors.value = { ...canvasLoadErrors.value, [layer]: canvasErrorMessage(error) }
+  fadeOutGlobalLoader()
+}
+
+const { retryCanvasKit: retrySceneCanvasKit } = useCanvas(sceneCanvasRef, store, {
   layer: 'scene',
+  maxDevicePixelRatio: 1.5,
   preserveDrawingBuffer: true,
   showRulers: false,
-  onReady: fadeOutGlobalLoader
+  onError: (error) => markCanvasError('scene', error),
+  onReady: () => markCanvasReady('scene')
 })
-const { hitTestSectionTitle, hitTestComponentLabel, hitTestFrameTitle } = useCanvas(
-  canvasRef,
-  store,
-  {
-    layer: 'overlays',
-    ownsSelectionChrome: (nodeId) => isCodeObjectFrame(store.graph.getNode(nodeId))
-  }
-)
+const {
+  hitTestSectionTitle,
+  hitTestComponentLabel,
+  hitTestFrameTitle,
+  retryCanvasKit: retryOverlayCanvasKit
+} = useCanvas(canvasRef, store, {
+  layer: 'overlays',
+  maxDevicePixelRatio: 1.25,
+  ownsSelectionChrome: (nodeId) => isCodeObjectFrame(store.graph.getNode(nodeId)),
+  onError: (error) => markCanvasError('overlays', error),
+  onReady: () => markCanvasReady('overlays')
+})
+
+async function retryCanvasKit() {
+  if (canvasRetrying.value) return
+  canvasRetrying.value = true
+  canvasLoadErrors.value = {}
+  await Promise.all([retrySceneCanvasKit(), retryOverlayCanvasKit()])
+  canvasRetrying.value = false
+}
 const {
   cursorOverride,
   autoLayoutPaddingEdit,
@@ -94,6 +163,33 @@ const {
   onDragOver: onAssetVariantDragOver,
   onDrop: onAssetVariantDrop
 } = useAssetVariantDrop(canvasAreaRef, store)
+const {
+  isDraggingAgentConversation,
+  onDragEnter: onAgentConversationDragEnter,
+  onDragLeave: onAgentConversationDragLeave,
+  onDragOver: onAgentConversationDragOver,
+  onDrop: onAgentConversationDrop
+} = useAgentConversationDrop(canvasAreaRef, store)
+
+function onCanvasDragEnter(event: DragEvent) {
+  onAssetVariantDragEnter(event)
+  onAgentConversationDragEnter(event)
+}
+
+function onCanvasDragLeave(event: DragEvent) {
+  onAssetVariantDragLeave(event)
+  onAgentConversationDragLeave(event)
+}
+
+function onCanvasDragOver(event: DragEvent) {
+  onAssetVariantDragOver(event)
+  onAgentConversationDragOver(event)
+}
+
+function onCanvasDrop(event: DragEvent) {
+  void onAssetVariantDrop(event)
+  onAgentConversationDrop(event)
+}
 
 const paddingSideIcons = {
   top: IconLucidePanelTop,
@@ -115,7 +211,11 @@ const paddingEditorAnchor = computed(() => {
   if (edit.side === 'left') return { x: abs.x + node.paddingLeft / 2, y: abs.y + node.height / 2 }
   return { x: abs.x + node.width - node.paddingRight / 2, y: abs.y + node.height / 2 }
 })
-const paddingEditorReference = useCanvasVirtualReference(canvasRef, store, paddingEditorAnchor)
+const paddingEditorReference = useCanvasVirtualReference(
+  canvasRef,
+  paddingEditorAnchor,
+  presentationViewport
+)
 const paddingEditorIcon = computed(() => {
   const edit = autoLayoutPaddingEdit.value
   return edit ? paddingSideIcons[edit.side] : IconLucidePanelTop
@@ -134,11 +234,12 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
       <div
         ref="canvasAreaRef"
         data-test-id="canvas-area"
+        :style="canvasGridStyle"
         class="canvas-area relative isolate h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden overscroll-none"
-        @dragenter="onAssetVariantDragEnter"
-        @dragleave="onAssetVariantDragLeave"
-        @dragover="onAssetVariantDragOver"
-        @drop="onAssetVariantDrop"
+        @dragenter="onCanvasDragEnter"
+        @dragleave="onCanvasDragLeave"
+        @dragover="onCanvasDragOver"
+        @drop="onCanvasDrop"
       >
         <canvas
           ref="sceneCanvasRef"
@@ -159,10 +260,12 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         <MermaidSvgOverlays />
         <CodeObjectOverlays />
         <BoardExperienceRuntimeHost />
-        <ObjectGraphRuntimeHost />
+        <AgentTerminalOverlays />
         <ContainerNavigationStatus />
         <SpatialMediaOverlays />
         <NarratedTraceAnnotationOverlay />
+        <ContextCommentCropOverlay />
+        <ContextCommentComposer />
         <Transition
           enter-active-class="transition-opacity duration-150"
           enter-from-class="opacity-0"
@@ -170,10 +273,14 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           leave-to-class="opacity-0"
         >
           <div
-            v-if="isDraggingOver || isDraggingAssetVariant"
+            v-if="isDraggingOver || isDraggingAssetVariant || isDraggingAgentConversation"
             data-test-id="canvas-drop-overlay"
             class="absolute inset-0 z-40 border-2 border-dashed border-accent/60 bg-accent/5"
-            :class="isDraggingAssetVariant ? 'pointer-events-auto' : 'pointer-events-none'"
+            :class="
+              isDraggingAssetVariant || isDraggingAgentConversation
+                ? 'pointer-events-auto'
+                : 'pointer-events-none'
+            "
           />
         </Transition>
         <PopoverRoot :open="!!autoLayoutPaddingEdit">
@@ -216,7 +323,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           <div
             v-if="store.state.loading"
             data-test-id="canvas-loading"
-            class="absolute inset-0 z-50 flex items-center justify-center bg-canvas"
+            class="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-canvas"
           >
             <icon-lucide-pencil-line class="size-8 text-surface opacity-45" />
             <div
@@ -228,6 +335,29 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
             </div>
           </div>
         </Transition>
+        <div
+          v-if="canvasLoadError"
+          data-test-id="canvas-error"
+          role="alert"
+          class="bg-canvas/95 absolute inset-0 z-[60] flex items-center justify-center px-6 backdrop-blur-sm"
+        >
+          <div
+            class="border-border/70 bg-panel max-w-sm rounded-xl border p-5 text-center shadow-xl"
+          >
+            <icon-lucide-triangle-alert class="mx-auto size-6 text-[var(--color-warning-text)]" />
+            <h2 class="mt-3 text-sm font-semibold text-surface">Canvas didn’t start</h2>
+            <p class="mt-1.5 text-[11px] leading-4 text-muted">{{ canvasLoadError }}</p>
+            <button
+              type="button"
+              data-test-id="canvas-error-retry"
+              class="bg-accent mt-4 h-8 rounded-md px-3 text-[11px] font-medium text-white disabled:cursor-wait disabled:opacity-60"
+              :disabled="canvasRetrying"
+              @click="retryCanvasKit"
+            >
+              {{ canvasRetrying ? 'Retrying…' : 'Retry canvas' }}
+            </button>
+          </div>
+        </div>
       </div>
     </ContextMenuTrigger>
 

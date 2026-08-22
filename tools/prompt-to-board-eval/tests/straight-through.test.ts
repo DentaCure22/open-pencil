@@ -37,10 +37,8 @@ function releaseEnvelope(): UnknownRecord {
     },
     release_summary: {
       artifact_count: 1,
-      connection_count: 0,
       contract: 'board-build-release/v1',
-      message:
-        'Board build applied durably on document-1 / Fixture: 1 artifact and 0 connections at revision 12.',
+      message: 'Board build applied durably on document-1 / Fixture: 1 artifact at revision 12.',
       proof_limitations: ['pixels:not_evaluated'],
       request_id: REQUEST_ID,
       revision: 12,
@@ -184,7 +182,7 @@ describe('straight-through Board release validation', () => {
         request_id: REQUEST_ID,
         revision: 12,
         target: EXACT_TARGET,
-        text: 'Board build applied durably on document-1 / Fixture: 1 artifact and 0 connections at revision 12.'
+        text: 'Board build applied durably on document-1 / Fixture: 1 artifact at revision 12.'
       },
       status: 'release'
     })
@@ -259,12 +257,6 @@ describe('straight-through Board release validation', () => {
           nested(candidate, 'release_summary').message = ' '
         },
         reason: 'release_message_missing'
-      },
-      {
-        change: (candidate) => {
-          nested(candidate, 'release_summary').connection_count = -1
-        },
-        reason: 'invalid_envelope'
       },
       {
         change: (candidate) => {

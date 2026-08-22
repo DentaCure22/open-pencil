@@ -6,7 +6,7 @@ description: Eksport obrazów (PNG, JPG, WEBP, SVG) i zarządzanie plikami .fig 
 
 ## Eksport obrazów
 
-Wybierz węzeł i użyj sekcji Eksport w panelu właściwości.
+Wybierz węzeł i użyj skrótu eksportu albo akcji Eksportuj w menu kontekstowym. Na małych ekranach ustawienia są także w mobilnej szufladzie Design.
 
 ### Ustawienia eksportu
 
@@ -19,7 +19,7 @@ Wybierz węzeł i użyj sekcji Eksport w panelu właściwości.
 |--------|-----|-----------------|
 | Skrót klawiszowy | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>E</kbd> |
 | Menu kontekstowe | Prawy klik <kbd>→</kbd> Eksportuj… | Prawy klik <kbd>→</kbd> Eksportuj… |
-| Panel właściwości | Przycisk "Eksportuj" | Przycisk "Eksportuj" |
+| Mobilna szuflada Design | Dotknij "Eksportuj" | Dotknij "Eksportuj" |
 
 ## Kopiuj jako
 

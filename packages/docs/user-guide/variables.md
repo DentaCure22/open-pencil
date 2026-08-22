@@ -9,7 +9,7 @@ Variables store reusable design tokens — colors, spacing values, and other pro
 
 ## Opening the Variables Dialog
 
-Open **Layers**, then click the variable icon in the Document row. The same dialog is also available from the Variables section when page-level Design properties are visible.
+Open **Layers**, then click the variable icon in the Document row.
 
 ## DTCG Import and Export
 

@@ -5,10 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import board, { boardChangeCommand } from '#cli/commands/board'
-import codeObject, { codeObjectUpsertCommand } from '#cli/commands/code-object'
+import { rewriteStdinValueArgs } from '#cli/argv'
+import board from '#cli/commands/board'
 import inspect, { inspectSubCommands } from '#cli/commands/inspect'
-import { rewriteLegacyInspectionArgs, rewriteStdinValueArgs } from '#cli/compatibility'
 import { applyAgentOutputMode } from '#cli/output-mode'
 
 describe('agent-facing CLI command surface', () => {
@@ -61,7 +60,7 @@ describe('agent-facing CLI command surface', () => {
     )
   })
 
-  test('groups document inspection without removing compatibility aliases', () => {
+  test('groups document inspection under one command', () => {
     expect(Object.keys(inspectSubCommands)).toEqual([
       'find',
       'info',
@@ -73,30 +72,6 @@ describe('agent-facing CLI command surface', () => {
       'variables'
     ])
     expect(inspect.subCommands).toBe(inspectSubCommands)
-  })
-
-  test('keeps old inspection invocations as invisible compatibility aliases', () => {
-    expect(rewriteLegacyInspectionArgs(['tree', 'document.fig', '--json'])).toEqual([
-      'inspect',
-      'tree',
-      'document.fig',
-      '--json'
-    ])
-    expect(rewriteLegacyInspectionArgs(['board', 'context', '--current'])).toEqual([
-      'board',
-      'context',
-      '--current'
-    ])
-    expect(rewriteLegacyInspectionArgs(['boards', 'list', '--json'])).toEqual([
-      'board',
-      'search',
-      '--json'
-    ])
-    expect(rewriteLegacyInspectionArgs(['documents', '--json'])).toEqual([
-      'board',
-      'search',
-      '--json'
-    ])
   })
 
   test('preserves a standalone stdin marker as the request-file value for Citty', () => {
@@ -142,10 +117,15 @@ describe('agent-facing CLI command surface', () => {
     }
   })
 
-  test('keeps the normal Board surface to search, open, create, build, and present', () => {
+  test('keeps the normal Board surface focused on discovery, navigation, build, and present', () => {
     expect(Object.keys(board.subCommands ?? {})).toEqual([
       'search',
+      'get',
+      'ls',
+      'nearby',
+      'pages',
       'open',
+      'where',
       'create',
       'build',
       'present'
@@ -153,9 +133,6 @@ describe('agent-facing CLI command surface', () => {
     expect(board.subCommands?.change).toBeUndefined()
     expect(board.subCommands?.connect).toBeUndefined()
     expect(board.subCommands?.edit).toBeUndefined()
-    expect(codeObject.subCommands?.upsert).toBeUndefined()
-    expect(boardChangeCommand.meta?.description).toContain('Deprecated')
-    expect(codeObjectUpsertCommand.meta?.description).toContain('Deprecated')
     const buildArgs = board.subCommands?.build?.args
     expect(Object.keys(buildArgs ?? {}).sort()).toEqual(
       ['gesture-id', 'json', 'latest-gesture', 'release-summary', 'request', 'request-file'].sort()

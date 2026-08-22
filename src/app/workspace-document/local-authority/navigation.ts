@@ -7,6 +7,8 @@ export type LocalWorkspaceNavigationDependencies = {
   currentRuntimeInstanceId(): string | null
   openPage(pageId: string): Promise<boolean>
   readIntent(): Promise<LocalWorkspaceNavigationIntent | null>
+  /** Select and frame the intent's objects or region after the page is open; best effort. */
+  revealTargets?(intent: LocalWorkspaceNavigationIntent): boolean
 }
 
 export function createLocalWorkspaceNavigationConsumer(
@@ -42,6 +44,10 @@ export function createLocalWorkspaceNavigationConsumer(
         return false
       }
       if (dependencies.currentPageId() !== intent.pageId) return false
+      if ((intent.objectIds?.length || intent.region) && dependencies.revealTargets) {
+        // Reveal is best effort: a stale object must not strand the intent unconsumed.
+        dependencies.revealTargets(intent)
+      }
       return dependencies.consumeIntent(intent.intentId)
     })().finally(() => {
       inFlight = null

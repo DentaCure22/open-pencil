@@ -2,8 +2,6 @@ import { useEventListener } from '@vueuse/core'
 import { ref, type Ref } from 'vue'
 
 import type { EditorStore } from '@/app/editor/session'
-import { placeSmylrComponentCodeObject } from '@/app/smylr-component-library/code-object-canvas'
-import { SMYLR_COMPUTED_ASSETS } from '@/app/smylr-component-library/computed-catalog'
 
 export const ASSET_VARIANT_DRAG_TYPE = 'application/x-openpencil-component-variant'
 const ASSET_VARIANT_DRAG_START_EVENT = 'openpencil:asset-variant-drag-start'
@@ -117,7 +115,7 @@ export function useAssetVariantDrop(canvasAreaRef: Ref<HTMLElement | null>, edit
     isDraggingAssetVariant.value = false
   }
 
-  function onDrop(event: DragEvent) {
+  async function onDrop(event: DragEvent) {
     const area = canvasAreaRef.value
     const payload = readAssetVariantDrag(event.dataTransfer)
     isDraggingAssetVariant.value = false
@@ -129,6 +127,10 @@ export function useAssetVariantDrop(canvasAreaRef: Ref<HTMLElement | null>, edit
       placeSceneVariant(editor, payload, point.x, point.y)
       return
     }
+    const [{ placeSmylrComponentCodeObject }, { SMYLR_COMPUTED_ASSETS }] = await Promise.all([
+      import('@/app/smylr-component-library/code-object-canvas'),
+      import('@/app/smylr-component-library/computed-catalog')
+    ])
     const asset = SMYLR_COMPUTED_ASSETS.find(
       (candidate) => candidate.fixtureId === payload.fixtureId
     )

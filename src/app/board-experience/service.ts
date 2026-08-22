@@ -185,7 +185,6 @@ export function syncBoardExperience(store: EditorStore): BoardExperienceSession 
       deactivate: () => {
         deactivateBoardExperience(store)
       },
-      invalidate: () => emitChange(store),
       origin,
       pageId: page.id
     })

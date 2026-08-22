@@ -12,13 +12,13 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Toolbar with design tools | ✅ | Bottom toolbar (UI3 style): Select, Frame, Section, Rectangle, Ellipse, Line, Text, Hand, Pen |
-| Layers panel (left sidebar) | ✅ | Tree view with expand/collapse, drag reorder, visibility toggle; resizable width |
-| Pages panel | ✅ | Add, delete, rename pages; per-page viewport state |
-| Properties panel (right sidebar) | ✅ | Sections: Appearance, Fill, Stroke, Effects, Typography, Layout, Position; resizable width |
+| Toolbar with design tools | ✅ | Integrated tool rail: Select, Frame, Section, Rectangle, Ellipse, Line, Text, Hand, Pen |
+| Layers panel (left sidebar) | ✅ | Floating sidebar with Layers, Chats, Assets, and Activity; tree supports expand/collapse, drag reorder, and visibility |
+| Pages panel | ✅ | Workspace browser manages Boards and preserves each Board's viewport state |
+| Properties panel (right sidebar) | 🟡 | No permanent desktop panel; contextual controls stay on the canvas/tool rail, with Design controls in the mobile drawer |
 | Zoom & pan | ✅ | <kbd>Ctrl</kbd> + scroll, pinch, <kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>−</kbd> / <kbd>⌘</kbd><kbd>0</kbd> (100%) / <kbd>⌘</kbd><kbd>1</kbd> (fit) / <kbd>⌘</kbd><kbd>2</kbd> (selection), <kbd>Space</kbd> + drag, middle mouse, hand tool (<kbd>H</kbd>) |
 | Canvas rulers | ✅ | Top/left rulers with selection highlight bands and coordinate badges |
-| Canvas background color | ✅ | Per-page background via properties panel |
+| Canvas background color | 🟡 | Per-page background is retained in document state; the desktop control is not currently exposed |
 | Canvas guides | 🔲 | Figma supports draggable guides from rulers |
 | Actions menu / command palette | 🔲 | Figma's quick actions search |
 | Context menu | ✅ | Right-click with clipboard, z-order, grouping, component, visibility, lock, move-to-page actions |
@@ -28,7 +28,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Custom file thumbnails | 🔲 | Thumbnail generated on export, but no custom thumbnail picker |
 | Nudge value settings | 🔲 | Default 1px/10px; Figma allows custom small/big nudge values |
 | App menu (browser mode) | ✅ | File, Edit, View, Object, Text, Arrange menus; Tauri uses native menus |
-| AI tools | 🟡 | 90 tools via OpenRouter + MCP server; no AI-generated images or AI-powered search yet |
+| AI tools | 🟡 | Pi task chat plus the runtime-discovered MCP catalog; no AI-generated images or AI-powered search yet |
 
 ## Layers & Shapes
 
@@ -43,7 +43,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Masks | 🔲 | Shape masks for clipping layers |
 | Layer types & hierarchy | ✅ | 17 node types, flat Map + parent-child tree |
 | Select layers | ✅ | Click, shift-click, marquee selection |
-| Alignment & position | ✅ | Position, rotation, dimensions in properties panel |
+| Alignment & position | ✅ | Canvas interactions, contextual controls, and the mobile Design drawer |
 | Copy & paste objects | ✅ | Standard clipboard + Figma Kiwi binary format; Copy as text/SVG/PNG/JSX |
 | Scale layers proportionally | 🟡 | Shift-resize constrains proportions; no dedicated Scale tool (K) |
 | Lock & unlock layers | ✅ | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd> toggles lock; locked nodes can't be selected/moved from canvas |
@@ -213,12 +213,12 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Real-time multiplayer | ✅ | P2P via Trystero + Yjs CRDT, cursors, follow mode; no server required |
 | Cursor chat | 🔲 | Inline chat bubbles at cursor |
 | Branching & merging | 🔲 | Version branches for design files |
-| Dev Mode (inspect) | 🟡 | Code tab shows JSX representation of selection; no CSS properties or handoff specs |
+| Dev Mode (inspect) | 🟡 | Mobile Code drawer exposes source for Code Objects that own editable code; no full desktop handoff inspector |
 | Code Connect | 🔲 | Link design components to code |
 | Code snippets | 🟡 | JSX export with syntax highlighting and copy; no CSS/Swift/Kotlin snippets |
-| Tailwind CSS v4 export | ✅ | Export as HTML with Tailwind utility classes from Code panel, CLI, or programmatically |
+| Tailwind CSS v4 export | ✅ | Export as HTML with Tailwind utility classes from the CLI, mobile source drawer, or programmatically |
 | Figma for VS Code | 🔲 | Editor plugin integration |
-| MCP server | ✅ | @open-pencil/mcp with stdio + HTTP transports; 87 core tools + 3 file management tools = 90 total |
+| MCP server | ✅ | `@open-pencil/mcp` with stdio + HTTP transports and a runtime-discovered tool catalog |
 | CLI tools | ✅ | Headless CLI: info, tree, find, export, analyze, node, pages, variables, eval; MCP server with stdio + HTTP |
 
 ## Figma Draw

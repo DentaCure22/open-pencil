@@ -5,6 +5,10 @@ export {
   codeObjectViewportPluginData,
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument,
+  DEFAULT_CODE_OBJECT_SURFACE,
+  isKnownCodeObjectComponent,
+  KNOWN_CODE_OBJECT_COMPONENTS,
+  normalizeCodeObjectSurface,
   parseCodeObjectDocument,
   serializeCodeObjectPluginData,
   smylrTrustedWebAppPageId,
@@ -13,6 +17,7 @@ export {
   SMYLR_TRUSTED_WEB_APP_SOURCE,
   type CodeObjectDocument,
   type CodeObjectDocumentEnvelope,
+  type CodeObjectSurface,
   type CreateUserCodeObjectDocumentInput,
   type SmylrTrustedWebAppDocument
 } from './document'
@@ -27,6 +32,24 @@ export {
   preflightCodeObjectSource,
   type CodeObjectStaticPreflight
 } from './source'
+
+export {
+  CODE_OBJECT_UI_BLOCK_CAPABILITIES,
+  CODE_OBJECT_UI_BLOCK_DEFINITIONS,
+  CODE_OBJECT_UI_BLOCKS,
+  CONFIGURED_CODE_OBJECT_SOURCE,
+  codeObjectUiBlockDefinition,
+  codeObjectUiBlockSource,
+  isCodeObjectUiBlockName,
+  resolveCodeObjectUiBlock,
+  validateCodeObjectUiBlockConfig,
+  type CodeObjectUiBlockCapability,
+  type CodeObjectUiBlockConfigValidation,
+  type CodeObjectUiBlockDefinition,
+  type CodeObjectUiBlockName,
+  type ResolveCodeObjectUiBlockInput,
+  type ResolvedCodeObjectUiBlock
+} from './ui-block'
 
 export {
   codeObjectViewportPreset,

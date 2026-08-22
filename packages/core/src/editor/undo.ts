@@ -23,7 +23,7 @@ export function createUndoActions(ctx: EditorContext) {
   }
 
   function commitMoveWithReparent(
-    originals: Map<string, { x: number; y: number; parentId: string }>
+    originals: ReadonlyMap<string, { x: number; y: number; parentId: string }>
   ) {
     const finals = new Map<string, { x: number; y: number; parentId: string }>()
     for (const [id] of originals) {

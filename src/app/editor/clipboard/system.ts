@@ -1,6 +1,7 @@
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import type { EditorStore } from '@/app/editor/active-store'
+import { handleLiveContainerCopyCommand } from '@/app/smylr-live-inspector/clipboard'
 import { readTauriClipboardText, writeTauriClipboardHtml } from '@/app/tauri/clipboard'
 import { isTauri } from '@/app/tauri/env'
 
@@ -48,6 +49,7 @@ export async function executeClipboardCommand(
   command: 'copy' | 'cut' | 'paste'
 ) {
   if (command === 'copy') {
+    if (await handleLiveContainerCopyCommand(store)) return true
     if (await copySelectionToTauriClipboard(store)) return true
   }
 

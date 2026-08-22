@@ -1,10 +1,4 @@
-import {
-  isObjectGraphConnectionNode,
-  objectGraphConnectionsOnPage,
-  setObjectGraphConnectionsOnPage,
-  type ObjectGraphConnection,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -23,6 +17,7 @@ import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboa
 import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
+import { detachOutsideFrameMembership } from './structure/overflow'
 import type { EditorContext } from './types'
 
 type PasteOptions = {
@@ -55,9 +50,8 @@ export function createClipboardActions(ctx: EditorContext) {
 
   function duplicateSelected(selectedNodes: SceneNode[]) {
     const prevSelection = new Set(ctx.state.selectedIds)
-    const duplicableNodes = selectedNodes.filter((node) => !isObjectGraphConnectionNode(node))
-    const selectedSet = new Set(duplicableNodes.map((node) => node.id))
-    const topLevel = duplicableNodes.filter(
+    const selectedSet = new Set(selectedNodes.map((node) => node.id))
+    const topLevel = selectedNodes.filter(
       (node) => !node.parentId || !selectedSet.has(node.parentId)
     )
 
@@ -248,6 +242,7 @@ export function createClipboardActions(ctx: EditorContext) {
   }
 
   function deleteSelected() {
+    detachOutsideFrameMembership(ctx, ctx.state.selectedIds)
     const entries: Array<{
       id: string
       parentId: string
@@ -255,19 +250,6 @@ export function createClipboardActions(ctx: EditorContext) {
       subtree: Map<string, SceneNode>
     }> = []
     const selectedIds = new Set(ctx.state.selectedIds)
-    const endpointIds = new Set(selectedIds)
-    for (const id of selectedIds) {
-      for (const descendantId of snapshotSubtree(ctx.graph, id).keys()) {
-        endpointIds.add(descendantId)
-      }
-    }
-    const pageId = ctx.state.currentPageId
-    const connectionSnapshots = objectGraphConnectionsOnPage(ctx.graph, pageId).filter(
-      (connection) =>
-        selectedIds.has(connection.id) ||
-        endpointIds.has(connection.sourceNodeId) ||
-        endpointIds.has(connection.targetNodeId)
-    )
     for (const id of selectedIds) {
       const node = ctx.graph.getNode(id)
       if (!node || node.locked) continue
@@ -276,27 +258,7 @@ export function createClipboardActions(ctx: EditorContext) {
       const index = parent?.childIds.indexOf(id) ?? -1
       entries.push({ id, parentId, index, subtree: snapshotSubtree(ctx.graph, id) })
     }
-    if (entries.length === 0 && connectionSnapshots.length === 0) return
-
-    const connectionIds = new Set(connectionSnapshots.map((connection) => connection.id))
-    const deleteConnections = () => {
-      if (connectionIds.size === 0) return
-      const next = objectGraphConnectionsOnPage(ctx.graph, pageId).filter(
-        (connection) => !connectionIds.has(connection.id)
-      )
-      setObjectGraphConnectionsOnPage(ctx.graph, pageId, next)
-    }
-    const restoreConnections = () => {
-      if (connectionSnapshots.length === 0) return
-      const current = objectGraphConnectionsOnPage(ctx.graph, pageId)
-      const byId = new Map<string, ObjectGraphConnection>(
-        current.map((connection) => [connection.id, connection])
-      )
-      for (const connection of connectionSnapshots) {
-        byId.set(connection.id, structuredClone(connection))
-      }
-      setObjectGraphConnectionsOnPage(ctx.graph, pageId, [...byId.values()])
-    }
+    if (entries.length === 0) return
 
     const relayoutParents = () => {
       for (const parentId of new Set(entries.map((entry) => entry.parentId))) {
@@ -306,20 +268,17 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const prevSelection = new Set(ctx.state.selectedIds)
     for (const { id } of entries) ctx.graph.deleteNode(id)
-    deleteConnections()
     relayoutParents()
 
     ctx.undo.push({
       label: 'Delete',
       forward: () => {
         for (const { id } of entries) ctx.graph.deleteNode(id)
-        deleteConnections()
         relayoutParents()
         ctx.setSelectedIds(new Set())
       },
       inverse: () => {
         restoreDeletedEntries(ctx, entries)
-        restoreConnections()
         relayoutParents()
         ctx.setSelectedIds(prevSelection)
       }

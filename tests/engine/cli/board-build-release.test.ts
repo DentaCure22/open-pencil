@@ -36,7 +36,6 @@ describe('straight-through Board build release', () => {
       readback: { nodes: [{ id: 'node:1' }, { id: 'node:2' }] },
       receipt: {
         appliedRevision: 42,
-        connection_ids: ['connection:1'],
         requestId: 'request:1',
         status: 'applied'
       },
@@ -50,7 +49,6 @@ describe('straight-through Board build release', () => {
     expect(first).toEqual(second)
     expect(first).toMatchObject({
       artifact_count: 2,
-      connection_count: 1,
       contract: 'board-build-release/v1',
       next_build_target: {
         content_document_id: 'content:1',
@@ -70,7 +68,7 @@ describe('straight-through Board build release', () => {
         workspace_id: 'workspace:1'
       }
     })
-    expect(first.message).toContain('2 artifacts and 1 connection at revision 42')
+    expect(first.message).toContain('2 artifacts at revision 42')
     expect(first.proof_limitations).toEqual([])
     expect(first).not.toHaveProperty('timing')
     expect(first).not.toHaveProperty('callback')
@@ -136,7 +134,7 @@ describe('straight-through Board build release', () => {
 
     expect(commands).toEqual(['board_context', 'board_build'])
     expect(output.release_summary.status).toBe('ready')
-    expect(output.release_summary.message).toContain('1 artifact and 0 connections')
+    expect(output.release_summary.message).toContain('1 artifact at revision 42')
   })
 
   test('preserves authority commit ownership in the compact release envelope', () => {
@@ -306,7 +304,6 @@ describe('straight-through Board build release', () => {
     const receipt = {
       appliedRevision: 42,
       baseRevision: 41,
-      connection_ids: ['connection:1'],
       input_digest: 'sha256:receipt',
       owner_ids: { brief: 'node:1', control: 'node:2' },
       requestId: 'request:compact',
@@ -366,7 +363,6 @@ describe('straight-through Board build release', () => {
       receipt,
       release_summary: {
         artifact_count: 2,
-        connection_count: 1,
         request_id: 'request:compact',
         revision: 42,
         status: 'ready'
@@ -404,7 +400,6 @@ describe('straight-through Board build release', () => {
 
     expect(summary).toMatchObject({
       artifact_count: 0,
-      connection_count: 0,
       request_id: 'request:refused',
       revision: 42,
       status: 'stop'
@@ -431,7 +426,6 @@ describe('straight-through Board build release', () => {
 
     expect(summary).toMatchObject({
       artifact_count: 0,
-      connection_count: 0,
       request_id: 'request:invalid-plan',
       status: 'stop'
     })

@@ -1,10 +1,15 @@
 import type { Editor } from '@open-pencil/core/editor'
 import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { rectIntersectionRatio } from '@open-pencil/scene-graph/geometry'
 import { assetReference, computeImageHash } from '@open-pencil/scene-graph/images'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
-import { contentSourceAssetHash, hasAssetReference } from '@/app/media-evidence/assets'
+import {
+  contentSourceAssetHash,
+  hasAssetReference,
+  restoreAssetNodes
+} from '@/app/media-evidence/assets'
 import {
   fileExtension,
   mediaEvidenceFrameSize,
@@ -33,20 +38,6 @@ function setSelection(editor: Editor, ids: Set<string>) {
   else editor.clearSelection()
 }
 
-function intersectionRatio(first: Rect, second: Rect): number {
-  const intersectionWidth = Math.max(
-    0,
-    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
-  )
-  const intersectionHeight = Math.max(
-    0,
-    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
-  )
-  if (intersectionWidth === 0 || intersectionHeight === 0) return 0
-  const smallerArea = Math.min(first.width * first.height, second.width * second.height)
-  return smallerArea > 0 ? (intersectionWidth * intersectionHeight) / smallerArea : 0
-}
-
 function cascadedMediaPlacement(editor: Editor, pageId: string, bounds: Rect): Rect {
   const occupied = editor.graph
     .getChildren(pageId)
@@ -56,7 +47,7 @@ function cascadedMediaPlacement(editor: Editor, pageId: string, bounds: Rect): R
   for (let attempt = 0; attempt < MEDIA_CASCADE_ATTEMPTS; attempt++) {
     let conflicts = false
     for (const item of occupied) {
-      if (intersectionRatio(candidate, item) >= MEDIA_CASCADE_OVERLAP_RATIO) {
+      if (rectIntersectionRatio(candidate, item) >= MEDIA_CASCADE_OVERLAP_RATIO) {
         conflicts = true
         break
       }
@@ -149,10 +140,7 @@ async function placeViewerFiles(editor: Editor, files: File[], cx: number, cy: n
   editor.undo.push({
     label: 'Place media evidence',
     forward: () => {
-      for (const item of prepared) editor.graph.images.set(item.hash, item.bytes)
-      for (const snapshot of snapshots) {
-        editor.graph.createNode(snapshot.type, pageId, structuredClone(snapshot))
-      }
+      restoreAssetNodes(editor, pageId, prepared, snapshots)
       setSelection(editor, new Set(ids))
       editor.requestRender()
     },

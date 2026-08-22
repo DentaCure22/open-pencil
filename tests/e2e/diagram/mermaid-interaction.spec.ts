@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 import { expect, test } from '#tests/e2e/fixtures'
 import { CanvasHelper } from '#tests/helpers/canvas'
-import { createTestCodeObject } from '#tests/helpers/object-graph'
+import { createTestCodeObject } from '#tests/helpers/code-object'
 
 const SOURCE = `flowchart LR
   Capture --> Decide --> Build`
@@ -12,7 +12,7 @@ const UPDATED_SOURCE = `flowchart TD
 async function insertMermaid(page: Page, source = SOURCE) {
   const menubar = page.locator('[role="menubar"]')
   if (!(await menubar.isVisible())) await page.getByTestId('app-menu-toggle').click()
-  await page.getByTestId('menubar-insert').click()
+  await page.getByTestId('menubar-file').click()
   await page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
   await page.getByTestId('mermaid-source').fill(source)
   await expect(page.getByTestId('mermaid-insert')).toBeEnabled({ timeout: 15_000 })
@@ -116,6 +116,10 @@ test('keeps Mermaid and Code Object overlays synchronized while panning', async 
   await expect(mermaidOverlay).toBeVisible()
   await expect(codeObjectOverlay).toBeVisible()
   await canvas.waitForRender()
+  const objectStylesBeforePan = await Promise.all([
+    mermaidOverlay.getAttribute('style'),
+    codeObjectOverlay.getAttribute('style')
+  ])
 
   const readOverlayPositions = () =>
     page.evaluate((frameId) => {
@@ -142,15 +146,14 @@ test('keeps Mermaid and Code Object overlays synchronized while panning', async 
   await page.mouse.down()
 
   const samples: Array<Awaited<ReturnType<typeof readOverlayPositions>>> = []
-  let movementDone = false
-  const movement = page.mouse
-    .move(start.x + 120, start.y - 48, { steps: 80 })
-    .finally(() => (movementDone = true))
-  while (!movementDone) {
-    samples.push(await readOverlayPositions())
-    await page.waitForTimeout(2)
+  const movement = page.mouse.move(start.x + 120, start.y - 48, { steps: 80 })
+  const sampling = async () => {
+    for (let index = 0; index < 40; index += 1) {
+      samples.push(await readOverlayPositions())
+      await page.waitForTimeout(2)
+    }
   }
-  await movement
+  await Promise.all([movement, sampling()])
   await canvas.waitForRender()
   samples.push(await readOverlayPositions())
   await page.mouse.up()
@@ -175,6 +178,65 @@ test('keeps Mermaid and Code Object overlays synchronized while panning', async 
   expect(Math.max(...displacements)).toBeGreaterThan(100)
   expect(displacements.some((distance) => distance > 1 && distance < 100)).toBe(true)
   expect(maximumDrift).toBeLessThan(1)
+  expect(
+    await Promise.all([
+      mermaidOverlay.getAttribute('style'),
+      codeObjectOverlay.getAttribute('style')
+    ])
+  ).toEqual(objectStylesBeforePan)
+})
+
+test('keeps Mermaid on the shared presentation frame while zooming', async ({ page }) => {
+  await page.goto('/?test&no-rulers')
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await canvas.clearCanvas()
+  await insertMermaid(page)
+  await canvas.waitForRender()
+
+  const immediate = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    const overlay = document.querySelector('[data-test-id="mermaid-svg-object"]')
+    const ownerId = store ? [...store.state.selectedIds][0] : undefined
+    const owner = ownerId ? store?.graph.getNode(ownerId) : undefined
+    if (!store || !overlay || !owner) throw new Error('Expected rendered Mermaid owner')
+
+    const sample = () => {
+      const box = overlay.getBoundingClientRect()
+      return {
+        box: { height: box.height, width: box.width, x: box.x, y: box.y },
+        geometry: { height: owner.height, width: owner.width, x: owner.x, y: owner.y }
+      }
+    }
+
+    const before = sample()
+    store.setZoomAroundPoint(store.state.zoom * 1.5, 0, 0)
+    return { before, afterZoomRequest: sample() }
+  })
+
+  expect(immediate.afterZoomRequest.box).toEqual(immediate.before.box)
+  expect(immediate.afterZoomRequest.geometry).toEqual(immediate.before.geometry)
+
+  await canvas.waitForRender()
+  const presented = await page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    const overlay = document.querySelector('[data-test-id="mermaid-svg-object"]')
+    const ownerId = store ? [...store.state.selectedIds][0] : undefined
+    const owner = ownerId ? store?.graph.getNode(ownerId) : undefined
+    if (!overlay || !owner) throw new Error('Expected presented Mermaid owner')
+    const box = overlay.getBoundingClientRect()
+    return {
+      box: { height: box.height, width: box.width, x: box.x, y: box.y },
+      geometry: { height: owner.height, width: owner.width, x: owner.x, y: owner.y }
+    }
+  })
+
+  expect(presented.geometry).toEqual(immediate.before.geometry)
+  expect(
+    Math.hypot(presented.box.x - immediate.before.box.x, presented.box.y - immediate.before.box.y)
+  ).toBeGreaterThan(20)
+  expect(presented.box.width).toBeGreaterThan(immediate.before.box.width)
+  expect(presented.box.height).toBeGreaterThan(immediate.before.box.height)
 })
 
 test('selects, drags, and focuses a Mermaid SVG frame like one normal object', async ({ page }) => {

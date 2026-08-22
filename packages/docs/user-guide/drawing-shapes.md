@@ -5,7 +5,7 @@ description: Creating rectangles, ellipses, lines, frames, sections, polygons, a
 
 # Drawing Shapes
 
-The bottom toolbar provides tools for creating shapes, frames, and sections. Select a tool, then click and drag on the canvas to draw.
+The integrated tool rail provides tools for creating shapes, frames, and sections. Select a tool, then click and drag on the canvas to draw.
 ## Toolbar Tools
 
 | Tool | Shortcut | Description |

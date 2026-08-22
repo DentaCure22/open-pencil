@@ -125,9 +125,7 @@ const contentStyle = computed(() => {
 const contentLabel = computed(
   () => `${Math.round(metrics.value.contentWidth)} × ${Math.round(metrics.value.contentHeight)}`
 )
-const gaps = computed(() =>
-  getGapMeasurements(node, { height, width, x: originX, y: originY }, previewStyle)
-)
+const gaps = computed(() => getGapMeasurements(node, previewStyle))
 const labeledGapKeys = computed(() => {
   const seen = new Set<string>()
   return gaps.value.map((gap) => {

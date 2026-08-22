@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
+import { rectsIntersect } from '@open-pencil/scene-graph/geometry'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 import type { LayerNode, LayerTreeHostBridge } from '@open-pencil/vue'
 
@@ -166,15 +167,6 @@ const INSPECTED_STYLE_PROPERTIES = [
   'line-height'
 ] as const
 
-function intersects(first: Rect, second: Rect) {
-  return (
-    first.x < second.x + second.width &&
-    first.x + first.width > second.x &&
-    first.y < second.y + second.height &&
-    first.y + first.height > second.y
-  )
-}
-
 function clientRect(rect: DOMRect): Rect {
   return { height: rect.height, width: rect.width, x: rect.left, y: rect.top }
 }
@@ -209,7 +201,7 @@ export function codeObjectRegionHints(
       const style = getComputedStyle(element)
       if (style.display === 'none' || style.visibility === 'hidden') return []
       const rect = element.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0 || !intersects(clientRect(rect), clientRegion))
+      if (rect.width <= 0 || rect.height <= 0 || !rectsIntersect(clientRect(rect), clientRegion))
         return []
       const overlapWidth = Math.max(
         0,

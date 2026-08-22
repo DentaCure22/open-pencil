@@ -52,9 +52,8 @@ test('create component from selection (⌘⌥K)', async () => {
   componentId = selectedId
 })
 
-test('component shows purple label in design panel', async () => {
-  const header = editor.page.getByTestId('design-node-header')
-  await expect(header).toContainText('COMPONENT')
+test('component properties omit the redundant summary header', async () => {
+  await expect(editor.page.getByTestId('design-node-header')).toHaveCount(0)
 })
 
 test('component visible in layers panel', async () => {
@@ -89,7 +88,7 @@ test('create instance from component (context menu)', async () => {
   expect(instance?.componentId).toBe(expectDefined(comp, 'component').id)
 })
 
-test('instance shows INSTANCE type in design panel', async () => {
+test('instance opens its properties without a redundant summary header', async () => {
   const children = await getPageChildren()
   const instance = expectDefined(
     children.find((c) => c.type === 'INSTANCE'),
@@ -103,8 +102,7 @@ test('instance shows INSTANCE type in design panel', async () => {
   }, instance.id)
   await editor.canvas.waitForRender()
 
-  const header = editor.page.getByTestId('design-node-header')
-  await expect(header).toContainText('INSTANCE')
+  await expect(editor.page.getByTestId('design-node-header')).toHaveCount(0)
 })
 
 test('instance has "Go to Main Component" button', async () => {

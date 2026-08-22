@@ -76,9 +76,3 @@ export function sourceObjectSource(
     metadata
   }
 }
-
-export function isSourceObjectNode(
-  node: Pick<SceneNode, 'pluginData'> | null | undefined
-): boolean {
-  return sourceObjectSource(node) !== null
-}

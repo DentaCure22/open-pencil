@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 import type { SceneNode } from '@open-pencil/scene-graph'
 import type { MoveSnapInput } from '@open-pencil/vue'
 
@@ -5,6 +7,9 @@ export const CODE_OBJECT_DRAG_THRESHOLD_PX = 4
 
 export type CodeObjectInteractionMode = 'design' | 'interact'
 export type CodeObjectInteractionModes = Record<string, CodeObjectInteractionMode>
+export type CodeObjectWheelOwner = 'canvas' | 'content'
+
+export const activeCodeObjectInteractionFrameId = ref<string | null>(null)
 
 export type CodeObjectInteractionModeReconciliation = {
   deactivatedFrameIds: string[]
@@ -93,6 +98,13 @@ export function moveCodeObjectDesignGesture(
 
 export function codeObjectDesignGestureDragged(gesture: CodeObjectDesignGesture): boolean {
   return gesture.phase === 'dragging'
+}
+
+export function codeObjectWheelOwner(
+  mode: CodeObjectInteractionMode,
+  overflow: 'clip' | 'scroll' | undefined
+): CodeObjectWheelOwner {
+  return mode === 'interact' && overflow === 'scroll' ? 'content' : 'canvas'
 }
 
 export function reconcileCodeObjectInteractionModes(

@@ -166,9 +166,7 @@ Use `board build` for typed artifact creation/refinement. `board present` and li
 persisted authority may support durable list, context, create, build, connect, read, and verify
 operations according to the capabilities returned by `board context`. `board edit` supports guarded
 top-level native-object update, move, resize, duplicate, and delete with exact target identity,
-revision checks, stable request receipts, and replay. Legacy `boards`, `documents`, `board change`,
-and `code-object upsert` commands remain callable compatibility aliases but do not appear in normal
-help. Board rename/duplicate/delete and Board history commands remain intentionally absent until
+revision checks, stable request receipts, and replay. Board rename/duplicate/delete and Board history commands remain intentionally absent until
 they have guarded receipts, exact-target validation, and normal Undo/Redo verification; raw `eval`
 is not their fallback.
 

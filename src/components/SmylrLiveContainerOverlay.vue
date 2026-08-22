@@ -3,6 +3,11 @@ import { useEventListener } from '@vueuse/core'
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 import type { Vector } from '@open-pencil/scene-graph/primitives'
+import {
+  closeLiveInspectorContextComment,
+  openContextCommentForLiveInspector,
+  reconcileLiveInspectorContextComment
+} from '@/app/context-comment'
 import { useEditorStore } from '@/app/editor/active-store'
 import { resolveLiveDropLayer } from '@/app/smylr-live-inspector/drop-layer'
 import {
@@ -14,6 +19,7 @@ import {
   liveInspectorPatchDraft,
   liveInspectorSelectedId,
   liveInspectorSelectedRect,
+  liveInspectorSelectionEpoch,
   hoveredLiveInspectorNode,
   hoveredLiveInspectorRect,
   previewLiveInspectorDraft,
@@ -22,6 +28,7 @@ import {
   undoLiveInspectorDraft
 } from '@/app/smylr-live-inspector/session'
 import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
+import { getContainerLabelPlacement } from '@/components/smylr-live-container-overlay/label-placement'
 import SmylrLiveSpacingMeasurements from '@/components/smylr-live-container-overlay/SmylrLiveSpacingMeasurements.vue'
 import Tip from '@/components/ui/Tip.vue'
 
@@ -145,13 +152,6 @@ const hoverOverlayStyle = computed<Record<string, string>>(() => {
     width: `${Math.max(1, rect.width)}px`
   }
 })
-const labelBelow = computed(
-  () => Number.parseFloat(overlayStyle.value.top ?? '0') * Math.max(store.state.zoom, 0.01) < 32
-)
-const hoverLabelBelow = computed(
-  () =>
-    Number.parseFloat(hoverOverlayStyle.value.top ?? '0') * Math.max(store.state.zoom, 0.01) < 32
-)
 const overlayLabelStyle = computed(() => {
   const zoom = Math.max(store.state.zoom, 0.01)
   return {
@@ -161,6 +161,33 @@ const overlayLabelStyle = computed(() => {
     padding: `${2 / zoom}px ${6 / zoom}px`
   }
 })
+const selectedLabelPlacement = computed(() => {
+  const frame = liveFrame.value
+  const rect = displayedRect.value
+  return frame && rect
+    ? getContainerLabelPlacement(rect, frame, store.state.zoom)
+    : { horizontal: 'left' as const, maxWidth: 360, vertical: 'above' as const }
+})
+const hoverLabelPlacement = computed(() => {
+  const frame = liveFrame.value
+  const rect = hoveredLiveInspectorRect.value
+  return frame && rect
+    ? getContainerLabelPlacement(rect, frame, store.state.zoom)
+    : { horizontal: 'left' as const, maxWidth: 360, vertical: 'above' as const }
+})
+const selectedLabelStyle = computed(() => ({
+  ...overlayLabelStyle.value,
+  maxWidth: `${selectedLabelPlacement.value.maxWidth}px`
+}))
+const hoverLabelStyle = computed(() => ({
+  ...overlayLabelStyle.value,
+  maxWidth: `${hoverLabelPlacement.value.maxWidth}px`
+}))
+function verticalLabelClass(vertical: 'above' | 'below' | 'inside-top') {
+  if (vertical === 'below') return 'top-full mt-1'
+  if (vertical === 'inside-top') return 'top-0 mt-1'
+  return 'bottom-full mb-1'
+}
 const cornerHandleStyle = computed(() => {
   const zoom = Math.max(store.state.zoom, 0.01)
   const size = 6 / zoom
@@ -444,6 +471,22 @@ watch(liveInspectorSelectedId, () => {
   moveDrag.value = null
   previewPosition.value = null
 })
+watch(
+  [
+    isSelectMode,
+    liveInspectorSelectedId,
+    liveInspectorSelectionEpoch,
+    () => Boolean(liveInspectorSelectedRect.value)
+  ],
+  ([selectMode, selectedId]) => {
+    reconcileLiveInspectorContextComment({
+      active: selectMode,
+      open: () => openContextCommentForLiveInspector(store),
+      selectedId
+    })
+  },
+  { flush: 'post', immediate: true }
+)
 watch(liveInspectorSelectedRect, (rect) => {
   const target = previewPosition.value
   if (
@@ -465,6 +508,7 @@ useEventListener(window, 'pointerup', endResize)
 useEventListener(window, 'pointercancel', endResize)
 
 onUnmounted(() => {
+  closeLiveInspectorContextComment()
   for (const stop of unsubscribe) stop()
   unsubscribe = []
 })
@@ -490,18 +534,22 @@ onUnmounted(() => {
       :width="displayedSize.width"
       :zoom="store.state.zoom"
     />
-    <Tip label="Drag to move · drop above target · Shift-drop below">
+    <Tip :label="`${displayedNode.label} · Drag to move · drop above target · Shift-drop below`">
       <div
         data-test-id="smylr-live-container-label"
-        class="pointer-events-auto absolute left-0 flex cursor-move items-center bg-accent font-medium text-white shadow-sm active:cursor-grabbing"
-        :class="labelBelow ? 'top-full mt-1' : 'bottom-full mb-1'"
-        :style="overlayLabelStyle"
+        class="pointer-events-auto absolute flex cursor-move items-center bg-accent font-medium text-white shadow-sm active:cursor-grabbing"
+        :class="[
+          selectedLabelPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
+          verticalLabelClass(selectedLabelPlacement.vertical)
+        ]"
+        :style="selectedLabelStyle"
+        :title="displayedNode.label"
         @pointerdown="beginMove($event)"
       >
-        <span class="max-w-36 truncate">{{ displayedNode.label }}</span>
+        <span class="min-w-0 flex-1 truncate">{{ displayedNode.label }}</span>
         <span
           v-if="liveInspectorPatchDraft || liveInspectorCanRedoSelectedDraft"
-          class="ml-1 flex items-center gap-0.5 border-l border-white/25 pl-1"
+          class="ml-1 flex shrink-0 items-center gap-0.5 border-l border-white/25 pl-1"
         >
           <button
             type="button"
@@ -583,11 +631,15 @@ onUnmounted(() => {
     :style="hoverOverlayStyle"
   >
     <div
-      class="pointer-events-none absolute left-0 flex items-center bg-accent/75 font-medium text-white shadow-sm"
-      :class="hoverLabelBelow ? 'top-full mt-1' : 'bottom-full mb-1'"
-      :style="overlayLabelStyle"
+      class="pointer-events-none absolute flex items-center bg-accent/75 font-medium text-white shadow-sm"
+      :class="[
+        hoverLabelPlacement.horizontal === 'right' ? 'right-0' : 'left-0',
+        verticalLabelClass(hoverLabelPlacement.vertical)
+      ]"
+      :style="hoverLabelStyle"
+      :title="hoveredLiveInspectorNode.label"
     >
-      <span class="max-w-36 truncate">{{ hoveredLiveInspectorNode.label }}</span>
+      <span class="min-w-0 flex-1 truncate">{{ hoveredLiveInspectorNode.label }}</span>
     </div>
   </div>
 </template>

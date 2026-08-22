@@ -161,7 +161,13 @@ function semanticVariableValue(token: SmylrLiveSemanticToken): {
     if (!raw || raw === 'none') return null
     return { type: 'FLOAT', value: 1 }
   }
-  if (token.category === 'surface' || token.category === 'border' || token.category === 'text') {
+  if (
+    token.category === 'surface' ||
+    token.category === 'border' ||
+    token.category === 'chart' ||
+    token.category === 'status' ||
+    token.category === 'text'
+  ) {
     const color = parseColorLoose(token.resolvedValue)
     if (color) return { type: 'COLOR', value: color }
     // Opacity-only or non-color text tokens may still be numeric.
@@ -771,9 +777,7 @@ function requestReset() {
     compact-header
     :computed-style="node.computedStyle"
     :editor-store="shadowStore"
-    :type-label="proxyNode.type === 'TEXT' ? 'TEXT' : 'CONTAINER'"
     :name-label="node.label"
-    :show-object-graph="false"
     data-live-adapter="true"
     @pointerdown.capture="beginLiveInspectorDraftTransaction(styleTransactionKey)"
     @pointerup.capture="endLiveInspectorDraftTransaction(styleTransactionKey)"

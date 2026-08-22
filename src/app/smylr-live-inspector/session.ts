@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- Security validation, session state, and preview history share one protocol boundary. */
 import { computed, ref, shallowRef } from 'vue'
 
+import type { SpatialNavigationDirection } from '@/app/editor/spatial-navigation'
 import { IS_BROWSER } from '@/constants'
 
 import { readCacheJson, writeCacheJson } from '../cache'
@@ -16,7 +17,9 @@ import { type LiveInspectorPatchDraft, type LiveInspectorTokenPatch } from './pa
 export const SMYLR_OPENPENCIL_INSPECTOR_MESSAGE = 'SMYLR_OPENPENCIL_INSPECTOR_V1'
 
 export type SmylrOpenPencilInspectorAction =
+  | 'board-navigate'
   | 'exit-interact'
+  | 'focus-frame'
   | 'hover'
   | 'interaction-start'
   | 'mode'
@@ -36,6 +39,7 @@ export type SmylrOpenPencilInspectorMessage = {
     status?: LiveInspectorAuthStatus
   }
   document?: SmylrLiveContainerDocument
+  direction?: SpatialNavigationDirection
   hoveredId?: string
   kind?: string
   mode?: LiveInspectorInteractionMode
@@ -275,7 +279,9 @@ const MAX_INSPECTOR_PAGE_FACE_DATA_URL_LENGTH = 5_000_000
 const MAX_INSPECTOR_PAGES = 32
 
 const INSPECTOR_MESSAGE_KEYS = {
+  'board-navigate': new Set(['action', 'direction', 'kind', 'runtimeInstanceId']),
   'exit-interact': new Set(['action', 'kind', 'runtimeInstanceId']),
+  'focus-frame': new Set(['action', 'kind', 'runtimeInstanceId']),
   hover: new Set([
     'action',
     'document',
@@ -383,16 +389,52 @@ export function findLiveInspectorNodeRect(
   return null
 }
 
+type LiveInspectorTreeIndex = {
+  nodes: Map<string, SmylrLiveContainerNode>
+  rects: Map<string, SmylrLiveContainerRect>
+}
+
+function indexLiveInspectorTree(root: SmylrLiveContainerNode | undefined): LiveInspectorTreeIndex {
+  const nodes = new Map<string, SmylrLiveContainerNode>()
+  const rects = new Map<string, SmylrLiveContainerRect>()
+
+  function visit(node: SmylrLiveContainerNode, offsetX: number, offsetY: number) {
+    const x = offsetX + node.rect.x
+    const y = offsetY + node.rect.y
+    nodes.set(node.id, node)
+    rects.set(node.id, {
+      height: node.rect.height,
+      width: node.rect.width,
+      x,
+      y
+    })
+    for (const child of node.children ?? []) visit(child, x, y)
+  }
+
+  if (root) visit(root, 0, 0)
+  return { nodes, rects }
+}
+
+const liveInspectorTreeIndex = computed(() =>
+  indexLiveInspectorTree(liveInspectorDocument.value?.tree)
+)
+
 export const selectedLiveInspectorNode = computed(() =>
-  findLiveInspectorNode(liveInspectorDocument.value?.tree, liveInspectorSelectedId.value)
+  liveInspectorSelectedId.value
+    ? (liveInspectorTreeIndex.value.nodes.get(liveInspectorSelectedId.value) ?? null)
+    : null
 )
 
 export const hoveredLiveInspectorNode = computed(() =>
-  findLiveInspectorNode(liveInspectorDocument.value?.tree, liveInspectorHoveredId.value)
+  liveInspectorHoveredId.value
+    ? (liveInspectorTreeIndex.value.nodes.get(liveInspectorHoveredId.value) ?? null)
+    : null
 )
 
 export const hoveredLiveInspectorRect = computed(() =>
-  findLiveInspectorNodeRect(liveInspectorDocument.value?.tree, liveInspectorHoveredId.value)
+  liveInspectorHoveredId.value
+    ? (liveInspectorTreeIndex.value.rects.get(liveInspectorHoveredId.value) ?? null)
+    : null
 )
 
 export const liveInspectorFlatNodes = computed<SmylrLiveInspectorFlatNode[]>(() => {
@@ -444,7 +486,7 @@ export function selectAdjacentLiveInspectorNode(direction: LiveInspectorNavigati
   }
 
   const selectedNode = findLiveInspectorNode(root, selectedId) ?? root
-  let target: SmylrLiveContainerNode | undefined | null = null
+  let target: SmylrLiveContainerNode | undefined | null
 
   if (direction === 'child') {
     target = selectedNode.children?.[0] ?? null
@@ -611,9 +653,11 @@ function isLiveSemanticToken(value: unknown) {
 
   return (
     (value.category === 'border' ||
+      value.category === 'chart' ||
       value.category === 'radius' ||
       value.category === 'shadow' ||
       value.category === 'spacing' ||
+      value.category === 'status' ||
       value.category === 'surface' ||
       value.category === 'text') &&
     isBoundedString(value.cssProperty, 256) &&
@@ -821,7 +865,9 @@ function isLiveContainerDocument(value: unknown): value is SmylrLiveContainerDoc
 
 function isInspectorAction(value: unknown): value is SmylrOpenPencilInspectorAction {
   return (
+    value === 'board-navigate' ||
     value === 'exit-interact' ||
+    value === 'focus-frame' ||
     value === 'hover' ||
     value === 'interaction-start' ||
     value === 'mode' ||
@@ -848,7 +894,21 @@ export function isSmylrOpenPencilInspectorMessage(
   if (value.runtimeInstanceId !== undefined && !isBoundedString(value.runtimeInstanceId, 128)) {
     return false
   }
-  if (value.action === 'exit-interact' || value.action === 'interaction-start') return true
+  if (value.action === 'board-navigate') {
+    return (
+      value.direction === 'up' ||
+      value.direction === 'down' ||
+      value.direction === 'left' ||
+      value.direction === 'right'
+    )
+  }
+  if (
+    value.action === 'exit-interact' ||
+    value.action === 'focus-frame' ||
+    value.action === 'interaction-start'
+  ) {
+    return true
+  }
   if (value.action === 'mode') return isLiveInspectorInteractionMode(value.mode)
   if (value.action === 'snapshot') return isLiveContainerPageFace(value.pageFace)
   if (value.action === 'ready') {
@@ -860,6 +920,8 @@ export function isSmylrOpenPencilInspectorMessage(
     )
   }
 
+  if (value.action === 'hover') return isOptionalBoundedString(value.hoveredId, 512)
+
   if (!isLiveContainerDocument(value.document)) return false
   const optionalSelectionIsValid =
     isOptionalBoundedString(value.hoveredId, 512) &&
@@ -867,9 +929,6 @@ export function isSmylrOpenPencilInspectorMessage(
     (value.selectedRect === undefined || isLiveContainerRect(value.selectedRect))
   if (!optionalSelectionIsValid) return false
 
-  // `hoveredId: undefined` is the explicit pointer-leave packet. Accept it so
-  // temporary hover chrome clears without disturbing the clicked selection.
-  if (value.action === 'hover') return isOptionalBoundedString(value.hoveredId, 512)
   if (value.action === 'select') {
     return (
       isBoundedString(value.selectedId, 512) &&
@@ -984,7 +1043,13 @@ export function markLiveInspectorFrameUnavailable(src: string) {
   liveInspectorAuthStatus.value = 'unavailable'
 }
 
+const RELOAD_COALESCE_MS = 400
+let lastLiveInspectorReloadAt = 0
+
 export function reloadLiveInspectorFrame() {
+  const now = Date.now()
+  if (now - lastLiveInspectorReloadAt < RELOAD_COALESCE_MS) return
+  lastLiveInspectorReloadAt = now
   clearLiveInspectorDocumentState({ preserveDrafts: true, preserveSelection: true })
   liveInspectorStatus.value = 'loading'
   liveInspectorAuthStatus.value = 'unknown'
@@ -1011,6 +1076,14 @@ export function setLiveInspectorActiveFrame(frameId: string | null) {
   liveInspectorActiveFrameId.value = frameId
 }
 
+export function enterLiveInspectorContainerSelection(frameId: string) {
+  setLiveInspectorActiveFrame(frameId)
+  setLiveInspectorInteractionMode('select')
+  const rootId = liveInspectorDocument.value?.tree.id
+  if (rootId) return selectLiveInspectorNode(rootId)
+  return postLiveInspectorCommand({ action: 'request-tree' })
+}
+
 export function enterLiveInspectorPreviewMode() {
   if (liveInspectorPreviewMode.value) return
   liveInspectorPreviewReturnMode = liveInspectorInteractionMode.value
@@ -1029,7 +1102,6 @@ export function selectLiveInspectorNode(id: string) {
   if (liveInspectorInteractionMode.value !== 'select') {
     setLiveInspectorInteractionMode('select')
   }
-  if (!postLiveInspectorCommand({ action: 'select-node', nodeId: id })) return false
   // Claim the known document node immediately. The iframe confirmation still
   // replaces these values with its authoritative live bounds, while pooled
   // canvases no longer leave Assets/Layers clicks looking unselected during
@@ -1040,7 +1112,7 @@ export function selectLiveInspectorNode(id: string) {
   // Always reclaim Design ownership even when the live id is unchanged
   // (e.g. user clicked a native copy, then the same live container again).
   liveInspectorSelectionEpoch.value += 1
-  return true
+  return postLiveInspectorCommand({ action: 'select-node', nodeId: id })
 }
 
 export function clearLiveInspectorSelection() {

@@ -13,6 +13,7 @@ import {
   outlineStrokeSelected as outlineStrokeSelectedImpl
 } from './structure/flatten'
 import { ungroupSelected as ungroupImpl } from './structure/group'
+import { detachOutsideFrameMembership } from './structure/overflow'
 import { createStructureReorderActions } from './structure/reorder'
 import { createStructureStateActions } from './structure/state'
 import type { EditorContext } from './types'
@@ -107,6 +108,8 @@ export function createStructureActions(ctx: EditorContext) {
   return {
     isTopLevel,
     ...reorderActions,
+    detachOutsideFrameMembership: (nodeIds: Iterable<string>) =>
+      detachOutsideFrameMembership(ctx, nodeIds),
     reparentNodes,
     wrapSelectionInContainer,
     wrapInAutoLayout,

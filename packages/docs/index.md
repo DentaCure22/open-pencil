@@ -30,7 +30,7 @@ features:
     details: Build custom editing surfaces with the Vue SDK, embed OpenPencil into other products, or assemble workflow-specific editors around the same core.
   - icon: 🤖
     title: AI-Native
-    details: Built-in chat with 90 tools — create shapes, set styles, manage layout, analyze tokens. MCP server for Claude Code, Cursor, Windsurf.
+    details: Pi task chat for coding work, plus an MCP server for programmatic design operations from Claude Code, Cursor, and Windsurf.
   - icon: 📖
     title: Open Source
     details: MIT license. Read and modify everything — the editor, the engine, the file codec, the CLI.

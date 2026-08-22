@@ -15,9 +15,12 @@ test('pauses the running Experience when its Board runtimes are inactive', async
   await editor.page.locator('[data-asset-group="board-experiences"]').click()
   await editor.page.getByTestId('board-experience-asset-tower-defense').click()
 
-  const controls = editor.page.getByLabel('Tower defense controls. Double-click to interact.', {
-    exact: true
-  })
+  const controls = editor.page.getByLabel(
+    'Tower defense controls. Click to select or interact. Double-click to focus.',
+    {
+      exact: true
+    }
+  )
   await controls.dblclick()
   await editor.page.getByRole('button', { name: 'Start wave', exact: true }).click()
 

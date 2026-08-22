@@ -90,6 +90,16 @@ test('creating a shape updates layers', async () => {
   const names = await getLayerNames()
   expect(names).toContain('Rectangle')
   expect(names.length).toBe(before.length + 1)
+  const selectedId = await editor.page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    return [...store.state.selectedIds][0] ?? null
+  })
+  if (!selectedId) throw new Error('Expected the created Rectangle to stay selected')
+  await expect(editor.page.locator(`[data-node-id="${selectedId}"]`)).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
 
   await editor.canvas.undo()
   const after = await getLayerNames()

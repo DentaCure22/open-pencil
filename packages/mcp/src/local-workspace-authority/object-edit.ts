@@ -305,6 +305,18 @@ function objectReadback(graph: SceneGraph, node: SceneNode): JsonRecord {
   }
 }
 
+function objectEditAfter(
+  operation: AuthorityObjectEditOperation['kind'],
+  originalId: string,
+  resultNode: SceneNode | null,
+  resultObjectId: string | null,
+  graph: SceneGraph
+): JsonRecord {
+  if (operation === 'object.delete') return { deleted: true, id: originalId }
+  if (resultNode) return objectReadback(graph, resultNode)
+  return { id: resultObjectId, missing: true }
+}
+
 function stripCopiedReceipts(graph: SceneGraph, ownerId: string): void {
   const nodes = [graph.getNode(ownerId), ...graph.getDescendants(ownerId)]
   for (const node of nodes) {
@@ -382,12 +394,7 @@ export function applyAuthorityObjectEdit(
   }
   const resultNode = resultObjectId ? document.graph.getNode(resultObjectId) : null
   const receipt: AuthorityObjectEditReceipt = {
-    after:
-      operation.kind === 'object.delete'
-        ? { deleted: true, id: node.id }
-        : resultNode
-          ? objectReadback(document.graph, resultNode)
-          : { id: resultObjectId, missing: true },
+    after: objectEditAfter(operation.kind, node.id, resultNode, resultObjectId, document.graph),
     appliedRevision: baseRevision + 1,
     baseRevision,
     inputDigest: intent.inputDigest,

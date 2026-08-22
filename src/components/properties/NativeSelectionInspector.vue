@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
 import { useEditorCommands, useI18n, useSelectionState } from '@open-pencil/vue'
 
 import type { EditorStore } from '@/app/editor/active-store'
@@ -9,7 +7,6 @@ import EffectsSection from './EffectsSection.vue'
 import ExportSection from './ExportSection.vue'
 import FillSection from './FillSection.vue'
 import LayoutSection from './LayoutSection/LayoutSection.vue'
-import ObjectGraphSection from './ObjectGraphSection.vue'
 import PositionSection from './PositionSection.vue'
 import StrokeSection from './StrokeSection.vue'
 import TypographySection from './TypographySection.vue'
@@ -20,32 +17,18 @@ import type { DesignStyleDeclaration } from '@open-pencil/dom-css'
 const {
   compactHeader = false,
   editorStore,
-  nameLabel,
-  showObjectGraph = true,
-  typeLabel
+  nameLabel
 } = defineProps<{
   compactHeader?: boolean
   computedStyle?: DesignStyleDeclaration
   editorStore?: EditorStore
   nameLabel?: string
-  showObjectGraph?: boolean
-  typeLabel?: string
 }>()
 
 const { selectedNode: node } = useSelectionState()
 const { getCommand } = useEditorCommands()
 const goToMainComponent = getCommand('selection.goToMainComponent')
 const detachInstance = getCommand('selection.detachInstance')
-const isComponentType = computed(() => {
-  if (typeLabel === 'CONTAINER') return true
-  const type = node.value?.type
-  return type === 'COMPONENT' || type === 'COMPONENT_SET' || type === 'INSTANCE'
-})
-const nodeSizeLabel = computed(() => {
-  const selection = node.value
-  if (!selection) return ''
-  return `${Math.round(selection.width)} × ${Math.round(selection.height)}`
-})
 const { panels } = useI18n()
 </script>
 
@@ -56,36 +39,15 @@ const { panels } = useI18n()
     class="scrollbar-thin flex-1 overflow-x-hidden overflow-y-auto pb-4"
   >
     <div
+      v-if="compactHeader"
       data-test-id="design-node-header"
-      class="flex items-center gap-2.5 border-b border-white/[0.055] px-3"
-      :class="compactHeader ? 'h-11' : 'min-h-16 py-2.5'"
+      class="flex h-11 items-center gap-2.5 border-b border-white/[0.055] px-3"
     >
-      <icon-lucide-square-dashed
-        class="size-4 shrink-0"
-        :class="isComponentType ? 'text-component' : 'text-muted'"
-      />
-      <div class="min-w-0 flex-1">
-        <div
-          v-if="!compactHeader"
-          data-test-id="design-node-type"
-          class="truncate text-[9px] leading-3.5 font-medium tracking-[0.04em] text-muted uppercase"
-        >
-          {{ typeLabel ?? node.type }}
-        </div>
-        <div
-          data-test-id="design-node-name"
-          class="truncate leading-4 text-surface"
-          :class="compactHeader ? 'text-[11.5px] font-medium' : 'text-[12px] font-semibold'"
-        >
-          {{ nameLabel ?? node.name }}
-        </div>
-        <div
-          v-if="!compactHeader"
-          data-test-id="design-node-size"
-          class="text-[9.5px] leading-3.5 tabular-nums text-muted/70"
-        >
-          {{ nodeSizeLabel }}
-        </div>
+      <div
+        data-test-id="design-node-name"
+        class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-surface"
+      >
+        {{ nameLabel ?? node.name }}
       </div>
       <div v-if="$slots['header-actions']" class="ml-auto flex shrink-0 items-center gap-1">
         <slot name="header-actions" />
@@ -113,7 +75,6 @@ const { panels } = useI18n()
     <VariantSection v-if="node.type === 'INSTANCE'" />
 
     <PositionSection :editor-store="editorStore" />
-    <ObjectGraphSection v-if="showObjectGraph" />
     <LayoutSection :computed-style="computedStyle" />
     <AppearanceSection />
     <TypographySection v-if="node.type === 'TEXT'" />

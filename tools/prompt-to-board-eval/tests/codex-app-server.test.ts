@@ -91,8 +91,7 @@ describe('isolated Codex app-server straight-through transport', () => {
     const fake = await fakeAppServer()
     const rawLines: string[] = []
     const projected: ProjectedCodexJsonEvent[] = []
-    let session: CodexAppServerSession
-    session = new CodexAppServerSession({
+    const session: CodexAppServerSession = new CodexAppServerSession({
       binary: fake.binary,
       cwd: tmpdir(),
       env: { ...process.env, FAKE_APP_SERVER_REQUEST_LOG: fake.requestLog },

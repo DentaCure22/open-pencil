@@ -1,3 +1,5 @@
+import { converter, parse } from 'culori'
+
 /**
  * Smylr design-system token catalog for OpenPencil canvas boards.
  *
@@ -32,6 +34,7 @@ export type SmylrTokenShadowPreview = {
   blur: number
   spread: number
   a: number
+  inset: boolean
 }
 
 export type SmylrTokenDefinition = {
@@ -40,15 +43,11 @@ export type SmylrTokenDefinition = {
   cssVariable: string
   label: string
   sourceFile: string
-  /** @deprecated prefer valueLight */
-  value?: string
   valueLight?: string
   valueDark?: string
+  resolvedValueLight?: string
+  resolvedValueDark?: string
   previewKind?: SmylrTokenPreviewKind
-  /** @deprecated prefer previewLight */
-  preview?: Color
-  previewLight?: Color
-  previewDark?: Color
   radiusPx?: number
   shadow?: SmylrTokenShadowPreview
   shadowDark?: SmylrTokenShadowPreview
@@ -89,20 +88,42 @@ export const SMYLR_TOKEN_CATEGORY_LABELS: Record<string, string> = {
   spacing: 'Spacing'
 }
 
+const toRgb = converter('rgb')
+
+function clampUnit(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
+function tokenColorPreview(value: string | undefined): Color | undefined {
+  if (!value) return undefined
+  const parsed = parse(value)
+  if (!parsed) return undefined
+  const converted = toRgb(parsed)
+  if (!converted) return undefined
+  return {
+    r: clampUnit(converted.r),
+    g: clampUnit(converted.g),
+    b: clampUnit(converted.b),
+    a: clampUnit(converted.alpha ?? 1)
+  }
+}
+
 export function tokenPreviewLight(token: SmylrTokenDefinition): Color | undefined {
-  return token.previewLight ?? token.preview
+  return tokenColorPreview(token.resolvedValueLight ?? token.valueLight)
 }
 
 export function tokenPreviewDark(token: SmylrTokenDefinition): Color | undefined {
-  return token.previewDark ?? token.previewLight ?? token.preview
+  return tokenColorPreview(
+    token.resolvedValueDark ?? token.valueDark ?? token.resolvedValueLight ?? token.valueLight
+  )
 }
 
 export function tokenValueLight(token: SmylrTokenDefinition): string {
-  return token.valueLight ?? token.value ?? token.styleValue ?? token.cssProperty
+  return token.valueLight ?? token.styleValue ?? token.cssProperty
 }
 
 export function tokenValueDark(token: SmylrTokenDefinition): string {
-  return token.valueDark ?? token.valueLight ?? token.value ?? token.styleValue ?? token.cssProperty
+  return token.valueDark ?? token.valueLight ?? token.styleValue ?? token.cssProperty
 }
 
 export function smylrTokensByCategory(
@@ -148,7 +169,8 @@ export function filterSmylrTokens(query: string): SmylrTokenDefinition[] {
       token.sourceFile,
       token.valueLight ?? '',
       token.valueDark ?? '',
-      token.value ?? '',
+      token.resolvedValueLight ?? '',
+      token.resolvedValueDark ?? '',
       token.styleValue ?? '',
       ...(token.utilities ?? [])
     ]

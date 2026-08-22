@@ -17,17 +17,9 @@
 - **Variablen** — Design-Tokens mit Sammlungen, Modi (Hell/Dunkel), Farb-/Float-/String-/Boolean-Typen, Variablenbindung
 - **Sektionen** — Organisatorische Container mit automatischer Kindübernahme und Titel-Pills
 
-## Eigenschafts-Panel
+## Arbeitsbereich & Objektsteuerung
 
-Kontextsensitive Design | Code | KI-Tabs:
-
-- **Darstellung** — Deckkraft, Eckenradius (einheitlich oder pro Ecke), Sichtbarkeit
-- **Füllung** — Vollfarbe, Verlauf (Linear/Radial/Angular/Diamant), Bild
-- **Kontur** — Farbe, Breite, Ausrichtung (Innen/Mitte/Außen), Pro-Seite-Breiten, Cap, Join, Dash
-- **Effekte** — Schlagschatten, Innerer Schatten, Ebenen-Unschärfe, Hintergrund-Unschärfe, Vordergrund-Unschärfe
-- **Typografie** — Schriftart-Auswahl mit virtuellem Scrollen und Suche, Gewicht, Größe, Ausrichtung, Stil-Buttons
-- **Layout** — Auto-Layout-Steuerungen (wenn aktiviert)
-- **Export** — Skalierung, Format (PNG/JPG/WEBP/SVG), Live-Vorschau
+Die schwebende Seitenleiste bündelt Ebenen, Chats, Assets und Aktivität. Objektspezifische Aktionen bleiben am Canvas und in der integrierten Werkzeugleiste. Auf schmalen Bildschirmen zeigt die mobile Schublade Design-Steuerungen und den Quelltext von Code Objects mit bearbeitbarem Code.
 
 ## Rendering
 
@@ -63,17 +55,17 @@ Mehrere Dokumente in Tabs öffnen. <kbd>⌘</kbd><kbd>T</kbd> neuer Tab, <kbd>�
 
 CLI: `openpencil export design.fig -f jsx --style tailwind`
 
-## KI-Chat
+## Aufgaben-Chat
 
-<kbd>⌘</kbd><kbd>J</kbd> öffnet den KI-Assistenten. 90+ Werkzeuge zum Erstellen von Formen, Setzen von Stilen, Verwalten von Layout, Arbeiten mit Komponenten und Variablen, Ausführen boolescher Operationen, Analysieren von Design-Tokens und Exportieren von Assets. Verbinden Sie Anthropic, OpenAI, Google AI, OpenRouter oder einen kompatiblen Endpunkt.
+Öffne **CHATS** in der linken Seitenleiste, um eine Pi-Coding-Aufgabe zu starten oder fortzusetzen. Seitenleiste und Board-Karten teilen dieselbe Konversation, Modellwahl, Werkzeugaktivität, Anhänge und Folgefragen.
 
-Tool-Aufrufe werden als einklappbare Timeline-Einträge angezeigt. Visuelle Überprüfung — der Assistent rendert seine Arbeit und vergleicht sie mit Ihrer Anfrage. Vollständige Undo-Unterstützung für alle KI-Mutationen.
+Aktive Werkzeugaufrufe bleiben aufgeklappt; abgeschlossene Aktivität wird kompakt zusammengefasst.
 
-Siehe [KI-Chat](/programmable/ai-chat) für Einrichtung und Anbieter-Details.
+Siehe [Aufgaben-Chat](/programmable/ai-chat).
 
 ## MCP-Server
 
-Claude Code, Cursor, Windsurf oder jeden MCP-Client verbinden, um `.fig`-Dateien headless zu lesen und zu schreiben. 90+ Werkzeuge. Zwei Transporte: stdio und HTTP.
+Claude Code, Cursor, Windsurf oder jeden MCP-Client verbinden, um `.fig`-Dateien headless zu lesen und zu schreiben. Clients entdecken den aktuellen Katalog zur Laufzeit über stdio oder HTTP.
 
 ```sh
 npm install -g @open-pencil/mcp

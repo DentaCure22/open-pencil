@@ -1,5 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
 
+import { SceneGraph } from '@open-pencil/scene-graph'
+
+import { createEditor } from '#core/editor'
 import { rendererInvalidationForChanges } from '#core/editor/graph-events'
 
 describe('graph event renderer invalidation', () => {
@@ -29,5 +32,23 @@ describe('graph event renderer invalidation', () => {
       geometryCache: false,
       nodePicture: true
     })
+  })
+
+  test('graph replacement invalidates every renderer cache', () => {
+    const editor = createEditor()
+    const firstRenderer = { invalidateAllPictures: mock() } as Parameters<
+      typeof editor.setCanvasKit
+    >[1]
+    const secondRenderer = { invalidateAllPictures: mock() } as Parameters<
+      typeof editor.setCanvasKit
+    >[1]
+    const canvasKit = {} as Parameters<typeof editor.setCanvasKit>[0]
+
+    editor.setCanvasKit(canvasKit, firstRenderer)
+    editor.setCanvasKit(canvasKit, secondRenderer)
+    editor.replaceGraph(new SceneGraph())
+
+    expect(firstRenderer.invalidateAllPictures).toHaveBeenCalledTimes(1)
+    expect(secondRenderer.invalidateAllPictures).toHaveBeenCalledTimes(1)
   })
 })

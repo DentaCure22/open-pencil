@@ -1,26 +1,27 @@
 ---
-title: Livelli e pagine
-description: Gestire livelli, pagine e pannello proprietà in OpenPencil.
+title: Livelli e board
+description: Usare la barra laterale, l’albero dei livelli e le board del workspace in OpenPencil.
 ---
-# Livelli e pagine
 
-## Pannello livelli
-Albero gerarchico sulla sinistra. Espandi/comprimi, trascina per riordinare, attiva/disattiva visibilità con l'icona occhio, doppio click per rinominare. La selezione si sincronizza con il canvas.
+# Livelli e board
 
-## Pannello pagine
-- **Cambiare pagina** — click su un tab
-- **Aggiungere** — pulsante aggiungi
-- **Eliminare** — rimuovi pagina corrente
-- **Rinominare** — doppio click sul nome; Invio o clic altrove per confermare, Esc per annullare
+OpenPencil mantiene visibile il canvas e raccoglie le viste principali in una barra laterale flottante a sinistra. Puoi ridimensionarla o chiuderla per lasciare più spazio al canvas.
 
-Ogni pagina ha il suo viewport indipendente.
+## Barra laterale
 
-## Pannello proprietà
-Tre tab: **Design** (proprietà contestuali), **Codice** (JSX / Tailwind CSS v4), **IA** (chat <kbd>⌘</kbd><kbd>J</kbd>).
+- **Livelli** — visualizza e modifica la gerarchia della board attiva.
+- **Chat** — avvia o continua attività Pi e apri le relative schede.
+- **Asset** — inserisci contenuti riutilizzabili.
+- **Attività** — consulta l’attività Trace registrata.
 
-Design: aspetto, riempimento, contorno, effetti, tipografia, layout, esportazione.
+## Livelli
 
-## Layout mobile
+Espandi i contenitori, trascina i livelli per riordinarli o cambiare il genitore, usa l’occhio per nasconderli e fai doppio clic per rinominarli. La selezione resta sincronizzata con il canvas. Il pulsante delle variabili apre la gestione dei design token.
 
-Su mobile, i pannelli laterali sono sostituiti da un cassetto inferiore scorrevole con schede: Livelli, Proprietà, Design, Codice.
+## Workspace e board
 
+Usa **Workspace** nella barra degli strumenti per cercare una board, riaprire quelle recenti o gestire progetti e board. Ogni board conserva contenuti e viewport.
+
+## Mobile
+
+Sugli schermi piccoli, la barra laterale diventa un pannello inferiore con Livelli e Design, oltre a Codice quando l’oggetto ha una sorgente modificabile e alla vista IA mobile.

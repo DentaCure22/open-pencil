@@ -3,9 +3,11 @@ import { readFile } from 'node:fs/promises'
 import { defineCommand } from 'citty'
 
 import type { WorkspaceSearchResult } from '@open-pencil/core/rpc'
+import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import { rpcEnvelopeExact, type AppRpcEnvelope, type AppRpcTarget } from '#cli/app-client'
 import { appTargetOptions, exactAppTargetRpcArgs } from '#cli/app-target'
+import { readEditorPresence } from '#cli/board-file/workspace'
 import {
   boardListIndex,
   boardListLimit,
@@ -17,7 +19,7 @@ import {
   type BoardListIndexResult,
   type BoardListResult
 } from '#cli/board-list'
-import { bold, entity, fmtList, printError } from '#cli/format'
+import { bold, entity, fmtList, kv, printError } from '#cli/format'
 
 type JsonObject = { [key: string]: unknown }
 
@@ -38,13 +40,15 @@ type BoardCreateArgs = ExactBoardCliArgs & {
 }
 
 type ExactBoardOpenArgs = ExactBoardCliArgs & {
-  'editor-runtime-instance-id'?: string
   json?: boolean
+  objects?: string
+  region?: string
 }
 
 type BoardOpenArgs = {
-  'editor-runtime-instance-id'?: string
   json?: boolean
+  objects?: string
+  region?: string
   target?: string
 }
 
@@ -52,17 +56,15 @@ type BoardSearchArgs = BoardListArgs
 
 export type BoardCreateResult = {
   creation: JsonObject
-  created_context?: JsonObject
-  opened: JsonObject | null
-  open_error?: string
+  created_context: JsonObject
   source_page_id: string
-  status: 'completed' | 'created_headless' | 'created_not_opened'
+  status: 'created'
   target?: AppRpcTarget
 }
 
 export type BoardOpenResult = {
   navigation: JsonObject
-  status: 'ambiguous_editor' | 'completed' | 'needs_editor' | 'queued_for_editor'
+  status: 'queued_for_editor'
   target?: AppRpcTarget
 }
 
@@ -292,17 +294,33 @@ function assertExactTarget(
   }
 }
 
+function assertBoardNavigationTarget(
+  target: AppRpcTarget | undefined,
+  expected: Record<string, unknown>
+): asserts target is AppRpcTarget {
+  if (!target) throw new Error('Board navigation did not return an exact target.')
+  const fields: Array<[string, string | undefined]> = [
+    ['workspace_id', target.workspaceId],
+    ['document_id', target.documentId],
+    ['content_document_id', target.contentDocumentId],
+    ['page_id', target.pageId]
+  ]
+  const mismatches = fields.filter(([field, actual]) => actual !== expected[field])
+  if (mismatches.length > 0) {
+    throw new Error(
+      `Board navigation returned the wrong exact target: ${mismatches
+        .map(([field]) => field)
+        .join(', ')}.`
+    )
+  }
+}
+
 function writerRevision(context: JsonObject): number {
   const runtime = record(context.runtime, 'Board context runtime')
   if (runtime.write_authority !== 'writer') {
     throw new Error('The exact OpenPencil Board is view-only; Board creation was not attempted.')
   }
   return numberField(record(context.revisions, 'Board context revisions'), 'board', 'Board context')
-}
-
-function executionSurface(context: JsonObject): string | undefined {
-  const value = context.execution_surface
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function contextToken(context: JsonObject): string {
@@ -331,23 +349,15 @@ export async function createBoardPage(
   const sourceTarget = await boardCreateRpcArgs(args, send)
   const sourcePageId = sourceTarget.page_id as string
 
-  let context = await send('board_context', sourceTarget)
+  const context = await send('board_context', sourceTarget)
   assertExactTarget(context.target, sourceTarget, 'Board context')
-  let expectedRevision = writerRevision(context.result)
-  const headless = executionSurface(context.result) === 'local_workspace_authority'
-
-  if (!headless) {
-    const sourceOpen = await send('board_open', sourceTarget)
-    assertExactTarget(sourceOpen.target, sourceTarget, 'Board open')
-    context = await send('board_context', sourceTarget)
-    assertExactTarget(context.target, sourceTarget, 'Board context')
-    expectedRevision = writerRevision(context.result)
-  }
+  const expectedRevision = writerRevision(context.result)
+  const token = contextToken(context.result)
 
   const creation = await send('tool', {
     ...sourceTarget,
     args: { name: required(args.name, '--name') },
-    ...(headless ? { context_token: contextToken(context.result) } : {}),
+    context_token: token,
     mutation: {
       expectedRevision,
       requestId: required(args['request-id'], '--request-id')
@@ -357,39 +367,40 @@ export async function createBoardPage(
   assertExactTarget(creation.target, sourceTarget, 'Board creation')
   const createdPageId = stringField(creation.result, 'id', 'Board creation')
   const createdTarget = { ...sourceTarget, page_id: createdPageId }
-
-  if (headless) {
-    const createdContext = await send('board_context', createdTarget)
-    assertExactTarget(createdContext.target, createdTarget, 'Created Board context')
-    return {
-      created_context: compactCreatedContext(createdContext.result),
-      creation: creation.result,
-      opened: null,
-      source_page_id: sourcePageId,
-      status: 'created_headless',
-      target: createdContext.target
-    }
+  const createdContext = await send('board_context', createdTarget)
+  assertExactTarget(createdContext.target, createdTarget, 'Created Board context')
+  return {
+    created_context: compactCreatedContext(createdContext.result),
+    creation: creation.result,
+    source_page_id: sourcePageId,
+    status: 'created',
+    target: createdContext.target
   }
+}
 
-  try {
-    const opened = await send('board_open', createdTarget)
-    assertExactTarget(opened.target, createdTarget, 'Created Board open')
-    return {
-      creation: creation.result,
-      opened: opened.result,
-      source_page_id: sourcePageId,
-      status: 'completed',
-      target: opened.target
-    }
-  } catch (error) {
-    return {
-      creation: creation.result,
-      opened: null,
-      open_error: error instanceof Error ? error.message : String(error),
-      source_page_id: sourcePageId,
-      status: 'created_not_opened'
-    }
+function parseNavigationObjects(value: string | undefined): string[] {
+  if (!value?.trim()) return []
+  return value
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
+}
+
+function parseNavigationRegion(value: string | undefined): Rect | undefined {
+  if (!value?.trim()) return undefined
+  const parts = value.split(',').map((part) => Number.parseFloat(part.trim()))
+  const [x, y, width, height] = parts
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isFinite(part)) ||
+    width === undefined ||
+    width <= 0 ||
+    height === undefined ||
+    height <= 0
+  ) {
+    throw new Error('--region requires x,y,width,height with positive width and height.')
   }
+  return { height, width, x: x as number, y: y as number }
 }
 
 export async function openBoardPage(
@@ -397,19 +408,16 @@ export async function openBoardPage(
   send: BoardRpcSender = rpcEnvelopeExact<JsonObject>
 ): Promise<BoardOpenResult> {
   const exact = exactBoardRpcArgs(args)
-  const editorRuntimeInstanceId = args['editor-runtime-instance-id']?.trim()
+  const objectIds = parseNavigationObjects(args.objects)
+  const region = parseNavigationRegion(args.region)
   const navigation = await send('board_open', {
     ...exact,
-    ...(editorRuntimeInstanceId ? { editor_runtime_instance_id: editorRuntimeInstanceId } : {})
+    ...(objectIds.length > 0 ? { object_ids: objectIds } : {}),
+    ...(region ? { region } : {})
   })
-  assertExactTarget(navigation.target, exact, 'Board navigation')
+  assertBoardNavigationTarget(navigation.target, exact)
   const status = navigation.result.status
-  if (
-    status !== 'ambiguous_editor' &&
-    status !== 'completed' &&
-    status !== 'needs_editor' &&
-    status !== 'queued_for_editor'
-  ) {
+  if (status !== 'queued_for_editor') {
     throw new Error('Board navigation returned an unknown status.')
   }
   return {
@@ -437,9 +445,10 @@ export async function searchBoardPages(
 
 export async function openBoardByTarget(
   args: BoardOpenArgs,
-  send: BoardRpcSender = rpcEnvelopeExact<JsonObject>
+  send?: BoardRpcSender
 ): Promise<BoardOpenResult> {
-  const listed = await send('list_documents', boardsListRpcArgs())
+  const listSend = send ?? rpcEnvelopeExact<JsonObject>
+  const listed = await listSend('list_documents', boardsListRpcArgs())
   const exact = resolveBoardIndexTarget(
     boardListResult(listed.result),
     required(args.target, 'Board name or ID')
@@ -448,10 +457,9 @@ export async function openBoardByTarget(
     {
       'content-document-id': exact.content_document_id,
       'document-id': exact.document_id,
-      ...(args['editor-runtime-instance-id']
-        ? { 'editor-runtime-instance-id': args['editor-runtime-instance-id'] }
-        : {}),
+      ...(args.objects ? { objects: args.objects } : {}),
       'page-id': exact.page_id,
+      ...(args.region ? { region: args.region } : {}),
       'runtime-instance-id': exact.runtime_instance_id,
       'workspace-id': exact.workspace_id
     },
@@ -531,20 +539,6 @@ function printOperation(
   console.log('')
 }
 
-function boardOpenTitle(status: BoardOpenResult['status']): string {
-  switch (status) {
-    case 'completed':
-      return 'Board opened'
-    case 'queued_for_editor':
-      return 'Board navigation queued'
-    case 'ambiguous_editor':
-      return 'Board editor is ambiguous'
-    case 'needs_editor':
-      return 'Board editor is needed'
-  }
-  throw new Error('Unknown Board open status.')
-}
-
 async function runBoardSearchCommand(args: BoardSearchArgs): Promise<void> {
   try {
     printList(await searchBoardPages(args), Boolean(args.json))
@@ -593,6 +587,47 @@ export const search = defineCommand({
   }
 })
 
+export const where = defineCommand({
+  meta: {
+    name: 'where',
+    description:
+      'Show which Board the user is looking at right now, from the editor presence heartbeat'
+  },
+  args: { json: jsonOption },
+  async run({ args }) {
+    try {
+      const presence = await readEditorPresence()
+      if (args.json) {
+        console.log(JSON.stringify({ presence }, null, 2))
+        return
+      }
+      if (!presence) {
+        console.log('No editor presence recorded yet; open the OpenPencil editor first.')
+        return
+      }
+      const ageSeconds = Math.max(
+        0,
+        Math.round((Date.now() - Date.parse(presence.updatedAt)) / 1000)
+      )
+      console.log(bold(presence.pageName))
+      console.log(kv('page_id', entity(presence.pageId)))
+      console.log(kv('updated', `${String(ageSeconds)}s ago`))
+      if (presence.viewport) {
+        console.log(kv('zoom', presence.viewport.zoom.toFixed(2)))
+        console.log(
+          kv(
+            'pan',
+            `${String(Math.round(presence.viewport.panX))}, ${String(Math.round(presence.viewport.panY))}`
+          )
+        )
+      }
+    } catch (error) {
+      printError(error)
+      process.exit(1)
+    }
+  }
+})
+
 export const open = defineCommand({
   meta: {
     name: 'open',
@@ -604,9 +639,13 @@ export const open = defineCommand({
       description: 'Exact Board name or ID',
       required: true
     },
-    'editor-runtime-instance-id': {
+    objects: {
       type: 'string',
-      description: 'Exact connected editor runtime to use when more than one can open the Board'
+      description: 'Comma-separated Board object IDs to select and reveal after opening'
+    },
+    region: {
+      type: 'string',
+      description: 'Page-space rectangle to frame after opening, as x,y,width,height'
     },
     json: jsonOption
   },
@@ -616,7 +655,7 @@ export const open = defineCommand({
       if (args.json) console.log(JSON.stringify(result, null, 2))
       else {
         printOperation(
-          boardOpenTitle(result.status),
+          'Board navigation queued',
           { ...result.navigation, status: result.status },
           result.target
         )
@@ -658,7 +697,6 @@ export const create = defineCommand({
       const result = await createBoardPage(await boardTargetSource(args))
       if (args.json) console.log(JSON.stringify(result, null, 2))
       else printOperation('Board created', result, result.target)
-      if (result.status === 'created_not_opened') process.exitCode = 1
     } catch (error) {
       printError(error)
       process.exit(1)
@@ -671,5 +709,5 @@ export default defineCommand({
     name: 'boards',
     description: 'Search, open, and create persisted Boards'
   },
-  subCommands: { create, list, open, search }
+  subCommands: { create, list, open, search, where }
 })

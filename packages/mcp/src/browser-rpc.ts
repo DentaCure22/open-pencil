@@ -7,6 +7,12 @@ import type { PendingRequest } from '#mcp/rpc-types'
 
 const RPC_TIMEOUT = 20_000
 const SINGLE_RUNTIME_DISCOVERY_COMMANDS = new Set(['board_context', 'list_documents'])
+/**
+ * A persisted-authority runtime id is a workspace alias, not a live tab. Agents naturally acquire
+ * it from persisted board_context and then issue live commands with it; the live command clearly
+ * targets "the app showing this workspace", so route it to the live runtime instead of failing.
+ */
+const PERSISTED_RUNTIME_PREFIX = 'local-authority:'
 
 const APP_NOT_CONNECTED_MESSAGE =
   'OpenPencil app is not connected. STOP and tell the user: "The OpenPencil desktop app is not running, no document is open, or the desktop app is connected to a different MCP server. Please start OpenPencil, open a document, and try again." Do NOT attempt to start the app yourself or retry automatically.'
@@ -38,7 +44,7 @@ type BrowserNavigationTarget = {
   workspaceId: string
 }
 
-export type BrowserNavigationResolution =
+type BrowserNavigationResolution =
   | {
       candidateRuntimeIds: string[]
       reason: 'no_matching_editor' | 'requested_editor_unavailable'
@@ -54,7 +60,7 @@ export type BrowserNavigationResolution =
       status: 'ambiguous_editor'
     }
 
-export type BrowserNavigationRequest = {
+type BrowserNavigationRequest = {
   contentDocumentId: string
   requestedRuntimeInstanceId?: string
   workspaceId: string
@@ -65,6 +71,8 @@ type BrowserRuntime = {
   runtimeInstanceId: string
   token: string
   navigationTargets: BrowserNavigationTarget[]
+  /** Last register/presence heartbeat. Zombie tabs keep their socket open but stop refreshing. */
+  updatedAt: number
   visibility: RuntimeVisibility
   writeAuthority: RuntimeWriteAuthority
   ws: WebSocket
@@ -142,13 +150,6 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
 
   function isConnected(): boolean {
     return Boolean(browserWs && browserRegistered)
-  }
-
-  function notifyNavigationRuntime(runtimeInstanceId: string): boolean {
-    const runtime = runtimes.get(runtimeInstanceId)
-    if (!runtime || runtime.ws.readyState !== runtime.ws.OPEN) return false
-    sendJson(runtime.ws, { type: 'navigation_intent' })
-    return true
   }
 
   function rejectAllPending(reason: string) {
@@ -263,16 +264,60 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     return { candidateRuntimeIds, status: 'ambiguous_editor' }
   }
 
+  /**
+   * A persisted-authority alias means "the app the user is looking at". When several runtimes are
+   * connected (e.g. a zombie tab whose socket never closed), pick the most plausible one instead
+   * of erroring: prefer active runtimes, then the freshest heartbeat.
+   */
+  function singleLiveRuntime(preferVisibleWriter: boolean): BrowserRuntime | null {
+    const preferred = preferVisibleWriter ? visibleWriterRuntimes() : availableRuntimes()
+    const available = preferred.length > 0 ? preferred : availableRuntimes()
+    const activeOnly = available.filter((runtime) => runtime.active)
+    const candidates = activeOnly.length > 0 ? activeOnly : available
+    return [...candidates].sort((first, second) => second.updatedAt - first.updatedAt)[0] ?? null
+  }
+
+  function routePersistedRuntime(
+    body: Record<string, unknown>,
+    args: Record<PropertyKey, unknown>
+  ): { body: Record<string, unknown>; requestedRuntime: string } {
+    const workspaceId = args.workspace_id
+    const contentDocumentId = args.content_document_id
+    const resolution =
+      typeof workspaceId === 'string' && typeof contentDocumentId === 'string'
+        ? resolveNavigationRuntime({ contentDocumentId, workspaceId })
+        : null
+    if (resolution && resolution.status !== 'ready') {
+      throw new Error(
+        resolution.status === 'ambiguous_editor'
+          ? `Live Board target is ambiguous across runtimes: ${resolution.candidateRuntimeIds.join(', ')}.`
+          : APP_NOT_CONNECTED_MESSAGE
+      )
+    }
+    const runtime = resolution
+      ? runtimes.get(resolution.runtimeInstanceId)
+      : singleLiveRuntime(true)
+    if (!runtime) throw new Error(APP_NOT_CONNECTED_MESSAGE)
+    return {
+      body: { ...body, args: { ...args, runtime_instance_id: runtime.runtimeInstanceId } },
+      requestedRuntime: runtime.runtimeInstanceId
+    }
+  }
+
   function routeBody(body: Record<string, unknown>): {
     body: Record<string, unknown>
     requestedRuntime?: string
   } {
     const requestedRuntime = requestedRuntimeInstanceId(body)
+    const args = isRecord(body.args) ? body.args : {}
+
+    if (requestedRuntime?.startsWith(PERSISTED_RUNTIME_PREFIX)) {
+      return routePersistedRuntime(body, args)
+    }
     if (requestedRuntime || !SINGLE_RUNTIME_DISCOVERY_COMMANDS.has(String(body.command))) {
       return { body, ...(requestedRuntime ? { requestedRuntime } : {}) }
     }
 
-    const args = isRecord(body.args) ? body.args : {}
     const currentVisible = body.command === 'board_context' && args.target === 'current_visible'
     const available = currentVisible ? visibleWriterRuntimes() : availableRuntimes()
     if (currentVisible && available.length === 0) {
@@ -378,6 +423,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
       navigationTargets: targets,
       runtimeInstanceId,
       token,
+      updatedAt: Date.now(),
       visibility,
       writeAuthority,
       ws
@@ -386,8 +432,8 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     runtimeBySocket.set(ws, runtimeInstanceId)
 
     const previousBrowserWs = browserWs
+    const previousToken = browserToken
     if (previousBrowserWs && previousBrowserWs !== ws && !active) {
-      broadcastRegisterToken()
       return
     }
     browserWs = ws
@@ -395,11 +441,12 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     browserRuntimeInstanceId = runtimeInstanceId
     browserRegistered = true
     const didChangeBrowser = previousBrowserWs !== ws
+    const didChangeToken = previousToken !== token
     if (didChangeBrowser && previousBrowserWs) {
       rejectPendingForSocket(previousBrowserWs, 'Active OpenPencil client changed', true)
     }
     if (didChangeBrowser) onConnectionChange()
-    broadcastRegisterToken()
+    if (didChangeBrowser || didChangeToken) broadcastRegisterToken()
   }
 
   function handleBrowserResponse(msg: BrowserMessage, ws: WebSocket) {
@@ -493,7 +540,6 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     handleConnection,
     handleMessage,
     isConnected,
-    notifyNavigationRuntime,
     resolveNavigationRuntime,
     sendRpc,
     currentRuntimeInstanceId: () => browserRuntimeInstanceId

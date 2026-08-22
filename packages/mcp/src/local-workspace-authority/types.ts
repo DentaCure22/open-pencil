@@ -1,5 +1,8 @@
+import type { Rect } from '@open-pencil/scene-graph/primitives'
+
 export const LOCAL_WORKSPACE_AUTHORITY_VERSION = 1
 export const LOCAL_WORKSPACE_NAVIGATION_INTENT_VERSION = 1
+export const LOCAL_WORKSPACE_PRESENCE_SELECTION_LIMIT = 24
 export const LOCAL_AUTHORITY_BOARD_CAPABILITIES = [
   'board.open.queued_navigation',
   'board.create.page',
@@ -8,11 +11,13 @@ export const LOCAL_AUTHORITY_BOARD_CAPABILITIES = [
   'board.read.code_object',
   'board.read.mermaid_source',
   'board.read.memory_search',
+  'board.read.screenshot.persisted',
   'board.build.native_text.anchor',
   'board.build.native_text.auto_placement',
   'board.build.native_card.auto_placement',
   'board.build.native_card.explicit_placement',
   'board.build.native_diagram.mermaid.headless',
+  'board.build.ui_block.registry.v1',
   'board.build.plan.v1',
   'board.build.plan.grid.v1',
   'board.build.plan.flow.v1',
@@ -81,6 +86,8 @@ export type LocalWorkspaceAuthorityHead = {
   version: typeof LOCAL_WORKSPACE_AUTHORITY_VERSION
 }
 
+export type LocalWorkspaceNavigationRegion = Rect
+
 export type LocalWorkspaceNavigationIntent = {
   authorityId: string
   contentDocumentId: string
@@ -88,7 +95,11 @@ export type LocalWorkspaceNavigationIntent = {
   createdAt: string
   expiresAt: string
   intentId: string
+  /** Exact Board object IDs to select and reveal after the page opens. */
+  objectIds?: string[]
   pageId: string
+  /** Page-space rectangle to frame after the page opens. */
+  region?: LocalWorkspaceNavigationRegion
   runtimeInstanceId?: string
   sequence: number
   version: typeof LOCAL_WORKSPACE_NAVIGATION_INTENT_VERSION
@@ -97,10 +108,72 @@ export type LocalWorkspaceNavigationIntent = {
 
 export type QueueLocalWorkspaceNavigationRequest = {
   contentDocumentId: string
+  objectIds?: string[]
   pageId: string
+  region?: LocalWorkspaceNavigationRegion
   runtimeInstanceId?: string
   ttlMs?: number
   workspaceId: string
+}
+
+export type LocalWorkspacePresenceViewport = {
+  panX: number
+  panY: number
+  zoom: number
+}
+
+/** Latest editor heartbeat: which Board the user is looking at right now. */
+export type LocalWorkspacePresence = {
+  authorityId: string
+  contentDocumentId: string
+  pageId: string
+  pageName: string
+  runtimeInstanceId?: string
+  selectedIds?: string[]
+  selectionTruncated?: boolean
+  updatedAt: string
+  version: 1
+  viewport?: LocalWorkspacePresenceViewport
+  workspaceId: string
+}
+
+export type RecordLocalWorkspacePresenceRequest = {
+  contentDocumentId: string
+  pageId: string
+  pageName: string
+  runtimeInstanceId?: string
+  selectedIds?: string[]
+  selectionTruncated?: boolean
+  viewport?: LocalWorkspacePresenceViewport
+  workspaceId: string
+}
+
+export const LOCAL_WORKSPACE_THEME_INTENT_VERSION = 1
+
+export type LocalWorkspaceThemeSetting = 'auto' | 'dark' | 'light'
+
+/** Latest-wins appearance request for the live OpenPencil window. */
+export type LocalWorkspaceThemeIntent = {
+  consumedAt: string | null
+  createdAt: string
+  sequence: number
+  theme: LocalWorkspaceThemeSetting
+  updatedAt: string
+  version: typeof LOCAL_WORKSPACE_THEME_INTENT_VERSION
+}
+
+export type RecordLocalWorkspaceThemeRequest = {
+  theme: LocalWorkspaceThemeSetting
+}
+
+export type QueueResolvedLocalWorkspaceNavigationRequest = {
+  objectIds?: string[]
+  pageId?: string
+  pageName?: string
+  query?: string
+  region?: LocalWorkspaceNavigationRegion
+  runtimeInstanceId?: string
+  ttlMs?: number
 }
 
 export type InitializeLocalWorkspaceRequest = {

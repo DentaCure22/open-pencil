@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createAutomationBoardHandlers } from '@/app/automation/bridge/board-tools'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { resetAutomationMutationQueuesForTests } from '@/app/automation/bridge/mutation-queue'
 import {
@@ -60,18 +59,6 @@ function createShapeRequest(expectedRevision: number, requestId: string, name: s
     },
     mutation: { expectedRevision, requestId },
     name: 'create_shape'
-  }
-}
-
-function contextResult(value: unknown) {
-  return value as {
-    context_token: string
-    request_ledger: {
-      limits: { receipts: number; reservations: number; tombstones: number }
-      recent_transactions: Array<{ request_id: string; route: string }>
-      status: string
-      usage: { receipts: number; reservations: number; tombstones: number } | null
-    }
   }
 }
 
@@ -184,23 +171,6 @@ describe('ToolDef receipt crash and concurrency boundary', () => {
       )
     ).toBe(true)
 
-    const handlers = createAutomationBoardHandlers(RUNTIME_ID)
-    const context = contextResult(await handlers.context(target))
-    expect(context.request_ledger).toEqual({
-      limits: { receipts: 64, reservations: 64, tombstones: 512 },
-      recent_transactions: [],
-      status: 'open',
-      usage: { receipts: 0, reservations: 1, tombstones: 0 }
-    })
-    await expect(
-      handlers.verify(target, {
-        context_token: context.context_token,
-        request_id: requestId
-      })
-    ).resolves.toMatchObject({
-      reason: 'request_ledger_pending',
-      status: 'error'
-    })
     await expect(
       handleTool(
         target,

@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto'
-
 import {
+  codeObjectUiBlockSource,
   createSmylrTrustedWebAppDocument,
   isCodeObjectViewportPresetId,
+  resolveCodeObjectUiBlock,
   serializeCodeObjectPluginData
 } from '@open-pencil/core/code-object'
 import {
@@ -10,12 +10,9 @@ import {
   boardBuildPlanCompositionCurrentBounds,
   boardBuildPlanCompositionGap,
   boardBuildPlanCompositionMembers,
-  boardBuildPlanConvergenceAnchor,
   boardBuildPlanDigestInput,
-  boardBuildPlanInboundReferences,
   boardBuildPlanLayoutMembers,
   boardBuildPlanReferenceKey,
-  boardBuildTracedConnections,
   captureBoardTransactionState,
   compileBoardBuildPlanComposition,
   compileBoardBuildPlanLayout,
@@ -26,7 +23,6 @@ import {
   type BoardBuildPlan,
   type BoardBuildPlanBounds,
   type BoardBuildPlanCanonicalObjectOperation,
-  type BoardBuildPlanConnection,
   type BoardBuildPlanOperation,
   type BoardBuildPlanReference,
   type BoardBuildPlanResolvedOperation,
@@ -40,19 +36,7 @@ import {
   materializeCanonicalObject,
   type CanonicalObjectForkResult
 } from '@open-pencil/core/tools'
-import {
-  canAddObjectGraphConnection,
-  findEquivalentObjectGraphConnection,
-  OBJECT_GRAPH_SCHEMA_VERSION,
-  objectGraphConnectionById,
-  objectGraphConnectionsOnPage,
-  setObjectGraphConnectionsOnPage,
-  type ObjectGraphConnection,
-  type ObjectGraphPermission,
-  type ObjectGraphPortSide,
-  type SceneNode,
-  type Vector
-} from '@open-pencil/scene-graph'
+import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 
 import {
   authorityCodeObjectReadback,
@@ -104,7 +88,6 @@ import type { LocalWorkspaceAuthorityHead } from './types'
 const EXECUTION_SURFACE = 'local_workspace_authority'
 const RECEIPT_PLUGIN_ID = 'openpencil.agent-tools'
 const RECEIPT_KEY_PREFIX = 'authority-board-plan-request:'
-const MAX_CONNECTIONS_PER_OBJECT = 64
 const AUTHORITY_PLAN_ARTIFACT_KINDS = new Set<AuthorityPlanArtifactKind>([
   'canonical_object',
   'code_object',
@@ -138,9 +121,6 @@ type AuthorityBoardPlanReceipt = {
   artifactDigests: Record<string, string>
   artifactKinds: Record<string, AuthorityPlanArtifactKind>
   baseRevision: number
-  connectionIds: string[]
-  connectionDigests: Record<string, string>
-  connectionResults: AuthorityBoardPlanConnectionResult[]
   inputDigest: string
   operationResults: AuthorityBoardPlanOperationResult[]
   pageId: string
@@ -161,23 +141,10 @@ type AuthorityBoardPlanObjectEditResult = {
   resultObjectId: string | null
 }
 
-type AuthorityBoardPlanConnectionResult = {
-  connectionId: string
-  effect: 'already_satisfied' | 'would_change'
-  index: number
-}
-
 type AuthorityBoardPlanCanonicalObjectResult = {
   category: 'canonical_object'
   kind: BoardBuildPlanCanonicalObjectOperation['kind']
   result: CanonicalObjectForkResult
-}
-
-type AuthorityBoardPlanConnectionDeleteResult = {
-  category: 'connection_delete'
-  connectionId: string
-  effect: 'already_satisfied' | 'would_change'
-  kind: 'connection.delete'
 }
 
 type AuthorityBoardPlanTransactionRevertResult = {
@@ -190,7 +157,6 @@ type AuthorityBoardPlanTransactionRevertResult = {
 
 type AuthorityBoardPlanOperationResult =
   | AuthorityBoardPlanCanonicalObjectResult
-  | AuthorityBoardPlanConnectionDeleteResult
   | AuthorityBoardPlanTransactionRevertResult
   | AuthorityBoardPlanObjectEditResult
 
@@ -297,43 +263,10 @@ function operationResultsFrom(value: unknown): AuthorityBoardPlanOperationResult
   return value as AuthorityBoardPlanOperationResult[]
 }
 
-function connectionResultsFrom(
-  value: unknown,
-  connectionIds: readonly string[]
-): AuthorityBoardPlanConnectionResult[] {
-  if (value === undefined) {
-    return connectionIds.map((connectionId, index) => ({
-      connectionId,
-      effect: 'would_change',
-      index
-    }))
-  }
-  if (!Array.isArray(value)) throw new Error('invalid connection results')
-  const results = value as AuthorityBoardPlanConnectionResult[]
-  if (
-    results.some(
-      (result) =>
-        !isRecord(result) ||
-        typeof result.connectionId !== 'string' ||
-        !Number.isInteger(result.index) ||
-        (result.effect !== 'already_satisfied' && result.effect !== 'would_change')
-    )
-  ) {
-    throw new Error('invalid connection results')
-  }
-  return results
-}
-
 function receiptFromEntry(entry: { key: string; value: string }): AuthorityBoardPlanReceipt {
   try {
     const parsed: unknown = JSON.parse(entry.value)
-    if (
-      !isRecord(parsed) ||
-      !isRecord(parsed.aliases) ||
-      !isRecord(parsed.artifactDigests) ||
-      !Array.isArray(parsed.connectionIds) ||
-      !isRecord(parsed.connectionDigests)
-    ) {
+    if (!isRecord(parsed) || !isRecord(parsed.aliases) || !isRecord(parsed.artifactDigests)) {
       throw new Error('invalid shape')
     }
     if (
@@ -350,9 +283,7 @@ function receiptFromEntry(entry: { key: string; value: string }): AuthorityBoard
         (!isRecord(parsed.artifactKinds) ||
           Object.values(parsed.artifactKinds).some(
             (value) => !AUTHORITY_PLAN_ARTIFACT_KINDS.has(value as AuthorityPlanArtifactKind)
-          ))) ||
-      Object.values(parsed.connectionDigests).some((value) => typeof value !== 'string') ||
-      parsed.connectionIds.some((value) => typeof value !== 'string')
+          )))
     ) {
       throw new Error('invalid fields')
     }
@@ -364,12 +295,6 @@ function receiptFromEntry(entry: { key: string; value: string }): AuthorityBoard
         ? (parsed.artifactKinds as Record<string, AuthorityPlanArtifactKind>)
         : Object.fromEntries(Object.keys(parsed.aliases).map((alias) => [alias, 'unknown'])),
       baseRevision: parsed.baseRevision,
-      connectionIds: parsed.connectionIds as string[],
-      connectionDigests: parsed.connectionDigests as Record<string, string>,
-      connectionResults: connectionResultsFrom(
-        parsed.connectionResults,
-        parsed.connectionIds as string[]
-      ),
       inputDigest: parsed.inputDigest,
       operationResults: operationResultsFrom(parsed.operationResults),
       pageId: parsed.pageId,
@@ -512,10 +437,6 @@ function artifactDigest(document: AuthorityBoardDocument, ownerId: string): stri
   return authorityMutationInputDigest('board_build:plan-artifact-state/v1', { nodes })
 }
 
-function connectionDigest(connection: ObjectGraphConnection): string {
-  return authorityMutationInputDigest('board_build:plan-connection-state/v1', connection)
-}
-
 function referenceId(
   reference: BoardBuildPlanReference,
   aliases: Readonly<Record<string, string>>
@@ -524,37 +445,6 @@ function referenceId(
   const value = aliases[reference.alias]
   if (!value) throw new Error(`Board plan alias "${reference.alias}" was not resolved.`)
   return value
-}
-
-function convergencePlacementAnchor(
-  document: AuthorityBoardDocument,
-  plan: BoardBuildPlan,
-  artifact: BoardBuildPlan['artifacts'][number],
-  aliases: Readonly<Record<string, string>>,
-  intent: Awaited<ReturnType<typeof authorityBuildIntent>>
-) {
-  if (artifact.recipe.kind === 'native_diagram') return undefined
-  if (artifact.recipe.placement?.relative_offset) return undefined
-  const references = boardBuildPlanInboundReferences(plan, artifact.alias)
-  if (references.length < 2) return undefined
-  const sourceBounds = references.flatMap((reference) => {
-    const objectId = 'object_id' in reference ? reference.object_id : aliases[reference.alias]
-    if (!objectId) return []
-    const node = document.graph.getNode(objectId)
-    return node ? [document.graph.getAbsoluteBounds(node.id)] : []
-  })
-  if (sourceBounds.length !== references.length) return undefined
-  const footprint =
-    intent.kind === 'native_card'
-      ? authorityNativeCardFootprint(intent.operation)
-      : intent.kind === 'native_text'
-        ? authorityNativeTextFootprint(intent.operation)
-        : intent.operation.operation === 'create'
-          ? { height: intent.operation.height, width: intent.operation.width }
-          : undefined
-  if (!footprint) return undefined
-  const direction = artifact.recipe.placement?.preferred_directions?.[0] ?? 'right'
-  return boardBuildPlanConvergenceAnchor(sourceBounds, footprint, direction)
 }
 
 function assertPageObject(
@@ -573,6 +463,68 @@ function assertPageObject(
   }
 }
 
+function supportsRelativePlanPlacement(kind: unknown): boolean {
+  return (
+    kind === 'native_card' ||
+    kind === 'code_object' ||
+    kind === 'ui_block' ||
+    kind === 'trusted_web_app'
+  )
+}
+
+function lowerArtifactRecipe(recipe: JsonRecord): JsonRecord {
+  if (recipe.kind === 'ui_block') {
+    const block = resolveCodeObjectUiBlock({
+      block: String(recipe.block),
+      config: recipe.config,
+      height: typeof recipe.height === 'number' ? recipe.height : undefined,
+      initialState: isRecord(recipe.initial_state) ? recipe.initial_state : undefined,
+      surface: isRecord(recipe.surface)
+        ? {
+            background: recipe.surface.background === 'transparent' ? 'transparent' : 'surface',
+            overflow: recipe.surface.overflow === 'scroll' ? 'scroll' : 'clip'
+          }
+        : undefined,
+      width: typeof recipe.width === 'number' ? recipe.width : undefined
+    })
+    return {
+      height: block.height,
+      initial_state: block.initialState,
+      kind: 'code_object',
+      name: recipe.name,
+      object_key: recipe.object_key,
+      operation: 'create',
+      placement: recipe.placement,
+      props: { block: block.block, config: block.config },
+      source: codeObjectUiBlockSource(block.block),
+      source_format: 'tsx',
+      surface: block.surface,
+      width: block.width
+    }
+  }
+  if (recipe.kind !== 'trusted_web_app') return recipe
+  const document = createSmylrTrustedWebAppDocument({
+    label: String(recipe.name),
+    route: String(recipe.route),
+    ...(isCodeObjectViewportPresetId(recipe.viewport_preset)
+      ? { viewportPreset: recipe.viewport_preset }
+      : {})
+  })
+  return {
+    height: recipe.height,
+    initial_state: document.state,
+    kind: 'code_object',
+    name: document.name,
+    object_key: document.definitionId,
+    operation: 'create',
+    placement: recipe.placement,
+    props: document.props,
+    source: document.source,
+    source_format: 'tsx',
+    width: recipe.width
+  }
+}
+
 function artifactArgs(
   plan: BoardBuildPlan,
   index: number,
@@ -583,14 +535,7 @@ function artifactArgs(
 ): JsonRecord {
   const artifact = plan.artifacts[index]
   if (!artifact) throw new Error(`Board plan artifact ${index} is missing.`)
-  const convergenceReference =
-    !exactPoint &&
-    !artifact.anchor &&
-    artifact.recipe.kind === 'native_card' &&
-    artifact.recipe.placement?.target === undefined
-      ? boardBuildPlanInboundReferences(plan, artifact.alias)[0]
-      : undefined
-  const anchorReference = artifact.anchor ?? convergenceReference
+  const anchorReference = artifact.anchor
   const anchorId = anchorReference ? referenceId(anchorReference, aliases) : undefined
   const recipe = structuredClone(artifact.recipe) as JsonRecord
   if (exactPoint) {
@@ -598,48 +543,18 @@ function artifactArgs(
       clearance: 0,
       target: { kind: 'point', x: exactPoint.x, y: exactPoint.y }
     }
-  } else if (
-    (recipe.kind === 'native_card' ||
-      recipe.kind === 'code_object' ||
-      recipe.kind === 'trusted_web_app') &&
-    anchorId
-  ) {
+  } else if (supportsRelativePlanPlacement(recipe.kind) && anchorId) {
     const placement = isRecord(recipe.placement) ? recipe.placement : {}
     recipe.placement = {
       ...placement,
       target: { kind: 'relative', object_id: anchorId }
     }
   }
-  const loweredRecipe =
-    recipe.kind === 'trusted_web_app'
-      ? (() => {
-          const document = createSmylrTrustedWebAppDocument({
-            label: String(recipe.name),
-            route: String(recipe.route),
-            ...(isCodeObjectViewportPresetId(recipe.viewport_preset)
-              ? { viewportPreset: recipe.viewport_preset }
-              : {})
-          })
-          return {
-            height: recipe.height,
-            initial_state: document.state,
-            kind: 'code_object',
-            name: document.name,
-            object_key: document.definitionId,
-            operation: 'create',
-            placement: recipe.placement,
-            props: document.props,
-            source: document.source,
-            source_format: 'tsx',
-            width: recipe.width
-          }
-        })()
-      : recipe
   return {
     ...(anchorId && (recipe.kind === 'native_text' || recipe.kind === 'native_diagram')
       ? { anchor_id: anchorId }
       : {}),
-    recipe: loweredRecipe,
+    recipe: lowerArtifactRecipe(recipe),
     ...(taskId ? { task_id: taskId } : {}),
     ...(traceId ? { trace_id: traceId } : {})
   }
@@ -742,7 +657,7 @@ async function prevalidatePlanArtifacts(options: {
     if (!('object_id' in member)) continue
     const node = options.document.graph.getNode(member.object_id)
     if (!node || node.parentId !== options.pageId || node.type === 'CANVAS' || !node.visible) {
-      throw new Error(
+      throw new TypeError(
         `Composition member "${member.object_id}" is not a visible top-level object on the exact Board.`
       )
     }
@@ -753,121 +668,6 @@ async function prevalidatePlanArtifacts(options: {
     }
   }
   return { diagrams, footprints }
-}
-
-function permissions(kind: BoardBuildPlanConnection['kind']): ObjectGraphPermission[] {
-  if (kind === 'action') return ['target.action.execute']
-  if (kind === 'data') return ['target.data.write']
-  return []
-}
-
-function planConnectionPort(port: string | undefined): {
-  id?: string
-  side: ObjectGraphPortSide
-} {
-  if (
-    port === undefined ||
-    port === 'auto' ||
-    port === 'bottom' ||
-    port === 'left' ||
-    port === 'right' ||
-    port === 'top'
-  ) {
-    return { side: port ?? 'auto' }
-  }
-  return { id: port, side: 'auto' }
-}
-
-function createConnection(
-  input: BoardBuildPlanConnection,
-  aliases: Readonly<Record<string, string>>
-): ObjectGraphConnection {
-  const sourcePort = planConnectionPort(input.source_port)
-  const targetPort = planConnectionPort(input.target_port)
-  return {
-    automatic: input.automatic ?? input.kind !== 'visual',
-    id: `object-connection:${randomBytes(8).toString('hex')}`,
-    kind: input.kind,
-    label: input.label ?? input.kind,
-    permissions: permissions(input.kind),
-    schemaVersion: OBJECT_GRAPH_SCHEMA_VERSION,
-    sourceNodeId: referenceId(input.source, aliases),
-    sourcePort: sourcePort.side,
-    ...(sourcePort.id ? { sourcePortId: sourcePort.id } : {}),
-    targetNodeId: referenceId(input.target, aliases),
-    targetPort: targetPort.side,
-    ...(targetPort.id ? { targetPortId: targetPort.id } : {})
-  }
-}
-
-function connectionMatchesRequestedState(
-  existing: ObjectGraphConnection,
-  requested: ObjectGraphConnection
-): boolean {
-  return (
-    existing.automatic === requested.automatic &&
-    existing.label === requested.label &&
-    JSON.stringify(existing.permissions) === JSON.stringify(requested.permissions)
-  )
-}
-
-function addPlanConnections(
-  document: AuthorityBoardDocument,
-  pageId: string,
-  plan: BoardBuildPlan,
-  aliases: Readonly<Record<string, string>>
-): {
-  connections: ObjectGraphConnection[]
-  results: AuthorityBoardPlanConnectionResult[]
-} {
-  const existing = objectGraphConnectionsOnPage(document.graph, pageId)
-  const created: ObjectGraphConnection[] = []
-  const satisfied: ObjectGraphConnection[] = []
-  const results: AuthorityBoardPlanConnectionResult[] = []
-  for (const [index, input] of plan.connections.entries()) {
-    const connection = createConnection(input, aliases)
-    assertPageObject(document, pageId, connection.sourceNodeId)
-    assertPageObject(document, pageId, connection.targetNodeId)
-    const allConnections = [...existing, ...created]
-    setObjectGraphConnectionsOnPage(document.graph, pageId, allConnections)
-    const equivalent = findEquivalentObjectGraphConnection(document.graph, pageId, connection)
-    if (equivalent) {
-      if (!connectionMatchesRequestedState(equivalent, connection)) {
-        throw new Error(
-          `Board plan connection ${index} conflicts with existing connection "${equivalent.id}".`
-        )
-      }
-      satisfied.push(equivalent)
-      results.push({ connectionId: equivalent.id, effect: 'already_satisfied', index })
-      continue
-    }
-    const sourceCount = allConnections.filter(
-      (candidate) =>
-        candidate.sourceNodeId === connection.sourceNodeId ||
-        candidate.targetNodeId === connection.sourceNodeId
-    ).length
-    if (sourceCount >= MAX_CONNECTIONS_PER_OBJECT) {
-      throw new Error('The Board plan source endpoint has reached its connection limit.')
-    }
-    const targetCount = allConnections.filter(
-      (candidate) =>
-        candidate.sourceNodeId === connection.targetNodeId ||
-        candidate.targetNodeId === connection.targetNodeId
-    ).length
-    if (targetCount >= MAX_CONNECTIONS_PER_OBJECT) {
-      throw new Error('The Board plan target endpoint has reached its connection limit.')
-    }
-    if (!canAddObjectGraphConnection(document.graph, pageId, connection)) {
-      throw new Error(
-        `Board plan connection ${index} is invalid for the current page, endpoints, or ports.`
-      )
-    }
-    created.push(connection)
-    satisfied.push(connection)
-    results.push({ connectionId: connection.id, effect: 'would_change', index })
-  }
-  setObjectGraphConnectionsOnPage(document.graph, pageId, [...existing, ...created])
-  return { connections: satisfied, results }
 }
 
 function placementFootprint(intent: AuthorityBuildIntent): { height: number; width: number } {
@@ -893,9 +693,6 @@ function requestedPlacementTarget(
 ): unknown {
   if (artifact.anchor) return { anchor: artifact.anchor, kind: 'relative' }
   if (artifact.recipe.placement?.target) return artifact.recipe.placement.target
-  const inbound = boardBuildPlanInboundReferences(plan, artifact.alias)
-  if (inbound.length >= 2) return { kind: 'convergence', sources: inbound }
-  if (inbound[0]) return { anchor: inbound[0], kind: 'relative' }
   return { kind: 'unspecified' }
 }
 
@@ -930,18 +727,15 @@ function createCompiledArtifact(options: {
   document: AuthorityBoardDocument
   intent: AuthorityBuildIntent
   pageId: string
-  placementAnchor?: Vector
 }): AuthorityPlanArtifact['created'] {
-  const { artifact, baseRevision, childRequestId, document, intent, pageId, placementAnchor } =
-    options
+  const { artifact, baseRevision, childRequestId, document, intent, pageId } = options
   if (intent.kind === 'code_object') {
     const codeObject = createAuthorityCodeObject(
       document,
       pageId,
       intent,
       childRequestId,
-      baseRevision,
-      placementAnchor
+      baseRevision
     )
     if (artifact.recipe.kind === 'trusted_web_app') {
       const trustedDocument = createSmylrTrustedWebAppDocument({
@@ -962,7 +756,7 @@ function createCompiledArtifact(options: {
       receipt: codeObject.receipt
     }
   }
-  return createAuthorityArtifact(document, pageId, intent, childRequestId, placementAnchor)
+  return createAuthorityArtifact(document, pageId, intent, childRequestId)
 }
 
 function canonicalArtifactPlacementTarget(
@@ -1121,7 +915,7 @@ async function createLayoutArtifacts(options: {
   } catch (error) {
     if (error instanceof AuthorityPlacementError) {
       const conflict = error.details.conflict
-      throw new Error(
+      throw new TypeError(
         `No collision-free placement for Board plan layout: anchor=${JSON.stringify(layout.anchor)}; footprint=${compiled.footprint.width}x${compiled.footprint.height}; clearance=${layout.placement?.clearance ?? 48}${conflict ? `; conflict=${JSON.stringify(conflict)}` : ''}. No mutation was applied.`
       )
     }
@@ -1231,11 +1025,7 @@ async function createCompositionArtifacts(options: {
 }): Promise<AuthorityBoardPlanOperationResult[]> {
   const composition = options.plan.composition
   if (!composition) return []
-  const compiled = compileBoardBuildPlanComposition(
-    composition,
-    options.footprints,
-    options.plan.connections
-  )
+  const compiled = compileBoardBuildPlanComposition(composition, options.footprints)
   const excludedObjectIds = authorityCompositionExcludedIds(
     options.document,
     options.pageId,
@@ -1272,7 +1062,7 @@ async function createCompositionArtifacts(options: {
     }
   } catch (error) {
     if (error instanceof AuthorityPlacementError) {
-      throw new Error(
+      throw new TypeError(
         `No collision-free placement for semantic Board composition${composition.anchor ? ` near ${JSON.stringify(composition.anchor)}` : ''}. No mutation was applied.`
       )
     }
@@ -1297,7 +1087,6 @@ async function createCompositionArtifacts(options: {
   })
   const movePlan: BoardBuildPlan = {
     artifacts: [],
-    connections: [],
     contract: options.plan.contract,
     ...(moves.length > 0 ? { operations: moves } : {})
   }
@@ -1395,17 +1184,10 @@ function applyPlanOperations(
     transactionRevert: PreparedAuthorityTransactionRevert | undefined
   }
 ): AuthorityBoardPlanOperationResult[] {
-  const operations = resolveBoardBuildPlanOperations(
-    options.plan.operations,
-    (objectId) => {
-      const node = document.graph.getNode(objectId)
-      return node && node.type !== 'CANVAS' ? document.graph.getAbsoluteBounds(objectId) : undefined
-    },
-    (operation) =>
-      boardBuildTracedConnections(document.graph, options.pageId, operation).map(
-        (connection) => connection.id
-      )
-  )
+  const operations = resolveBoardBuildPlanOperations(options.plan.operations, (objectId) => {
+    const node = document.graph.getNode(objectId)
+    return node && node.type !== 'CANVAS' ? document.graph.getAbsoluteBounds(objectId) : undefined
+  })
   const transactionRevert = operations.find((operation) => operation.kind === 'transaction.revert')
   if (transactionRevert) {
     return [
@@ -1420,30 +1202,6 @@ function applyPlanOperations(
   )
   return normalOperations.flatMap<AuthorityBoardPlanOperationResult>(
     (operation, index): AuthorityBoardPlanOperationResult | AuthorityBoardPlanOperationResult[] => {
-      if (operation.kind === 'connection.delete') {
-        const existing = objectGraphConnectionById(
-          document.graph,
-          options.pageId,
-          operation.connection_id
-        )
-        if (existing) {
-          setObjectGraphConnectionsOnPage(
-            document.graph,
-            options.pageId,
-            objectGraphConnectionsOnPage(document.graph, options.pageId).filter(
-              ({ id }) => id !== operation.connection_id
-            )
-          )
-        }
-        return [
-          {
-            category: 'connection_delete' as const,
-            connectionId: operation.connection_id,
-            effect: existing ? ('would_change' as const) : ('already_satisfied' as const),
-            kind: operation.kind
-          }
-        ]
-      }
       if (isCanonicalObjectOperation(operation)) {
         return [
           {
@@ -1456,11 +1214,6 @@ function applyPlanOperations(
       const existing = document.graph.getNode(operation.object_id)
       const peerNodes = existing ? canonicalMemoryPeerNodes(document.graph, existing) : []
       const sharedPatch = authoritySharedObjectPatch(operation)
-      const endpointIds = new Set(
-        existing
-          ? [existing.id, ...[...document.graph.getDescendants(existing.id)].map(({ id }) => id)]
-          : []
-      )
       const childRequestId = `${AUTHORITY_BOARD_PLAN_INTERNAL_REQUEST_PREFIX}${options.requestId}:operation:${index}`
       const intent = parseAuthorityObjectEditIntent(operation, options.taskId, options.traceId)
       const applied = applyAuthorityObjectEdit(
@@ -1474,16 +1227,6 @@ function applyPlanOperations(
         for (const peer of peerNodes) {
           if (peer.id !== operation.object_id) document.graph.updateNode(peer.id, sharedPatch)
         }
-      }
-      if (operation.kind === 'object.delete' && endpointIds.size > 0) {
-        setObjectGraphConnectionsOnPage(
-          document.graph,
-          options.pageId,
-          objectGraphConnectionsOnPage(document.graph, options.pageId).filter(
-            (connection) =>
-              !endpointIds.has(connection.sourceNodeId) && !endpointIds.has(connection.targetNodeId)
-          )
-        )
       }
       const resultObjectId =
         applied.outcome === 'applied'
@@ -1514,8 +1257,6 @@ async function compilePlan(options: {
 }): Promise<{
   aliases: Record<string, string>
   artifacts: AuthorityPlanArtifact[]
-  connections: ObjectGraphConnection[]
-  connectionResults: AuthorityBoardPlanConnectionResult[]
   document: AuthorityBoardDocument
   operationResults: AuthorityBoardPlanOperationResult[]
 }> {
@@ -1620,21 +1361,13 @@ async function compilePlan(options: {
           'board_build'
         )
         placementIntent = intent
-        const placementAnchor = convergencePlacementAnchor(
-          working,
-          options.plan,
-          artifact,
-          aliases,
-          intent
-        )
         created = createCompiledArtifact({
           artifact,
           baseRevision: options.baseRevision,
           childRequestId: `${AUTHORITY_BOARD_PLAN_INTERNAL_REQUEST_PREFIX}${options.requestId}:${artifact.alias}`,
           document: working,
           intent,
-          pageId: options.pageId,
-          ...(placementAnchor ? { placementAnchor } : {})
+          pageId: options.pageId
         })
       }
     } catch (error) {
@@ -1661,12 +1394,9 @@ async function compilePlan(options: {
   if (options.plan.composition && !(await createCompositionWhenReady())) {
     throw new Error('Composition anchor was unavailable during atomic compile.')
   }
-  const connectionCompilation = addPlanConnections(working, options.pageId, options.plan, aliases)
   return {
     aliases,
     artifacts,
-    connections: connectionCompilation.connections,
-    connectionResults: connectionCompilation.results,
     document: working,
     operationResults
   }
@@ -1718,7 +1448,6 @@ async function currentPlanReadback(
   aliases: Record<string, ReturnType<typeof authorityNodeSummary>>
   artifact_kinds: Record<string, AuthorityPlanArtifactKind>
   code_objects: Record<string, Awaited<ReturnType<typeof authorityCodeObjectReadback>>>
-  connections: ObjectGraphConnection[]
   current: boolean
   operations: JsonRecord[]
 }> {
@@ -1737,7 +1466,6 @@ async function currentPlanReadback(
       aliases: {},
       artifact_kinds: {},
       code_objects: {},
-      connections: [],
       current: readback.current,
       operations: [readback.operation]
     }
@@ -1771,18 +1499,6 @@ async function currentPlanReadback(
         operation: operation.kind,
         placement_id: operation.result.placement_id,
         status
-      }
-    }
-    if (operation.category === 'connection_delete') {
-      const exists = Boolean(
-        objectGraphConnectionById(document.graph, pageId, operation.connectionId)
-      )
-      if (exists) current = false
-      return {
-        connection_id: operation.connectionId,
-        effect: operation.effect,
-        operation: operation.kind,
-        status: exists ? 'diverged' : 'current'
       }
     }
     const isFinalForObject =
@@ -1845,26 +1561,10 @@ async function currentPlanReadback(
       if (readback.reconciliation.status !== 'current') current = false
     }
   }
-  const connections = receipt.connectionIds.flatMap((connectionId) => {
-    const connection = objectGraphConnectionById(document.graph, pageId, connectionId)
-    if (!connection) {
-      current = false
-      return []
-    }
-    if (
-      !document.graph.getNode(connection.sourceNodeId) ||
-      !document.graph.getNode(connection.targetNodeId) ||
-      connectionDigest(connection) !== receipt.connectionDigests[connectionId]
-    ) {
-      current = false
-    }
-    return [connection]
-  })
   return {
     aliases,
     artifact_kinds: structuredClone(receipt.artifactKinds),
     code_objects: codeObjects,
-    connections,
     current,
     operations
   }
@@ -1922,12 +1622,6 @@ async function resultForReceipt(options: {
     receipt: {
       appliedRevision: options.receipt.appliedRevision,
       baseRevision: options.receipt.baseRevision,
-      connection_ids: [...options.receipt.connectionIds],
-      connection_results: options.receipt.connectionResults.map((result) => ({
-        connection_id: result.connectionId,
-        effect: result.effect,
-        index: result.index
-      })),
       idempotent_replay: options.replay,
       input_digest: options.receipt.inputDigest,
       owner_ids: structuredClone(options.receipt.aliases),
@@ -2048,11 +1742,6 @@ export async function buildAuthorityBoardPlan(options: {
       compiled.artifacts.map((artifact) => [artifact.alias, artifact.created.kind])
     ),
     baseRevision: head.revision,
-    connectionIds: compiled.connections.map(({ id }) => id),
-    connectionDigests: Object.fromEntries(
-      compiled.connections.map((connection) => [connection.id, connectionDigest(connection)])
-    ),
-    connectionResults: compiled.connectionResults,
     inputDigest,
     operationResults: compiled.operationResults,
     pageId: page.id,

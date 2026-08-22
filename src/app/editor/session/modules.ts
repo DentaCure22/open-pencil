@@ -13,9 +13,8 @@ import { createMobileClipboardActions } from '@/app/editor/mobile-clipboard'
 import { createPenActions } from '@/app/editor/pen'
 import { createProfilerActions } from '@/app/editor/profiler'
 import type { AppEditorState } from '@/app/editor/session/types'
+import { createSpatialSelectionNavigation } from '@/app/editor/spatial-selection-navigation'
 import { createVectorEditActions } from '@/app/editor/vector-edit'
-import { createObjectGraphCoordinator } from '@/app/object-graph/coordinator'
-import { createObjectGraphNavigation } from '@/app/object-graph/navigation'
 
 export function defineEditorStoreAccessors(store: object, editor: Editor) {
   Object.defineProperties(store, {
@@ -70,9 +69,8 @@ export function createEditorStoreModules(
   const documentExport = createDocumentExportActions(editor, state, io, documentIO.downloadBlob)
   const mobileClipboard = createMobileClipboardActions(editor, state)
   const profiler = createProfilerActions(editor)
-  const objectGraph = createObjectGraphCoordinator(editor, state)
-  const objectGraphNavigation = createObjectGraphNavigation(editor)
   const containerNavigation = createContainerNavigation(editor)
+  const spatialSelectionNavigation = createSpatialSelectionNavigation(editor)
 
   return {
     ...flash,
@@ -94,13 +92,10 @@ export function createEditorStoreModules(
     startWatchingCurrentFile: documentIO.startWatchingCurrentFile,
     dispose: () => {
       containerNavigation.dispose()
-      objectGraphNavigation.dispose()
-      objectGraph.dispose()
       documentIO.disposeDocumentIO()
     },
     containerNavigation,
-    objectGraph,
-    objectGraphNavigation,
+    spatialSelectionNavigation,
     ...documentExport,
     ...mobileClipboard,
     ...profiler

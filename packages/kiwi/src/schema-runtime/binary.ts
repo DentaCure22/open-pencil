@@ -8,6 +8,7 @@ export function decodeBinarySchema(buffer: Uint8Array | ByteBuffer): Schema {
   let bb = buffer instanceof ByteBuffer ? buffer : new ByteBuffer(buffer)
   let definitionCount = bb.readVarUint()
   let definitions: Definition[] = []
+  let encodedTypes: (number | null)[][] = []
 
   // Read in the schema
   for (let i = 0; i < definitionCount; i++) {
@@ -15,18 +16,22 @@ export function decodeBinarySchema(buffer: Uint8Array | ByteBuffer): Schema {
     let kind = bb.readByte()
     let fieldCount = bb.readVarUint()
     let fields: Field[] = []
+    let fieldTypes: (number | null)[] = []
 
     for (let j = 0; j < fieldCount; j++) {
       let fieldName = bb.readString()
       let type = bb.readVarInt()
       let isArray = !!(bb.readByte() & 1)
       let value = bb.readVarUint()
+      let encodedType = kinds[kind] === 'ENUM' ? null : type
+
+      fieldTypes.push(encodedType)
 
       fields.push({
         name: fieldName,
         line: 0,
         column: 0,
-        type: kinds[kind] === 'ENUM' ? null : (type as any),
+        type: null,
         isArray: isArray,
         isDeprecated: false,
         value: value
@@ -40,6 +45,7 @@ export function decodeBinarySchema(buffer: Uint8Array | ByteBuffer): Schema {
       kind: kinds[kind],
       fields: fields
     })
+    encodedTypes.push(fieldTypes)
   }
 
   // Bind type names afterwards
@@ -47,7 +53,7 @@ export function decodeBinarySchema(buffer: Uint8Array | ByteBuffer): Schema {
     let fields = definitions[i].fields
     for (let j = 0; j < fields.length; j++) {
       let field = fields[j]
-      let type = field.type as any as number | null
+      let type = encodedTypes[i][j]
 
       if (type !== null && type < 0) {
         if (~type >= types.length) {

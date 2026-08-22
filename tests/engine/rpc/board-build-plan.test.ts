@@ -2,9 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   BOARD_BUILD_PLAN_CONTRACT,
-  boardBuildPlanConvergenceAnchor,
   boardBuildPlanDigestInput,
-  boardBuildPlanInboundReferences,
   compileBoardBuildPlanComposition,
   compileBoardBuildPlanFlowLayout,
   compileBoardBuildPlanGridLayout,
@@ -33,16 +31,6 @@ const validPlan = () => ({
       }
     }
   ],
-  connections: [
-    {
-      kind: 'visual',
-      label: 'then',
-      source: { alias: 'detect' },
-      source_port: 'right',
-      target: { alias: 'retry' },
-      target_port: 'left'
-    }
-  ],
   contract: BOARD_BUILD_PLAN_CONTRACT
 })
 
@@ -60,7 +48,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       operations: [{ kind: 'canonical_object.fork', object_id: '0:20' }]
     })
@@ -75,7 +62,6 @@ describe('board build plan contract', () => {
     expect(() =>
       parseBoardBuildPlan({
         artifacts: [],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT,
         operations: [
           { canonical_object_id: 'object:old', kind: 'canonical_object.link', placements: [] }
@@ -87,7 +73,6 @@ describe('board build plan contract', () => {
   test('accepts guarded object operations without requiring new artifacts', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       operations: [
         { kind: 'object.move', object_id: '0:10', x: 320, y: 240 },
@@ -114,18 +99,17 @@ describe('board build plan contract', () => {
   test('resolves an existing Code Object viewport resize idempotently', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       operations: [{ kind: 'object.resize', object_id: '0:10', viewport_preset: 'desktop' }]
     })
 
     expect(plan.operations).toEqual([
       {
-        height: 900,
+        height: 1069,
         kind: 'object.resize',
         object_id: '0:10',
         viewport_preset: 'desktop',
-        width: 1440
+        width: 1728
       }
     ])
     expect(parseBoardBuildPlan(plan)).toEqual(plan)
@@ -133,108 +117,28 @@ describe('board build plan contract', () => {
     const mismatch = structuredClone(plan) as unknown as {
       operations: Array<Record<string, unknown>>
     }
-    mismatch.operations[0] && (mismatch.operations[0].width = 390)
+    if (mismatch.operations[0]) mismatch.operations[0].width = 390
     expect(() => parseBoardBuildPlan(mismatch)).toThrow(
       'height and width must match its viewport_preset'
     )
   })
 
-  test('accepts only an exact connection ID for connection deletion', () => {
-    const plan = parseBoardBuildPlan({
-      artifacts: [],
-      connections: [],
-      contract: BOARD_BUILD_PLAN_CONTRACT,
-      operations: [{ connection_id: 'object-connection:exact', kind: 'connection.delete' }]
-    })
-
-    expect(plan.operations).toEqual([
-      { connection_id: 'object-connection:exact', kind: 'connection.delete' }
-    ])
-    expect(() =>
-      parseBoardBuildPlan({
-        artifacts: [],
-        connections: [],
-        contract: BOARD_BUILD_PLAN_CONTRACT,
-        operations: [
-          {
-            connection_id: 'object-connection:exact',
-            kind: 'connection.delete',
-            source_object_id: '0:10'
-          }
-        ]
-      })
-    ).toThrow('unsupported fields: source_object_id')
-  })
-
-  test('compiles a bounded traced-connection scope to exact delete operations', () => {
-    const plan = parseBoardBuildPlan({
-      artifacts: [],
-      connections: [],
-      contract: BOARD_BUILD_PLAN_CONTRACT,
-      operations: [
-        {
-          kind: 'connection.delete_traced',
-          object_ids: ['0:10', '0:11'],
-          orientation: 'vertical',
-          region: { height: 320, width: 480, x: 80, y: 60 }
-        }
-      ]
-    })
-    const operations = resolveBoardBuildPlanOperations(
-      plan.operations,
-      () => undefined,
-      () => ['connection:2', 'connection:1']
-    )
-
-    expect(operations).toEqual([
-      { connection_id: 'connection:2', kind: 'connection.delete' },
-      { connection_id: 'connection:1', kind: 'connection.delete' }
-    ])
-  })
-
-  test('allows a trace region to resolve connectors without captured endpoint objects', () => {
-    const plan = parseBoardBuildPlan({
-      artifacts: [],
-      connections: [],
-      contract: BOARD_BUILD_PLAN_CONTRACT,
-      operations: [
-        {
-          kind: 'connection.delete_traced',
-          object_ids: [],
-          orientation: 'horizontal',
-          region: { height: 40, width: 120, x: 80, y: 60 }
-        }
-      ]
-    })
-
-    expect(plan.operations).toEqual([
-      {
-        kind: 'connection.delete_traced',
-        object_ids: [],
-        orientation: 'horizontal',
-        region: { height: 40, width: 120, x: 80, y: 60 }
-      }
-    ])
-  })
-
   test('accepts one transaction revert as the entire plan', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
-      operations: [{ kind: 'transaction.revert', transaction_id: 'request:delete-connection' }]
+      operations: [{ kind: 'transaction.revert', transaction_id: 'request:prior-mutation' }]
     })
 
     expect(plan.operations).toEqual([
-      { kind: 'transaction.revert', transaction_id: 'request:delete-connection' }
+      { kind: 'transaction.revert', transaction_id: 'request:prior-mutation' }
     ])
     expect(() =>
       parseBoardBuildPlan({
         artifacts: [],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT,
         operations: [
-          { kind: 'transaction.revert', transaction_id: 'request:delete-connection' },
+          { kind: 'transaction.revert', transaction_id: 'request:prior-mutation' },
           { kind: 'object.delete', object_id: '0:10' }
         ]
       })
@@ -244,7 +148,6 @@ describe('board build plan contract', () => {
   test('accepts relative moves and resolves them from current Board bounds', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       operations: [
         {
@@ -266,7 +169,6 @@ describe('board build plan contract', () => {
   test('rejects ambiguous or self-referential relative moves', () => {
     const base = {
       artifacts: [],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     }
     expect(() =>
@@ -297,44 +199,27 @@ describe('board build plan contract', () => {
     ).toThrow('must reference a different object')
   })
 
-  test('rejects empty transactions and references to objects deleted by the same plan', () => {
+  test('rejects an empty plan', () => {
     expect(() =>
       parseBoardBuildPlan({
         artifacts: [],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT
       })
-    ).toThrow('at least one artifact, composition, connection, or operation')
-
-    expect(() =>
-      parseBoardBuildPlan({
-        artifacts: [],
-        connections: [
-          {
-            kind: 'visual',
-            source: { object_id: '0:10' },
-            target: { object_id: '0:11' }
-          }
-        ],
-        contract: BOARD_BUILD_PLAN_CONTRACT,
-        operations: [{ kind: 'object.delete', object_id: '0:10' }]
-      })
-    ).toThrow('references an object deleted by the same plan')
+    ).toThrow('at least one artifact, composition, or operation')
   })
 
-  test('normalizes one ordered native composition', () => {
+  test('normalizes one ordered plan', () => {
     const plan = parseBoardBuildPlan(validPlan())
     expect(plan.operations).toBeUndefined()
     expect(plan).toMatchObject({
       artifacts: [
         { alias: 'detect', recipe: { kind: 'native_card' } },
         { alias: 'retry', anchor: { alias: 'detect' }, recipe: { kind: 'native_text' } }
-      ],
-      connections: [{ kind: 'visual', label: 'then' }]
+      ]
     })
   })
 
-  test('compiles semantic composition from relationships without public grid geometry', () => {
+  test('compiles semantic composition without public grid geometry', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [
         {
@@ -364,10 +249,6 @@ describe('board build plan contract', () => {
         placement: 'below',
         preferences: { density: 'compact', direction: 'horizontal' }
       },
-      connections: [
-        { kind: 'visual', source: { alias: 'capture' }, target: { alias: 'resolve' } },
-        { kind: 'visual', source: { alias: 'resolve' }, target: { alias: 'edit' } }
-      ],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -376,16 +257,12 @@ describe('board build plan contract', () => {
       preferences: { density: 'compact', direction: 'horizontal' }
     })
     if (!plan.composition) throw new Error('Expected semantic composition.')
-    const compiled = compileBoardBuildPlanComposition(
-      plan.composition,
-      {
-        'alias:capture': { height: 180, width: 320 },
-        'alias:edit': { height: 180, width: 320 },
-        'alias:resolve': { height: 220, width: 360 }
-      },
-      plan.connections
-    )
-    expect(compiled.strategy).toBe('flow')
+    const compiled = compileBoardBuildPlanComposition(plan.composition, {
+      'alias:capture': { height: 180, width: 320 },
+      'alias:edit': { height: 180, width: 320 },
+      'alias:resolve': { height: 220, width: 360 }
+    })
+    expect(compiled.strategy).toBe('grid')
     expect(compiled.members['alias:capture']?.x).toBeLessThan(
       compiled.members['alias:resolve']?.x ?? 0
     )
@@ -410,7 +287,6 @@ describe('board build plan contract', () => {
         members: [{ alias: 'one' }, { alias: 'two' }],
         preferences: { direction: 'horizontal' }
       },
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     }
 
@@ -432,7 +308,6 @@ describe('board build plan contract', () => {
           geography: 'recompose',
           members: [{ object_id: '0:10' }, { object_id: '0:11' }]
         },
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT
       }).composition
     ).toMatchObject({
@@ -449,7 +324,6 @@ describe('board build plan contract', () => {
           anchor: { height: 500, kind: 'near_region', width: 900, x: 0, y: 0 },
           members: [{ object_id: '0:10' }, { object_id: '0:11' }]
         },
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT
       })
     ).toThrow('requires geography recompose')
@@ -461,136 +335,9 @@ describe('board build plan contract', () => {
         geography: 'recompose',
         members: [{ object_id: '0:10' }, { object_id: '0:11' }]
       },
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
     expect(plan.composition?.members).toEqual([{ object_id: '0:10' }, { object_id: '0:11' }])
-  })
-
-  test('accepts general named ports and exact port-to-port connections', () => {
-    const plan = parseBoardBuildPlan({
-      artifacts: [
-        {
-          alias: 'producer',
-          recipe: {
-            initial_state: {},
-            kind: 'code_object',
-            name: 'Producer',
-            object_key: 'producer',
-            operation: 'create',
-            placement: { target: { kind: 'auto' } },
-            ports: [
-              {
-                direction: 'output',
-                id: 'record/status',
-                kinds: ['data'],
-                label: 'Status',
-                offset: 0.7,
-                side: 'right'
-              }
-            ],
-            props: {},
-            source: 'export default function Producer(){ return <div /> }',
-            source_format: 'tsx'
-          }
-        },
-        {
-          alias: 'consumer',
-          anchor: { alias: 'producer' },
-          recipe: {
-            kind: 'code_object',
-            name: 'Consumer',
-            object_key: 'consumer',
-            operation: 'create',
-            ports: [
-              {
-                direction: 'input',
-                id: 'status',
-                kinds: ['data'],
-                label: 'Status',
-                offset: 0.3,
-                side: 'left'
-              }
-            ],
-            source: 'export default function Consumer(){ return <div /> }',
-            source_format: 'tsx'
-          }
-        }
-      ],
-      connections: [
-        {
-          kind: 'data',
-          source: { alias: 'producer' },
-          source_port: 'record/status',
-          target: { alias: 'consumer' },
-          target_port: 'status'
-        }
-      ],
-      contract: BOARD_BUILD_PLAN_CONTRACT
-    })
-
-    expect(plan.artifacts[0]?.recipe).toMatchObject({
-      ports: [{ id: 'record/status', offset: 0.7, side: 'right' }]
-    })
-    expect(plan.connections[0]).toMatchObject({
-      source_port: 'record/status',
-      target_port: 'status'
-    })
-  })
-
-  test('derives a centered convergence anchor from distinct inbound sources', () => {
-    const plan = parseBoardBuildPlan({
-      artifacts: [
-        {
-          alias: 'upper',
-          recipe: {
-            body: 'Upper branch',
-            kind: 'native_card',
-            placement: { target: { kind: 'auto' } },
-            title: 'Upper'
-          }
-        },
-        {
-          alias: 'lower',
-          anchor: { alias: 'upper' },
-          recipe: {
-            body: 'Lower branch',
-            kind: 'native_card',
-            placement: { preferred_directions: ['below'] },
-            title: 'Lower'
-          }
-        },
-        {
-          alias: 'decision',
-          recipe: {
-            body: 'Converged result',
-            kind: 'native_card',
-            placement: { preferred_directions: ['right'] },
-            title: 'Decision'
-          }
-        }
-      ],
-      connections: [
-        { kind: 'visual', source: { alias: 'upper' }, target: { alias: 'decision' } },
-        { kind: 'visual', source: { alias: 'lower' }, target: { alias: 'decision' } }
-      ],
-      contract: BOARD_BUILD_PLAN_CONTRACT
-    })
-
-    expect(boardBuildPlanInboundReferences(plan, 'decision')).toEqual([
-      { alias: 'upper' },
-      { alias: 'lower' }
-    ])
-    expect(
-      boardBuildPlanConvergenceAnchor(
-        [
-          { height: 100, width: 300, x: 400, y: 100 },
-          { height: 100, width: 300, x: 400, y: 700 }
-        ],
-        { height: 120, width: 320 },
-        'right'
-      )
-    ).toEqual({ height: 120, width: 300, x: 400, y: 390 })
   })
 
   test('accepts a first native text artifact with explicit free placement', () => {
@@ -605,7 +352,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -652,7 +398,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       version: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -699,7 +444,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -861,7 +605,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [{ kind: 'visual', source: 'intake', target: 'review' }],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -877,8 +620,7 @@ describe('board build plan contract', () => {
             }
           }
         }
-      ],
-      connections: [{ source: { alias: 'intake' }, target: { alias: 'review' } }]
+      ]
     })
   })
 
@@ -954,34 +696,6 @@ describe('board build plan contract', () => {
     const cardWithBoth = validPlan()
     cardWithBoth.artifacts[0].anchor = { object_id: '0:10' }
     expect(() => parseBoardBuildPlan(cardWithBoth)).toThrow('requires exactly one')
-
-    const cardWithOneInbound = {
-      artifacts: [
-        {
-          alias: 'source',
-          recipe: {
-            body: 'Source',
-            kind: 'native_card',
-            placement: { target: { kind: 'auto' } },
-            title: 'Source'
-          }
-        },
-        {
-          alias: 'decision',
-          recipe: {
-            body: 'Decision',
-            kind: 'native_card',
-            placement: { preferred_directions: ['right'] },
-            title: 'Decision'
-          }
-        }
-      ],
-      connections: [{ kind: 'visual', source: { alias: 'source' }, target: { alias: 'decision' } }],
-      contract: BOARD_BUILD_PLAN_CONTRACT
-    }
-    expect(() => parseBoardBuildPlan(cardWithOneInbound)).toThrow(
-      'at least two distinct inbound aliases'
-    )
   })
 
   test('accepts Code Object and native Mermaid artifacts while validating their exact shapes', () => {
@@ -1012,7 +726,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
     expect(plan.artifacts).toMatchObject([
@@ -1042,7 +755,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
     expect(rewrite.artifacts[0]?.recipe).toMatchObject({
@@ -1063,7 +775,6 @@ describe('board build plan contract', () => {
             }
           }
         ],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT
       })
     ).toThrow('refinement cannot use anchor, composition, layout, or recipe.placement.target')
@@ -1104,7 +815,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -1138,7 +848,7 @@ describe('board build plan contract', () => {
     const unknownApp = structuredClone(plan) as unknown as {
       artifacts: Array<{ recipe: Record<string, unknown> }>
     }
-    unknownApp.artifacts[0]?.recipe && (unknownApp.artifacts[0].recipe.app_id = 'unknown')
+    if (unknownApp.artifacts[0]) unknownApp.artifacts[0].recipe.app_id = 'unknown'
     expect(() => parseBoardBuildPlan(unknownApp)).toThrow('app_id must be smylr')
   })
 
@@ -1158,7 +868,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     })
 
@@ -1177,43 +886,12 @@ describe('board build plan contract', () => {
     const conflictingSize = structuredClone(plan) as unknown as {
       artifacts: Array<{ recipe: Record<string, unknown> }>
     }
-    conflictingSize.artifacts[0]?.recipe &&
-      (conflictingSize.artifacts[0].recipe.viewport_preset = 'desktop')
+    if (conflictingSize.artifacts[0]) {
+      conflictingSize.artifacts[0].recipe.viewport_preset = 'desktop'
+    }
     expect(() => parseBoardBuildPlan(conflictingSize)).toThrow(
       'height and width must match its viewport_preset'
     )
-  })
-
-  test('validates connection references, activation, self-links, and duplicates', () => {
-    const unknown = validPlan()
-    unknown.connections[0].target = { alias: 'missing' }
-    expect(() => parseBoardBuildPlan(unknown)).toThrow('unknown or forward alias')
-
-    const automaticVisual = validPlan()
-    automaticVisual.connections[0].automatic = true
-    expect(() => parseBoardBuildPlan(automaticVisual)).toThrow('cannot be automatic')
-
-    const selfLink = validPlan()
-    selfLink.connections[0].target = { alias: 'detect' }
-    expect(() => parseBoardBuildPlan(selfLink)).toThrow('itself')
-
-    const duplicate = validPlan()
-    duplicate.connections.push(structuredClone(duplicate.connections[0]))
-    expect(() => parseBoardBuildPlan(duplicate)).toThrow('duplicate connection')
-  })
-
-  test('defaults action and data connections to inert until explicitly activated', () => {
-    const plan = validPlan()
-    plan.connections[0].kind = 'data'
-    expect(parseBoardBuildPlan(plan).connections[0]).toMatchObject({
-      automatic: false,
-      kind: 'data'
-    })
-    plan.connections[0].automatic = false
-    expect(parseBoardBuildPlan(plan).connections[0]).toMatchObject({
-      automatic: false,
-      kind: 'data'
-    })
   })
 
   test('binds the normalized plan and exact target into the digest input', () => {
@@ -1261,7 +939,6 @@ describe('board build plan contract', () => {
           }
         }))
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },
@@ -1306,7 +983,6 @@ describe('board build plan contract', () => {
         alias,
         recipe: { body: alias, kind: 'native_card', title: alias }
       })),
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { height: 480, kind: 'region', width: 960, x: 120, y: 240 },
@@ -1341,7 +1017,6 @@ describe('board build plan contract', () => {
           recipe: { body: alias, kind: 'native_card', title: alias }
         }))
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },
@@ -1356,7 +1031,7 @@ describe('board build plan contract', () => {
     expect(plan.layout.members).toEqual(['one', 'two'])
   })
 
-  test('compiles measured flow ranks with deterministic connector corridors', () => {
+  test('compiles measured flow ranks with deterministic geometry', () => {
     const plan = parseBoardBuildPlan({
       artifacts: [
         {
@@ -1372,7 +1047,6 @@ describe('board build plan contract', () => {
           recipe: { body: `${alias} fields`, kind: 'native_card', title: alias, width: 320 }
         }))
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },
@@ -1415,7 +1089,6 @@ describe('board build plan contract', () => {
         { alias: 'one', recipe: { body: 'one', kind: 'native_card', title: 'one' } },
         { alias: 'two', recipe: { body: 'two', kind: 'native_card', title: 'two' } }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },
@@ -1461,7 +1134,6 @@ describe('board build plan contract', () => {
           recipe: { body: alias, kind: 'native_card', title: alias }
         }))
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },
@@ -1531,7 +1203,6 @@ describe('board build plan contract', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT,
       layout: {
         anchor: { alias: 'title' },

@@ -1,17 +1,13 @@
-import type { ObjectGraphPortDefinition } from '@open-pencil/scene-graph'
-
-import type { BoardBuildTraceConnectionDelete } from '#core/rpc/board-build-trace'
-
-import type { CodeObjectViewportPresetId } from '../../code-object/viewport'
+import type { CodeObjectSurface } from '#core/code-object/document'
+import type { CodeObjectUiBlockName } from '#core/code-object/ui-block'
+import type { CodeObjectViewportPresetId } from '#core/code-object/viewport'
+import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 export const BOARD_BUILD_PLAN_CONTRACT = 'board-build-plan/v1' as const
 export const BOARD_BUILD_PLAN_MAX_ARTIFACTS = 32
-export const BOARD_BUILD_PLAN_MAX_CONNECTIONS = 64
 export const BOARD_BUILD_PLAN_MAX_OPERATIONS = 64
 
 export type BoardBuildPlanDirection = 'above' | 'below' | 'left' | 'right'
-export type BoardBuildPlanConnectionKind = 'action' | 'data' | 'visual'
-export type BoardBuildPlanPort = string
 
 export type BoardBuildPlanReference = { alias: string } | { object_id: string }
 
@@ -134,10 +130,24 @@ export type BoardBuildPlanCodeObjectRecipe = {
   object_key: string
   operation: 'create'
   placement?: BoardBuildPlanPlacement
-  ports?: ObjectGraphPortDefinition[]
   props?: Record<string, unknown>
   source: string
   source_format: 'tsx'
+  surface?: CodeObjectSurface
+  width?: number
+}
+
+export type BoardBuildPlanUiBlockRecipe = {
+  block: CodeObjectUiBlockName
+  config?: Record<string, unknown>
+  height?: number
+  initial_state?: Record<string, unknown>
+  kind: 'ui_block'
+  name: string
+  object_key: string
+  operation: 'create'
+  placement?: BoardBuildPlanPlacement
+  surface?: CodeObjectSurface
   width?: number
 }
 
@@ -166,22 +176,13 @@ export type BoardBuildPlanArtifactRecipe =
   | BoardBuildPlanNativeCardRecipe
   | BoardBuildPlanNativeDiagramRecipe
   | BoardBuildPlanNativeTextRecipe
+  | BoardBuildPlanUiBlockRecipe
   | BoardBuildPlanTrustedWebAppRecipe
 
 export type BoardBuildPlanArtifact = {
   alias: string
   anchor?: BoardBuildPlanReference
   recipe: BoardBuildPlanArtifactRecipe
-}
-
-export type BoardBuildPlanConnection = {
-  automatic?: boolean
-  kind: BoardBuildPlanConnectionKind
-  label?: string
-  source: BoardBuildPlanReference
-  source_port?: BoardBuildPlanPort
-  target: BoardBuildPlanReference
-  target_port?: BoardBuildPlanPort
 }
 
 export type BoardBuildPlanObjectPatch = {
@@ -229,8 +230,6 @@ export type BoardBuildPlanResizeOperation = {
 
 export type BoardBuildPlanOperation =
   | BoardBuildPlanCanonicalObjectOperation
-  | BoardBuildTraceConnectionDelete
-  | { connection_id: string; kind: 'connection.delete' }
   | { kind: 'transaction.revert'; transaction_id: string }
   | { kind: 'object.delete'; object_id: string }
   | { kind: 'object.duplicate'; object_id: string; offset_x?: number; offset_y?: number }
@@ -241,13 +240,12 @@ export type BoardBuildPlanOperation =
 
 export type BoardBuildPlanResolvedOperation = Exclude<
   BoardBuildPlanOperation,
-  BoardBuildPlanRelativeMoveOperation | BoardBuildTraceConnectionDelete
+  BoardBuildPlanRelativeMoveOperation
 >
 
 export type BoardBuildPlan = {
   artifacts: BoardBuildPlanArtifact[]
   composition?: BoardBuildPlanComposition
-  connections: BoardBuildPlanConnection[]
   contract: typeof BOARD_BUILD_PLAN_CONTRACT
   layout?: BoardBuildPlanLayout
   operations?: BoardBuildPlanOperation[]
@@ -261,12 +259,7 @@ export type BoardBuildPlanTargetIdentity = {
   workspace_id: string
 }
 
-export type BoardBuildPlanBounds = {
-  height: number
-  width: number
-  x: number
-  y: number
-}
+export type BoardBuildPlanBounds = Rect
 
 export type BoardBuildPlanGridCompilation = {
   aliases: Record<string, BoardBuildPlanBounds>

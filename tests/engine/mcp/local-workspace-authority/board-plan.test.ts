@@ -10,19 +10,14 @@ import {
   canonicalMemoryObjectId,
   canonicalMemorySourceNodeId
 } from '@open-pencil/core/tools'
-import {
-  objectGraphConnectionsOnPage,
-  readObjectGraphPorts,
-  SceneGraph,
-  setObjectGraphConnectionsOnPage,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import { LocalWorkspaceBoardRuntime } from '#mcp/local-workspace-authority/board-runtime'
 import {
   readAuthorityBoardDocument,
   writeAuthorityBoardDocument
 } from '#mcp/local-workspace-authority/document'
+import { readAuthorityMermaidSource } from '#mcp/local-workspace-authority/native-diagram'
 import { LocalWorkspaceAuthorityStore } from '#mcp/local-workspace-authority/store'
 
 const roots: string[] = []
@@ -129,6 +124,12 @@ async function boardContext(f: Awaited<ReturnType<typeof fixture>>) {
   )
 }
 
+async function savedMermaidSource(f: Awaited<ReturnType<typeof fixture>>, ownerId: string) {
+  const head = await f.store.head()
+  if (!head) throw new Error('Expected saved Mermaid authority head')
+  return readAuthorityMermaidSource(readAuthorityBoardDocument(head.document), f.page.id, ownerId)
+}
+
 function mixedPlan() {
   return {
     artifacts: [
@@ -168,14 +169,6 @@ function mixedPlan() {
         }
       }
     ],
-    connections: [
-      {
-        kind: 'visual',
-        label: 'owns',
-        source: { alias: 'decision' },
-        target: { alias: 'caption' }
-      }
-    ],
     contract: BOARD_BUILD_PLAN_CONTRACT
   }
 }
@@ -201,37 +194,10 @@ function codeObjectPlan() {
           name: 'Risk triage control',
           object_key: 'risk-triage-control-v1',
           operation: 'create',
-          ports: [
-            {
-              direction: 'output',
-              id: 'status',
-              kinds: ['data'],
-              label: 'Risk status',
-              offset: 0.75,
-              side: 'right'
-            },
-            {
-              direction: 'input',
-              id: 'brief',
-              kinds: ['visual'],
-              label: 'Risk brief',
-              offset: 0.5,
-              side: 'left'
-            }
-          ],
           source:
             'export default function App({state}){return <main><strong>{state.severity}</strong></main>}',
           source_format: 'tsx'
         }
-      }
-    ],
-    connections: [
-      {
-        kind: 'visual',
-        label: 'controls',
-        source: { alias: 'brief' },
-        target: { alias: 'app' },
-        target_port: 'brief'
       }
     ],
     contract: BOARD_BUILD_PLAN_CONTRACT
@@ -251,7 +217,6 @@ function mermaidPlan() {
         }
       }
     ],
-    connections: [],
     contract: BOARD_BUILD_PLAN_CONTRACT
   }
 }
@@ -261,7 +226,7 @@ function planRequest(context: RpcResult, plan: unknown, requestId = 'request:mix
     command: 'board_build',
     args: {
       ...(context.board_build_base as RpcResult),
-      intent: 'Create one connected release composition',
+      intent: 'Create one release composition',
       plan,
       request_id: requestId
     }
@@ -294,7 +259,6 @@ describe('local workspace authority Board build plans', () => {
             }
           }
         ],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT
       },
       'request:canonical-object-plan'
@@ -334,7 +298,6 @@ describe('local workspace authority Board build plans', () => {
         sharedContext,
         {
           artifacts: [],
-          connections: [],
           contract: BOARD_BUILD_PLAN_CONTRACT,
           operations: [
             {
@@ -366,7 +329,6 @@ describe('local workspace authority Board build plans', () => {
           forkContext,
           {
             artifacts: [],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: [
               { kind: 'canonical_object.fork', object_id: createdId },
@@ -429,7 +391,6 @@ describe('local workspace authority Board build plans', () => {
                 }
               }
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:create-edit-target'
@@ -444,7 +405,6 @@ describe('local workspace authority Board build plans', () => {
       editContext,
       {
         artifacts: [],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT,
         operations: [
           { kind: 'object.move', object_id: objectId, x: 720, y: 480 },
@@ -480,7 +440,6 @@ describe('local workspace authority Board build plans', () => {
           noChangeContext,
           {
             artifacts: [],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: [
               { kind: 'object.move', object_id: objectId, x: 720, y: 480 },
@@ -517,7 +476,6 @@ describe('local workspace authority Board build plans', () => {
                 title: alias
               }
             })),
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:create-composition-targets'
@@ -545,7 +503,6 @@ describe('local workspace authority Board build plans', () => {
               members: [{ object_id: ids.first }, { object_id: ids.second }],
               preferences: { direction: 'horizontal' }
             },
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:persisted-semantic-recompose'
@@ -604,10 +561,6 @@ describe('local workspace authority Board build plans', () => {
               members: [{ alias: 'discover' }, { alias: 'measure' }, { alias: 'deliver' }],
               preferences: { direction: 'horizontal' }
             },
-            connections: [
-              { kind: 'visual', source: { alias: 'discover' }, target: { alias: 'measure' } },
-              { kind: 'visual', source: { alias: 'measure' }, target: { alias: 'deliver' } }
-            ],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:persisted-anchorless-composition'
@@ -656,7 +609,6 @@ describe('local workspace authority Board build plans', () => {
               }
             ],
             composition: { members: [{ alias: 'first' }, { alias: 'second' }] },
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: [{ kind: 'object.delete', object_id: f.gridBlockerId }]
           },
@@ -694,7 +646,6 @@ describe('local workspace authority Board build plans', () => {
                 }
               }
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: oldIds.map((objectId) => ({ kind: 'object.delete', object_id: objectId }))
           },
@@ -742,7 +693,6 @@ describe('local workspace authority Board build plans', () => {
                 }
               }
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:free-text-plan'
@@ -806,7 +756,6 @@ describe('local workspace authority Board build plans', () => {
                 }
               }
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT
           },
           'request:diagonal-plan'
@@ -833,101 +782,7 @@ describe('local workspace authority Board build plans', () => {
     })
   })
 
-  test('centers a cardinal convergence after two completed branches', async () => {
-    const f = await fixture()
-    const context = await boardContext(f)
-    const applied = responseResult(
-      await f.runtime.sendRpc(
-        planRequest(
-          context,
-          {
-            artifacts: [
-              {
-                alias: 'intake',
-                recipe: {
-                  body: 'Start here.',
-                  kind: 'native_card',
-                  placement: { target: { kind: 'point', x: 640, y: 600 } },
-                  title: 'Intake'
-                }
-              },
-              {
-                alias: 'upper',
-                anchor: { alias: 'intake' },
-                recipe: {
-                  body: 'Upper branch.',
-                  kind: 'native_card',
-                  placement: {
-                    clearance: 240,
-                    relative_offset: { column: 1, row: -1 }
-                  },
-                  title: 'Upper review'
-                }
-              },
-              {
-                alias: 'lower',
-                anchor: { alias: 'intake' },
-                recipe: {
-                  body: 'Lower branch.',
-                  kind: 'native_card',
-                  placement: {
-                    clearance: 240,
-                    relative_offset: { column: 1, row: 1 }
-                  },
-                  title: 'Lower review'
-                }
-              },
-              {
-                alias: 'decision',
-                recipe: {
-                  body: 'Converge both reviews.',
-                  kind: 'native_card',
-                  placement: {
-                    clearance: 560,
-                    preferred_directions: ['right']
-                  },
-                  title: 'Decision'
-                }
-              }
-            ],
-            connections: [
-              {
-                kind: 'visual',
-                source: { alias: 'upper' },
-                target: { alias: 'decision' }
-              },
-              {
-                kind: 'visual',
-                source: { alias: 'lower' },
-                target: { alias: 'decision' }
-              }
-            ],
-            contract: BOARD_BUILD_PLAN_CONTRACT
-          },
-          'request:converging-plan'
-        )
-      )
-    )
-
-    const ownerIds = applied.owner_ids as Record<string, string>
-    const head = await f.store.head()
-    if (!head) throw new Error('Expected committed converging Board plan')
-    const graph = readAuthorityBoardDocument(head.document).graph
-    const upper = graph.getAbsoluteBounds(ownerIds.upper)
-    const lower = graph.getAbsoluteBounds(ownerIds.lower)
-    const decision = graph.getAbsoluteBounds(ownerIds.decision)
-
-    expect(decision.x).toBe(upper.x + upper.width + 560)
-    expect(decision.y + decision.height / 2).toBe((upper.y + lower.y + lower.height) / 2)
-    expect(decision.x).toBeGreaterThan(lower.x + lower.width)
-    expect(applied).toMatchObject({
-      final_revision: 2,
-      receipt: { appliedRevision: 2, baseRevision: 1 },
-      status: { mutation: 'applied' }
-    })
-  })
-
-  test('commits aliased artifacts and their connection in one authority revision', async () => {
+  test('commits aliased artifacts in one authority revision', async () => {
     const f = await fixture()
     const context = await boardContext(f)
     expect(context.capabilities).toContain('board.build.plan.v1')
@@ -954,9 +809,6 @@ describe('local workspace authority Board build plans', () => {
     const ownerIds = applied.owner_ids as Record<string, string>
     expect(Object.keys(ownerIds).sort()).toEqual(['caption', 'decision', 'followup'])
     expect(ownerIds.caption).not.toBe(ownerIds.decision)
-    const receipt = applied.receipt as { connection_ids: string[] }
-    expect(receipt.connection_ids).toHaveLength(1)
-
     const head = await f.store.head()
     if (!head) throw new Error('Expected committed Board plan authority head')
     const document = readAuthorityBoardDocument(head.document)
@@ -967,15 +819,6 @@ describe('local workspace authority Board build plans', () => {
     const decisionBounds = document.graph.getAbsoluteBounds(ownerIds.decision)
     const followupBounds = document.graph.getAbsoluteBounds(ownerIds.followup)
     expect(followupBounds.y).toBeGreaterThanOrEqual(decisionBounds.y + decisionBounds.height)
-    expect(objectGraphConnectionsOnPage(document.graph, f.page.id)).toEqual([
-      expect.objectContaining({
-        id: receipt.connection_ids[0],
-        kind: 'visual',
-        label: 'owns',
-        sourceNodeId: ownerIds.decision,
-        targetNodeId: ownerIds.caption
-      })
-    ])
     const page = document.graph.getNode(f.page.id)
     expect(
       page?.pluginData.filter((entry) =>
@@ -1014,7 +857,6 @@ describe('local workspace authority Board build plans', () => {
           reading_order: views.map(([alias]) => ({ alias }))
         }
       },
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     }
     const commit = spyOn(f.store, 'commit')
@@ -1059,7 +901,7 @@ describe('local workspace authority Board build plans', () => {
       )
       return frame
     })
-    expect(frames.map(({ x }) => x)).toEqual([...frames.map(({ x }) => x)].sort((a, b) => a - b))
+    expect(frames.map(({ x }) => x)).toEqual(frames.map(({ x }) => x).sort((a, b) => a - b))
     expect(new Set(frames.map(({ y }) => y)).size).toBe(1)
     responseResult(
       await f.runtime.sendRpc(
@@ -1067,7 +909,6 @@ describe('local workspace authority Board build plans', () => {
           await boardContext(f),
           {
             artifacts: [],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: [
               {
@@ -1084,7 +925,10 @@ describe('local workspace authority Board build plans', () => {
     const resizedHead = await f.store.head()
     if (!resizedHead) throw new Error('Expected committed Smylr viewport resize')
     const resizedDocument = readAuthorityBoardDocument(resizedHead.document)
-    expect(resizedDocument.graph.getNode(ownerIds.home)).toMatchObject({ height: 900, width: 1440 })
+    expect(resizedDocument.graph.getNode(ownerIds.home)).toMatchObject({
+      height: 1069,
+      width: 1728
+    })
     expect(parseCodeObjectDocument(resizedDocument.graph.getNode(ownerIds.home))).toMatchObject({
       viewport: { preset: 'desktop' }
     })
@@ -1092,116 +936,39 @@ describe('local workspace authority Board build plans', () => {
     commit.mockRestore()
   })
 
-  test('deletes an exact persisted connection idempotently through the normal plan receipt', async () => {
-    const f = await fixture()
-    const seeded = responseResult(
-      await f.runtime.sendRpc(planRequest(await boardContext(f), mixedPlan()))
-    )
-    const connectionId = (seeded.receipt as { connection_ids: string[] }).connection_ids[0]
-    if (!connectionId) throw new Error('Expected seeded connection')
-    const deletionPlan = {
-      artifacts: [],
-      connections: [],
-      contract: BOARD_BUILD_PLAN_CONTRACT,
-      operations: [{ connection_id: connectionId, kind: 'connection.delete' as const }]
-    }
-
-    const applied = responseResult(
-      await f.runtime.sendRpc(
-        planRequest(
-          await boardContext(f),
-          deletionPlan,
-          'request:delete-exact-persisted-connection'
-        )
-      )
-    )
-    expect(applied).toMatchObject({
-      proof: { durable_readback: 'passed' },
-      readback: {
-        plan: {
-          current: true,
-          operations: [
-            {
-              connection_id: connectionId,
-              effect: 'would_change',
-              operation: 'connection.delete',
-              status: 'current'
-            }
-          ]
-        }
-      },
-      status: { command: 'completed', mutation: 'applied' }
-    })
-    const head = await f.store.head()
-    if (!head) throw new Error('Expected committed connection deletion')
-    expect(
-      objectGraphConnectionsOnPage(readAuthorityBoardDocument(head.document).graph, f.page.id)
-    ).toEqual([])
-
-    const noChange = responseResult(
-      await f.runtime.sendRpc(
-        planRequest(
-          await boardContext(f),
-          deletionPlan,
-          'request:delete-already-missing-persisted-connection'
-        )
-      )
-    )
-    expect(noChange).toMatchObject({
-      proof: { durable_readback: 'passed' },
-      readback: {
-        plan: {
-          current: true,
-          operations: [
-            {
-              connection_id: connectionId,
-              effect: 'already_satisfied',
-              operation: 'connection.delete',
-              status: 'current'
-            }
-          ]
-        }
-      }
-    })
-  })
-
   test('reverts and reapplies an exact persisted Board transaction by request id', async () => {
     const f = await fixture()
     const seeded = responseResult(
       await f.runtime.sendRpc(planRequest(await boardContext(f), mixedPlan()))
     )
-    const connectionId = (seeded.receipt as { connection_ids: string[] }).connection_ids[0]
-    if (!connectionId) throw new Error('Expected seeded connection')
+    const decisionId = (seeded.owner_ids as Record<string, string>).decision
+    if (!decisionId) throw new Error('Expected seeded decision card')
     const seededHead = await f.store.head()
     if (!seededHead) throw new Error('Expected seeded Board head')
-    const originalConnection = objectGraphConnectionsOnPage(
-      readAuthorityBoardDocument(seededHead.document).graph,
-      f.page.id
-    )[0]
-    if (!originalConnection) throw new Error('Expected original connection record')
+    const originalBounds = readAuthorityBoardDocument(seededHead.document).graph.getAbsoluteBounds(
+      decisionId
+    )
 
-    const deleteRequestId = 'request:delete-for-transaction-revert'
+    const moveRequestId = 'request:move-for-transaction-revert'
     await f.runtime.sendRpc(
       planRequest(
         await boardContext(f),
         {
           artifacts: [],
-          connections: [],
           contract: BOARD_BUILD_PLAN_CONTRACT,
-          operations: [{ connection_id: connectionId, kind: 'connection.delete' }]
+          operations: [{ kind: 'object.move', object_id: decisionId, x: 720, y: 480 }]
         },
-        deleteRequestId
+        moveRequestId
       )
     )
 
-    const revertRequestId = 'request:restore-deleted-transaction'
+    const revertRequestId = 'request:restore-moved-transaction'
     const revertRequest = planRequest(
       await boardContext(f),
       {
         artifacts: [],
-        connections: [],
         contract: BOARD_BUILD_PLAN_CONTRACT,
-        operations: [{ kind: 'transaction.revert', transaction_id: deleteRequestId }]
+        operations: [{ kind: 'transaction.revert', transaction_id: moveRequestId }]
       },
       revertRequestId
     )
@@ -1217,7 +984,7 @@ describe('local workspace authority Board build plans', () => {
               effect: 'would_change',
               operation: 'transaction.revert',
               status: 'current',
-              transaction_id: deleteRequestId
+              transaction_id: moveRequestId
             }
           ]
         }
@@ -1228,11 +995,8 @@ describe('local workspace authority Board build plans', () => {
     const restoredHead = await f.store.head()
     if (!restoredHead) throw new Error('Expected restored Board head')
     expect(
-      objectGraphConnectionsOnPage(
-        readAuthorityBoardDocument(restoredHead.document).graph,
-        f.page.id
-      )
-    ).toEqual([originalConnection])
+      readAuthorityBoardDocument(restoredHead.document).graph.getNode(decisionId)
+    ).toMatchObject({ x: originalBounds.x, y: originalBounds.y })
 
     const replay = responseResult(await f.runtime.sendRpc(revertRequest))
     expect(replay.status).toMatchObject({ command: 'completed', mutation: 'replayed' })
@@ -1243,27 +1007,29 @@ describe('local workspace authority Board build plans', () => {
         await boardContext(f),
         {
           artifacts: [],
-          connections: [],
           contract: BOARD_BUILD_PLAN_CONTRACT,
           operations: [{ kind: 'transaction.revert', transaction_id: revertRequestId }]
         },
-        'request:reapply-deleted-transaction'
+        'request:reapply-moved-transaction'
       )
     )
     const redoneHead = await f.store.head()
     if (!redoneHead) throw new Error('Expected reapplied Board head')
-    expect(
-      objectGraphConnectionsOnPage(readAuthorityBoardDocument(redoneHead.document).graph, f.page.id)
-    ).toEqual([])
+    expect(readAuthorityBoardDocument(redoneHead.document).graph.getNode(decisionId)).toMatchObject(
+      {
+        x: 720,
+        y: 480
+      }
+    )
     const recentTransactions = (
       (await boardContext(f)).request_ledger as {
         recent_transactions: Array<{ request_id: string }>
       }
     ).recent_transactions
     expect(recentTransactions.slice(0, 3)).toMatchObject([
-      { request_id: 'request:reapply-deleted-transaction' },
+      { request_id: 'request:reapply-moved-transaction' },
       { request_id: revertRequestId },
-      { request_id: deleteRequestId }
+      { request_id: moveRequestId }
     ])
   })
 
@@ -1272,18 +1038,21 @@ describe('local workspace authority Board build plans', () => {
     const seeded = responseResult(
       await f.runtime.sendRpc(planRequest(await boardContext(f), mixedPlan()))
     )
-    const connectionId = (seeded.receipt as { connection_ids: string[] }).connection_ids[0]
-    if (!connectionId) throw new Error('Expected seeded connection')
+    const decisionId = (seeded.owner_ids as Record<string, string>).decision
+    if (!decisionId) throw new Error('Expected seeded decision card')
     const beforeLiveMutation = await f.store.head()
     if (!beforeLiveMutation) throw new Error('Expected Board head before live mutation')
     const liveDocument = readAuthorityBoardDocument(beforeLiveMutation.document)
-    setObjectGraphConnectionsOnPage(liveDocument.graph, f.page.id, [])
-    const liveRequestId = 'request:live-delete-persisted-across-restart'
+    const original = liveDocument.graph.getNode(decisionId)
+    if (!original) throw new Error('Expected seeded decision node')
+    const originalX = original.x
+    liveDocument.graph.updateNode(decisionId, { x: originalX + 320 })
+    const liveRequestId = 'request:live-move-persisted-across-restart'
     await f.store.commit({
       document: writeAuthorityBoardDocument(liveDocument),
       expectedContentHash: beforeLiveMutation.contentHash,
       expectedRevision: beforeLiveMutation.revision,
-      requestId: 'workspace-save-live-delete',
+      requestId: 'workspace-save-live-move',
       transaction: {
         pageId: f.page.id,
         requestId: liveRequestId,
@@ -1308,11 +1077,10 @@ describe('local workspace authority Board build plans', () => {
           await boardContext(restarted),
           {
             artifacts: [],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             operations: [{ kind: 'transaction.revert', transaction_id: liveRequestId }]
           },
-          'request:restore-live-delete-after-restart'
+          'request:restore-live-move-after-restart'
         )
       )
     )
@@ -1324,14 +1092,11 @@ describe('local workspace authority Board build plans', () => {
     const restoredHead = await restartedStore.head()
     if (!restoredHead) throw new Error('Expected restored Board head')
     expect(
-      objectGraphConnectionsOnPage(
-        readAuthorityBoardDocument(restoredHead.document).graph,
-        f.page.id
-      ).map((connection) => connection.id)
-    ).toEqual([connectionId])
+      readAuthorityBoardDocument(restoredHead.document).graph.getNode(decisionId)
+    ).toMatchObject({ x: originalX })
   })
 
-  test('restores an exact deleted native subtree and its connection from transaction history', async () => {
+  test('restores an exact deleted native subtree from transaction history', async () => {
     const f = await fixture()
     const seeded = responseResult(
       await f.runtime.sendRpc(planRequest(await boardContext(f), mixedPlan()))
@@ -1346,7 +1111,6 @@ describe('local workspace authority Board build plans', () => {
       ...seededDocument.graph.getDescendants(decisionId)
     ].filter((node): node is SceneNode => node !== undefined)
     const originalPageChildren = [...(seededDocument.graph.getNode(f.page.id)?.childIds ?? [])]
-    const originalConnections = objectGraphConnectionsOnPage(seededDocument.graph, f.page.id)
     const deleteRequestId = 'request:delete-native-subtree'
 
     await f.runtime.sendRpc(
@@ -1354,7 +1118,6 @@ describe('local workspace authority Board build plans', () => {
         await boardContext(f),
         {
           artifacts: [],
-          connections: [],
           contract: BOARD_BUILD_PLAN_CONTRACT,
           operations: [{ kind: 'object.delete', object_id: decisionId }]
         },
@@ -1365,14 +1128,12 @@ describe('local workspace authority Board build plans', () => {
     if (!deletedHead) throw new Error('Expected deleted Board head')
     const deletedDocument = readAuthorityBoardDocument(deletedHead.document)
     expect(deletedDocument.graph.getNode(decisionId)).toBeUndefined()
-    expect(objectGraphConnectionsOnPage(deletedDocument.graph, f.page.id)).toEqual([])
 
     await f.runtime.sendRpc(
       planRequest(
         await boardContext(f),
         {
           artifacts: [],
-          connections: [],
           contract: BOARD_BUILD_PLAN_CONTRACT,
           operations: [{ kind: 'transaction.revert', transaction_id: deleteRequestId }]
         },
@@ -1386,109 +1147,6 @@ describe('local workspace authority Board build plans', () => {
     for (const original of originalNodes) {
       expect(restoredDocument.graph.getNode(original.id)).toEqual(original)
     }
-    expect(objectGraphConnectionsOnPage(restoredDocument.graph, f.page.id)).toEqual(
-      originalConnections
-    )
-  })
-
-  test('reconciles missing and already-satisfied connections in one authority commit', async () => {
-    const f = await fixture()
-    const initialContext = await boardContext(f)
-    const initial = responseResult(
-      await f.runtime.sendRpc(
-        planRequest(
-          initialContext,
-          {
-            artifacts: [
-              {
-                alias: 'first',
-                recipe: {
-                  body: 'First',
-                  kind: 'native_card',
-                  placement: { target: { kind: 'point', x: 200, y: 240 } },
-                  title: 'First'
-                }
-              },
-              {
-                alias: 'second',
-                recipe: {
-                  body: 'Second',
-                  kind: 'native_card',
-                  placement: { target: { kind: 'point', x: 600, y: 240 } },
-                  title: 'Second'
-                }
-              },
-              {
-                alias: 'third',
-                recipe: {
-                  body: 'Third',
-                  kind: 'native_card',
-                  placement: { target: { kind: 'point', x: 1000, y: 240 } },
-                  title: 'Third'
-                }
-              }
-            ],
-            connections: [
-              {
-                kind: 'visual',
-                source: { alias: 'second' },
-                target: { alias: 'third' }
-              }
-            ],
-            contract: BOARD_BUILD_PLAN_CONTRACT
-          },
-          'request:seed-connection-reconciliation'
-        )
-      )
-    )
-    const ids = initial.owner_ids as Record<string, string>
-    const existingId = (initial.receipt as { connection_ids: string[] }).connection_ids[0]
-    if (!existingId) throw new Error('Expected seeded connection')
-    const context = await boardContext(f)
-    const commit = spyOn(f.store, 'commit')
-
-    const applied = responseResult(
-      await f.runtime.sendRpc(
-        planRequest(
-          context,
-          {
-            artifacts: [],
-            connections: [
-              {
-                kind: 'visual',
-                source: { object_id: ids.first },
-                target: { object_id: ids.second }
-              },
-              {
-                kind: 'visual',
-                source: { object_id: ids.second },
-                target: { object_id: ids.third }
-              }
-            ],
-            contract: BOARD_BUILD_PLAN_CONTRACT
-          },
-          'request:reconcile-existing-connection'
-        )
-      )
-    )
-
-    expect(commit).toHaveBeenCalledTimes(1)
-    expect(applied.receipt).toMatchObject({
-      connection_ids: [expect.stringMatching(/^object-connection:/u), existingId],
-      connection_results: [
-        {
-          connection_id: expect.stringMatching(/^object-connection:/u),
-          effect: 'would_change',
-          index: 0
-        },
-        { connection_id: existingId, effect: 'already_satisfied', index: 1 }
-      ]
-    })
-    const head = await f.store.head()
-    if (!head) throw new Error('Expected committed reconciled connection plan')
-    const document = readAuthorityBoardDocument(head.document)
-    expect(objectGraphConnectionsOnPage(document.graph, f.page.id)).toHaveLength(2)
-    commit.mockRestore()
   })
 
   test('replays the same request without a commit and rejects a changed digest', async () => {
@@ -1503,7 +1161,6 @@ describe('local workspace authority Board build plans', () => {
       owner_ids: applied.owner_ids,
       persistence: { authority_revision: 2 },
       receipt: {
-        connection_ids: (applied.receipt as { connection_ids: string[] }).connection_ids,
         idempotent_replay: true
       },
       status: { mutation: 'replayed' }
@@ -1520,7 +1177,7 @@ describe('local workspace authority Board build plans', () => {
     commit.mockRestore()
   })
 
-  test('stages an aliased Code Object and connection in one commit with exact replay', async () => {
+  test('stages an aliased Code Object in one commit with exact replay', async () => {
     const f = await fixture()
     const firstContext = await boardContext(f)
     const commit = spyOn(f.store, 'commit')
@@ -1558,19 +1215,6 @@ describe('local workspace authority Board build plans', () => {
     })
     const ownerIds = applied.owner_ids as Record<string, string>
     expect(Object.keys(ownerIds).sort()).toEqual(['app', 'brief'])
-    expect((applied.receipt as { connection_ids: string[] }).connection_ids).toHaveLength(1)
-    const head = await f.store.head()
-    if (!head) throw new Error('Expected committed named-port plan')
-    const document = readAuthorityBoardDocument(head.document)
-    expect(readObjectGraphPorts(document.graph.getNode(ownerIds.app))).toMatchObject([
-      { id: 'brief', side: 'left' },
-      { id: 'status', side: 'right' }
-    ])
-    expect(objectGraphConnectionsOnPage(document.graph, f.page.id)[0]).toMatchObject({
-      targetNodeId: ownerIds.app,
-      targetPortId: 'brief'
-    })
-
     const replayed = responseResult(
       await f.runtime.sendRpc(
         planRequest(await boardContext(f), codeObjectPlan(), 'request:code-object-plan')
@@ -1608,17 +1252,8 @@ describe('local workspace authority Board build plans', () => {
     })
     const ownerId = (applied.owner_ids as Record<string, string>).flow
     expect(ownerId).toBeString()
-    const source = responseResult(
-      await f.runtime.sendRpc({
-        command: 'get_mermaid_source',
-        args: {
-          ...(context.board_build_base as RpcResult),
-          owner_id: ownerId
-        }
-      })
-    )
+    const source = await savedMermaidSource(f, ownerId)
     expect(source).toMatchObject({
-      execution_surface: 'local_workspace_authority',
       owner_id: ownerId,
       reconciliation: { status: 'current' },
       source: 'flowchart LR\n  Observe --> Decide --> Improve'
@@ -1672,15 +1307,7 @@ describe('local workspace authority Board build plans', () => {
       x: beforeBounds.x,
       y: beforeBounds.y
     })
-    const source = responseResult(
-      await f.runtime.sendRpc({
-        command: 'get_mermaid_source',
-        args: {
-          ...((await boardContext(f)).board_build_base as RpcResult),
-          owner_id: ownerId
-        }
-      })
-    )
+    const source = await savedMermaidSource(f, ownerId)
     expect(source).toMatchObject({
       owner_id: ownerId,
       reconciliation: { status: 'current' },
@@ -1773,7 +1400,7 @@ describe('local workspace authority Board build plans', () => {
     })
   })
 
-  test('fails closed when connection compilation rejects an exact endpoint', async () => {
+  test('fails closed for ambiguous or reserved plan requests', async () => {
     const f = await fixture()
     const context = await boardContext(f)
     const before = await f.store.head()
@@ -1781,14 +1408,6 @@ describe('local workspace authority Board build plans', () => {
     const beforeDocument = readAuthorityBoardDocument(before.document)
     const beforeNodeIds = [...beforeDocument.graph.nodes.keys()].sort()
     const commit = spyOn(f.store, 'commit')
-    const invalid = mixedPlan()
-    invalid.connections[0].target = { object_id: 'missing:object' }
-
-    await expect(
-      f.runtime.sendRpc(planRequest(context, invalid, 'request:invalid-plan'))
-    ).rejects.toThrow('is not a visible object on the exact page')
-
-    expect(commit).not.toHaveBeenCalled()
     await expect(
       f.runtime.sendRpc({
         ...planRequest(context, mixedPlan(), 'request:ambiguous-plan'),
@@ -1803,17 +1422,17 @@ describe('local workspace authority Board build plans', () => {
         planRequest(context, mixedPlan(), '__openpencil_board_plan__:reserved-public-request')
       )
     ).rejects.toThrow('reserved internal Board plan prefix')
+    expect(commit).not.toHaveBeenCalled()
     const after = await f.store.head()
     if (!after) throw new Error('Expected Board plan authority head after refusal')
     const afterDocument = readAuthorityBoardDocument(after.document)
     expect(after.revision).toBe(before.revision)
     expect(after.contentHash).toBe(before.contentHash)
     expect([...afterDocument.graph.nodes.keys()].sort()).toEqual(beforeNodeIds)
-    expect(objectGraphConnectionsOnPage(afterDocument.graph, f.page.id)).toEqual([])
     expect(
       afterDocument.graph
         .getNode(f.page.id)
-        ?.pluginData.some((entry) => entry.key.includes('request:invalid-plan'))
+        ?.pluginData.some((entry) => entry.key.includes('request:ambiguous-plan'))
     ).toBe(false)
     commit.mockRestore()
   })
@@ -1847,7 +1466,6 @@ describe('local workspace authority Board build plans', () => {
                 }
               }))
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             layout: {
               anchor: { alias: 'title' },
@@ -1883,7 +1501,7 @@ describe('local workspace authority Board build plans', () => {
     })
   })
 
-  test('commits measured schema ranks and their data connections in one revision', async () => {
+  test('commits measured schema ranks in one revision', async () => {
     const f = await fixture()
     const context = await boardContext(f)
     const applied = responseResult(
@@ -1910,35 +1528,6 @@ describe('local workspace authority Board build plans', () => {
                   width: 360
                 }
               }))
-            ],
-            connections: [
-              {
-                automatic: false,
-                kind: 'data',
-                label: 'owns',
-                source: { alias: 'users' },
-                source_port: 'right',
-                target: { alias: 'workspaces' },
-                target_port: 'left'
-              },
-              {
-                automatic: false,
-                kind: 'data',
-                label: 'joins',
-                source: { alias: 'users' },
-                source_port: 'right',
-                target: { alias: 'memberships' },
-                target_port: 'left'
-              },
-              {
-                automatic: false,
-                kind: 'data',
-                label: 'contains',
-                source: { alias: 'workspaces' },
-                source_port: 'right',
-                target: { alias: 'projects' },
-                target_port: 'left'
-              }
             ],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             layout: {
@@ -1977,7 +1566,6 @@ describe('local workspace authority Board build plans', () => {
       },
       status: { mutation: 'applied' }
     })
-    expect((applied.receipt as RpcResult).connection_ids).toHaveLength(3)
   })
 
   test('fails a blocked grid as one group without committing partial members', async () => {
@@ -2002,7 +1590,6 @@ describe('local workspace authority Board build plans', () => {
                 recipe: { body: 'Second grid card.', kind: 'native_card', title: 'Two' }
               }
             ],
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             layout: {
               anchor: { object_id: f.gridAnchorId },
@@ -2043,7 +1630,6 @@ describe('local workspace authority Board build plans', () => {
                 width: 240
               }
             })),
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             layout: {
               anchor: region,
@@ -2093,7 +1679,6 @@ describe('local workspace authority Board build plans', () => {
                 width: 240
               }
             })),
-            connections: [],
             contract: BOARD_BUILD_PLAN_CONTRACT,
             layout: {
               anchor: region,
@@ -2146,7 +1731,6 @@ describe('local workspace authority Board build plans', () => {
           }
         }
       ],
-      connections: [],
       contract: BOARD_BUILD_PLAN_CONTRACT
     }
 

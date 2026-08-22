@@ -13,19 +13,13 @@ import {
 
 import AppSelect from '@/components/ui/AppSelect.vue'
 
-import ComputedBoxModel from '@/components/properties/LayoutSection/ComputedBoxModel.vue'
 import VariableScrubInput from '@/components/properties/VariableScrubInput.vue'
 import ClipContentControl from '@/components/properties/LayoutSection/ClipContentControl.vue'
 import PaddingControls from '@/components/properties/LayoutSection/PaddingControls.vue'
 import { useSelectUI } from '@/components/ui/select'
 import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
 
-import type { DesignStyleDeclaration } from '@open-pencil/dom-css'
 import type { LayoutDirection, LayoutAlign } from '@open-pencil/scene-graph'
-
-const { computedStyle } = defineProps<{
-  computedStyle?: DesignStyleDeclaration
-}>()
 
 const ctx = useLayoutControlsContext()
 const gapFieldRef = ref<HTMLElement | null>(null)
@@ -221,7 +215,7 @@ function isAlignmentActive(primary: LayoutAlign, counter: string) {
   <PaddingControls />
   <ClipContentControl />
 
-  <div class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
+  <div class="mt-2">
     <div>
       <label class="mb-1 block text-[11px] text-muted">{{ panels.alignment }}</label>
       <div data-test-id="layout-alignment-grid" class="grid w-fit grid-cols-3 gap-0.5">
@@ -240,7 +234,5 @@ function isAlignmentActive(primary: LayoutAlign, counter: string) {
         </button>
       </div>
     </div>
-
-    <ComputedBoxModel :computed-style="computedStyle" :node="ctx.node" />
   </div>
 </template>

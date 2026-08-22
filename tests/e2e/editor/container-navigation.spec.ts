@@ -1,9 +1,9 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { readTestSelectedIds } from '#tests/helpers/object-graph'
+import { readTestSelectedIds } from '#tests/helpers/code-object'
 
 const editor = useEditorSetupWithClear('/?test&no-rulers')
 
-test('enters container traversal explicitly and navigates child containers with arrows', async () => {
+test('container traversal takes arrow priority over ordinary object navigation', async () => {
   const target = await editor.page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
@@ -90,4 +90,98 @@ test('enters container traversal explicitly and navigates child containers with 
       )
     )
     .toBe(beforeNudge + 10)
+})
+
+test('live Containers mode takes arrow priority over Board object navigation', async () => {
+  const target = await editor.page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const {
+      liveInspectorDocument,
+      selectLiveInspectorNode,
+      setLiveInspectorActiveFrame,
+      setLiveInspectorDirectCommandTarget,
+      setLiveInspectorInteractionMode
+    } = await import('/src/app/smylr-live-inspector/session.ts')
+    const frame = store.graph.createNode('FRAME', store.state.currentPageId, {
+      height: 360,
+      name: 'Live app frame',
+      width: 480,
+      x: 120,
+      y: 120
+    })
+    const neighbor = store.graph.createNode('RECTANGLE', store.state.currentPageId, {
+      height: 120,
+      name: 'Board neighbor',
+      width: 160,
+      x: 760,
+      y: 120
+    })
+    const child = {
+      children: [],
+      id: 'live-child',
+      label: 'Live child',
+      rect: { height: 180, width: 240, x: 40, y: 40 },
+      tagName: 'section'
+    }
+    const root = {
+      children: [child],
+      id: 'live-root',
+      label: 'Live root',
+      rect: { height: 360, width: 480, x: 0, y: 0 },
+      tagName: 'main'
+    }
+    store.select([frame.id])
+    setLiveInspectorActiveFrame(frame.id)
+    setLiveInspectorDirectCommandTarget(frame.id, () => true)
+    liveInspectorDocument.value = {
+      capturedAt: new Date(0).toISOString(),
+      route: '/test',
+      selectedId: root.id,
+      title: 'Keyboard navigation test',
+      tree: root
+    }
+    setLiveInspectorInteractionMode('select')
+    selectLiveInspectorNode(root.id)
+    store.undo.clear()
+    return {
+      frameId: frame.id,
+      framePosition: { x: frame.x, y: frame.y },
+      neighborId: neighbor.id
+    }
+  })
+
+  await editor.page.keyboard.press('ArrowRight')
+
+  await expect
+    .poll(() =>
+      editor.page.evaluate(async () => {
+        const { liveInspectorSelectedId } = await import('/src/app/smylr-live-inspector/session.ts')
+        return liveInspectorSelectedId.value
+      })
+    )
+    .toBe('live-child')
+  await expect.poll(() => readTestSelectedIds(editor.page)).toEqual([target.frameId])
+  expect(
+    await editor.page.evaluate((id) => {
+      const node = window.openPencil?.getStore?.().graph.getNode(id)
+      return node ? { x: node.x, y: node.y } : null
+    }, target.frameId)
+  ).toEqual(target.framePosition)
+  expect(await readTestSelectedIds(editor.page)).not.toContain(target.neighborId)
+
+  await editor.page.evaluate(async (frameId) => {
+    const {
+      liveInspectorActiveFrameId,
+      liveInspectorDocument,
+      liveInspectorInteractionMode,
+      liveInspectorSelectedId,
+      setLiveInspectorDirectCommandTarget
+    } = await import('/src/app/smylr-live-inspector/session.ts')
+    setLiveInspectorDirectCommandTarget(frameId, null)
+    liveInspectorInteractionMode.value = 'frame'
+    liveInspectorDocument.value = null
+    liveInspectorSelectedId.value = null
+    liveInspectorActiveFrameId.value = null
+  }, target.frameId)
 })

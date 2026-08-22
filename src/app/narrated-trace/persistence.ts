@@ -10,7 +10,8 @@ export type PersistedNarratedTraceGesture = {
   }
   candidates: {
     count: number
-    items: Array<{ stableId: string }>
+    /** stableId is the precise hit (a leaf, or content inside a Code Object); ownerId is its page-owned container. */
+    items: Array<{ ownerId?: string; stableId: string }>
     primaryTargetId?: string
     truncated: boolean
   }
@@ -40,30 +41,18 @@ export function persistedNarratedTraceGesture(
   if (!scope?.workspaceId || !gesture || !pageRegion) return null
   const startedAt = Date.parse(session.startedAt)
   if (!Number.isFinite(startedAt)) return null
-  const ownerIds = [
-    ...new Set(
-      gesture.candidates.flatMap((candidate) =>
-        candidate.ownerId?.trim()
-          ? [candidate.ownerId.trim()]
-          : candidate.stableId.trim()
-            ? [candidate.stableId.trim()]
-            : []
-      )
-    )
-  ]
-  const items = ownerIds.slice(0, 25)
-  const hasCompleteOwnerContract = gesture.candidates.every((candidate) =>
-    candidate.ownerId?.trim()
-  )
+  // Persist the precise hits, not just their page-owned owners: collapsing here permanently
+  // destroys leaf and Code Object internal IDs that workers need to bind "this exact thing".
+  const seenLeafIds = new Set<string>()
+  const preciseItems = gesture.candidates.flatMap((candidate) => {
+    const stableId = candidate.stableId.trim()
+    if (!stableId || seenLeafIds.has(stableId)) return []
+    seenLeafIds.add(stableId)
+    const ownerId = candidate.ownerId?.trim()
+    return [{ ...(ownerId && ownerId !== stableId ? { ownerId } : {}), stableId }]
+  })
+  const items = preciseItems.slice(0, 25)
   const primaryTargetId = gesture.primaryTargetId?.trim()
-  const primaryOwnerId = primaryTargetId
-    ? (gesture.candidates
-        .find(
-          (candidate) =>
-            candidate.stableId === primaryTargetId || candidate.ownerId === primaryTargetId
-        )
-        ?.ownerId?.trim() ?? primaryTargetId)
-    : undefined
   return {
     boardOrigin: {
       contentDocumentId: scope.documentId,
@@ -72,12 +61,12 @@ export function persistedNarratedTraceGesture(
     },
     candidates: {
       count: items.length,
-      items: items.map((stableId) => ({ stableId })),
-      ...(primaryOwnerId ? { primaryTargetId: primaryOwnerId } : {}),
+      items,
+      ...(primaryTargetId ? { primaryTargetId } : {}),
       truncated:
         gesture.candidatesTruncated ||
-        ownerIds.length > items.length ||
-        (!hasCompleteOwnerContract && gesture.candidateCount > items.length)
+        preciseItems.length > items.length ||
+        gesture.candidateCount > preciseItems.length
     },
     capturedAt: new Date(startedAt + event.atMs).toISOString(),
     contract: 'trace-gesture-agent/v1',

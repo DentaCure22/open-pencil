@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import type { EvaluationConfiguration } from './evaluation-config'
 import {
   EVAL_CONTEXT_INVENTORY_SCHEMA_VERSION,
+  parseEvalEvent,
   type EvalContextComponent,
   type EvalContextComponentKind,
   type EvalContextInventory,
@@ -13,7 +14,6 @@ import {
   type EvalTelemetryAvailability,
   type EvalTelemetryValue
 } from './schema'
-import { parseEvalEvent } from './schema'
 
 export const EVAL_RUN_TELEMETRY_ARTIFACT_SCHEMA_VERSION =
   'prompt-to-board-run-telemetry/v1' as const
@@ -342,11 +342,15 @@ export function deriveEvalRunTelemetry(events: readonly EvalEvent[]): EvalRunTel
           (event) =>
             event.kind === 'agent_message_completed' && event.sequence < turnCompleted.sequence
         )
-  const generatedFinalMissingReason = straightThroughRelease
-    ? 'Straight-through release is authoritative; pre-build agent commentary is not a generated final.'
-    : !turnCompleted
-      ? 'A completed Codex turn was not observed, so an agent message cannot be identified as the generated final.'
-      : 'No completed generated final was observed before codex_turn_completed.'
+  let generatedFinalMissingReason =
+    'No completed generated final was observed before codex_turn_completed.'
+  if (straightThroughRelease) {
+    generatedFinalMissingReason =
+      'Straight-through release is authoritative; pre-build agent commentary is not a generated final.'
+  } else if (!turnCompleted) {
+    generatedFinalMissingReason =
+      'A completed Codex turn was not observed, so an agent message cannot be identified as the generated final.'
+  }
   const usage = recordData(turnCompleted, 'usage')
   const usageScope = turnCompleted?.data.usage_scope
   const usageMissingReason =

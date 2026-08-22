@@ -216,17 +216,17 @@ function ensureSubtreePictureCacheScope(
   graph: SceneGraph,
   sceneVersion: number
 ): void {
-  if (
-    r.subtreePictureCachePageId === r.pageId &&
+  const samePage = r.subtreePictureCachePageId === r.pageId
+  const sameVersion =
     r.subtreePictureCacheSceneVersion === sceneVersion &&
     r.subtreePictureCachePositionPreviewVersion === graph.positionPreviewVersion
-  ) {
-    return
-  }
-  clearSubtreePictureCache(r)
+  if (samePage && sameVersion) return
+
+  if (!samePage || !r.subtreePictureCacheTargetedInvalidation) clearSubtreePictureCache(r)
   r.subtreePictureCachePageId = r.pageId
   r.subtreePictureCacheSceneVersion = sceneVersion
   r.subtreePictureCachePositionPreviewVersion = graph.positionPreviewVersion
+  r.subtreePictureCacheTargetedInvalidation = false
 }
 
 function cachedSubtreePicture(
@@ -238,14 +238,7 @@ function cachedSubtreePicture(
 ) {
   ensureSubtreePictureCacheScope(r, graph, sceneVersion)
   const cached = r.subtreePictureCache.get(childId)
-  if (
-    cached &&
-    cached.pageId === r.pageId &&
-    cached.sceneVersion === sceneVersion &&
-    cached.positionPreviewVersion === graph.positionPreviewVersion
-  ) {
-    return cached.picture
-  }
+  if (cached?.pageId === r.pageId) return cached.picture
 
   cached?.picture.delete()
   if (!bounds) return null
@@ -267,9 +260,7 @@ function cachedSubtreePicture(
   recorder.delete()
   r.subtreePictureCache.set(childId, {
     picture,
-    pageId: r.pageId,
-    sceneVersion,
-    positionPreviewVersion: graph.positionPreviewVersion
+    pageId: r.pageId
   })
   return picture
 }

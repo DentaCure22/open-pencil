@@ -57,7 +57,10 @@ export async function writeJsonHistory(
   contentHash: string,
   value: unknown
 ): Promise<void> {
-  await writeJsonFile(path.join(historyPath, historyFileName(revision, contentHash)), value)
+  await writeFileAtomically(
+    path.join(historyPath, historyFileName(revision, contentHash)),
+    `${JSON.stringify(value)}\n`
+  )
 }
 
 export async function readJsonHistory(
@@ -74,6 +77,23 @@ export async function readJsonHistory(
     if (errorCode(error) === 'ENOENT') return null
     throw error
   }
+}
+
+export async function findJsonHistoryRevisionByHash(
+  historyPath: string,
+  contentHash: string
+): Promise<number | null> {
+  let matchingFileNames: string[]
+  try {
+    matchingFileNames = (await readdir(historyPath)).filter(
+      (fileName) => fileName.endsWith(`-${contentHash}.json`) && /^\d{10}-/.test(fileName)
+    )
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return null
+    throw error
+  }
+  const fileName = matchingFileNames.sort().at(-1)
+  return fileName ? Number.parseInt(fileName.slice(0, 10), 10) : null
 }
 
 export async function pruneJsonHistory(historyPath: string, limit: number): Promise<void> {

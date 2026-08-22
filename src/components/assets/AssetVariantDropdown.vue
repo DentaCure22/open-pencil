@@ -166,14 +166,10 @@ function openVariant(variant: AssetVariant) {
 
 function computedPreviewSrc(asset: InteractiveAsset, variantId: string | null) {
   if (asset.kind !== 'computed') return ''
-  return `${window.location.origin}${smylrComponentPreviewRoute(
-    asset,
-    variantId ?? undefined,
-    {
-      embed: true,
-      preview: true
-    }
-  )}`
+  return `${window.location.origin}${smylrComponentPreviewRoute(asset, variantId ?? undefined, {
+    embed: true,
+    preview: true
+  })}`
 }
 
 function usesTallComputedPreview() {

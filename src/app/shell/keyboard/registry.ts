@@ -6,8 +6,15 @@ import { editorCommandMetadata } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
 import { codeObjectViewportInsets, isCodeObjectFrame } from '@/app/code-object/model'
+import { executeClipboardCommand } from '@/app/editor/clipboard/system'
 import { TOOL_SHORTCUTS } from '@/app/editor/session'
-import { showTracePanel, TRACE_KEYBINDING } from '@/app/narrated-trace'
+import {
+  activateNarratedTraceAnnotationTool,
+  NARRATED_TRACE_ANNOTATION_SHORTCUTS,
+  setNarratedTraceAnnotationTool,
+  showTracePanel,
+  TRACE_KEYBINDING
+} from '@/app/narrated-trace'
 import { isEditing } from '@/app/shell/keyboard/focus'
 import { bindSpaceHandTool } from '@/app/shell/keyboard/space-tool'
 import type {
@@ -20,6 +27,7 @@ type ShortcutAction = (options: KeyboardShortcutRunOptions) => void
 
 type ShortcutDefinition = {
   allowWhenEditing?: boolean
+  allowWhenLoading?: boolean
   id: string
   keys: string | string[]
   run: ShortcutAction
@@ -62,7 +70,22 @@ function bindToolShortcuts(bindings: KeyBindingMap, options: KeyboardShortcutRun
     bindings[code] = (event: KeyboardEvent) => {
       event.preventDefault()
       options.spaceTool.resetToolBeforeSpace()
+      setNarratedTraceAnnotationTool('none')
       options.store.setTool(tool)
+    }
+  }
+}
+
+function bindNarratedTraceToolShortcuts(
+  bindings: KeyBindingMap,
+  options: KeyboardShortcutRunOptions
+) {
+  for (const tool of ['ink', 'focus'] as const) {
+    const shortcut = NARRATED_TRACE_ANNOTATION_SHORTCUTS[tool]
+    bindings[shortcut.keybinding] = (event: KeyboardEvent) => {
+      event.preventDefault()
+      options.spaceTool.resetToolBeforeSpace()
+      void activateNarratedTraceAnnotationTool(options.store, tool)
     }
   }
 }
@@ -79,7 +102,11 @@ function zoomToSelection(options: KeyboardShortcutRunOptions) {
 }
 
 export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
-  const spaceTool = bindSpaceHandTool(options.inputFocused, options.store, options.enabled)
+  const spaceTool = bindSpaceHandTool(
+    options.inputFocused,
+    options.store,
+    () => options.enabled() && !options.store.state.loading
+  )
   const runOptions = (event: KeyboardEvent): KeyboardShortcutRunOptions => ({
     ...options,
     keyEvent: event,
@@ -108,6 +135,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     },
     ...commandShortcuts('selection.ungroup', 'edit.redo'),
     {
+      allowWhenLoading: true,
       id: 'toggle-ui',
       keys: appMenuTinykeysShortcut('toggle-ui') ?? '$mod+Backslash',
       run: ({ actions }) => actions.toggleUI()
@@ -115,24 +143,30 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     { id: 'toggle-ai', keys: '$mod+KeyJ', run: ({ actions }) => actions.toggleAI() },
     {
       allowWhenEditing: true,
+      allowWhenLoading: true,
       id: 'open-trace',
       keys: TRACE_KEYBINDING,
       run: showTracePanel
     },
     {
+      allowWhenLoading: true,
       id: 'close-tab',
       keys: appMenuTinykeysShortcut('close') ?? '$mod+KeyW',
       run: ({ closeActiveTab }) => closeActiveTab()
     },
-    { id: 'new-tab', keys: ['$mod+KeyN', '$mod+KeyT'], run: ({ createTab }) => createTab() },
-    ...commandShortcuts(
-      'edit.undo',
-      'view.zoom100',
-      'view.zoomFit',
-      'selection.duplicate',
-      'selection.selectAll'
-    ),
     {
+      allowWhenLoading: true,
+      id: 'new-tab',
+      keys: ['$mod+KeyN', '$mod+KeyT'],
+      run: ({ createTab }) => createTab()
+    },
+    ...commandShortcuts('edit.undo', 'selection.duplicate', 'selection.selectAll'),
+    ...commandShortcuts('view.zoom100', 'view.zoomFit').map((shortcut) => ({
+      ...shortcut,
+      allowWhenLoading: true
+    })),
+    {
+      allowWhenLoading: true,
       id: 'view.zoomSelection',
       keys: editorCommandMetadata('view.zoomSelection').keybinding ?? [],
       run: zoomToSelection
@@ -158,17 +192,33 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     { id: 'delete', keys: 'Delete', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete-alt', keys: 'Alt+Delete', run: ({ actions }) => actions.smartDelete(true) },
     { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEnterText() },
-    { id: 'escape', keys: 'Escape', run: ({ actions }) => actions.escapeOrDeselect() }
+    {
+      allowWhenLoading: true,
+      id: 'escape',
+      keys: 'Escape',
+      run: ({ actions }) => actions.escapeOrDeselect()
+    }
   ]
 
   const bindings: KeyBindingMap = {}
   const editingSafeBindings = new Set<string>()
+  const loadingSafeBindings = new Set<string>()
   bindToolShortcuts(bindings, runOptions(new KeyboardEvent('keydown')))
+  bindNarratedTraceToolShortcuts(bindings, runOptions(new KeyboardEvent('keydown')))
+  bindShortcut(bindings, '$mod+KeyC', (event) => {
+    event.preventDefault()
+    void executeClipboardCommand(options.store, 'copy')
+  })
 
   for (const shortcut of shortcuts) {
     if (shortcut.allowWhenEditing) {
       for (const keys of Array.isArray(shortcut.keys) ? shortcut.keys : [shortcut.keys]) {
         editingSafeBindings.add(keys)
+      }
+    }
+    if (shortcut.allowWhenLoading) {
+      for (const keys of Array.isArray(shortcut.keys) ? shortcut.keys : [shortcut.keys]) {
+        loadingSafeBindings.add(keys)
       }
     }
     bindShortcut(bindings, shortcut.keys, (event) => {
@@ -184,6 +234,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
         keys,
         (event: KeyboardEvent) => {
           if (!options.enabled()) return
+          if (options.store.state.loading && !loadingSafeBindings.has(keys)) return
           if (shouldIgnoreShortcut(event, options) && !editingSafeBindings.has(keys)) return
           handler(event)
         }

@@ -172,4 +172,5 @@ export function commitResizePreview(d: DragResize, editor: Editor) {
       ...(d.origVectorNetwork || node.vectorNetwork ? { vectorNetwork: d.origVectorNetwork } : {})
     })
   }
+  editor.detachOutsideFrameMembership([d.nodeId])
 }

@@ -71,26 +71,25 @@ describe('local workspace authority editor history bridge', () => {
     const reverts: LocalWorkspaceAuthorityTransactionRevert[] = []
     let pending: LocalWorkspaceAuthorityTransactionRevert | null = null
     let revision = 41
-    let bridge: ReturnType<typeof createLocalWorkspaceAuthorityHistoryBridge>
-
-    bridge = createLocalWorkspaceAuthorityHistoryBridge({
-      onError: (error) => {
-        throw error
-      },
-      revertTransaction: async (input) => {
-        reverts.push(input)
-        pending = input
-      },
-      store: fixture.store,
-      synchronize: async () => {
-        if (!pending) return false
-        revision += 1
-        fixture.addTransaction(pending.requestId, revision)
-        pending = null
-        bridge.applyHead(fixture.head(revision))
-        return true
-      }
-    })
+    const bridge: ReturnType<typeof createLocalWorkspaceAuthorityHistoryBridge> =
+      createLocalWorkspaceAuthorityHistoryBridge({
+        onError: (error) => {
+          throw error
+        },
+        revertTransaction: async (input) => {
+          reverts.push(input)
+          pending = input
+        },
+        store: fixture.store,
+        synchronize: async () => {
+          if (!pending) return false
+          revision += 1
+          fixture.addTransaction(pending.requestId, revision)
+          pending = null
+          bridge.applyHead(fixture.head(revision))
+          return true
+        }
+      })
 
     fixture.addTransaction('agent-build-1', revision)
     bridge.applyHead(fixture.head(revision))

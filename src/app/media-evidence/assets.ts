@@ -15,3 +15,15 @@ export function hasAssetReference(editor: Editor, hash: string): boolean {
   }
   return false
 }
+
+export function restoreAssetNodes(
+  editor: Editor,
+  pageId: string,
+  assets: readonly { bytes: Uint8Array; hash: string }[],
+  snapshots: readonly SceneNode[]
+): void {
+  for (const asset of assets) editor.graph.images.set(asset.hash, asset.bytes)
+  for (const snapshot of snapshots) {
+    editor.graph.createNode(snapshot.type, pageId, structuredClone(snapshot))
+  }
+}

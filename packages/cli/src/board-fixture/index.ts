@@ -1,7 +1,11 @@
 import { defineCommand } from 'citty'
 
 import { rpcEnvelopeExact, type AppRpcTarget } from '#cli/app-client'
-import { appTargetOptions, appTargetRpcArgs, type AppTargetCliArgs } from '#cli/app-target'
+import {
+  exactAppTargetOptions,
+  exactAppTargetRpcArgs,
+  type AppTargetCliArgs
+} from '#cli/app-target'
 import { bold, entity, fmtList, printError } from '#cli/format'
 
 type FixtureOperation = 'assert' | 'capture' | 'reset'
@@ -14,16 +18,8 @@ type FixtureArgs = AppTargetCliArgs & {
   'request-id'?: string
 }
 
-const exactTargetOptions = {
-  'content-document-id': { ...appTargetOptions['content-document-id'], required: true },
-  'document-id': { ...appTargetOptions['document-id'], required: true },
-  'page-id': { ...appTargetOptions['page-id'], required: true },
-  'runtime-instance-id': { ...appTargetOptions['runtime-instance-id'], required: true },
-  'workspace-id': { ...appTargetOptions['workspace-id'], required: true }
-} as const
-
 const sharedOptions = {
-  ...exactTargetOptions,
+  ...exactAppTargetOptions,
   'context-token': {
     type: 'string',
     description: 'Exact token returned by board context',
@@ -38,17 +34,6 @@ function required(value: string | undefined, flag: string): string {
   return result
 }
 
-function exactTarget(args: FixtureArgs): Record<string, unknown> {
-  return {
-    ...appTargetRpcArgs(args),
-    content_document_id: required(args['content-document-id'], '--content-document-id'),
-    document_id: required(args['document-id'], '--document-id'),
-    page_id: required(args['page-id'], '--page-id'),
-    runtime_instance_id: required(args['runtime-instance-id'], '--runtime-instance-id'),
-    workspace_id: required(args['workspace-id'], '--workspace-id')
-  }
-}
-
 function revision(value: string | undefined): number {
   const result = Number(required(value, '--expected-revision'))
   if (!Number.isInteger(result) || result < 0) {
@@ -59,7 +44,7 @@ function revision(value: string | undefined): number {
 
 export function boardFixtureRpcArgs(args: FixtureArgs): Record<string, unknown> {
   return {
-    ...exactTarget(args),
+    ...exactAppTargetRpcArgs(args, true),
     context_token: required(args['context-token'], '--context-token'),
     operation: args.operation,
     ...(args.operation === 'capture'

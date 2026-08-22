@@ -44,7 +44,7 @@ async function selectDemoCard(page: Parameters<typeof test>[0]['page'], canvas: 
   await canvas.waitForRender()
 
   await expect(page.getByTestId('design-panel-single')).toBeVisible()
-  await expect(page.getByTestId('design-node-header')).toContainText('Card')
+  await expect(page.getByTestId('design-node-header')).toHaveCount(0)
 }
 
 async function getSelectedFill(page: Parameters<typeof test>[0]['page']) {

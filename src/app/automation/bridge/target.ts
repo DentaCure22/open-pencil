@@ -153,13 +153,25 @@ function defaultWorkspaceTab(tabs: Tab[]): Tab | undefined {
   throw new Error(`Multiple OpenPencil workspaces are open: ${workspaceIds.join(', ')}`)
 }
 
+/**
+ * The durable content document id names the document itself; the tab id is only the window
+ * handle. Agents coming from the persisted authority hold the durable id, so both must address
+ * the same tab.
+ */
+function tabMatchesDocumentId(tab: Tab, requestedDocumentId: string): boolean {
+  if (tab.id === requestedDocumentId) return true
+  const durableDocumentId =
+    readOpenPencilWorkspaceIdentity(tab.store.graph)?.documentId ?? tab.store.graph.rootId
+  return durableDocumentId === requestedDocumentId
+}
+
 function validateResolvedTab(
   tab: Tab,
   requestedDocumentId: string | undefined,
   requestedDocumentName: string | undefined,
   requestedWorkspaceId: string | undefined
 ) {
-  if (requestedDocumentId && tab.id !== requestedDocumentId) {
+  if (requestedDocumentId && !tabMatchesDocumentId(tab, requestedDocumentId)) {
     throw new Error(
       `Workspace "${requestedWorkspaceId}" is document "${tab.id}", not "${requestedDocumentId}"`
     )
@@ -185,7 +197,7 @@ export function resolveAutomationTabFromTabs(
   if (requestedWorkspaceId) {
     tab = uniqueWorkspaceTab(tabs, requestedWorkspaceId)
   } else if (requestedDocumentId) {
-    tab = tabs.find((candidate) => candidate.id === requestedDocumentId)
+    tab = tabs.find((candidate) => tabMatchesDocumentId(candidate, requestedDocumentId))
   } else if (requestedDocumentName) {
     tab = uniqueNamedTab(tabs, requestedDocumentName)
   } else {

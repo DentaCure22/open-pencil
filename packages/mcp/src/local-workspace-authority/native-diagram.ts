@@ -76,11 +76,10 @@ export function authorityDiagramOperation(options: {
   recipe: BoardBuildPlanNativeDiagramRecipe
 }): AuthorityDiagramOperation {
   const { anchorId, exactPoint, recipe } = options
-  const target = exactPoint
-    ? ({ kind: 'point', ...exactPoint } as const)
-    : anchorId
-      ? ({ anchorId, kind: 'anchor' } as const)
-      : parseAuthorityFreePlacementTarget(recipe.placement?.target)
+  let target: AuthorityDiagramPlacement
+  if (exactPoint) target = { kind: 'point', ...exactPoint }
+  else if (anchorId) target = { anchorId, kind: 'anchor' }
+  else target = parseAuthorityFreePlacementTarget(recipe.placement?.target)
   const relativeOffset = parseAuthorityRelativePlacementOffset(recipe.placement?.relative_offset)
   if (relativeOffset && target.kind !== 'anchor' && target.kind !== 'relative') {
     throw new Error('placement.relative_offset requires an anchor or relative placement.target.')

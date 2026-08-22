@@ -37,7 +37,11 @@ const ownerAppearance = computed(
 const themeMismatch = computed(
   () =>
     !legacyFlatDiagram.value &&
-    Boolean(ownerAppearance.value && ownerAppearance.value !== resolvedTheme.value)
+    Boolean(
+      ownerAppearance.value &&
+      ownerAppearance.value !== 'auto' &&
+      ownerAppearance.value !== resolvedTheme.value
+    )
 )
 const needsAttention = computed(() => conflicted.value || themeMismatch.value)
 const editButton = useButtonUI({ tone: 'ghost', size: 'sm', bordered: true })

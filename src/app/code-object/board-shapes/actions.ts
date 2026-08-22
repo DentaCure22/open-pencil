@@ -1,13 +1,8 @@
-import {
-  readObjectGraphInputs,
-  readObjectGraphPorts,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { BOARD_SHAPE_PERMISSIONS, type BoardPermissionDescriptor } from '@/app/board-permissions'
 import type { EditorStore } from '@/app/editor/active-store'
 
-import { codeObjectConnectionDescriptors } from '../connection-migration'
 import {
   CODE_OBJECT_BOARD_API_VERSION,
   type CodeObjectActionReceipt,
@@ -178,13 +173,6 @@ export function createCodeObjectBoardClient(
   const { permissions, shapes } = codeObjectBoardSnapshot(store, actor)
   return {
     apiVersion: CODE_OBJECT_BOARD_API_VERSION,
-    connections: codeObjectConnectionDescriptors(store, actorFrameId).map(
-      ({ id, label, permissions }) => ({
-        id,
-        label,
-        permissions
-      })
-    ),
     createShape: (shape) =>
       dispatch({
         shape,
@@ -195,14 +183,7 @@ export function createCodeObjectBoardClient(
         shapeId,
         type: 'code-object.board-shape.delete'
       }),
-    emitGraphSignal: (signal) =>
-      dispatch({
-        signal,
-        type: 'code-object.graph.emit'
-      }),
-    inputs: readObjectGraphInputs(actor),
     permissions,
-    ports: readObjectGraphPorts(actor),
     self: {
       height: actor?.height ?? 0,
       id: actor?.id ?? actorFrameId,

@@ -229,7 +229,7 @@ Gestion d'état via Potok (bibliothèque Redux-like pour atomes ClojureScript). 
 
 ## 11. Scripting et extensibilité
 
-OpenPencil inclut une [commande `eval`](/programmable/cli/scripting) offrant une API Plugin compatible Figma pour le scripting headless. De plus, 90 outils IA sont disponibles via le chat intégré, le serveur MCP (stdio + HTTP) et le CLI. Penpot a un système de plugins avec exécution sandboxée mais pas d'API de scripting headless ni d'intégration MCP.
+OpenPencil inclut une [commande `eval`](/programmable/cli/scripting) offrant une API Plugin compatible Figma pour le scripting sans interface. Il propose aussi le chat de tâches Pi et un catalogue MCP découvert à l'exécution. Penpot a un système de plugins avec exécution isolée, mais pas d'API de scripting sans interface ni d'intégration MCP.
 
 ## Résumé
 
@@ -246,4 +246,4 @@ OpenPencil inclut une [commande `eval`](/programmable/cli/scripting) offrant une
 | **Self-hosting** | Penpot | Prêt Docker vs desktop uniquement |
 | **Maturité écosystème** | Penpot | Années de production vs stade précoce |
 
-Open Pencil est architecturalement plus léger — un renderer CanvasKit monoprocessus en ~26K LOC TypeScript, compatible Figma par conception. Penpot est une plateforme full-stack avec ~299K LOC. Open Pencil a le scripting headless, **90 outils AI/MCP**, export SVG et une app desktop native.
+Open Pencil est architecturalement plus léger — un renderer CanvasKit monoprocessus en TypeScript, compatible Figma par conception. Penpot est une plateforme full-stack. Open Pencil propose le scripting sans interface, le chat de tâches Pi, un catalogue MCP découvert à l'exécution, l'export SVG et une application de bureau native.

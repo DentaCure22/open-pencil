@@ -109,6 +109,40 @@ export function computeBounds(items: Iterable<Rect>): Rect {
   return boundsToRect(bounds)
 }
 
+export function mapAxisAlignedRect(rect: Rect, mapPoint: (x: number, y: number) => Vector): Rect {
+  const first = mapPoint(rect.x, rect.y)
+  const second = mapPoint(rect.x + rect.width, rect.y + rect.height)
+  return {
+    height: Math.abs(second.y - first.y),
+    width: Math.abs(second.x - first.x),
+    x: Math.min(first.x, second.x),
+    y: Math.min(first.y, second.y)
+  }
+}
+
+export function rectIntersectionArea(first: Rect, second: Rect): number {
+  const width = Math.max(
+    0,
+    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
+  )
+  const height = Math.max(
+    0,
+    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
+  )
+  return width * height
+}
+
+export function rectsIntersect(first: Rect, second: Rect): boolean {
+  return rectIntersectionArea(first, second) > 0
+}
+
+export function rectIntersectionRatio(first: Rect, second: Rect): number {
+  const intersectionArea = rectIntersectionArea(first, second)
+  if (intersectionArea === 0) return 0
+  const smallerArea = Math.min(first.width * first.height, second.width * second.height)
+  return smallerArea > 0 ? intersectionArea / smallerArea : 0
+}
+
 export function polygonVertices(node: {
   width: number
   height: number

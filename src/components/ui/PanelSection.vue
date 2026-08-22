@@ -19,10 +19,10 @@ const sectionCls = useSectionUI(ui)
 <template>
   <section :class="sectionCls.wrapper">
     <div v-if="$slots.actions" class="flex items-center justify-between">
-      <label :class="sectionCls.label">{{ label }}</label>
+      <h3 :class="sectionCls.label">{{ label }}</h3>
       <slot name="actions" />
     </div>
-    <label v-else :class="sectionCls.label">{{ label }}</label>
+    <h3 v-else :class="sectionCls.label">{{ label }}</h3>
     <slot />
   </section>
 </template>

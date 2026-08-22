@@ -2,8 +2,6 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { TreeRoot } from 'reka-ui'
 
-import { isObjectGraphConnectionNode } from '@open-pencil/scene-graph'
-
 import { useEditor } from '#vue/editor/context'
 import { provideLayerTree, useLayerTreeHostBridge } from '#vue/primitives/LayerTree/context'
 import { useLayerDrag } from '#vue/primitives/LayerTree/useLayerDrag'
@@ -77,10 +75,7 @@ function buildTree(parentId: string): LayerNode[] {
 
   return parent.childIds
     .map((cid) => editor.graph.getNode(cid))
-    .filter(
-      (node): node is NonNullable<typeof node> =>
-        Boolean(node) && !isObjectGraphConnectionNode(node)
-    )
+    .filter((node): node is NonNullable<typeof node> => node !== undefined)
     .map((node) => {
       const virtual = hostBridge?.getVirtualChildren?.(node)
       if (virtual && virtual.length > 0) {
@@ -166,6 +161,19 @@ function filterTree(nodes: LayerNode[], query: string): LayerNode[] {
 }
 
 const visibleItems = computed(() => filterTree(items.value, filterText.trim().toLowerCase()))
+
+function collectSelectedTreeItems(nodes: LayerNode[], selected: ReadonlySet<string>) {
+  const matches: LayerNode[] = []
+  for (const node of nodes) {
+    if (selected.has(node.id)) matches.push(node)
+    if (node.children) matches.push(...collectSelectedTreeItems(node.children, selected))
+  }
+  return matches
+}
+
+const selectedTreeItems = computed(() =>
+  collectSelectedTreeItems(visibleItems.value, selectedIds.value)
+)
 
 watch(
   () => filterText.trim(),
@@ -454,6 +462,9 @@ provideLayerTree({
     as="div"
     class="flex min-h-0 flex-1 flex-col overflow-hidden"
     v-model:expanded="expanded"
+    :model-value="selectedTreeItems"
+    multiple
+    selection-behavior="replace"
     :items="visibleItems"
     :get-key="getKey"
     :get-children="getChildren"

@@ -2,7 +2,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { NarratedTraceChange } from './types'
 
-const MEANINGFUL_NODE_PROPERTIES = new Set<string>([
+const MEANINGFUL_NODE_PROPERTIES = new Set<keyof SceneNode>([
   'name',
   'x',
   'y',
@@ -96,6 +96,33 @@ const MEANINGFUL_NODE_PROPERTIES = new Set<string>([
   'flipY'
 ])
 
+export type NarratedTraceNodeSnapshot = Partial<SceneNode> &
+  Pick<
+    SceneNode,
+    'height' | 'id' | 'name' | 'parentId' | 'pluginData' | 'type' | 'width' | 'x' | 'y'
+  >
+
+export function snapshotNarratedTraceNode(node: SceneNode): NarratedTraceNodeSnapshot {
+  const meaningfulProperties = Object.fromEntries(
+    [...MEANINGFUL_NODE_PROPERTIES].flatMap((property) => {
+      const value = node[property]
+      return value === undefined ? [] : [[property, structuredClone(value)]]
+    })
+  ) as Partial<SceneNode>
+  return {
+    ...meaningfulProperties,
+    height: node.height,
+    id: node.id,
+    name: node.name,
+    parentId: node.parentId,
+    pluginData: structuredClone(node.pluginData),
+    type: node.type,
+    width: node.width,
+    x: node.x,
+    y: node.y
+  }
+}
+
 function traceValue(value: unknown): string | undefined {
   if (value === undefined) return undefined
   if (value === null) return 'null'
@@ -117,7 +144,7 @@ export function changesForNarratedTraceNodeUpdate(
   changes: Partial<SceneNode>
 ): NarratedTraceChange[] {
   return (Object.keys(changes) as Array<keyof SceneNode>).flatMap((property) => {
-    if (!MEANINGFUL_NODE_PROPERTIES.has(String(property))) return []
+    if (!MEANINGFUL_NODE_PROPERTIES.has(property)) return []
     const after = traceValue(changes[property])
     const before = traceValue(previous?.[property])
     if (after === before) return []

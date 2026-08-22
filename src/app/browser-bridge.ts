@@ -20,20 +20,13 @@ declare global {
   }
 }
 
-let activeStore: EditorStore | null = null
-
 function windowApi(): OpenPencilWindowAPI {
   window.openPencil ??= {}
-  window.openPencil.getStore ??= () => {
-    if (!activeStore) throw new Error('OpenPencil store not initialized')
-    return activeStore
-  }
   return window.openPencil
 }
 
 export function setOpenPencilStore(store: EditorStore) {
-  activeStore = store
-  windowApi()
+  windowApi().getStore = () => store
 }
 
 export function exposeChatTransportOverride(

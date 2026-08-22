@@ -4,7 +4,7 @@ import type { LocalWorkspaceAuthorityHead } from './client'
 
 const BOARD_PLAN_RECEIPT_KEY_PREFIX = 'authority-board-plan-request:'
 const BOARD_PLAN_RECEIPT_PLUGIN_ID = 'openpencil.agent-tools'
-const DURABLE_HISTORY_LABEL = 'Agent Board transaction'
+export const DURABLE_HISTORY_LABEL = 'Agent Board transaction'
 
 type AppliedBoardTransaction = {
   appliedRevision: number

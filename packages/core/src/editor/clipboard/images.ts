@@ -1,4 +1,5 @@
 import type { Fill, SceneNode } from '@open-pencil/scene-graph'
+import { rectIntersectionRatio } from '@open-pencil/scene-graph/geometry'
 import {
   assetHashFromReference,
   assetReference,
@@ -46,20 +47,6 @@ export function fitImagePlacementSize(
   }
 }
 
-function overlapRatio(first: Rect, second: Rect): number {
-  const width = Math.max(
-    0,
-    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
-  )
-  const height = Math.max(
-    0,
-    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
-  )
-  if (width === 0 || height === 0) return 0
-  const smallerArea = Math.min(first.width * first.height, second.width * second.height)
-  return smallerArea > 0 ? (width * height) / smallerArea : 0
-}
-
 function rasterMimeType(name: string, mimeType: string): string {
   if (mimeType) return mimeType
   const extension = name.match(/\.([^.]+)$/)?.[1]?.toLowerCase()
@@ -91,7 +78,7 @@ export function createClipboardImageActions(ctx: EditorContext) {
     for (let attempt = 0; attempt < IMAGE_CASCADE_ATTEMPTS; attempt++) {
       let conflicts = false
       for (const item of occupied) {
-        if (overlapRatio(candidate, item) >= IMAGE_CASCADE_OVERLAP_RATIO) {
+        if (rectIntersectionRatio(candidate, item) >= IMAGE_CASCADE_OVERLAP_RATIO) {
           conflicts = true
           break
         }

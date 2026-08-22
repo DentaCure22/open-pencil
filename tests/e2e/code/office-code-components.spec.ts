@@ -15,7 +15,7 @@ test('keeps Office shapes quiet on the board and opens full editors on interacti
   await expect(document.getByTestId('office-document-runtime')).toHaveCount(0)
   await expect(document.locator('iframe')).toHaveCount(0)
 
-  await editor.page.getByTestId('code-object-design-hit-target').last().dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').last().click()
   await expect(document).toHaveAttribute('data-office-mode', 'interact')
   await expect(document.getByTestId('office-document-loading')).toBeHidden({ timeout: 15_000 })
   await expect(document.locator('[data-u-comp="workbench-layout"]')).toBeVisible()
@@ -36,7 +36,7 @@ test('keeps Office shapes quiet on the board and opens full editors on interacti
   await expect(spreadsheet.getByText('Q1')).toBeVisible()
   await expect(spreadsheet.getByTestId('office-spreadsheet-runtime')).toHaveCount(0)
 
-  await editor.page.getByTestId('code-object-design-hit-target').last().dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').last().click()
   await expect(spreadsheet).toHaveAttribute('data-office-mode', 'interact')
   await expect(spreadsheet.getByTestId('office-spreadsheet-loading')).toBeHidden({
     timeout: 15_000

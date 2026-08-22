@@ -16,6 +16,7 @@ export function clearSubtreePictureCache(r: SkiaRenderer): void {
   r.subtreePictureCachePageId = null
   r.subtreePictureCacheSceneVersion = -1
   r.subtreePictureCachePositionPreviewVersion = -1
+  r.subtreePictureCacheTargetedInvalidation = false
 }
 
 export function invalidateAllPictures(r: SkiaRenderer): void {
@@ -31,6 +32,11 @@ export function invalidateNodePicture(r: SkiaRenderer, nodeId: string): void {
     pic.delete()
     r.nodePictureCache.delete(nodeId)
   }
+  invalidateSubtreePicture(r, nodeId)
+}
+
+export function invalidateSubtreePicture(r: SkiaRenderer, nodeId: string): void {
+  r.subtreePictureCacheTargetedInvalidation = true
   const subtree = r.subtreePictureCache.get(nodeId)
   if (subtree) {
     subtree.picture.delete()

@@ -6,7 +6,7 @@
 graph TB
     subgraph Tauri["Tauri v2 Shell"]
         subgraph Editor["Editor (Web)"]
-            UI["Vue 3 UI<br/>Toolbar · Panels · Properties<br/>Layers · Color Picker"]
+            UI["Vue 3 UI<br/>Sidebar · Tool rail · Canvas<br/>Layers · Chats · Assets · Activity"]
             Skia["Skia CanvasKit (WASM, 7MB)<br/>Vector rendering · Text shaping<br/>Effects · Export"]
             subgraph Core["Core Engine (TS)"]
                 SG[SceneGraph] --- Layout[Layout - Yoga]
@@ -19,19 +19,19 @@ graph TB
                 Kiwi --- SVG[SVG export]
             end
         end
-        MCP["MCP Server (90 tools, stdio+HTTP)"]
+        MCP["MCP Server (stdio+HTTP)"]
         Collab["P2P Collab (Trystero + Yjs)"]
     end
 `
 
 ## Disposition de l'éditeur
 
-L'interface suit le layout UI3 de Figma — barre d'outils en bas, navigation à gauche, propriétés à droite :
+L'éditeur utilise une disposition compacte centrée sur le canevas :
 
-- **Panneau de navigation (gauche)** — Arbre des calques, panneau des pages
-- **Canvas (centre)** — Canvas infini avec rendu CanvasKit, zoom/pan
-- **Panneau de propriétés (droite)** — Sections contextuelles : Apparence, Remplissage, Contour, Typographie, Layout, Position
-- **Barre d'outils (bas)** — Sélection d'outil : Sélectionner, Frame, Section, Rectangle, Ellipse, Ligne, Texte, Plume, Main
+- **Barre latérale (gauche)** — Calques, Chats, Ressources et Activité dans une surface flottante
+- **Barre d'outils** — Contrôles intégrés de dessin, sélection, espace de travail et utilitaires
+- **Canevas** — Surface CanvasKit infinie avec zoom, déplacement et actions contextuelles
+- **Tiroir mobile** — Contrôles Calques, Design et Code sur les écrans étroits
 
 ## Composants
 
@@ -72,11 +72,11 @@ Voir la [Référence du format de fichier](/reference/file-format) pour plus de 
 
 Les outils sont définis une seule fois dans `packages/core/src/tools/`, découpés par domaine : read, create, modify, structure, variables, vector, analyze. Chaque outil a des paramètres typés et une fonction `execute(figma, args)`. Les adaptateurs les convertissent pour :
 
-- **Chat IA** — schémas valibot, multi-fournisseur (Anthropic, OpenAI, Google AI, OpenRouter, endpoints compatibles)
+- **Tâches d'agents** — conversations Pi dans la barre latérale et les cartes du Board
 - **Serveur MCP** — schémas zod, transports stdio + HTTP
 - **CLI** — accessible via la commande `eval`
 
-90+ outils core + 3 outils de gestion de fichiers MCP. Inclut requête XPath (`query_nodes`), inspection JSX (`get_jsx`, `diff_jsx`), description sémantique (`describe`) et vérification visuelle (`export_image` renvoie des images au modèle).
+Le catalogue est découvert à l'exécution plutôt que documenté avec un nombre fixe. Il comprend la requête XPath (`query_nodes`), l'inspection JSX (`get_jsx`, `diff_jsx`), la description sémantique (`describe`) et la vérification visuelle (`export_image`).
 
 ### Annuler/Rétablir
 
@@ -92,13 +92,9 @@ Collaboration peer-to-peer en temps réel via Trystero (WebRTC) + Yjs CRDT. Sans
 
 ### Pont RPC CLI-vers-application
 
-Lorsque l'application de bureau est lancée, les commandes CLI s'y connectent via WebSocket au lieu de nécessiter un fichier .fig. Le serveur d'automatisation tourne sur `127.0.0.1:7600` (HTTP) et `127.0.0.1:7601` (WebSocket). Les commandes s'exécutent sur l'état en direct de l'éditeur, permettant aux scripts d'automatisation et aux agents IA d'interagir avec l'application en cours d'exécution.
+Le RPC direct entre le CLI et l'application est désactivé pour l'instant. La persistance locale du Board et de Trace utilise l'autorité limitée sur le port 7602 et ne nécessite pas MCP.
 
 ## Prochaines étapes
-
-### Ensemble complet d'outils figma-use
-
-Le serveur MCP expose actuellement 90 outils. L'implémentation de référence dans [figma-use](https://github.com/dannote/figma-use) en compte 118. Les outils restants couvrent les contraintes de layout avancées, les connexions de prototype, l'édition avancée des propriétés de composants et les opérations en masse sur les documents.
 
 ### Outillage de design pour la CI
 

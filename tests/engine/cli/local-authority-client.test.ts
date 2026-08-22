@@ -43,7 +43,7 @@ describe('direct local Board authority client', () => {
     expect(isLocalAuthorityRpc('trace_query', {})).toBe(true)
     expect(isLocalAuthorityRpc('board_context', { target: 'current_visible' })).toBe(false)
     expect(isLocalAuthorityRpc('board_build', {})).toBe(true)
-    expect(isLocalAuthorityRpc('board_build', { runtime_instance_id: 'runtime:live' })).toBe(false)
+    expect(isLocalAuthorityRpc('board_build', { runtime_instance_id: 'runtime:live' })).toBe(true)
   })
 
   test('fails closed when persisted authority is unavailable', async () => {
@@ -78,7 +78,7 @@ describe('direct local Board authority client', () => {
 
     expect(result).toMatchObject({
       source_page_id: sourcePage.id,
-      status: 'created_headless',
+      status: 'created',
       target: { pageName: 'One Command Board', workspaceId }
     })
     const reopened = createLocalAuthorityRpcClient({ preferredWorkspaceId: workspaceId, root })

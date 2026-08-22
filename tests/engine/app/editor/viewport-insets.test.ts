@@ -40,7 +40,6 @@ function rect(left: number, top: number, width: number, height: number): RectFix
 describe('editor viewport insets', () => {
   test('keeps fitted content clear of desktop panels and the mobile drawer', () => {
     installDocument({
-      '[data-test-id="board-dock"]': rect(540, 690, 120, 48),
       '[data-test-id="canvas-area"]': rect(100, 50, 1000, 700),
       '[data-test-id="layers-shell"]': rect(112, 62, 220, 676),
       '[data-test-id="mobile-drawer"]': rect(100, 620, 1000, 130),

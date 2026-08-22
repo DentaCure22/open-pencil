@@ -291,6 +291,10 @@ export function createVariableActions(ctx: EditorContext) {
     ctx.requestRender()
   }
 
+  function setPresentationVariableMode(collectionId: string, modeId: string | null) {
+    if (ctx.graph.setPresentationMode(collectionId, modeId)) ctx.requestRepaint()
+  }
+
   function updateVariableValue(id: string, modeId: string, value: VariableValue) {
     const variable = ctx.graph.variables.get(id)
     if (!variable) return
@@ -379,6 +383,7 @@ export function createVariableActions(ctx: EditorContext) {
     setDefaultMode,
     duplicateMode,
     setActiveMode,
+    setPresentationVariableMode,
     replaceVariablesFromSnapshot
   }
 }

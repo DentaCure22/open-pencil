@@ -5,7 +5,8 @@ export default defineConfig({
     index: './src/index.ts',
     'local-workspace-authority': './src/local-workspace-authority.ts',
     server: './src/server.ts',
-    stdio: './src/stdio.ts'
+    stdio: './src/stdio.ts',
+    'dispatch-stdio': './src/dispatch-stdio.ts'
   },
   platform: 'node',
   format: ['esm'],
@@ -20,6 +21,8 @@ export default defineConfig({
       '@modelcontextprotocol/sdk',
       '@open-pencil/core',
       /^@open-pencil\/core\//,
+      '@open-pencil/scene-graph',
+      /^@open-pencil\/scene-graph\//,
       'hono',
       /^hono\//,
       'package-manager-detector',

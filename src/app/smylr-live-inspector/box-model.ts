@@ -14,6 +14,10 @@ export type BoxModelMetrics = {
   margin: BoxModelEdges
   padding: BoxModelEdges
 }
+export type BoxModelGapMetrics = {
+  column: number | null
+  row: number | null
+}
 export type GapMeasurement = {
   axis: 'horizontal' | 'vertical'
   height: number
@@ -123,10 +127,10 @@ export function getBoxModelMetrics(
   }
 }
 
-function gapValues(
+export function getBoxModelGapMetrics(
   computedStyle: DesignStyleDeclaration | undefined,
   previewStyle: DesignStyleDeclaration | undefined
-) {
+): BoxModelGapMetrics {
   const previewGap = previewStyle?.gap ? previewStyle.gap.trim().split(/\s+/) : []
   const computedGap = computedStyle?.gap ? computedStyle.gap.trim().split(/\s+/) : []
   const rowGap = firstPixelLength(
@@ -141,7 +145,7 @@ function gapValues(
     computedStyle?.['column-gap'],
     computedGap[1] ?? computedGap[0]
   )
-  return { columnGap, rowGap }
+  return { column: columnGap, row: rowGap }
 }
 
 function firstPixelLength(...values: Array<string | undefined>) {
@@ -215,15 +219,14 @@ function addMeasurement(
 
 export function getGapMeasurements(
   node: SmylrLiveContainerNode,
-  selectedRect: SmylrLiveContainerRect,
   previewStyle?: DesignStyleDeclaration
 ): GapMeasurement[] {
   const display = previewStyle?.display ?? node.computedStyle?.display
   if (!display || !LAYOUT_DISPLAYS.has(display)) return []
 
-  const { columnGap, rowGap } = gapValues(node.computedStyle, previewStyle)
-  const horizontalGap = columnGap && columnGap > 0 ? columnGap : null
-  const verticalGap = rowGap && rowGap > 0 ? rowGap : null
+  const gap = getBoxModelGapMetrics(node.computedStyle, previewStyle)
+  const horizontalGap = gap.column && gap.column > 0 ? gap.column : null
+  const verticalGap = gap.row && gap.row > 0 ? gap.row : null
   if (!horizontalGap && !verticalGap) return []
 
   const children = (node.children ?? [])
@@ -232,8 +235,8 @@ export function getGapMeasurements(
     .map((child) => ({
       height: child.rect.height,
       width: child.rect.width,
-      x: child.rect.x - selectedRect.x,
-      y: child.rect.y - selectedRect.y
+      x: child.rect.x,
+      y: child.rect.y
     }))
   const measurements = new Map<string, GapMeasurement>()
 

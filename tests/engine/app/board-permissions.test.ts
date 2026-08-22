@@ -9,7 +9,6 @@ import {
   BOARD_SHAPE_PERMISSIONS,
   reconcileBoardPage,
   runBoardMutation,
-  runBoardTargetMutation,
   type BoardPermission,
   type BoardPermissionDescriptor
 } from '@/app/board-permissions'
@@ -56,32 +55,14 @@ function shapeAction(
 }
 
 describe('Board permissions', () => {
-  test('runs an allowed mutation and denies missing permissions or out-of-scope targets', () => {
+  test('denies mutations without the required permission', () => {
     const store = createEditorStore()
     const target = store.graph.createNode('RECTANGLE', store.state.currentPageId, {
       name: 'Connected target'
     })
-    const outsideScope = store.graph.createNode('RECTANGLE', store.state.currentPageId, {
-      name: 'Outside scope'
-    })
     const permissions = descriptor(store, ['target.action.execute'])
     permissions.targetNodeIds = [target.id]
 
-    expect(
-      runBoardTargetMutation(store, permissions, {
-        action: { type: 'toggle-opacity' },
-        targetNodeId: target.id,
-        type: 'board.target.action'
-      })
-    ).toMatchObject({ changed: true, status: 'applied' })
-    expect(target.opacity).toBe(0.4)
-    expect(
-      runBoardTargetMutation(store, permissions, {
-        action: { type: 'hide' },
-        targetNodeId: outsideScope.id,
-        type: 'board.target.action'
-      })
-    ).toMatchObject({ reason: 'capability-denied', status: 'denied' })
     expect(
       runBoardMutation(store, permissions, ['target.data.write'], () => 'unexpected', target.id)
     ).toEqual({ reason: 'capability-denied', status: 'denied' })

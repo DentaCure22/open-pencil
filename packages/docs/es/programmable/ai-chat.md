@@ -1,64 +1,28 @@
 ---
-title: Chat IA
-description: Asistente IA integrado con más de 90 herramientas para crear y modificar diseños.
+title: Chat de tareas
+description: Tareas de programación con Pi compartidas por la barra lateral y las tarjetas del Board.
 ---
 
-# Chat IA
+# Chat de tareas
 
-Presiona <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) para abrir el asistente IA. Describe lo que quieres — crea formas, establece estilos, gestiona el layout, trabaja con componentes y analiza tu diseño.
+Abre la pestaña **CHATS** de la barra lateral izquierda para iniciar o continuar una tarea. OpenPencil ejecuta Pi directamente y conserva el modelo, el esfuerzo, los mensajes, la actividad de herramientas y los seguimientos en una sola conversación.
 
-## Configuración
+## Flujo
 
-1. Abre el panel de chat IA (<kbd>⌘</kbd><kbd>J</kbd>)
-2. Haz clic en el icono de ajustes
-3. Elige un proveedor e introduce tu clave API
-4. Selecciona un modelo
+- **Nueva tarea** inicia una conversación Pi.
+- **Enviar seguimiento** continúa la conversación seleccionada.
+- Las **tarjetas del Board** y CHATS muestran los mismos hilos locales.
+- Los **archivos adjuntos** se cargan con el prompt.
+- **Detener** finaliza el turno activo.
 
-### Proveedores compatibles
+No hay dispatcher ni un backend alternativo. La lista de modelos proviene del catálogo de Pi.
 
-| Proveedor | Modelos | Configuración |
-|-----------|---------|---------------|
-| **OpenRouter** | Claude, GPT-4, Gemini, DeepSeek y otros | Clave API de [openrouter.ai](https://openrouter.ai) |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Opus, etc. | Clave API de [console.anthropic.com](https://console.anthropic.com) |
-| **OpenAI** | GPT-4o, GPT-4, etc. | Clave API de [platform.openai.com](https://platform.openai.com) |
-| **Google AI** | Gemini 2.0, Gemini 1.5, etc. | Clave API de [aistudio.google.dev](https://aistudio.google.dev) |
-| **Compatible con OpenAI** | Cualquier endpoint con formato de API OpenAI | URL base personalizada + clave. Admite alternancia entre API de Completions y Responses. |
-| **Compatible con Anthropic** | Cualquier endpoint con formato de API Anthropic | URL base personalizada + clave |
+## Actividad y Trace
 
-Sin backend, sin suscripción — tu clave se comunica directamente con el proveedor.
+El razonamiento y las herramientas conservan su orden original. El trabajo activo permanece abierto; la actividad terminada se resume con la duración del turno.
 
-## Funciones
+Trace está separado del chat. El gesto más reciente está en `~/.openpencil/local-workspace-authority-v1/trace-context.json`; los fragmentos históricos acotados están en `trace-events/*.jsonl`.
 
-El asistente tiene más de 90 herramientas en estas categorías:
+## Automatización de diseño
 
-- **Crear** — frames, formas, texto, componentes, páginas. Renderiza JSX para layouts complejos.
-- **Estilo** — rellenos, contornos, efectos, opacidad, radio de borde, modos de fusión.
-- **Layout** — auto-layout, grid, alineación, espaciado, dimensionamiento.
-- **Componentes** — crear componentes, instancias, conjuntos de componentes. Gestionar sobrecargas.
-- **Variables** — crear/editar variables, colecciones, modos. Vincular a rellenos.
-- **Consultar** — buscar nodos, selectores XPath, leer propiedades, listar páginas, fuentes, selección.
-- **Inspeccionar** — `get_jsx` para vista JSX, `diff_jsx` para diferencias estructurales, `describe` para rol semántico y problemas de diseño.
-- **Analizar** — paleta de colores, auditoría tipográfica, consistencia de espaciado, detección de patrones.
-- **Exportar** — PNG, SVG, JSX con clases Tailwind. Verificación visual mediante `export_image`.
-- **Vector** — operaciones booleanas, manipulación de trazados.
-
-## Verificación visual
-
-El asistente puede verificar su trabajo visualmente. Después de crear o modificar diseños, utiliza `export_image` para capturar una imagen y verificar el resultado contra la solicitud original.
-
-## Ejemplos de prompts
-
-- "Crea una tarjeta con título, descripción y un botón azul"
-- "Haz que todos los botones de esta página usen el mismo radio de borde"
-- "¿Qué fuentes se usan en este archivo?"
-- "Cambia el fondo del frame seleccionado a un degradado de azul a morado"
-- "Exporta el frame seleccionado como SVG"
-- "Muéstrame el JSX de este frame"
-
-## Consejos
-
-- Selecciona nodos antes de preguntar — el asistente sabe qué está seleccionado.
-- Sé específico con colores, tamaños y posiciones para resultados precisos.
-- El asistente puede modificar múltiples nodos en un solo mensaje.
-- Usa "deshacer" en el editor — las mutaciones de IA admiten deshacer completo.
-- Todos los layouts se recalculan automáticamente después de cada ejecución de herramienta.
+Los clientes MCP descubren el catálogo actual de herramientas de OpenPencil en tiempo de ejecución mediante stdio o HTTP. Consulta [Servidor MCP](./mcp-server).

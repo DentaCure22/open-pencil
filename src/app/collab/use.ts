@@ -19,9 +19,7 @@ type CollabActions = {
   connect: (
     roomId: string,
     durableStore?: DurableYjsStore,
-    onDurableReady?: DurableYjsHydratedHandler,
-    localOnly?: boolean,
-    seedLocalWorkspace?: boolean
+    onDurableReady?: DurableYjsHydratedHandler
   ) => void
   disconnect: () => void
   syncGraphReplacementToYjs: () => void
@@ -67,22 +65,16 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     ]).then(([session, yjsSync]) => {
       runtime = session.createCollabRuntime()
       const activeRuntime = runtime
-      const {
-        syncNodeToYjs,
-        syncAllNodesToYjs,
-        syncGraphReplacementToYjs,
-        migrateObjectGraphRecordsToYjs,
-        applyYjsToGraph,
-        applyYjsObjectGraphToGraph
-      } = yjsSync.createYjsGraphSync({
-        getStore: getActiveStore,
-        getYdoc: () => activeRuntime.ydoc,
-        getYnodes: () => activeRuntime.ynodes,
-        getYimages: () => activeRuntime.yimages,
-        setSuppressYjsEvents: (value) => {
-          activeRuntime.suppressYjsEvents = value
-        }
-      })
+      const { syncNodeToYjs, syncAllNodesToYjs, syncGraphReplacementToYjs, applyYjsToGraph } =
+        yjsSync.createYjsGraphSync({
+          getStore: getActiveStore,
+          getYdoc: () => activeRuntime.ydoc,
+          getYnodes: () => activeRuntime.ynodes,
+          getYimages: () => activeRuntime.yimages,
+          setSuppressYjsEvents: (value) => {
+            activeRuntime.suppressYjsEvents = value
+          }
+        })
       const { connect, disconnect } = session.createCollabConnectionActions({
         runtime: activeRuntime,
         state,
@@ -91,10 +83,8 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
         tickFollow,
         broadcastAwareness,
         applyYjsToGraph,
-        applyYjsObjectGraphToGraph,
         syncNodeToYjs,
         syncAllNodesToYjs,
-        migrateObjectGraphRecordsToYjs,
         resetFollow
       })
       return { connect, disconnect, syncAllNodesToYjs, syncGraphReplacementToYjs }
@@ -104,16 +94,6 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
 
   function connect(roomId: string) {
     void loadCollabActions().then((actions) => actions.connect(roomId))
-  }
-
-  function connectLocalWorkspace(
-    roomId: string,
-    onReady?: DurableYjsHydratedHandler,
-    seedLocalWorkspace = true
-  ) {
-    void loadCollabActions().then((actions) =>
-      actions.connect(roomId, undefined, onReady, true, seedLocalWorkspace)
-    )
   }
 
   function connectSharedWorkspace(
@@ -154,7 +134,6 @@ export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
     remotePeers,
     followingPeer,
     connect,
-    connectLocalWorkspace,
     connectSharedWorkspace,
     disconnect,
     publishGraphReplacement,

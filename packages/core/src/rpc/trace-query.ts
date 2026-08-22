@@ -5,6 +5,8 @@ const MAX_SESSIONS_READ = 12
 const MAX_EVENTS_PER_RESULT = 5
 const MAX_EXACT_WINDOW_EVENTS = 24
 const MAX_EXACT_WINDOW_SESSIONS = 24
+/** Gestures often land a beat before or after speech; turn context brackets the window. */
+export const TURN_CONTEXT_BRACKET_MS = 3000
 const CURSOR_PREFIX = 'trace-task-v3.'
 const STOP_TERMS = new Set([
   'a',
@@ -46,7 +48,10 @@ export type TraceHistoryEvent = {
   label: string
   target?: {
     bounds?: Rect
+    frameId?: string
     name: string
+    path?: string[]
+    route?: string
     stableId: string
   }
   text?: string
@@ -63,12 +68,18 @@ export type TraceHistorySession = {
 export type TraceQueryRecordSummary = {
   bounds?: Rect
   durationMs: number
+  eventCount?: number
+  evidenceCount?: number
+  gestureCount?: number
+  gestureIds?: string[]
   id: string
+  latestGestureAt?: string
   scope?: TraceQueryScope
   searchTerms?: string[]
   startedAt: string
   targetIds?: string[]
   title: string
+  updatedAt?: string
 }
 
 export type TraceQuerySpokenTurn = {
@@ -96,6 +107,8 @@ export type TraceQueryInput = {
   spokenText?: string
   spokenTurnId?: string
   tracedRegion?: Rect
+  /** With a spoken selector: bracket the window and rank distinct targets for demonstrative binding. */
+  turnContext?: boolean
   until?: string
   viewportBounds?: Rect
 }
@@ -111,6 +124,8 @@ export type TraceQueryEvent = {
   text?: string
 }
 
+export type TraceQueryTarget = NonNullable<TraceHistoryEvent['target']>
+
 export type TraceQueryMatch = {
   endedAt: string
   events: TraceQueryEvent[]
@@ -119,10 +134,13 @@ export type TraceQueryMatch = {
   scope: TraceQueryScope
   sessionId: string
   startedAt: string
+  targets: TraceQueryTarget[]
   title: string
 }
 
 export type TraceQueryPublicSpokenTurn = {
+  /** Seconds between the turn ending and this query answering — the caller's staleness signal. */
+  ageSeconds: number
   endedAt: string
   endedAtEpochMs: number
   id: string
@@ -133,7 +151,17 @@ export type TraceQueryPublicSpokenTurn = {
   text: string
 }
 
+export type TraceQueryContextTarget = TraceQueryTarget & {
+  eventCount: number
+  insideTurn: boolean
+  lastEventAt: string
+  rank: number
+  strength: number
+  strongestKind: string
+}
+
 export type TraceQueryResult = {
+  contextTargets?: TraceQueryContextTarget[]
   matches: TraceQueryMatch[]
   reason?:
     | 'ambiguous_matches'
@@ -143,12 +171,15 @@ export type TraceQueryResult = {
     | 'invalid_cursor'
     | 'invalid_spoken_turn_selector'
     | 'invalid_time_range'
+    | 'invalid_time_window'
     | 'malformed_trace_window'
     | 'no_relevant_trace'
     | 'no_trace_in_spoken_window'
+    | 'no_trace_in_time_window'
     | 'spoken_turn_not_found'
     | 'spoken_turn_runtime_binding_unavailable'
     | 'spoken_turn_scope_unavailable'
+    | 'spoken_turn_stale'
     | 'trace_read_failed'
     | 'trace_window_incomplete'
     | 'trace_window_truncated'
@@ -195,7 +226,8 @@ export type TraceSpokenTurnResolution =
       status: 'error'
     }
   | {
-      reason: 'spoken_turn_not_found'
+      reason: 'spoken_turn_not_found' | 'spoken_turn_stale'
+      staleTurn?: TraceQuerySpokenTurn
       status: 'empty'
     }
   | {
@@ -217,6 +249,7 @@ type ScoredSession = {
   score: number
   session: TraceHistorySession
   summary: TraceQueryRecordSummary
+  targets: TraceQueryTarget[]
 }
 
 type PreparedQuery = {
@@ -226,7 +259,7 @@ type PreparedQuery = {
   until: number | undefined
 }
 
-type ExactWindowEntry = {
+export type TraceWindowEntry = {
   events: TraceHistoryEvent[]
   session: TraceHistorySession
   summary: TraceQueryRecordSummary
@@ -240,6 +273,17 @@ function tokenize(value: string): string[] {
       )
     )
   ]
+}
+
+type TraceSearchEvent = Pick<TraceHistoryEvent, 'changes' | 'label' | 'target' | 'text'>
+
+export function traceEventSearchValues(events: readonly TraceSearchEvent[]): string[] {
+  return events.flatMap((event) => [
+    event.label,
+    event.text ?? '',
+    event.target?.name ?? '',
+    ...(event.changes?.map((change) => change.property) ?? [])
+  ])
 }
 
 function parseTime(value: string | undefined): number | null | undefined {
@@ -372,6 +416,18 @@ function eventScore(
   }
 }
 
+function traceQueryTargets(events: readonly TraceHistoryEvent[]): TraceQueryTarget[] {
+  const seen = new Set<string>()
+  return events.flatMap((event) => {
+    const target = event.target
+    if (!target) return []
+    const key = `${target.frameId ?? ''}\u0000${target.stableId}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [structuredClone(target)]
+  })
+}
+
 function scoreSession(
   session: TraceHistorySession,
   summary: TraceQueryRecordSummary,
@@ -405,7 +461,8 @@ function scoreSession(
         .slice(0, MAX_EVENTS_PER_RESULT)
         .map((entry) => entry.event)
     },
-    summary
+    summary,
+    targets: traceQueryTargets(session.events)
   }
 }
 
@@ -427,6 +484,7 @@ export function buildTraceQueryMatch(input: {
   score: number
   session: TraceHistorySession
   summary: TraceQueryRecordSummary
+  targets?: TraceQueryTarget[]
 }): TraceQueryMatch {
   const scope = input.session.scope ?? input.summary.scope
   if (!scope) throw new Error('Scoped Trace query returned an unscoped session')
@@ -439,12 +497,14 @@ export function buildTraceQueryMatch(input: {
     scope,
     sessionId: input.session.id,
     startedAt: input.session.startedAt,
+    targets: structuredClone(input.targets ?? traceQueryTargets(input.session.events)),
     title: input.summary.title
   }
 }
 
 export function publicTraceSpokenTurn(turn: TraceQuerySpokenTurn): TraceQueryPublicSpokenTurn {
   return {
+    ageSeconds: Math.max(0, Math.round((Date.now() - turn.endedAtEpochMs) / 1000)),
     endedAt: turn.endedAt,
     endedAtEpochMs: turn.endedAtEpochMs,
     id: turn.id,
@@ -558,16 +618,7 @@ function currentSessionSummary(
     id: session.id,
     ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
     searchTerms: tokenize(
-      [
-        session.id,
-        existing?.title ?? '',
-        ...session.events.flatMap((event) => [
-          event.label,
-          event.text ?? '',
-          event.target?.name ?? '',
-          ...(event.changes?.map((change) => change.property) ?? [])
-        ])
-      ].join(' ')
+      [session.id, existing?.title ?? '', ...traceEventSearchValues(session.events)].join(' ')
     ),
     startedAt: session.startedAt,
     title: existing?.title ?? 'Narrated session'
@@ -612,10 +663,32 @@ async function rankedSessions(
       summary
     }))
   )
+  const sessionInRequestedWindow = (session: TraceHistorySession): TraceHistorySession => {
+    if (prepared.since === undefined && prepared.until === undefined) return session
+    const startedAt = Date.parse(session.startedAt)
+    return {
+      ...session,
+      events: session.events.filter((event) => {
+        const eventStartedAt = startedAt + event.atMs
+        const eventEndedAt = eventStartedAt + (event.durationMs ?? 0)
+        if (prepared.since !== undefined && eventEndedAt < prepared.since) return false
+        if (prepared.until !== undefined && eventStartedAt > prepared.until) return false
+        return true
+      })
+    }
+  }
   const scored = sessions
     .flatMap(({ session, summary }) =>
       session && (!scope || sameScope(session.scope ?? summary.scope, scope))
-        ? [scoreSession(session, summary, prepared.queryTerms, input, prepared.cursor)]
+        ? [
+            scoreSession(
+              sessionInRequestedWindow(session),
+              summary,
+              prepared.queryTerms,
+              input,
+              prepared.cursor
+            )
+          ]
         : []
     )
     .filter((candidate) => candidate.score > 0)
@@ -654,6 +727,62 @@ function normalizedSpokenText(value: string) {
   return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+/** Turns older than this cannot serve as a "latest" anchor; explicit id/text lookups still can. */
+export const SPOKEN_TURN_FRESHNESS_MS = 15 * 60_000
+const SPOKEN_TEXT_MATCH_THRESHOLD = 0.6
+const SPOKEN_TEXT_AMBIGUITY_MARGIN = 0.1
+const SPOKEN_FILLER_TOKENS = new Set([
+  'ah',
+  'alright',
+  'erm',
+  'hmm',
+  'ok',
+  'okay',
+  'uh',
+  'uhh',
+  'um',
+  'umm',
+  'well',
+  'yeah'
+])
+
+function spokenTextTokens(value: string): Set<string> {
+  const tokens = normalizedSpokenText(value).match(/[\p{L}\p{N}']+/gu) ?? []
+  return new Set(tokens.filter((token) => !SPOKEN_FILLER_TOKENS.has(token)))
+}
+
+/**
+ * Word-set overlap coefficient. The dispatch words and the recorded turn come from two different
+ * speech recognizers and may be stitched from fragments, so substring equality is too brittle:
+ * score shared words against the smaller set instead.
+ */
+export function spokenTextMatchScore(query: string, turnText: string): number {
+  const queryTokens = spokenTextTokens(query)
+  const turnTokens = spokenTextTokens(turnText)
+  if (queryTokens.size === 0 || turnTokens.size === 0) return 0
+  let shared = 0
+  for (const token of queryTokens) if (turnTokens.has(token)) shared += 1
+  return shared / Math.min(queryTokens.size, turnTokens.size)
+}
+
+function spokenTextCandidates(
+  text: string,
+  scoped: readonly TraceQuerySpokenTurn[]
+): TraceQuerySpokenTurn[] {
+  const scored = scoped
+    .map((turn) => ({ score: spokenTextMatchScore(text, turn.text), turn }))
+    .filter((entry) => entry.score >= SPOKEN_TEXT_MATCH_THRESHOLD)
+    .sort(
+      (first, second) =>
+        second.score - first.score || second.turn.endedAtEpochMs - first.turn.endedAtEpochMs
+    )
+  if (scored.length === 0) return []
+  if (scored.length > 1 && scored[0].score - scored[1].score < SPOKEN_TEXT_AMBIGUITY_MARGIN) {
+    return scored.slice(0, 2).map((entry) => entry.turn)
+  }
+  return [scored[0].turn]
+}
+
 export function resolveTraceSpokenTurn(
   selector: TraceSpokenTurnSelector,
   turns: readonly TraceQuerySpokenTurn[],
@@ -683,8 +812,7 @@ export function resolveTraceSpokenTurn(
   if (selector.turnId) {
     candidates = scoped.filter((turn) => turn.id === selector.turnId)
   } else if (selector.text?.trim()) {
-    const query = normalizedSpokenText(selector.text)
-    candidates = scoped.filter((turn) => normalizedSpokenText(turn.text).includes(query))
+    candidates = spokenTextCandidates(selector.text, scoped)
   } else {
     candidates = [...scoped]
       .sort(
@@ -692,6 +820,16 @@ export function resolveTraceSpokenTurn(
           second.sequence - first.sequence || second.endedAtEpochMs - first.endedAtEpochMs
       )
       .slice(0, 1)
+    // The live path already ages turns out via expiresAtEpochMs; the persisted store keeps them
+    // forever, so "latest" must refuse to serve an anchor that is no longer fresh.
+    const newest = candidates[0]
+    if (
+      options.includeExpired === true &&
+      newest &&
+      nowEpochMs - newest.endedAtEpochMs > SPOKEN_TURN_FRESHNESS_MS
+    ) {
+      return { reason: 'spoken_turn_stale', staleTurn: structuredClone(newest), status: 'empty' }
+    }
   }
 
   if (candidates.length === 0) return { reason: 'spoken_turn_not_found', status: 'empty' }
@@ -737,9 +875,9 @@ function candidateSummaries(dependencies: TraceQueryDependencies, turn: TraceQue
   return candidates
 }
 
-function matchingEvents(
+export function matchingTraceWindowEvents(
   session: TraceHistorySession,
-  turn: TraceQuerySpokenTurn
+  turn: Pick<TraceQuerySpokenTurn, 'endedAtEpochMs' | 'startedAtEpochMs'>
 ): TraceHistoryEvent[] | null {
   const startedAtMs = Date.parse(session.startedAt)
   if (!Number.isFinite(startedAtMs)) return null
@@ -764,12 +902,86 @@ function matchingEvents(
   )
 }
 
+function targetStrength(kind: string): number {
+  // A screenshot event that carries a target is a Focus pointing gesture — as deliberate as a
+  // selection or an ink stroke, so it must not lose ranking ties to them.
+  if (kind === 'selection' || kind === 'ink' || kind === 'screenshot') return 4
+  if (kind === 'edit') return 3
+  if (kind === 'shape' || kind === 'tool') return 2
+  return 1
+}
+
+export function turnContextTargets(
+  entries: TraceWindowEntry[],
+  turn: Pick<TraceQuerySpokenTurn, 'endedAtEpochMs' | 'startedAtEpochMs'>
+): TraceQueryContextTarget[] {
+  const byKey = new Map<
+    string,
+    {
+      eventCount: number
+      insideTurn: boolean
+      lastEventAtMs: number
+      strength: number
+      strongestKind: string
+      target: TraceQueryTarget
+    }
+  >()
+  for (const { events, session } of entries) {
+    const sessionStartMs = Date.parse(session.startedAt)
+    if (!Number.isFinite(sessionStartMs)) continue
+    for (const event of events) {
+      const target = event.target
+      if (!target) continue
+      const key = `${target.frameId ?? ''}\u0000${target.stableId}`
+      const eventAtMs = sessionStartMs + event.atMs
+      const insideTurn = eventAtMs >= turn.startedAtEpochMs && eventAtMs <= turn.endedAtEpochMs
+      const strength = targetStrength(event.kind)
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, {
+          eventCount: 1,
+          insideTurn,
+          lastEventAtMs: eventAtMs,
+          strength,
+          strongestKind: event.kind,
+          target: structuredClone(target)
+        })
+        continue
+      }
+      existing.eventCount += 1
+      existing.insideTurn = existing.insideTurn || insideTurn
+      existing.lastEventAtMs = Math.max(existing.lastEventAtMs, eventAtMs)
+      if (strength > existing.strength) {
+        existing.strength = strength
+        existing.strongestKind = event.kind
+      }
+    }
+  }
+  return [...byKey.values()]
+    .sort(
+      (left, right) =>
+        Number(right.insideTurn) - Number(left.insideTurn) ||
+        right.strength - left.strength ||
+        right.lastEventAtMs - left.lastEventAtMs
+    )
+    .map((entry, index) => ({
+      ...entry.target,
+      eventCount: entry.eventCount,
+      insideTurn: entry.insideTurn,
+      lastEventAt: new Date(entry.lastEventAtMs).toISOString(),
+      rank: index + 1,
+      strength: entry.strength,
+      strongestKind: entry.strongestKind
+    }))
+}
+
 function spokenWindowResult(
-  entries: ExactWindowEntry[],
+  entries: TraceWindowEntry[],
   sourceSpokenTurn: TraceQueryPublicSpokenTurn,
   scanned: TraceQueryResult['scanned'],
   status: 'ambiguous' | 'matched',
-  reason?: 'trace_window_truncated' | 'trace_window_unsettled'
+  reason?: 'trace_window_truncated' | 'trace_window_unsettled',
+  contextTargets?: TraceQueryContextTarget[]
 ): TraceQueryResult {
   let remaining = MAX_EXACT_WINDOW_EVENTS
   const matches = entries.flatMap(({ events, session, summary }) => {
@@ -787,12 +999,34 @@ function spokenWindowResult(
     ]
   })
   return {
+    ...(contextTargets ? { contextTargets } : {}),
     matches,
     ...(reason ? { reason } : {}),
     scanned,
     sourceSpokenTurn,
     status
   }
+}
+
+function spokenResolutionFailure(resolution: TraceSpokenTurnResolution): TraceQueryResult | null {
+  if (resolution.status === 'error') return errorResult(resolution.reason)
+  if (resolution.status === 'empty') {
+    return buildTraceEmptyResult(
+      resolution.reason,
+      undefined,
+      resolution.staleTurn ? publicTraceSpokenTurn(resolution.staleTurn) : undefined
+    )
+  }
+  if (resolution.status === 'ambiguous') {
+    return {
+      matches: [],
+      reason: resolution.reason,
+      scanned: { indexCandidates: 0, sessions: 0 },
+      spokenTurnCandidates: resolution.candidates.map(publicTraceSpokenTurn),
+      status: 'ambiguous'
+    }
+  }
+  return null
 }
 
 export async function queryTraceSpokenTurnWindow(
@@ -811,17 +1045,9 @@ export async function queryTraceSpokenTurnWindow(
     dependencies.spokenTurns ?? [],
     { includeExpired: dependencies.persistentSpokenTurns === true }
   )
-  if (resolution.status === 'error') return errorResult(resolution.reason)
-  if (resolution.status === 'empty') return buildTraceEmptyResult(resolution.reason)
-  if (resolution.status === 'ambiguous') {
-    return {
-      matches: [],
-      reason: resolution.reason,
-      scanned: { indexCandidates: 0, sessions: 0 },
-      spokenTurnCandidates: resolution.candidates.map(publicTraceSpokenTurn),
-      status: 'ambiguous'
-    }
-  }
+  const failure = spokenResolutionFailure(resolution)
+  if (failure) return failure
+  if (resolution.status !== 'matched') return errorResult('invalid_spoken_turn_selector')
 
   const sourceSpokenTurn = publicTraceSpokenTurn(resolution.turn)
   if (!validTurnWindow(resolution.turn)) {
@@ -833,7 +1059,15 @@ export async function queryTraceSpokenTurnWindow(
       status: 'ambiguous'
     }
   }
-  const candidates = candidateSummaries(dependencies, resolution.turn)
+  const windowTurn: TraceQuerySpokenTurn =
+    input.turnContext === true
+      ? {
+          ...resolution.turn,
+          endedAtEpochMs: resolution.turn.endedAtEpochMs + TURN_CONTEXT_BRACKET_MS,
+          startedAtEpochMs: resolution.turn.startedAtEpochMs - TURN_CONTEXT_BRACKET_MS
+        }
+      : resolution.turn
+  const candidates = candidateSummaries(dependencies, windowTurn)
   if (candidates.length > MAX_EXACT_WINDOW_SESSIONS) {
     return {
       matches: [],
@@ -867,10 +1101,10 @@ export async function queryTraceSpokenTurnWindow(
     }
   }
 
-  const entries: ExactWindowEntry[] = []
+  const entries: TraceWindowEntry[] = []
   for (const { session, summary } of loaded) {
     if (!session) continue
-    const events = matchingEvents(session, resolution.turn)
+    const events = matchingTraceWindowEvents(session, windowTurn)
     if (!events) {
       return {
         matches: [],
@@ -884,6 +1118,8 @@ export async function queryTraceSpokenTurnWindow(
   }
 
   const scanned = { indexCandidates: candidates.length, sessions: loaded.length }
+  const contextTargets =
+    input.turnContext === true ? turnContextTargets(entries, resolution.turn) : undefined
   const eventCount = entries.reduce((total, entry) => total + entry.events.length, 0)
   const currentUnsettled =
     dependencies.currentSessionSettled === false &&
@@ -897,7 +1133,8 @@ export async function queryTraceSpokenTurnWindow(
       sourceSpokenTurn,
       scanned,
       'ambiguous',
-      'trace_window_unsettled'
+      'trace_window_unsettled',
+      contextTargets
     )
   }
   if (eventCount > MAX_EXACT_WINDOW_EVENTS) {
@@ -906,13 +1143,21 @@ export async function queryTraceSpokenTurnWindow(
       sourceSpokenTurn,
       scanned,
       'ambiguous',
-      'trace_window_truncated'
+      'trace_window_truncated',
+      contextTargets
     )
   }
   if (eventCount === 0) {
     return buildTraceEmptyResult('no_trace_in_spoken_window', scanned, sourceSpokenTurn)
   }
-  return spokenWindowResult(entries, sourceSpokenTurn, scanned, 'matched')
+  return spokenWindowResult(
+    entries,
+    sourceSpokenTurn,
+    scanned,
+    'matched',
+    undefined,
+    contextTargets
+  )
 }
 
 export async function queryTraceRecords(
@@ -956,7 +1201,15 @@ export async function queryTraceRecords(
   }
 
   const limit = Math.max(1, Math.min(MAX_RESULTS, input.limit ?? 3))
-  const matches = scored.slice(0, limit).map(buildTraceQueryMatch)
+  const matches = scored.slice(0, limit).map((candidate) =>
+    buildTraceQueryMatch({
+      matchedBy: candidate.matchedBy,
+      score: candidate.score,
+      session: candidate.session,
+      summary: candidate.summary,
+      targets: candidate.targets
+    })
+  )
   const ambiguous = !prepared.cursor && scored.length > 1 && scored[0]?.score === scored[1]?.score
   if (ambiguous) {
     return {

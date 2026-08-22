@@ -34,7 +34,7 @@ test('opens a source PowerPoint as a focused deck with thumbnails and slide navi
   await expect(editor.page.getByTestId('pptx-deck-controls')).toHaveCount(0)
   await expect(editor.page.getByTestId('pptx-active-slide')).toBeVisible()
 
-  await editor.page.getByTestId('code-object-design-hit-target').dblclick()
+  await editor.page.getByTestId('code-object-design-hit-target').click()
   await expect(editor.page.getByTestId('pptx-deck-controls')).toBeVisible()
   await expect(editor.page.getByRole('complementary', { name: 'Slide thumbnails' })).toBeVisible()
   await expect(editor.page.getByTestId('pptx-thumbnail-slide')).toHaveCount(3)

@@ -1,6 +1,8 @@
 import { BLACK, DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from './constants'
 import type { NodeType, SceneNode } from './types'
 
+export type PersistedSceneNode = Pick<SceneNode, 'id' | 'type'> & Partial<SceneNode>
+
 export function createDefaultNode(
   generateId: () => string,
   type: NodeType,
@@ -150,6 +152,14 @@ export function createDefaultNode(
     figmaDerivedTextGlyphs: null,
     ...overrides
   }
+}
+
+/**
+ * Restores fields omitted by compact or older persisted node records.
+ * Explicit persisted values always win over current defaults.
+ */
+export function hydrateSceneNodeDefaults(node: PersistedSceneNode): SceneNode {
+  return createDefaultNode(() => node.id, node.type, node)
 }
 
 export const CONTAINER_TYPES = new Set<NodeType>([

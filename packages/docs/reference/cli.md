@@ -146,12 +146,18 @@ Use the compact persisted index when a Board or object ID is unknown:
 
 ```sh
 openpencil board search "pricing decisions" --limit 10 --json
+openpencil board get 0:35 --json
+openpencil board ls --json
+openpencil board nearby 0:35 --json
 openpencil board create --name "Agent Sandbox" --request-id "create-agent-sandbox" --json
 ```
 
 | Command         | Purpose                                                        |
 | --------------- | -------------------------------------------------------------- |
 | `board search`  | Find an unknown persisted Board or object compactly            |
+| `board get`     | Print one or a few `workspace.json` nodes without dumping the file |
+| `board ls`      | List direct children of a page or frame as id/name/box rows    |
+| `board nearby`  | List the nearest sibling boxes around one object               |
 | `board create`  | Create a Board when the user explicitly requests a new one    |
 | `board build`   | Apply one complete semantic plan as one guarded transaction   |
 | `board present` | Reveal a saved result when the user requests visual placement |
@@ -180,15 +186,14 @@ openpencil board build --request '{
         "body": "Ready",
         "placement": { "target": { "kind": "auto" } }
       }
-    }],
-    "connections": []
+    }]
   }
 }' --release-summary --json
 ```
 
 The request has exactly four top-level responsibilities: its contract, persisted target, stable
 request ID and intent, and one `board-build-plan/v1`. The plan may describe artifacts, semantic
-composition, object operations, and connections as one atomic outcome. Placement is an optional
+composition and object operations as one atomic outcome. Placement is an optional
 semantic hint, never authority.
 
 `board build` accepts exactly one of `--request` or `--request-file`. Use `--request-file` only when

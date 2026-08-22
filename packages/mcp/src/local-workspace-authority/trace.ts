@@ -1,3 +1,5 @@
+import type { Rect } from '@open-pencil/scene-graph/primitives'
+
 import type { LocalWorkspaceIdentity } from './types'
 
 export const LOCAL_WORKSPACE_TRACE_GESTURE_VERSION = 1
@@ -6,12 +8,7 @@ const MAX_TRACE_CANDIDATES = 25
 
 type JsonRecord = Record<string, unknown>
 
-export type LocalWorkspaceTraceRegion = {
-  height: number
-  width: number
-  x: number
-  y: number
-}
+export type LocalWorkspaceTraceRegion = Rect
 
 export type LocalWorkspaceTraceEvidenceReference = {
   evidenceId: string
@@ -34,7 +31,8 @@ export type LocalWorkspaceTraceGesture = {
   }
   candidates: {
     count: number
-    items: Array<{ stableId: string }>
+    /** stableId is the precise recorded hit; ownerId, when present, is its page-owned container. */
+    items: Array<{ ownerId?: string; stableId: string }>
     primaryTargetId?: string
     truncated: boolean
   }
@@ -97,18 +95,20 @@ function traceRegion(value: unknown): LocalWorkspaceTraceRegion {
   return region
 }
 
-function candidateIds(value: unknown): { ids: string[]; observedCount: number } {
-  if (!Array.isArray(value)) return { ids: [], observedCount: 0 }
-  const observed = [
-    ...new Set(
-      value.flatMap((item) => {
-        if (!isRecord(item)) return []
-        const stableId = optionalString(item.stableId)
-        return stableId ? [stableId] : []
-      })
-    )
-  ]
-  return { ids: observed.slice(0, MAX_TRACE_CANDIDATES), observedCount: observed.length }
+type TraceCandidateItem = { ownerId?: string; stableId: string }
+
+function candidateItems(value: unknown): { items: TraceCandidateItem[]; observedCount: number } {
+  if (!Array.isArray(value)) return { items: [], observedCount: 0 }
+  const seen = new Set<string>()
+  const observed = value.flatMap((item): TraceCandidateItem[] => {
+    if (!isRecord(item)) return []
+    const stableId = optionalString(item.stableId)
+    if (!stableId || seen.has(stableId)) return []
+    seen.add(stableId)
+    const ownerId = optionalString(item.ownerId)
+    return [{ ...(ownerId && ownerId !== stableId ? { ownerId } : {}), stableId }]
+  })
+  return { items: observed.slice(0, MAX_TRACE_CANDIDATES), observedCount: observed.length }
 }
 
 function candidateCount(value: unknown, minimum: number): number {
@@ -162,7 +162,7 @@ export function normalizeLocalWorkspaceTraceGesture(
   if (kind !== 'focus' && kind !== 'ink') {
     throw new TypeError('Trace gesture geometry.kind must be focus or ink.')
   }
-  const { ids, observedCount } = candidateIds(candidates.items)
+  const { items, observedCount } = candidateItems(candidates.items)
   const count = candidateCount(candidates.count, observedCount)
   const primaryTargetId = optionalString(candidates.primaryTargetId)
   const evidence = evidenceReference(value.evidence)
@@ -176,10 +176,12 @@ export function normalizeLocalWorkspaceTraceGesture(
     },
     candidates: {
       count,
-      items: ids.map((stableId) => ({ stableId })),
+      items,
       ...(primaryTargetId ? { primaryTargetId } : {}),
       truncated:
-        candidates.truncated === true || observedCount > MAX_TRACE_CANDIDATES || count > ids.length
+        candidates.truncated === true ||
+        observedCount > MAX_TRACE_CANDIDATES ||
+        count > items.length
     },
     capturedAt: new Date(capturedAt).toISOString(),
     contract: 'trace-gesture-agent/v1',

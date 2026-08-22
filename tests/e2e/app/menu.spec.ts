@@ -24,37 +24,29 @@ test.beforeEach(async () => {
   await expect(menubar).toBeVisible()
 })
 
-test('workspace title is static and the app icon owns browser menus', async () => {
-  const title = editor.page.getByTestId('workspace-title')
+test('the sidebar header is removed and Settings owns the application menu', async () => {
   const appMenuToggle = editor.page.getByTestId('app-menu-toggle')
 
-  await expect(title).toHaveText('OpenPencil')
-  await expect(title).not.toHaveAttribute('aria-expanded')
+  await expect(editor.page.getByTestId('workspace-title')).toHaveCount(0)
+  await expect(appMenuToggle).toHaveAccessibleName('Settings')
   await expect(appMenuToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(editor.page.getByTestId('toolbar').getByTestId('app-menu-toggle')).toBeVisible()
+  const settingsMenu = editor.page.getByTestId('app-settings-menu')
+  await expect(settingsMenu).toBeVisible()
 
-  await editor.page.mouse.move(500, 500)
-  const restingShadow = await appMenuToggle.evaluate(
-    (element) => getComputedStyle(element).boxShadow
-  )
-  await appMenuToggle.hover()
-  await expect
-    .poll(() => appMenuToggle.evaluate((element) => getComputedStyle(element).boxShadow))
-    .not.toBe(restingShadow)
+  const [menuBounds, shellBounds] = await Promise.all([
+    settingsMenu.boundingBox(),
+    editor.page.getByTestId('layers-shell-motion').boundingBox()
+  ])
+  if (!menuBounds || !shellBounds) throw new Error('Expected Settings and sidebar shell bounds')
+  expect(menuBounds.width).toBeCloseTo(280, 0)
+  expect(menuBounds.y + menuBounds.height).toBeCloseTo(shellBounds.y + shellBounds.height, 0)
 })
 
-test('menu bar has all top-level menus', async () => {
+test('Settings keeps only application-level menu groups', async () => {
   const triggers = editor.page.locator('[role="menubar"] [role="menuitem"]')
-  const labels = await triggers.allTextContents()
-  expect(labels).toEqual([
-    'File',
-    'Settings',
-    'Edit',
-    'Insert',
-    'View',
-    'Object',
-    'Text',
-    'Arrange'
-  ])
+  const labels = (await triggers.allTextContents()).map((label) => label.trim())
+  expect(labels).toEqual(['File', 'Settings'])
 })
 
 test('Settings menu keeps app preferences together', async () => {
@@ -70,6 +62,24 @@ test('Settings menu keeps app preferences together', async () => {
   await editor.page.keyboard.press('Escape')
 })
 
+test('appearance exposes clean Light, Dark, and System choices', async () => {
+  const light = editor.page.getByTestId('settings-theme-light')
+  const dark = editor.page.getByTestId('settings-theme-dark')
+  const system = editor.page.getByTestId('settings-theme-auto')
+
+  await expect(light).toHaveAccessibleName('Light')
+  await expect(dark).toHaveAccessibleName('Dark')
+  await expect(system).toHaveAccessibleName('System')
+
+  await dark.click()
+  await expect(editor.page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(dark).toHaveAttribute('aria-checked', 'true')
+
+  await light.click()
+  await expect(editor.page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(light).toHaveAttribute('aria-checked', 'true')
+})
+
 test('File menu opens and shows items', async () => {
   await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'File' }).click()
   const menu = editor.page.locator('[role="menu"]')
@@ -79,26 +89,14 @@ test('File menu opens and shows items', async () => {
   expect(items.some((t) => t.includes('Open'))).toBe(true)
   expect(items.some((t) => t.includes('Save'))).toBe(true)
   expect(items.some((t) => t.includes('Save as'))).toBe(true)
+  expect(items.some((t) => t.includes('Media'))).toBe(true)
+  expect(items.some((t) => t.includes('Mermaid diagram'))).toBe(true)
 
   await editor.page.keyboard.press('Escape')
 })
 
-test('Edit menu shows Undo/Redo/Delete', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Edit' }).click()
-  const menu = editor.page.locator('[role="menu"]')
-  await expect(menu).toBeVisible()
-
-  const items = await menu.locator('[role="menuitem"]').allTextContents()
-  expect(items.some((t) => t.includes('Undo'))).toBe(true)
-  expect(items.some((t) => t.includes('Redo'))).toBe(true)
-  expect(items.some((t) => t.includes('Delete'))).toBe(true)
-  expect(items.some((t) => t.includes('Select all'))).toBe(true)
-
-  await editor.page.keyboard.press('Escape')
-})
-
-test('Insert menu creates separate editable Mermaid pieces', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Insert' }).click()
+test('File menu creates separate editable Mermaid pieces', async () => {
+  await editor.page.getByTestId('menubar-file').click()
   await editor.page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
 
   const dialog = editor.page.getByTestId('mermaid-import-dialog')
@@ -169,10 +167,8 @@ test('Insert menu creates separate editable Mermaid pieces', async () => {
   expect(inserted.source).toContain('A[Capture]')
   expect(inserted.hasArrowhead).toBe(true)
   await expect(editor.page.getByTestId('design-panel-single')).toBeVisible()
-  await expect(editor.page.getByTestId('sidebar-context-code')).toHaveCount(0)
 
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Edit' }).click()
-  await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Undo' }).click()
+  await editor.page.keyboard.press('Meta+z')
   await editor.canvas.waitForRender()
   expect(
     await editor.page.evaluate(
@@ -183,8 +179,8 @@ test('Insert menu creates separate editable Mermaid pieces', async () => {
   assertNoMermaidErrors()
 })
 
-test('Insert menu converts Mermaid Architecture into editable native pieces', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Insert' }).click()
+test('File menu converts Mermaid Architecture into editable native pieces', async () => {
+  await editor.page.getByTestId('menubar-file').click()
   await editor.page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
 
   const dialog = editor.page.getByTestId('mermaid-import-dialog')
@@ -228,8 +224,8 @@ test('Insert menu converts Mermaid Architecture into editable native pieces', as
   assertNoMermaidErrors()
 })
 
-test('Insert menu keeps native Mermaid Sankey gradients readable on transparent boards', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Insert' }).click()
+test('File menu keeps native Mermaid Sankey gradients readable on transparent boards', async () => {
+  await editor.page.getByTestId('menubar-file').click()
   await editor.page.getByRole('menuitem', { name: 'Mermaid diagram…', exact: true }).click()
 
   const dialog = editor.page.getByTestId('mermaid-import-dialog')
@@ -348,99 +344,4 @@ Processing,Losses,3`)
   expect(afterResize.height).toBeGreaterThan(afterMove.height)
   expect(afterResize.width / afterResize.height).toBeCloseTo(afterMove.width / afterMove.height, 2)
   assertNoMermaidErrors()
-})
-
-test('View menu shows zoom options', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'View' }).click()
-  const menu = editor.page.locator('[role="menu"]')
-  await expect(menu).toBeVisible()
-
-  const items = await menu.locator('[role="menuitem"]').allTextContents()
-  expect(items.some((t) => t.includes('Zoom to fit'))).toBe(true)
-  expect(items.some((t) => t.includes('Zoom in'))).toBe(true)
-  expect(items.some((t) => t.includes('Zoom out'))).toBe(true)
-
-  await editor.page.keyboard.press('Escape')
-})
-
-test('Object menu shows Group/Ungroup/Component', async () => {
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Object' }).click()
-  const menu = editor.page.locator('[role="menu"]')
-  await expect(menu).toBeVisible()
-
-  const items = await menu.locator('[role="menuitem"]').allTextContents()
-  expect(items.some((t) => t.includes('Group'))).toBe(true)
-  expect(items.some((t) => t.includes('Ungroup'))).toBe(true)
-  expect(items.some((t) => t.includes('Create component'))).toBe(true)
-  expect(items.some((t) => t.includes('Bring to front'))).toBe(true)
-  expect(items.some((t) => t.includes('Send to back'))).toBe(true)
-
-  await editor.page.keyboard.press('Escape')
-})
-
-function getStoreStateNumber(key: 'selectedIds' | 'zoom') {
-  return editor.page.evaluate((stateKey) => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('OpenPencil store not initialized')
-    if (stateKey === 'selectedIds') return store.state.selectedIds.size
-    return store.state.zoom
-  }, key)
-}
-
-async function drawRectangleFromToolbar(x: number, y: number, width: number, height: number) {
-  await editor.page.getByRole('button', { name: 'Rectangle', exact: true }).click()
-  await editor.canvas.drag(x, y, x + width, y + height)
-  await editor.canvas.waitForRender()
-}
-
-test('Undo via Edit menu works', async () => {
-  await drawRectangleFromToolbar(520, 400, 100, 100)
-  const beforeUndo = await getStoreStateNumber('selectedIds')
-  expect(beforeUndo).toBe(1)
-
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Edit' }).click()
-  await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Undo' }).click()
-  await editor.canvas.waitForRender()
-
-  const afterUndo = await getStoreStateNumber('selectedIds')
-  expect(afterUndo).toBe(0)
-})
-
-test('Duplicate via Edit menu works', async () => {
-  await drawRectangleFromToolbar(560, 440, 80, 80)
-
-  const countBefore = await editor.page.evaluate(() => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('OpenPencil store not initialized')
-    return store.graph.getChildren(store.state.currentPageId).length
-  })
-
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'Edit' }).click()
-  await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Duplicate' }).click()
-  await editor.canvas.waitForRender()
-
-  const countAfter = await editor.page.evaluate(() => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('OpenPencil store not initialized')
-    return store.graph.getChildren(store.state.currentPageId).length
-  })
-
-  expect(countAfter).toBe(countBefore + 1)
-})
-
-test('Zoom to fit via View menu works', async () => {
-  await drawRectangleFromToolbar(700, 500, 100, 100)
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'View' }).click()
-  await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Zoom in' }).click()
-  await editor.canvas.waitForRender()
-
-  const zoomBefore = await getStoreStateNumber('zoom')
-  expect(zoomBefore).toBeGreaterThan(1)
-
-  await editor.page.locator('[role="menubar"] [role="menuitem"]', { hasText: 'View' }).click()
-  await editor.page.locator('[role="menu"] [role="menuitem"]', { hasText: 'Zoom to fit' }).click()
-  await editor.canvas.waitForRender()
-
-  const zoomAfter = await getStoreStateNumber('zoom')
-  expect(zoomAfter).not.toBe(zoomBefore)
 })

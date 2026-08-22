@@ -45,20 +45,13 @@ describe('Trace-targeted Board build materialization', () => {
             }
           }
         ],
-        connections: [
-          {
-            kind: 'visual',
-            source: { object_id: '$trace' },
-            target: { alias: 'note' }
-          }
-        ],
         contract: 'board-build-plan/v1',
         operations: [{ kind: 'object.update', object_id: '$trace', patch: { opacity: 0.8 } }]
       },
       context
     )
 
-    expect(materialized).toMatchObject({ objectReferenceCount: 2, regionReferenceCount: 1 })
+    expect(materialized).toMatchObject({ objectReferenceCount: 1, regionReferenceCount: 1 })
     expect(materialized.value).toMatchObject({
       artifacts: [
         {
@@ -69,7 +62,6 @@ describe('Trace-targeted Board build materialization', () => {
           }
         }
       ],
-      connections: [{ source: { object_id: 'frame:header' } }],
       operations: [{ object_id: 'frame:header' }]
     })
   })
@@ -91,7 +83,6 @@ describe('Trace-targeted Board build materialization', () => {
           alias,
           recipe: { body: alias, kind: 'native_card', title: alias }
         })),
-        connections: [],
         contract: 'board-build-plan/v1',
         layout: {
           anchor: { kind: 'trace_region' },
@@ -110,32 +101,6 @@ describe('Trace-targeted Board build materialization', () => {
       width: 160,
       x: 70,
       y: 50
-    })
-  })
-
-  test('materializes one traced-connection scope without exposing connection IDs to the caller', () => {
-    const context = boardBuildTraceContext({
-      ...preparedTrace('frame:card'),
-      trace_connections: { count: 3, items: [], truncated: false }
-    })
-    const materialized = materializeBoardBuildTrace(
-      {
-        operations: [{ kind: 'connection.delete_traced', orientation: 'vertical' }]
-      },
-      context
-    )
-
-    expect(context.connectionCount).toBe(3)
-    expect(materialized).toMatchObject({ connectionScopeCount: 1 })
-    expect(materialized.value).toEqual({
-      operations: [
-        {
-          kind: 'connection.delete_traced',
-          object_ids: ['frame:card', 'frame:peer'],
-          orientation: 'vertical',
-          region: { height: 80, width: 160, x: 70, y: 50 }
-        }
-      ]
     })
   })
 })

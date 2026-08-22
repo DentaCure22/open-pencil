@@ -5,6 +5,7 @@ import type {
   VariableCollection
 } from '@open-pencil/scene-graph'
 import { SceneGraph } from '@open-pencil/scene-graph'
+import { hydrateSceneNodeDefaults } from '@open-pencil/scene-graph/node-defaults'
 
 const BYTE_MARKER = '__openpencil_uint8array_v1'
 
@@ -83,7 +84,9 @@ export function readAuthorityBoardDocument(value: unknown): AuthorityBoardDocume
   const source = workspaceDocument(value)
   const graph = new SceneGraph()
   graph.rootId = source.rootId
-  graph.nodes = new Map(source.nodes)
+  graph.nodes = new Map(
+    source.nodes.map(([id, node]) => [id, hydrateSceneNodeDefaults(node)] as const)
+  )
   graph.images = new Map(source.images)
   graph.variables = new Map(source.variables)
   graph.variableCollections = new Map(source.variableCollections)

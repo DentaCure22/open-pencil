@@ -7,17 +7,12 @@ import * as Y from 'yjs'
 
 import { randomIndex } from '@open-pencil/core/random'
 
-import { createDragPreviewSession } from '@/app/collab/drag-preview'
 import {
   completeCollabHydration,
   createCollabHydrationState,
   type CollabHydrationState,
   resetCollabHydration
 } from '@/app/collab/hydration'
-import {
-  connectLocalWorkspaceChannel,
-  type LocalWorkspaceChannel
-} from '@/app/collab/local-workspace-channel'
 import { createCacheDurableYjsOutbox } from '@/app/collab/persistence/outbox'
 import {
   connectDurableYjsProvider,
@@ -32,7 +27,6 @@ import {
   registerYjsObservers,
   type SyncNodeToYjs
 } from '@/app/collab/yjs'
-import { getObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 import { PEER_COLORS } from '@/constants'
 
@@ -45,8 +39,6 @@ export type CollabRuntime = {
   persistence: IndexeddbPersistence | null
   durablePersistence: DurableYjsProvider | null
   durableConnectionAbort: AbortController | null
-  localWorkspaceChannel: LocalWorkspaceChannel | null
-  dragPreviewSession: { dispose: () => void } | null
   connectedStore: EditorStore | null
   hydration: CollabHydrationState
   suppressGraphSync: boolean
@@ -60,10 +52,8 @@ type CollabSessionBindings = {
   tickFollow: () => void
   broadcastAwareness: () => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
-  applyYjsObjectGraphToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
   syncNodeToYjs: SyncNodeToYjs
   syncAllNodesToYjs: () => void
-  migrateObjectGraphRecordsToYjs: () => void
 }
 
 type AwarenessChange = {
@@ -85,9 +75,7 @@ type ConnectCollabSessionOptions = CollabSessionBindings & {
   store: EditorStore
   disconnect: () => void
   durableStore?: DurableYjsStore
-  localOnly?: boolean
   onDurableReady?: DurableYjsHydratedHandler
-  seedLocalWorkspace?: boolean
 }
 
 type CollabConnectionActionsOptions = CollabSessionBindings & {
@@ -104,8 +92,6 @@ type CollabSessionResources = {
   persistence: IndexeddbPersistence | null
   durablePersistence: DurableYjsProvider | null
   durableConnectionAbort: AbortController | null
-  localWorkspaceChannel: LocalWorkspaceChannel | null
-  dragPreviewSession: { dispose: () => void } | null
   ydoc: Y.Doc | null
   unbindGraphEvents: (() => void) | null
   stopZoomWatch: (() => void) | null
@@ -126,8 +112,6 @@ export function createCollabRuntime(): CollabRuntime {
     persistence: null,
     durablePersistence: null,
     durableConnectionAbort: null,
-    localWorkspaceChannel: null,
-    dragPreviewSession: null,
     connectedStore: null,
     hydration: createCollabHydrationState(),
     suppressGraphSync: false,
@@ -155,18 +139,14 @@ export function createCollabConnectionActions({
   tickFollow,
   broadcastAwareness,
   applyYjsToGraph,
-  applyYjsObjectGraphToGraph,
   syncNodeToYjs,
   syncAllNodesToYjs,
-  migrateObjectGraphRecordsToYjs,
   resetFollow
 }: CollabConnectionActionsOptions) {
   function connect(
     roomId: string,
     durableStore?: DurableYjsStore,
-    onDurableReady?: DurableYjsHydratedHandler,
-    localOnly = false,
-    seedLocalWorkspace = true
+    onDurableReady?: DurableYjsHydratedHandler
   ) {
     connectCollabSession({
       roomId,
@@ -178,14 +158,10 @@ export function createCollabConnectionActions({
       tickFollow,
       broadcastAwareness,
       applyYjsToGraph,
-      applyYjsObjectGraphToGraph,
       syncNodeToYjs,
       syncAllNodesToYjs,
-      migrateObjectGraphRecordsToYjs,
       durableStore,
-      localOnly,
-      onDurableReady,
-      seedLocalWorkspace
+      onDurableReady
     })
   }
 
@@ -198,8 +174,6 @@ export function createCollabConnectionActions({
       persistence: runtime.persistence,
       durablePersistence: runtime.durablePersistence,
       durableConnectionAbort: runtime.durableConnectionAbort,
-      localWorkspaceChannel: runtime.localWorkspaceChannel,
-      dragPreviewSession: runtime.dragPreviewSession,
       ydoc: runtime.ydoc,
       unbindGraphEvents: runtime.unbindGraphEvents,
       stopZoomWatch: runtime.stopZoomWatch,
@@ -235,14 +209,10 @@ export function connectCollabSession({
   tickFollow,
   broadcastAwareness,
   applyYjsToGraph,
-  applyYjsObjectGraphToGraph,
   syncNodeToYjs,
   syncAllNodesToYjs,
-  migrateObjectGraphRecordsToYjs,
   durableStore,
-  localOnly,
-  onDurableReady,
-  seedLocalWorkspace = true
+  onDurableReady
 }: ConnectCollabSessionOptions) {
   if (runtime.ydoc) disconnect()
 
@@ -253,14 +223,9 @@ export function connectCollabSession({
   runtime.awareness = new awarenessProtocol.Awareness(runtime.ydoc)
   runtime.ynodes = runtime.ydoc.getMap('nodes')
   runtime.yimages = runtime.ydoc.getMap('images')
-  // The production workspace already restores its complete SceneGraph from the
-  // document cache before opening the local BroadcastChannel. Replaying another
-  // persisted Yjs history here can briefly resurrect deleted nodes, then replace
-  // Code Object metadata and page-owned Object Graph records with stale values.
-  // Keep IndexedDB room history only for explicit peer-collaboration rooms that
-  // do not already have a document persistence owner.
-  runtime.persistence =
-    durableStore || localOnly ? null : new IndexeddbPersistence(`op-room-${roomId}`, runtime.ydoc)
+  runtime.persistence = durableStore
+    ? null
+    : new IndexeddbPersistence(`op-room-${roomId}`, runtime.ydoc)
   const sessionDocument = runtime.ydoc
 
   const awareness = runtime.awareness
@@ -274,33 +239,27 @@ export function connectCollabSession({
     store,
     ynodes: runtime.ynodes,
     yimages: runtime.yimages,
-    yObjectGraphRecords: getObjectGraphYRecords(runtime.ydoc),
     getSuppressYjsEvents: () => runtime.suppressYjsEvents,
     setSuppressGraphSync: (value) => {
       runtime.suppressGraphSync = value
     },
-    applyYjsToGraph,
-    applyYjsObjectGraphToGraph
+    applyYjsToGraph
   })
 
-  if (localOnly) {
-    runtime.localWorkspaceChannel = connectLocalWorkspaceChannel(roomId, runtime.ydoc)
-  } else {
-    const roomConnection = connectCollabRoom({
-      roomId,
-      ydoc: runtime.ydoc,
-      awareness: runtime.awareness,
-      setConnected: () => {
-        state.value.connected = true
-      },
-      syncDocument: !durableStore,
-      updatePeersList
-    })
-    runtime.room = roomConnection.room
-    state.value.connected = true
-    broadcastAwareness()
-    runtime.stopZoomWatch = watchAwarenessZoom(store, () => runtime.awareness)
-  }
+  const roomConnection = connectCollabRoom({
+    roomId,
+    ydoc: runtime.ydoc,
+    awareness: runtime.awareness,
+    setConnected: () => {
+      state.value.connected = true
+    },
+    syncDocument: !durableStore,
+    updatePeersList
+  })
+  runtime.room = roomConnection.room
+  state.value.connected = true
+  broadcastAwareness()
+  runtime.stopZoomWatch = watchAwarenessZoom(store, () => runtime.awareness)
 
   function bindGraphEvents() {
     if (runtime.unbindGraphEvents) return
@@ -316,7 +275,7 @@ export function connectCollabSession({
       syncNodeToYjs
     })
   }
-  if (!localOnly) bindGraphEvents()
+  bindGraphEvents()
 
   function acceptHydratedDocument(seedWhenEmpty = true) {
     completeCollabHydration(runtime.hydration, runtime.ydoc, runtime.ynodes)
@@ -332,7 +291,6 @@ export function connectCollabSession({
     } finally {
       runtime.suppressGraphSync = false
     }
-    migrateObjectGraphRecordsToYjs()
   }
 
   const localPersistence = runtime.persistence
@@ -374,49 +332,6 @@ export function connectCollabSession({
         if (isAbortError(error)) return
         console.error('[OpenPencil Cloud] Durable sync failed', error)
       })
-  } else if (localOnly) {
-    const localChannel = runtime.localWorkspaceChannel
-    if (!localChannel) {
-      if (!seedLocalWorkspace) {
-        console.error('[OpenPencil Workspace] Local live sync is unavailable for this follower')
-        return
-      }
-      acceptHydratedDocument()
-      bindGraphEvents()
-      state.value.connected = true
-      void Promise.resolve(onDurableReady?.()).catch((error) =>
-        console.error('[OpenPencil Workspace] Local sync repair failed', error)
-      )
-      return
-    }
-    void localChannel
-      .bootstrap(seedLocalWorkspace ? syncAllNodesToYjs : undefined)
-      .then(async (result) => {
-        if (
-          result === 'closed' ||
-          runtime.ydoc !== sessionDocument ||
-          runtime.localWorkspaceChannel !== localChannel
-        ) {
-          return undefined
-        }
-        acceptHydratedDocument(false)
-        // Publish the terminal preview before the final Yjs transform so peers
-        // can interpolate into the durable pose instead of snapping to it.
-        runtime.dragPreviewSession = createDragPreviewSession({
-          store,
-          transport: localChannel
-        })
-        bindGraphEvents()
-        state.value.connected = true
-        await onDurableReady?.()
-        return undefined
-      })
-      .catch((error) => console.error('[OpenPencil Workspace] Local live sync failed', error))
-  } else {
-    acceptHydratedDocument()
-    void Promise.resolve(onDurableReady?.()).catch((error) =>
-      console.error('[OpenPencil Workspace] Collaboration sync repair failed', error)
-    )
   }
 }
 
@@ -428,8 +343,6 @@ export function resetCollabRuntime(runtime: CollabRuntime) {
   runtime.persistence = null
   runtime.durablePersistence = null
   runtime.durableConnectionAbort = null
-  runtime.localWorkspaceChannel = null
-  runtime.dragPreviewSession = null
   runtime.ydoc = null
   runtime.ynodes = null
   runtime.yimages = null
@@ -447,8 +360,6 @@ export function disposeCollabSessionResources(resources: CollabSessionResources)
   resources.unbindGraphEvents?.()
   resources.stopZoomWatch?.()
   void resources.room?.leave()
-  resources.dragPreviewSession?.dispose()
-  resources.localWorkspaceChannel?.close()
   resources.durableConnectionAbort?.abort()
   if (resources.durablePersistence) {
     void resources.durablePersistence.destroy()

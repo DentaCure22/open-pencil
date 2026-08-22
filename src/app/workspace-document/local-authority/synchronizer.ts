@@ -24,19 +24,11 @@ export function createLocalWorkspaceAuthorityHeadSynchronizer(
     return persistedSceneVersion === sceneVersion
   }
 
-  function synchronize(localChangesAlreadyPreserved = false): Promise<boolean> {
+  function synchronize(_localChangesAlreadyPreserved = false): Promise<boolean> {
     if (!options.canSynchronize()) return Promise.resolve(false)
     if (inFlight) return inFlight
 
     inFlight = (async () => {
-      if (
-        !localChangesAlreadyPreserved &&
-        options.canWrite() &&
-        persistedSceneVersion !== options.currentSceneVersion()
-      ) {
-        await options.persist()
-      }
-
       options.stopTracking()
       const restored = await options.restore()
       if (!restored) {

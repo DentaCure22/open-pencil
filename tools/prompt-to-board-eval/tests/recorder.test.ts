@@ -204,7 +204,7 @@ printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","id":"ms
       workspace_id: 'workspace-1'
     }
     const releaseMessage =
-      'Board build applied durably on document-1 / Fixture: 1 artifact and 0 connections at revision 13.'
+      'Board build applied durably on document-1 / Fixture: 1 artifact at revision 13.'
     await writeFile(
       binary,
       `#!/Users/omar/.bun/bin/bun
@@ -235,7 +235,6 @@ for await (const line of input) {
         receipt: { appliedRevision: 13, requestId: '${requestId}', semantic_owner: { owner_id: 'owner-1', root_object_id: 'owner-1' }, status: 'applied' },
         release_summary: {
           artifact_count: 1,
-          connection_count: 0,
           contract: 'board-build-release/v1',
           message: ${JSON.stringify(releaseMessage)},
           proof_limitations: ['pixels:not_evaluated'],

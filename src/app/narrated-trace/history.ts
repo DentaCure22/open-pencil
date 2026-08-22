@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue'
 
+import { traceEventSearchValues } from '@open-pencil/core/rpc'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -94,15 +95,7 @@ function isRecordSummary(value: unknown): value is NarratedTraceRecordSummary {
 }
 
 function summarySearchTerms(session: NarratedTraceSession, title: string): string[] {
-  const values = [
-    title,
-    ...session.events.flatMap((event) => [
-      event.label,
-      event.text ?? '',
-      event.target?.name ?? '',
-      ...(event.changes?.map((change) => change.property) ?? [])
-    ])
-  ]
+  const values = [title, ...traceEventSearchValues(session.events)]
   return [
     ...new Set(
       values

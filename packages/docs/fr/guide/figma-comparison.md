@@ -12,13 +12,13 @@ Comparaison fonctionnalité par fonctionnalité des capacités de Figma Design a
 
 | Fonctionnalité | Statut | Notes |
 |---------------|--------|-------|
-| Barre d'outils de design | ✅ | Barre inférieure (style UI3) : Sélection, Frame, Section, Rectangle, Ellipse, Ligne, Texte, Main, Plume |
-| Panneau des calques (barre latérale gauche) | ✅ | Vue en arbre avec expansion/réduction, réordonnancement par glissement, toggle de visibilité ; largeur redimensionnable |
-| Panneau des pages | ✅ | Ajouter, supprimer, renommer des pages ; état viewport par page |
-| Panneau de propriétés (barre latérale droite) | ✅ | Sections : Apparence, Remplissage, Contour, Effets, Typographie, Layout, Position ; largeur redimensionnable |
+| Barre d'outils de design | ✅ | Barre intégrée : Sélection, Frame, Section, Rectangle, Ellipse, Ligne, Texte, Main, Plume |
+| Panneau des calques (barre latérale gauche) | ✅ | Barre flottante avec Calques, Chats, Ressources et Activité |
+| Panneau des pages | ✅ | Le navigateur d'espace de travail gère les Boards et conserve leur viewport |
+| Panneau de propriétés (barre latérale droite) | 🟡 | Pas de panneau permanent sur desktop ; contrôles contextuels sur le canevas et Design dans le tiroir mobile |
 | Zoom et défilement | ✅ | <kbd>Ctrl</kbd> + scroll, pinch, <kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>−</kbd> / <kbd>⌘</kbd><kbd>0</kbd>, espace+glisser, souris milieu, outil main (H) |
 | Règles du canevas | ✅ | Règles haut/gauche avec bandes de sélection et badges de coordonnées |
-| Couleur de fond du canevas | ✅ | Fond par page via le panneau de propriétés |
+| Couleur de fond du canevas | 🟡 | Le fond reste dans le document ; le contrôle desktop n'est pas exposé |
 | Guides du canevas | 🔲 | Figma supporte des guides glissables depuis les règles |
 | Menu d'actions / palette de commandes | 🔲 | Recherche d'actions rapides de Figma |
 | Menu contextuel | ✅ | Clic droit avec presse-papiers, ordre-z, groupement, composant, visibilité, verrouillage, déplacer-vers-page |
@@ -28,7 +28,7 @@ Comparaison fonctionnalité par fonctionnalité des capacités de Figma Design a
 | Miniatures personnalisées | 🔲 | Miniature générée à l'export, mais pas de sélecteur personnalisé |
 | Réglages de valeur de nudge | 🔲 | Défaut 1px/10px ; Figma permet des valeurs personnalisées |
 | Menu de l'app (mode navigateur) | ✅ | Menus Fichier, Édition, Affichage, Objet, Texte, Disposition ; Tauri utilise les menus natifs |
-| Outils IA | 🟡 | 90+ outils via Anthropic, OpenAI, Google AI, OpenRouter + serveur MCP ; pas d'images générées par IA ni de recherche IA encore |
+| Outils IA | 🟡 | Chat de tâches Pi et catalogue MCP découvert à l'exécution ; pas encore d'images générées par IA ni de recherche IA |
 
 ## Calques et formes
 
@@ -55,7 +55,7 @@ Comparaison fonctionnalité par fonctionnalité des capacités de Figma Design a
 | Sélection intelligente (distribuer/aligner) | 🔲 | Espacer et aligner uniformément |
 | Guides de layout (colonnes, lignes, grille) | 🔲 | Guides colonne/ligne/grille sur les frames |
 | Mesurer les distances entre calques | 🔲 | Alt-survol pour afficher les distances |
-| Éditer des objets en lot | ✅ | Panneau multi-sélection : valeurs partagées affichées normalement, valeurs différentes affichent « Mixed » |
+| Éditer des objets en lot | ✅ | Les contrôles contextuels et le tiroir mobile Design prennent en charge la sélection multiple |
 | Identifier les objets similaires | 🔲 | Trouver des calques similaires |
 | Copier/coller des propriétés | 🔲 | Copier remplissage/contour/effets entre calques |
 | Relations parent-enfant | ✅ | Hiérarchie complète avec parentIndex, re-parentage par glissement |
@@ -215,7 +215,7 @@ Comparaison fonctionnalité par fonctionnalité des capacités de Figma Design a
 | Code Connect | 🔲 | Lier composants de design au code |
 | Extraits de code | 🟡 | Export JSX avec coloration et copie ; pas d'extraits CSS/Swift/Kotlin |
 | Figma for VS Code | 🔲 | Intégration plugin éditeur |
-| Serveur MCP | ✅ | @open-pencil/mcp avec transports stdio + HTTP ; 90+ outils core + 3 gestion de fichiers = 90+ total |
+| Serveur MCP | ✅ | `@open-pencil/mcp` avec transports stdio + HTTP et catalogue découvert à l'exécution |
 | Outils CLI | ✅ | CLI headless : info, tree, find, export, analyze, node, pages, variables, eval ; serveur MCP |
 
 ## Figma Draw

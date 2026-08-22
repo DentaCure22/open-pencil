@@ -13,6 +13,10 @@ export interface UseCanvasOptions {
    */
   layer?: CanvasRenderLayer
   /**
+   * Caps backing-store resolution below the device pixel ratio.
+   */
+  maxDevicePixelRatio?: number
+  /**
    * Forces ruler visibility on or off for this canvas.
    *
    * When omitted, the composable falls back to viewport and URL-param logic.
@@ -25,6 +29,10 @@ export interface UseCanvasOptions {
    * usage depending on the browser and GPU backend.
    */
   preserveDrawingBuffer?: boolean
+  /**
+   * Called when the rendering surface cannot be initialized.
+   */
+  onError?: (error: unknown) => void
   /**
    * Called once the rendering surface is ready.
    */

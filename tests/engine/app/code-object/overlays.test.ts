@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { codeObjectFramesForOverlay } from '@/app/code-object/overlays'
 import { createCodeObjectFromPreset } from '@/app/code-object/model'
+import { codeObjectFramesForOverlay } from '@/app/code-object/overlays'
 import { createEditorStore } from '@/app/editor/session'
 
 describe('Code Object overlays', () => {

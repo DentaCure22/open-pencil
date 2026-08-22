@@ -5,6 +5,7 @@ import type {
   VariableCollection,
   DocumentColorSpace
 } from '@open-pencil/scene-graph'
+import { hydrateSceneNodeDefaults } from '@open-pencil/scene-graph/node-defaults'
 
 import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 import { getLazyFigImportContext, setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
@@ -89,7 +90,9 @@ export function serializedSceneGraphTransferList(data: SerializedSceneGraph): Tr
 export function deserializeSceneGraph(data: SerializedSceneGraph): SceneGraph {
   const graph = new SceneGraph()
   graph.rootId = data.rootId
-  graph.nodes = new Map(data.nodes)
+  graph.nodes = new Map(
+    data.nodes.map(([id, node]) => [id, hydrateSceneNodeDefaults(node)] as const)
+  )
   graph.images = new Map(data.images)
   graph.variables = new Map(data.variables)
   graph.variableCollections = new Map(data.variableCollections)

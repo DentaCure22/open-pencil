@@ -18,7 +18,6 @@ import {
 import { APP_FLOW_COLOR } from '@/app/smylr-production/app-flow/primitives'
 import {
   appScreenFlowPluginValue,
-  syncAppScreenFlowGeometry,
   syncAppScreenFlowGeometryForNode,
   syncAppScreenFlowScene,
   syncDentalChartAppFlowGeometry,

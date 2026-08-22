@@ -49,6 +49,7 @@ export function rendererInvalidationForChanges(
 
 function invalidateRenderersForChange(
   renderers: Iterable<SkiaRenderer>,
+  graph: SceneGraph,
   id: string,
   changes: Partial<SceneNode>,
   invalidateNodePicture: boolean
@@ -57,14 +58,25 @@ function invalidateRenderersForChange(
   for (const renderer of renderers) {
     if (invalidation.geometryCache) renderer.invalidateVectorPath(id)
     if (invalidation.nodePicture) renderer.invalidateNodePicture(id)
+    const subtreeId = renderer.pageId ? topLevelSubtreeId(graph, id, renderer.pageId) : null
+    if (subtreeId) renderer.invalidateSubtreePicture(subtreeId)
   }
+}
+
+function topLevelSubtreeId(graph: SceneGraph, nodeId: string, pageId: string): string | null {
+  let node = graph.getNode(nodeId)
+  while (node?.parentId) {
+    if (node.parentId === pageId) return node.id
+    node = graph.getNode(node.parentId)
+  }
+  return null
 }
 
 export function createGraphEventSubscription(options: GraphEventOptions) {
   let unbindGraphEvents: (() => void) | null = null
 
   function onNodeUpdated(id: string, changes: Partial<SceneNode>) {
-    invalidateRenderersForChange(options.getRenderers(), id, changes, true)
+    invalidateRenderersForChange(options.getRenderers(), options.getGraph(), id, changes, true)
     options.emitEditorEvent('node:updated', id, changes)
     options.scheduleComponentSync(id)
     options.requestRender()
@@ -72,11 +84,21 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
 
   function onNodePreviewUpdated(id: string, changes: Partial<SceneNode>) {
     const { nodePicture } = rendererInvalidationForChanges(changes, { preview: true })
-    invalidateRenderersForChange(options.getRenderers(), id, changes, nodePicture)
+    invalidateRenderersForChange(
+      options.getRenderers(),
+      options.getGraph(),
+      id,
+      changes,
+      nodePicture
+    )
     options.emitEditorEvent('node:previewUpdated', id, changes)
   }
 
   function onNodeStructureChanged(nodeId: string) {
+    for (const renderer of options.getRenderers()) {
+      renderer.invalidateNodePicture(nodeId)
+      renderer.clearSubtreePictureCache()
+    }
     options.scheduleComponentSync(nodeId)
     options.requestRender()
   }

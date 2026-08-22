@@ -1,11 +1,17 @@
 import {
   queryTraceRecords,
+  resolveTraceRequest,
+  searchTrace,
   type TraceHistorySession,
+  type TraceQueryDependencies,
   type TraceQueryInput,
   type TraceQueryRecordSummary,
   type TraceQueryResult,
   type TraceQueryScope,
-  type TraceQuerySpokenTurn
+  type TraceQuerySpokenTurn,
+  type TraceResolveInput,
+  type TraceResolveResult,
+  type TraceSearchResult
 } from '@open-pencil/core/rpc'
 
 import type { LocalWorkspaceAuthorityStore } from './store'
@@ -125,6 +131,11 @@ function traceQueryInput(args: JsonRecord): TraceQueryInput {
   if (spokenSelector && (optionalString(args, 'since') || optionalString(args, 'until'))) {
     throw new Error('Spoken-turn retrieval cannot be combined with since or until.')
   }
+  if (args.turn_context === true && !spokenSelector) {
+    throw new Error(
+      'turn_context requires a spoken-turn selector (latest_spoken_turn, spoken_turn_id, or spoken_text).'
+    )
+  }
   const limit = args.limit
   if (
     limit !== undefined &&
@@ -140,7 +151,43 @@ function traceQueryInput(args: JsonRecord): TraceQueryInput {
     since: optionalString(args, 'since'),
     spokenText: optionalString(args, 'spoken_text'),
     spokenTurnId: optionalString(args, 'spoken_turn_id'),
+    turnContext: args.turn_context === true,
     until: optionalString(args, 'until')
+  }
+}
+
+async function persistedTraceDependencies(
+  store: LocalWorkspaceAuthorityStore
+): Promise<TraceQueryDependencies> {
+  const snapshot = await store.traceHistorySnapshot()
+  const records = snapshot.summaries.flatMap((record) => {
+    const parsed = traceSummary(record)
+    return parsed ? [parsed] : []
+  })
+  const spokenTurns = snapshot.spokenTurns.flatMap((turn) => {
+    const parsed = traceSpokenTurn(turn)
+    return parsed ? [parsed] : []
+  })
+  const sessions = new Map(
+    snapshot.sessions.flatMap((session) => {
+      const parsed = traceSession(session)
+      return parsed ? [[parsed.id, parsed] as const] : []
+    })
+  )
+  return {
+    persistentSpokenTurns: true,
+    readSession: async (sessionId) => structuredClone(sessions.get(sessionId) ?? null),
+    records,
+    spokenTurns
+  }
+}
+
+function traceReadFailure(): TraceQueryResult {
+  return {
+    matches: [],
+    reason: 'trace_read_failed',
+    scanned: { indexCandidates: 0, sessions: 0 },
+    status: 'error'
   }
 }
 
@@ -150,30 +197,51 @@ export async function queryPersistedTraceHistory(
 ): Promise<TraceQueryResult> {
   const input = traceQueryInput(args)
   try {
-    const [rawRecords, rawSpokenTurns] = await Promise.all([
-      store.traceSessionSummaries(),
-      store.traceSpokenTurns()
-    ])
-    const records = rawRecords.flatMap((record) => {
-      const parsed = traceSummary(record)
-      return parsed ? [parsed] : []
-    })
-    const spokenTurns = rawSpokenTurns.flatMap((turn) => {
-      const parsed = traceSpokenTurn(turn)
-      return parsed ? [parsed] : []
-    })
-    return await queryTraceRecords(input, {
-      persistentSpokenTurns: true,
-      readSession: async (sessionId) => traceSession(await store.traceSession(sessionId)),
-      records,
-      spokenTurns
-    })
+    return await queryTraceRecords(input, await persistedTraceDependencies(store))
   } catch {
-    return {
-      matches: [],
-      reason: 'trace_read_failed',
-      scanned: { indexCandidates: 0, sessions: 0 },
-      status: 'error'
-    }
+    return traceReadFailure()
+  }
+}
+
+export async function searchPersistedTrace(
+  store: LocalWorkspaceAuthorityStore,
+  args: JsonRecord
+): Promise<TraceSearchResult | { error: string }> {
+  const limit = args.limit
+  if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit))) {
+    throw new Error('search_trace limit must be an integer.')
+  }
+  try {
+    return await searchTrace(
+      {
+        ...(typeof limit === 'number' ? { limit } : {}),
+        pattern: optionalString(args, 'pattern'),
+        since: optionalString(args, 'since'),
+        until: optionalString(args, 'until')
+      },
+      await persistedTraceDependencies(store)
+    )
+  } catch {
+    return { error: 'trace_read_failed' }
+  }
+}
+
+export async function resolvePersistedTraceRequest(
+  store: LocalWorkspaceAuthorityStore,
+  args: JsonRecord
+): Promise<TraceResolveResult> {
+  const exactWords = optionalString(args, 'exact_words')
+  if (!exactWords) {
+    throw new Error('resolve_request requires exact_words: the user\u2019s words, verbatim.')
+  }
+  const input: TraceResolveInput = {
+    exactWords,
+    windowEndedAt: optionalString(args, 'window_ended_at'),
+    windowStartedAt: optionalString(args, 'window_started_at')
+  }
+  try {
+    return await resolveTraceRequest(input, await persistedTraceDependencies(store))
+  } catch {
+    return traceReadFailure()
   }
 }

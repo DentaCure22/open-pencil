@@ -8,7 +8,7 @@ export type CodeObjectViewportPreset = {
 }
 
 export const CODE_OBJECT_VIEWPORT_PRESETS: readonly CodeObjectViewportPreset[] = [
-  { height: 900, id: 'desktop', label: 'Desktop', width: 1440 },
+  { height: 1069, id: 'desktop', label: 'Desktop', width: 1728 },
   { height: 800, id: 'laptop', label: 'Laptop', width: 1280 },
   { height: 1024, id: 'tablet', label: 'Tablet', width: 768 },
   { height: 844, id: 'phone', label: 'Phone', width: 390 }

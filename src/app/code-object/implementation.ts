@@ -3,9 +3,13 @@ import {
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument as createPersistedUserCodeObjectDocument,
   isCodeObjectViewportPresetId,
+  isKnownCodeObjectComponent,
+  normalizeCodeObjectSurface,
   parseCodeObjectDocument,
+  resolveCodeObjectUiBlock,
   serializeCodeObjectPluginData,
   type CodeObjectDocument,
+  type CodeObjectSurface,
   type CodeObjectViewportPresetId
 } from '@open-pencil/core/code-object'
 import { randomHex } from '@open-pencil/core/random'
@@ -16,12 +20,13 @@ import { BOARD_SHAPE_PERMISSIONS } from '@/app/board-permissions'
 import type { EditorStore } from '@/app/editor/active-store'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 
-import type { CodeObjectBoardPermission, CodeObjectConnection } from './contracts'
+import type { CodeObjectBoardPermission } from './contracts'
 import {
   ANALYTICS_CHART_SOURCE,
   BOARD_REMOTE_SOURCE,
   CODE_STARTER_SOURCE,
   EARTH_SIGNALS_SOURCE,
+  FINANCIAL_DASHBOARD_SOURCE,
   INTERACTIVE_FORM_SOURCE,
   OFFICE_DOCUMENT_SOURCE,
   OFFICE_SPREADSHEET_SOURCE,
@@ -152,7 +157,7 @@ export type TrustedWebAppLaunchMetadata = {
 type OpenPencilCodeDocument<
   Component extends string,
   State extends Record<string, unknown>
-> = CodeObjectDocument<Component, State, CodeObjectBoardPermission, CodeObjectConnection>
+> = CodeObjectDocument<Component, State, CodeObjectBoardPermission>
 
 export type EarthSignalsDocument = OpenPencilCodeDocument<'earth-signals', EarthSignalsState>
 export type OrbitLabDocument = OpenPencilCodeDocument<'orbit-lab', OrbitLabState>
@@ -170,6 +175,12 @@ export type OfficeSpreadsheetDocument = OpenPencilCodeDocument<
 >
 export type PptxDeckDocument = OpenPencilCodeDocument<'pptx-deck', PptxDeckState>
 export type PdfDocumentDocument = OpenPencilCodeDocument<'pdf-document', PdfDocumentState>
+export type AgentConversationTerminalDocument = OpenPencilCodeDocument<
+  'agent-conversation-terminal',
+  Record<string, never>
+> & {
+  workerConversationId: string
+}
 
 export type SmylrFlowScreenDocument = OpenPencilCodeDocument<
   'smylr-flow-screen',
@@ -195,6 +206,7 @@ export type SmylrProductionAppDocument = OpenPencilCodeDocument<
 }
 
 export type ReactShapeDocument =
+  | AgentConversationTerminalDocument
   | CodeStarterDocument
   | UserCodeObjectDocument
   | EarthSignalsDocument
@@ -215,6 +227,7 @@ export type ReactShapePresetId =
     >
   | 'analytics-chart'
   | 'board-remote'
+  | 'financial-dashboard'
   | 'interactive-form'
 
 export type CreateReactShapeInput = {
@@ -222,9 +235,31 @@ export type CreateReactShapeInput = {
   document: ReactShapeDocument
   height: number
   name: string
+  parentId?: string
   width: number
   x?: number
   y?: number
+}
+
+const AGENT_SURFACE_SOURCE = `export default function AgentSurface() { return null }`
+
+export function createAgentConversationTerminalDocument(input: {
+  name: string
+  workerConversationId: string
+}): AgentConversationTerminalDocument {
+  return {
+    boardPermissions: [],
+    component: 'agent-conversation-terminal',
+    definitionId: `agent.conversation.${input.workerConversationId}`,
+    name: input.name,
+    props: {},
+    runtime: 'openpencil-code',
+    schemaVersion: CODE_OBJECT_SCHEMA_VERSION,
+    source: AGENT_SURFACE_SOURCE,
+    state: {},
+    surface: { background: 'surface', overflow: 'scroll' },
+    workerConversationId: input.workerConversationId
+  }
 }
 
 export type ReactShapePreset = {
@@ -262,20 +297,6 @@ const DEFAULT_CODE_STARTER_STATE: CodeStarterState = {
 export const DEFAULT_CODE_OBJECT_SOURCE = `import { useMemo } from 'react'
 
 type CodeObjectProps = {
-  board: {
-    emitGraphSignal: (signal: {
-      action: { type: 'toggle-opacity' }
-      kind: 'action'
-    }) => Promise<{ status: 'applied' | 'denied' | 'noop' }>
-    inputs: { connectionId: string; sourceNodeId: string; value: unknown }[]
-  }
-  connections: { id: string; label: string }[]
-  dispatchBoardAction: (action: {
-    connectionId: string
-    sourceStatePatch?: Record<string, unknown>
-    targetStatePatch: Record<string, unknown>
-    type: 'code-object.state.patch'
-  }) => Promise<{ status: 'applied' | 'denied' | 'noop' }>
   interactionEnabled: boolean
   props: { title?: string }
   setState: (next: { count: number }) => void
@@ -292,16 +313,12 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 export default function CodeObject({
-  board,
-  connections,
-  dispatchBoardAction,
   interactionEnabled,
   props,
   setState,
   state
 }: CodeObjectProps) {
   const doubled = useMemo(() => state.count * 2, [state.count])
-  const connection = connections[0]
   const nextCount = state.count + 1
   const actionStyle = {
     border: 0,
@@ -341,41 +358,7 @@ export default function CodeObject({
         >
           {interactionEnabled ? 'Increment' : 'Enter to interact'}
         </button>
-        {connection ? (
-          <button
-            disabled={!interactionEnabled}
-            onClick={() =>
-              void dispatchBoardAction({
-                connectionId: connection.id,
-                sourceStatePatch: { count: nextCount },
-                targetStatePatch: { count: nextCount },
-                type: 'code-object.state.patch'
-              })
-            }
-            style={actionStyle}
-          >
-            Advance both with {connection.label}
-          </button>
-        ) : null}
-        <button
-          disabled={!interactionEnabled}
-          onClick={() =>
-            void board.emitGraphSignal({
-              action: { type: 'toggle-opacity' },
-              kind: 'action'
-            })
-          }
-          style={actionStyle}
-        >
-          Pulse connected objects
-        </button>
       </div>
-      {board.inputs.length > 0 ? (
-        <p style={{ color: '#a8a8b3', fontSize: 11, marginTop: 16 }}>
-          Received {board.inputs.length} connected data input
-          {board.inputs.length === 1 ? '' : 's'}
-        </p>
-      ) : null}
     </main>
   )
 }`
@@ -605,6 +588,10 @@ const DEFAULT_OPEN_SOURCE_WORKSPACE_STATE: OpenSourceWorkspaceState = {
   piece: 'architecture'
 }
 
+const FINANCIAL_DASHBOARD_UI_BLOCK = resolveCodeObjectUiBlock({
+  block: 'financial-dashboard'
+})
+
 export const REACT_SHAPE_PRESETS = [
   {
     cornerRadius: 12,
@@ -679,6 +666,14 @@ export const REACT_SHAPE_PRESETS = [
     width: 720
   },
   {
+    cornerRadius: 0,
+    description: FINANCIAL_DASHBOARD_UI_BLOCK.definition.description,
+    height: FINANCIAL_DASHBOARD_UI_BLOCK.height,
+    id: 'financial-dashboard',
+    label: FINANCIAL_DASHBOARD_UI_BLOCK.definition.label,
+    width: FINANCIAL_DASHBOARD_UI_BLOCK.width
+  },
+  {
     cornerRadius: 12,
     description: 'A frame-owned TSX form with persisted fields and submission state',
     height: 520,
@@ -722,7 +717,6 @@ export function createEarthSignalsDocument(): EarthSignalsDocument {
   return {
     boardPermissions: [],
     component: 'earth-signals',
-    connections: [],
     definitionId: 'openpencil.earth-signals',
     name: 'Earth signals',
     props: {},
@@ -737,7 +731,6 @@ export function createCodeStarterDocument(): CodeStarterDocument {
   return {
     boardPermissions: [],
     component: 'code-starter',
-    connections: [],
     definitionId: 'openpencil.code-starter',
     name: 'Code starter',
     props: {},
@@ -751,22 +744,22 @@ export function createCodeStarterDocument(): CodeStarterDocument {
 export function createUserCodeObjectDocument(
   input: {
     boardPermissions?: CodeObjectBoardPermission[]
-    connections?: CodeObjectConnection[]
     definitionId?: string
     name?: string
     props?: UserCodeObjectProps
     source?: string
     state?: UserCodeObjectState
+    surface?: CodeObjectSurface
   } = {}
 ): UserCodeObjectDocument {
   return createPersistedUserCodeObjectDocument({
     boardPermissions: input.boardPermissions,
-    connections: input.connections,
     definitionId: input.definitionId?.trim() || `code-${randomHex(8)}`,
     name: input.name?.trim() || 'Code Object',
     props: input.props ?? { title: 'One TSX object' },
     source: input.source?.trim() || DEFAULT_CODE_OBJECT_SOURCE,
-    state: input.state ?? { count: 0 }
+    state: input.state ?? { count: 0 },
+    surface: input.surface
   })
 }
 
@@ -774,7 +767,6 @@ export function createOrbitLabDocument(): OrbitLabDocument {
   return {
     boardPermissions: [],
     component: 'orbit-lab',
-    connections: [],
     definitionId: 'openpencil.orbit-lab',
     name: 'Orbit lab',
     props: {},
@@ -789,7 +781,6 @@ export function createSignalBloomDocument(): SignalBloomDocument {
   return {
     boardPermissions: [],
     component: 'signal-bloom',
-    connections: [],
     definitionId: 'openpencil.signal-bloom',
     name: 'Signal bloom',
     props: {},
@@ -806,7 +797,6 @@ export function createOpenSourceWorkspaceDocument(
   return {
     boardPermissions: [],
     component: 'open-source-workspace',
-    connections: [],
     definitionId: 'openpencil.open-source-workspace',
     name: 'Architecture + Kanban',
     props: {},
@@ -821,7 +811,6 @@ export function createOfficeDocumentDocument(): OfficeDocumentDocument {
   return {
     boardPermissions: [],
     component: 'office-document',
-    connections: [],
     definitionId: 'openpencil.document',
     name: 'Document',
     props: {},
@@ -836,7 +825,6 @@ export function createOfficeSpreadsheetDocument(): OfficeSpreadsheetDocument {
   return {
     boardPermissions: [],
     component: 'office-spreadsheet',
-    connections: [],
     definitionId: 'openpencil.spreadsheet',
     name: 'Spreadsheet',
     props: {},
@@ -851,7 +839,6 @@ export function createPptxDeckDocument(): PptxDeckDocument {
   return {
     boardPermissions: [],
     component: 'pptx-deck',
-    connections: [],
     definitionId: 'openpencil.pptx-deck',
     name: 'Presentation',
     props: {},
@@ -866,7 +853,6 @@ export function createPdfDocumentDocument(): PdfDocumentDocument {
   return {
     boardPermissions: [],
     component: 'pdf-document',
-    connections: [],
     definitionId: 'openpencil.pdf-document',
     name: 'PDF',
     props: {},
@@ -896,7 +882,6 @@ export function createSmylrFlowScreenDocument(input: {
   return {
     boardPermissions: [],
     component: 'smylr-flow-screen',
-    connections: [],
     definitionId: `smylr.${input.flowId}.${input.screenId}`,
     flowId: input.flowId,
     label: input.label,
@@ -922,7 +907,7 @@ export function createSmylrProductionAppDocument(input: {
   route: string
   viewportPreset?: CodeObjectViewportPresetId
 }): SmylrProductionAppDocument {
-  return createSmylrTrustedWebAppDocument<CodeObjectBoardPermission, CodeObjectConnection>(input)
+  return createSmylrTrustedWebAppDocument<CodeObjectBoardPermission>(input)
 }
 
 function normalizeSmylrProductionAppState(): SmylrProductionAppState {
@@ -950,6 +935,122 @@ function documentForPreset(id: ReactShapePresetId): ReactShapeDocument {
       state: { range: '30d' }
     })
   }
+  if (id === 'financial-dashboard') {
+    const block = resolveCodeObjectUiBlock({
+      block: 'financial-dashboard',
+      config: {
+        accountingMethod: 'Accrual',
+        actions: [
+          {
+            label: 'Review customer mix',
+            prompt: 'Show sales by customer for August 2026 and explain concentration risk.'
+          }
+        ],
+        companyName: 'Demo Company',
+        comparisonPeriod: 'Compared with July 2026',
+        goingWell: [
+          {
+            description: 'Gross margin improved while revenue also grew.',
+            severity: 'Medium',
+            text: 'Product revenue increased 11% and gross margin reached 42%.',
+            title: 'Revenue quality improved',
+            tone: 'success'
+          },
+          {
+            text: 'Operating cash stayed positive for the third consecutive month.',
+            title: 'Cash generation is consistent',
+            tone: 'success'
+          }
+        ],
+        keyNumbers: [
+          {
+            label: 'Revenue',
+            reportLabel: 'P&L',
+            series: [58, 62, 61, 69, 73, 78, 84],
+            trend: 'positive',
+            value: '$84K',
+            whatChanged: 'Up 9% from July'
+          },
+          {
+            label: 'Net income',
+            reportLabel: 'P&L',
+            series: [8, 10, 9, 12, 13, 15, 17],
+            trend: 'positive',
+            value: '$17K',
+            whatChanged: 'Margin expanded to 20%'
+          },
+          {
+            label: 'Cash balance',
+            reportLabel: 'Balance sheet',
+            series: [96, 91, 102, 108, 106, 117, 121],
+            trend: 'positive',
+            value: '$121K',
+            whatChanged: 'Up $15K this month'
+          },
+          {
+            label: 'Overdue invoices',
+            reportLabel: 'A/R',
+            series: [18, 16, 15, 19, 21, 24, 27],
+            trend: 'negative',
+            value: '$27K',
+            whatChanged: '32% of open receivables'
+          }
+        ],
+        needsAttention: [
+          {
+            action: {
+              label: 'Draft reminders',
+              prompt: 'Draft friendly reminders for invoices more than 30 days overdue.'
+            },
+            description: 'Two customers account for 71% of the overdue balance.',
+            severity: 'High',
+            text: '$27K is overdue, up $6K since last month.',
+            title: 'Receivables are aging',
+            tone: 'danger'
+          },
+          {
+            severity: 'Cleanup',
+            text: 'Five uncategorized expenses are reducing report confidence.',
+            title: 'Books need light cleanup',
+            tone: 'warning'
+          }
+        ],
+        overallRead: 'mixed',
+        overallReadText:
+          'Revenue, margin, and cash are healthy. Overdue receivables are the clearest near-term risk.',
+        period: 'August 2026',
+        table: {
+          columns: [
+            { key: 'driver', label: 'Cash driver' },
+            { align: 'right', key: 'current', label: 'August' },
+            { align: 'right', key: 'change', label: 'Change' }
+          ],
+          rows: [
+            { change: '+$7K', current: '$84K', driver: 'Customer receipts' },
+            { change: '-$3K', current: '$31K', driver: 'Payroll' },
+            {
+              change: '-$2K',
+              current: '$12K',
+              driver: 'Software and services'
+            }
+          ],
+          title: 'Cash drivers'
+        },
+        title: 'Business health'
+      }
+    })
+    return createUserCodeObjectDocument({
+      definitionId: 'openpencil.financial-dashboard',
+      name: block.definition.label,
+      props: {
+        block: block.block,
+        config: block.config
+      },
+      source: FINANCIAL_DASHBOARD_SOURCE,
+      state: block.initialState,
+      surface: block.surface
+    })
+  }
   if (id === 'interactive-form') {
     return createUserCodeObjectDocument({
       definitionId: 'openpencil.interactive-form',
@@ -972,31 +1073,6 @@ function recordString(record: Record<string, unknown>, key: string) {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
-function normalizeCodeObjectConnections(value: unknown): CodeObjectConnection[] {
-  if (!Array.isArray(value)) return []
-  const ids = new Set<string>()
-  const targets = new Set<string>()
-  return value.slice(0, 32).flatMap((candidate) => {
-    if (!isRecord(candidate)) return []
-    const id = recordString(candidate, 'id')?.slice(0, 120)
-    const targetFrameId = recordString(candidate, 'targetFrameId')?.slice(0, 160)
-    if (!id || !targetFrameId || ids.has(id) || targets.has(targetFrameId)) return []
-    ids.add(id)
-    targets.add(targetFrameId)
-    return [
-      {
-        id,
-        label: (recordString(candidate, 'label') ?? 'Connected Code Object').slice(0, 80),
-        permissions:
-          Array.isArray(candidate.permissions) && candidate.permissions.includes('state.write')
-            ? (['state.write'] as const)
-            : [],
-        targetFrameId
-      }
-    ]
-  })
-}
-
 function normalizeCodeObjectBoardPermissions(value: unknown): CodeObjectBoardPermission[] {
   if (!Array.isArray(value)) return []
   const permissions = BOARD_SHAPE_PERMISSIONS.filter((permission) => value.includes(permission))
@@ -1012,16 +1088,17 @@ function materializeFrameOwnedFields<T extends ReactShapeDocument>(
   const viewportPreset = isRecord(parsed.viewport)
     ? parsed.viewport.preset
     : fallback.viewport?.preset
+  const surface = parsed.surface ?? fallback.surface
   return {
     ...fallback,
     boardPermissions: normalizeCodeObjectBoardPermissions(
       parsed.boardPermissions ?? fallback.boardPermissions
     ),
-    connections: normalizeCodeObjectConnections(parsed.connections ?? fallback.connections),
     definitionId: (recordString(parsed, 'definitionId') ?? fallback.definitionId).slice(0, 160),
     name: (recordString(parsed, 'name') ?? fallback.name).slice(0, 120),
     props: isRecord(parsed.props) ? structuredClone(parsed.props) : structuredClone(fallback.props),
     source: (recordString(parsed, 'source') ?? fallback.source).slice(0, 500_000),
+    ...(surface === undefined ? {} : { surface: normalizeCodeObjectSurface(surface) }),
     ...(isCodeObjectViewportPresetId(viewportPreset)
       ? { viewport: { preset: viewportPreset } }
       : {})
@@ -1264,6 +1341,28 @@ function normalizeSmylrFlowScreenState(
   }
 }
 
+function agentReactShapeDocument(parsed: Record<string, unknown>): ReactShapeDocument | null {
+  if (parsed.component === 'agent-conversation-terminal') {
+    const workerConversationId = recordString(parsed, 'workerConversationId')
+    if (!workerConversationId) return null
+    const document = materializeFrameOwnedFields(
+      parsed,
+      createAgentConversationTerminalDocument({
+        name: recordString(parsed, 'name') ?? 'Task conversation',
+        workerConversationId
+      })
+    )
+    return {
+      ...document,
+      surface: {
+        background: document.surface?.background ?? 'surface',
+        overflow: 'scroll'
+      }
+    }
+  }
+  return null
+}
+
 function standardReactShapeDocument(
   parsed: Record<string, unknown>,
   state: Record<string, unknown>
@@ -1351,12 +1450,38 @@ function standardReactShapeDocument(
   return null
 }
 
+/**
+ * A custom component name alongside TSX source means the author intended `user-code`
+ * and misplaced their identity in `component`. Recover it instead of rendering a blank
+ * frame; materialization then persists the corrected document. Known trusted components
+ * with missing required fields stay null — running their source would mask real damage.
+ */
+function userCodeRecoveryDocument(
+  parsed: NonNullable<ReturnType<typeof parseCodeObjectDocument>>
+): ReactShapeDocument | null {
+  if (isKnownCodeObjectComponent(parsed.component)) return null
+  const source = recordString(parsed, 'source')
+  if (!source) return null
+  return materializeFrameOwnedFields(
+    parsed,
+    createUserCodeObjectDocument({
+      definitionId: recordString(parsed, 'definitionId') ?? parsed.component,
+      name: recordString(parsed, 'name') ?? 'Code Object',
+      props: isRecord(parsed.props) ? parsed.props : {},
+      source,
+      state: parsed.state
+    })
+  )
+}
+
 export function reactShapeDocument(node: SceneNode | null | undefined): ReactShapeDocument | null {
   const parsed = parseCodeObjectDocument(node)
   if (!parsed) return null
+  const agent = agentReactShapeDocument(parsed)
+  if (agent) return agent
   const standard = standardReactShapeDocument(parsed, parsed.state)
   if (standard) return standard
-  if (parsed.component !== 'smylr-flow-screen') return null
+  if (parsed.component !== 'smylr-flow-screen') return userCodeRecoveryDocument(parsed)
   const flowId = recordString(parsed, 'flowId')
   const label = recordString(parsed, 'label')
   const route = recordString(parsed, 'route')
@@ -1414,16 +1539,25 @@ export function materializeReactShapeDocument(
 function restoreSceneNode(store: EditorStore, snapshot: SceneNode) {
   const { childIds: _childIds, id, parentId, ...overrides } = structuredClone(snapshot)
   if (store.graph.getNode(id)) return
-  store.graph.createNodeWithId(id, snapshot.type, parentId, { ...overrides, childIds: [] })
+  store.graph.createNodeWithId(id, snapshot.type, parentId, {
+    ...overrides,
+    childIds: []
+  })
 }
 
 function createReactShapeFrame(store: EditorStore, input: CreateReactShapeInput) {
   const pageId = store.state.currentPageId
-  const siblings = store.graph.getChildren(pageId)
+  const parentId =
+    input.parentId &&
+    store.graph.isContainer(input.parentId) &&
+    store.graph.isDescendant(input.parentId, pageId)
+      ? input.parentId
+      : pageId
+  const siblings = store.graph.getChildren(parentId)
   const x =
     input.x ??
     (siblings.length > 0 ? Math.max(...siblings.map((node) => node.x + node.width)) + 120 : 96)
-  const frame = store.graph.createNode('FRAME', pageId, {
+  const frame = store.graph.createNode('FRAME', parentId, {
     clipsContent: true,
     cornerRadius: input.cornerRadius ?? 0,
     fills: [],

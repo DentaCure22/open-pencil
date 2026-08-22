@@ -12,7 +12,7 @@ export function canonicalSmylrOpenPencilUrlFor(openPencilHref: string) {
   const url = new URL(openPencilHref)
   if (LOOPBACK_HOSTS.has(url.hostname)) {
     url.protocol = 'http:'
-    url.hostname = 'localhost'
+    if (url.hostname === '::1' || url.hostname === '[::1]') url.hostname = '127.0.0.1'
     url.port = DEFAULT_SMYLR_DEV_PORT
   }
   return url.href
@@ -29,7 +29,9 @@ export function smylrOpenPencilFrameUrlFor({
   route
 }: SmylrOpenPencilFrameUrlOptions) {
   const normalizedRoute = route.startsWith('/') ? route : `/${route}`
-  const url = new URL(normalizedRoute, `${baseUrl.replace(/\/+$/, '')}/`)
+  const base = new URL(`${baseUrl.replace(/\/+$/, '')}/`)
+  const requested = new URL(normalizedRoute, base)
+  const url = new URL(`${requested.pathname}${requested.search}${requested.hash}`, base)
   for (const [name, value] of Object.entries(params ?? {})) {
     url.searchParams.set(name, value)
   }

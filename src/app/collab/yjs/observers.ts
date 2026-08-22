@@ -1,18 +1,15 @@
 import type * as Y from 'yjs'
 
 import { YJS_STRUCTURE_REPAIR_ORIGIN } from '@/app/collab/origins'
-import type { ObjectGraphYRecords } from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 
 type YjsObserverOptions = {
   store: EditorStore
   ynodes: Y.Map<Y.Map<unknown>>
   yimages: Y.Map<Uint8Array>
-  yObjectGraphRecords?: ObjectGraphYRecords
   getSuppressYjsEvents: () => boolean
   setSuppressGraphSync: (value: boolean) => void
   applyYjsToGraph: (events: Y.YEvent<Y.Map<unknown>>[]) => void
-  applyYjsObjectGraphToGraph?: (events: Y.YEvent<Y.Map<unknown>>[]) => void
 }
 
 function logObserverError(context: string, error: unknown) {
@@ -23,11 +20,9 @@ export function registerYjsObservers({
   store,
   ynodes,
   yimages,
-  yObjectGraphRecords,
   getSuppressYjsEvents,
   setSuppressGraphSync,
-  applyYjsToGraph,
-  applyYjsObjectGraphToGraph
+  applyYjsToGraph
 }: YjsObserverOptions) {
   ynodes.observeDeep((events, transaction) => {
     if (getSuppressYjsEvents() || transaction.origin === YJS_STRUCTURE_REPAIR_ORIGIN) return
@@ -55,18 +50,6 @@ export function registerYjsObservers({
       store.requestRender()
     } catch (error) {
       logObserverError('Failed to apply remote image changes', error)
-    }
-  })
-
-  yObjectGraphRecords?.observeDeep((events) => {
-    if (getSuppressYjsEvents() || !applyYjsObjectGraphToGraph) return
-    setSuppressGraphSync(true)
-    try {
-      applyYjsObjectGraphToGraph(events)
-    } catch (error) {
-      logObserverError('Failed to apply remote Object Graph changes', error)
-    } finally {
-      setSuppressGraphSync(false)
     }
   })
 }

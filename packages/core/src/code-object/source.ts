@@ -4,7 +4,7 @@ import { transform } from 'sucrase'
 // @ts-expect-error -- Sucrase publishes parser types separately from its runtime parser path.
 import { parse } from 'sucrase/dist/parser/index.js'
 // @ts-expect-error -- Sucrase publishes tokenizer types separately from its runtime tokenizer path.
-import tokenizer from 'sucrase/dist/parser/tokenizer/index.js'
+import * as tokenizer from 'sucrase/dist/parser/tokenizer/index.js'
 import type { File } from 'sucrase/dist/types/parser/index'
 import type {
   IdentifierRole as SucraseIdentifierRole,
@@ -16,8 +16,14 @@ export const MAX_CODE_OBJECT_SOURCE_LENGTH = 100_000
 export const CODE_OBJECT_STATIC_PREFLIGHT_CONTRACT = 'code-object-static-preflight/v1' as const
 export const CODE_OBJECT_STATIC_TRANSFORMS = ['typescript', 'jsx', 'imports'] as const
 
-const ALLOWED_CODE_OBJECT_MODULES = new Set(['d3', 'react', 'react/jsx-runtime'])
-const ALLOWED_CODE_OBJECT_MODULES_DESCRIPTION = '"d3", "react", and "react/jsx-runtime"'
+const ALLOWED_CODE_OBJECT_MODULES = new Set([
+  '@open-pencil/code-object-ui',
+  'd3',
+  'react',
+  'react/jsx-runtime'
+])
+const ALLOWED_CODE_OBJECT_MODULES_DESCRIPTION =
+  '"@open-pencil/code-object-ui", "d3", "react", and "react/jsx-runtime"'
 
 type BindingRange = {
   endTokenIndex: number

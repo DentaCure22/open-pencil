@@ -2,7 +2,7 @@ import {
   computeAutoLayoutIndicator,
   computeAutoLayoutIndicatorForFrame
 } from '#vue/shared/input/auto-layout'
-import { findMoveDropTarget, reparentOutsideNodes } from '#vue/shared/input/drop-target'
+import { applyMoveReparent, findMoveDropTarget } from '#vue/shared/input/drop-target'
 export { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
 import { AUTO_LAYOUT_BREAK_THRESHOLD } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
@@ -66,6 +66,7 @@ export function handleMoveMove(
   if (!d.dragStarted) {
     if (!isPastDragStartThreshold(d, sx, sy)) return
     d.dragStarted = true
+    d.overflowDetached = editor.detachOutsideFrameMembership(d.originals.keys())
   }
 
   let dx = cx - d.startX
@@ -143,8 +144,16 @@ function removeCancelledDuplicate(d: DragMove, editor: Editor) {
   editor.requestRender()
 }
 
+function restoreOverflowChildren(d: DragMove, editor: Editor) {
+  for (const { id, parentId } of d.overflowDetached ?? []) {
+    editor.graph.reparentNode(id, parentId)
+  }
+  d.overflowDetached = undefined
+}
+
 export function cancelMove(d: DragMove, editor: Editor) {
   restoreOriginalPositions(d, editor)
+  restoreOverflowChildren(d, editor)
   editor.setLayoutInsertIndicator(null)
   editor.setSnapGuides([])
   editor.setDropTarget(null)
@@ -182,12 +191,7 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
 
   if (finalPositions) {
     applyFinalPositions(finalPositions, editor)
-    const dropId = editor.state.dropTargetId
-    if (dropId) {
-      editor.reparentNodes([...editor.state.selectedIds], dropId)
-    } else {
-      reparentOutsideNodes(editor)
-    }
+    applyMoveReparent(editor)
   }
 
   if (d.duplicated) {

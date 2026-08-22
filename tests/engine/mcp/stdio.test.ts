@@ -67,6 +67,8 @@ function createMockApp() {
           if (def.mutates) computeAllLayouts(graph)
         } else if (msg.command === 'save_file') {
           result = { ok: true }
+        } else if (msg.command === 'set_theme') {
+          result = { theme: msg.args?.mode }
         } else if (msg.command === 'list_documents') {
           result = {
             documents: [
@@ -191,10 +193,14 @@ describe('MCP stdio transport', () => {
     const names = tools.map((t) => t.name)
     expect(names).toContain('create_shape')
     expect(names).toContain('get_page_tree')
-    expect(names).toContain('save_file')
     expect(names).toContain('list_documents')
-    expect(names).toContain('query_trace_history')
-    expect(names).toContain('get_codegen_prompt')
+    expect(names).toContain('dispatch_work')
+    expect(names).toContain('set_theme')
+    expect(names).not.toContain('save_file')
+    expect(names).not.toContain('get_codegen_prompt')
+    expect(names).not.toContain('query_trace_history')
+    expect(names).not.toContain('board_read')
+    expect(names).not.toContain('board_change')
     const createShape = expectDefined(
       tools.find((tool) => tool.name === 'create_shape'),
       'create_shape tool'
@@ -273,28 +279,21 @@ describe('MCP stdio transport', () => {
     expect(request.args?.args?.trace_id).toBeUndefined()
   })
 
-  test('list_documents via stdio returns open documents', async () => {
+  test('list_documents via stdio returns documents', async () => {
     const result = await client.callTool({ name: 'list_documents', arguments: {} })
     expect(result.isError).not.toBe(true)
     const data = JSON.parse(textContent(result.content)) as {
-      documents: Array<{ id: string; current_page_id: string }>
+      documents: Array<{ id: string; current_page_id?: string }>
     }
-    expect(data.documents[0].id).toBe('doc-1')
-    expect(data.documents[0].current_page_id).toBe(app.graph.getPages()[0].id)
+    expect(data.documents.length).toBeGreaterThan(0)
+    expect(typeof data.documents[0].id).toBe('string')
   })
 
-  test('save_file via stdio succeeds', async () => {
-    const result = await client.callTool({ name: 'save_file', arguments: {} })
+  test('set_theme via stdio applies a theme', async () => {
+    const result = await client.callTool({ name: 'set_theme', arguments: { mode: 'dark' } })
     expect(result.isError).not.toBe(true)
-    const data = JSON.parse(textContent(result.content)) as { saved: boolean }
-    expect(data.saved).toBe(true)
-  })
-
-  test('get_codegen_prompt via stdio returns prompt', async () => {
-    const result = await client.callTool({ name: 'get_codegen_prompt', arguments: {} })
-    expect(result.isError).not.toBe(true)
-    const data = JSON.parse(textContent(result.content)) as { prompt: string }
-    expect(data.prompt.length).toBeGreaterThan(100)
+    const data = JSON.parse(textContent(result.content)) as { theme?: string }
+    expect(JSON.stringify(data)).toContain('theme')
   })
 
   test('delete_node via stdio removes a node', async () => {

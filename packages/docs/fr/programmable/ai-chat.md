@@ -1,64 +1,28 @@
 ---
-title: Chat IA
-description: Assistant IA intégré avec plus de 90 outils pour créer et modifier des designs.
+title: Chat de tâches
+description: Tâches de développement Pi partagées entre la barre latérale et les cartes du Board.
 ---
 
-# Chat IA
+# Chat de tâches
 
-Appuyez sur <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) pour ouvrir l'assistant IA. Décrivez ce que vous voulez — il crée des formes, définit des styles, gère la mise en page, travaille avec les composants et analyse votre design.
+Ouvrez l’onglet **CHATS** de la barre latérale gauche pour démarrer ou poursuivre une tâche. OpenPencil lance Pi directement et conserve le modèle, l’effort, les messages, l’activité des outils et les suivis dans une seule conversation.
 
-## Configuration
+## Fonctionnement
 
-1. Ouvrez le panneau de chat IA (<kbd>⌘</kbd><kbd>J</kbd>)
-2. Cliquez sur l'icône de paramètres
-3. Choisissez un fournisseur et entrez votre clé API
-4. Sélectionnez un modèle
+- **Nouvelle tâche** démarre une conversation Pi.
+- **Envoyer un suivi** poursuit la conversation sélectionnée.
+- Les **cartes du Board** et CHATS affichent les mêmes threads locaux.
+- Les **pièces jointes** sont envoyées avec le prompt.
+- **Arrêter** termine le tour actif.
 
-### Fournisseurs pris en charge
+Il n’y a ni dispatcher ni backend alternatif. La liste des modèles vient du catalogue Pi.
 
-| Fournisseur | Modèles | Configuration |
-|-------------|---------|---------------|
-| **OpenRouter** | Claude, GPT-4, Gemini, DeepSeek et autres | Clé API de [openrouter.ai](https://openrouter.ai) |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Opus, etc. | Clé API de [console.anthropic.com](https://console.anthropic.com) |
-| **OpenAI** | GPT-4o, GPT-4, etc. | Clé API de [platform.openai.com](https://platform.openai.com) |
-| **Google AI** | Gemini 2.0, Gemini 1.5, etc. | Clé API de [aistudio.google.dev](https://aistudio.google.dev) |
-| **Compatible OpenAI** | Tout endpoint au format API OpenAI | URL de base personnalisée + clé. Supporte le basculement entre API Completions et Responses. |
-| **Compatible Anthropic** | Tout endpoint au format API Anthropic | URL de base personnalisée + clé |
+## Activité et Trace
 
-Pas de backend, pas d'abonnement — votre clé communique directement avec le fournisseur.
+Le raisonnement et les appels d’outils gardent leur ordre d’origine. Le travail actif reste ouvert ; l’activité terminée est résumée avec la durée du tour.
 
-## Fonctionnalités
+Trace est séparé du chat. Le dernier geste se trouve dans `~/.openpencil/local-workspace-authority-v1/trace-context.json` ; les extraits historiques bornés sont dans `trace-events/*.jsonl`.
 
-L'assistant dispose de plus de 90 outils répartis dans ces catégories :
+## Automatisation du design
 
-- **Créer** — frames, formes, texte, composants, pages. Rendu JSX pour les mises en page complexes.
-- **Styliser** — remplissages, contours, effets, opacité, rayon d'arrondi, modes de fusion.
-- **Mise en page** — auto-layout, grille, alignement, espacement, dimensionnement.
-- **Composants** — créer des composants, des instances, des ensembles de composants. Gérer les surcharges.
-- **Variables** — créer/modifier des variables, des collections, des modes. Lier aux remplissages.
-- **Requêter** — trouver des nœuds, sélecteurs XPath, lire des propriétés, lister les pages, les polices, la sélection.
-- **Inspecter** — `get_jsx` pour la vue JSX, `diff_jsx` pour les différences structurelles, `describe` pour le rôle sémantique et les problèmes de design.
-- **Analyser** — palette de couleurs, audit typographique, cohérence de l'espacement, détection de motifs récurrents.
-- **Exporter** — PNG, SVG, JSX avec classes Tailwind. Vérification visuelle via `export_image`.
-- **Vectoriel** — opérations booléennes, manipulation de chemins.
-
-## Vérification visuelle
-
-L'assistant peut vérifier visuellement son travail. Après avoir créé ou modifié des designs, il utilise `export_image` pour capturer une image et vérifier le résultat par rapport à la demande initiale.
-
-## Exemples de prompts
-
-- « Créer une carte avec un titre, une description et un bouton bleu »
-- « Faire en sorte que tous les boutons de cette page utilisent le même rayon d'arrondi »
-- « Quelles polices sont utilisées dans ce fichier ? »
-- « Changer l'arrière-plan du frame sélectionné en un dégradé du bleu au violet »
-- « Exporter le frame sélectionné en SVG »
-- « Montre-moi le JSX de ce frame »
-
-## Conseils
-
-- Sélectionnez des nœuds avant de poser votre question — l'assistant sait ce qui est sélectionné.
-- Soyez précis sur les couleurs, tailles et positions pour des résultats exacts.
-- L'assistant peut modifier plusieurs nœuds en un seul message.
-- Utilisez « annuler » dans l'éditeur — les mutations IA supportent l'annulation complète.
-- Tous les layouts sont recalculés automatiquement après chaque exécution d'outil.
+Les clients MCP découvrent le catalogue actuel d’outils OpenPencil à l’exécution via stdio ou HTTP. Voir [Serveur MCP](./mcp-server).

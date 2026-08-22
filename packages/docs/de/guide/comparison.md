@@ -77,7 +77,7 @@ Open Pencil und Penpot verwenden beide Skia für das Rendering, aber die Impleme
 | | Open Pencil | Penpot |
 |---|-------------|--------|
 | CLI | ✅ Headless .fig-Operationen | ❌ Kein CLI |
-| AI-Werkzeuge | **87 Werkzeuge** + MCP-Server | Plugin-System |
+| AI-Werkzeuge | Pi-Aufgaben-Chat + MCP-Server | Plugin-System |
 | JSX-Renderer | ✅ Programmgesteuerte Erstellung | ❌ |
 | Eval-Befehl | ✅ Figma Plugin API | ❌ |
 | Plugin-System | Über eval/MCP | ✅ Natives Plugin-System |
@@ -97,7 +97,7 @@ Open Pencil und Penpot verwenden beide Skia für das Rendering, aber die Impleme
 | | Open Pencil | Penpot |
 |---|-------------|--------|
 | Integrierter Chat | ✅ OpenRouter-Integration | ❌ |
-| Werkzeugnutzung | 87 Design-Werkzeuge | ❌ |
+| Werkzeugnutzung | Zur Laufzeit entdeckter Design-Katalog | ❌ |
 | MCP-Server | ✅ stdio + HTTP | ❌ |
 | Bring your own key | ✅ Kein Vendor-Lock-in | ❌ |
 
@@ -107,7 +107,7 @@ Open Pencil und Penpot verwenden beide Skia für das Rendering, aber die Impleme
 |---|-------------|--------|
 | Headless CLI | ✅ 12 Befehle | ❌ |
 | Plugin API | Figma-kompatibel | Eigene Plugin API |
-| MCP-Server | ✅ 90 Werkzeuge | ❌ |
+| MCP-Server | ✅ stdio + HTTP | ❌ |
 | Eval-Befehl | ✅ JS-Ausführung | ❌ |
 | JSX-Renderer | ✅ Programmatisch | ❌ |
 
@@ -118,11 +118,11 @@ Open Pencil und Penpot verwenden beide Skia für das Rendering, aber die Impleme
 | **Figma-Kompatibilität** | Open Pencil | Natives .fig + Zwischenablage |
 | **Programmierbarkeit** | Open Pencil | CLI, eval, JSX, MCP-Server |
 | **Desktop-Erlebnis** | Open Pencil | Native Tauri-App, ~5 MB |
-| **KI-Integration** | Open Pencil | 90 Werkzeuge, MCP, integrierter Chat |
+| **KI-Integration** | Open Pencil | Pi-Aufgaben-Chat und MCP |
 | **Codebasis-Einfachheit** | Open Pencil | 11× weniger Code, 1 Sprache |
 | **CSS Grid** | Penpot | Yoga unterstützt es noch nicht |
 | **SVG-native** | Penpot | SVG ist die Muttersprache |
 | **Self-Hosting** | Penpot | Docker-bereit vs. Desktop-only |
 | **Ökosystem-Reife** | Penpot | Jahre der Produktion vs. frühe Phase |
 
-Open Pencil ist architektonisch schlanker — ein Single-Process-CanvasKit-Renderer in ~26K LOC TypeScript, Figma-kompatibel by Design. Penpot ist eine Full-Stack-Plattform mit ~299K LOC über Clojure, ClojureScript, Rust und SCSS, plus eine Docker-Service-Flotte. Beide bieten jetzt Echtzeit-Kollaboration (unterschiedliche Architekturen: P2P vs. Server). Penpot hat ein Plugin-Ökosystem und serverseitigen PDF-Export; Open Pencil hat Figma-kompatibles Headless-Scripting, **90 KI/MCP-Werkzeuge**, SVG-Export und eine native Desktop-App.
+Open Pencil ist architektonisch schlanker — ein Single-Process-CanvasKit-Renderer in TypeScript, Figma-kompatibel by Design. Penpot ist eine Full-Stack-Plattform über Clojure, ClojureScript, Rust und SCSS, plus eine Docker-Service-Flotte. Beide bieten Echtzeit-Kollaboration mit unterschiedlichen Architekturen. Penpot hat ein Plugin-Ökosystem und serverseitigen PDF-Export; Open Pencil hat Figma-kompatibles Headless-Scripting, Pi-Aufgaben-Chat, einen zur Laufzeit entdeckten MCP-Katalog, SVG-Export und eine native Desktop-App.

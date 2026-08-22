@@ -48,8 +48,6 @@ import type {
 export interface SubtreePictureCacheEntry {
   picture: SkPicture
   pageId: string | null
-  sceneVersion: number
-  positionPreviewVersion: number
 }
 
 import type { RenderOverlays, RulerTheme } from './renderer/types'
@@ -135,6 +133,7 @@ export class SkiaRenderer {
   subtreePictureCachePageId: string | null = null
   subtreePictureCacheSceneVersion = -1
   subtreePictureCachePositionPreviewVersion = -1
+  subtreePictureCacheTargetedInvalidation = false
   readonly labelCache = new LabelCache()
   readonly profiler: RenderProfiler
 
@@ -435,6 +434,14 @@ export class SkiaRenderer {
     RendererState.invalidateNodePicture(this, nodeId)
   }
 
+  invalidateSubtreePicture(nodeId: string): void {
+    RendererState.invalidateSubtreePicture(this, nodeId)
+  }
+
+  clearSubtreePictureCache(): void {
+    RendererState.clearSubtreePictureCache(this)
+  }
+
   flashNode(nodeId: string): void {
     RendererState.flashNode(this, nodeId)
   }
@@ -513,11 +520,11 @@ export class SkiaRenderer {
     textEditor: unknown,
     viewportWidth: number,
     viewportHeight: number,
-    showRulers = true,
+    showRulers: boolean,
+    dpr: number,
     layer: RenderPipeline.RenderLayer = 'full',
     selectionChromeOwnerIds?: ReadonlySet<string>
   ): void {
-    const dpr = IS_BROWSER ? window.devicePixelRatio || 1 : 1
     RenderPipeline.renderFromEditorState(
       this,
       state,

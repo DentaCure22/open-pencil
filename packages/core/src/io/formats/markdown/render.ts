@@ -431,7 +431,7 @@ async function renderToken(
       return
     case 'table':
       renderTable(context, parentId, token as Tokens.Table, width)
-      return
+      break
     case 'space':
     case 'def':
       return

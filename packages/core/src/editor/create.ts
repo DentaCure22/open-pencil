@@ -61,6 +61,7 @@ export function createEditor(options?: EditorOptions) {
   let _renderer: SkiaRenderer | null = null
   const _renderers = new Set<SkiaRenderer>()
   let _textEditor: TextEditor | null = null
+  let overlayRepaintPending = false
   const events: Emitter<EditorEvents> = createNanoEvents()
 
   void prefetchFigmaSchema()
@@ -96,6 +97,11 @@ export function createEditor(options?: EditorOptions) {
   }
 
   function requestOverlayRepaint() {
+    if (overlayRepaintPending) return
+    overlayRepaintPending = true
+    queueMicrotask(() => {
+      overlayRepaintPending = false
+    })
     state.renderVersion++
     emitEditorEvent('overlay:requested', {
       renderVersion: state.renderVersion,
@@ -203,6 +209,7 @@ export function createEditor(options?: EditorOptions) {
   }
 
   function replaceGraph(newGraph: SceneGraph) {
+    for (const renderer of _renderers) renderer.invalidateAllPictures()
     _graph = newGraph
     subscribeToGraph()
     const previousPageId = state.currentPageId

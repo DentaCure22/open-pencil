@@ -27,6 +27,7 @@ import {
 } from '@/app/narrated-trace'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useEditorPresentationViewport } from '@/app/editor/presentation'
+import { liveInspectorInteractionMode } from '@/app/smylr-live-inspector/session'
 import type {
   NarratedTraceInk,
   NarratedTraceFocusTrailPoint,
@@ -67,7 +68,10 @@ const focusTrails = ref<FocusTrail[]>([])
 const focusClock = ref(0)
 let focusAnimationFrame = 0
 
-const canAnnotate = computed(() => narratedTraceAnnotationTool.value !== 'none')
+const canAnnotate = computed(
+  () =>
+    narratedTraceAnnotationTool.value !== 'none' && liveInspectorInteractionMode.value !== 'select'
+)
 const canvasInkNodes = computed(() => {
   void store.state.sceneVersion
   return narratedTraceCanvasInkNodes(store)
@@ -211,7 +215,6 @@ function onPointerMove(event: PointerEvent) {
 
 function beginGestureTrace() {
   if (narratedTraceStatus.value === 'recording') return false
-  if (narratedTraceStatus.value === 'paused') return false
   beginNarratedTraceSession(narratedTraceScopeForStore(store))
   return true
 }

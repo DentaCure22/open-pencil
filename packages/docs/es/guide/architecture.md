@@ -6,7 +6,7 @@
 graph TB
     subgraph Tauri["Tauri v2 Shell"]
         subgraph Editor["Editor (Web)"]
-            UI["Vue 3 UI<br/>Toolbar · Panels · Properties<br/>Layers · Color Picker"]
+            UI["Vue 3 UI<br/>Sidebar · Tool rail · Canvas<br/>Layers · Chats · Assets · Activity"]
             Skia["Skia CanvasKit (WASM, 7MB)<br/>Vector rendering · Text shaping<br/>Effects · Export"]
             subgraph Core["Core Engine (TS)"]
                 SG[SceneGraph] --- Layout[Layout - Yoga]
@@ -19,19 +19,19 @@ graph TB
                 Kiwi --- SVG[SVG export]
             end
         end
-        MCP["MCP Server (90 tools, stdio+HTTP)"]
+        MCP["MCP Server (stdio+HTTP)"]
         Collab["P2P Collab (Trystero + Yjs)"]
     end
 `
 
 ## Diseño del editor
 
-La interfaz sigue el layout UI3 de Figma — barra de herramientas abajo, navegación a la izquierda, propiedades a la derecha:
+El editor usa un diseño compacto centrado en el canvas:
 
-- **Panel de navegación (izquierda)** — Árbol de capas, panel de páginas
-- **Canvas (centro)** — Canvas infinito con renderizado CanvasKit, zoom/pan
-- **Panel de propiedades (derecha)** — Secciones contextuales: Apariencia, Relleno, Trazo, Tipografía, Layout, Posición
-- **Barra de herramientas (abajo)** — Selección de herramienta: Seleccionar, Frame, Sección, Rectángulo, Elipse, Línea, Texto, Pluma, Mano
+- **Barra lateral (izquierda)** — Capas, Chats, Recursos y Actividad en una superficie flotante
+- **Barra de herramientas** — Controles integrados de dibujo, selección, espacio de trabajo y utilidades
+- **Canvas** — Superficie CanvasKit infinita con zoom, desplazamiento y acciones contextuales
+- **Cajón móvil** — Controles de Capas, Diseño y Código en vistas estrechas
 
 ## Componentes
 
@@ -72,11 +72,11 @@ Véase [Referencia del formato de archivo](/reference/file-format) para más det
 
 Las herramientas se definen una vez en `packages/core/src/tools/`, divididas por dominio: read, create, modify, structure, variables, vector, analyze. Cada herramienta tiene parámetros tipados y una función `execute(figma, args)`. Los adaptadores las convierten para:
 
-- **Chat IA** — schemas valibot, multi-proveedor (Anthropic, OpenAI, Google AI, OpenRouter, endpoints compatibles)
+- **Tareas de agentes** — conversaciones Pi en la barra lateral y las tarjetas del Board
 - **Servidor MCP** — schemas zod, transportes stdio + HTTP
 - **CLI** — disponibles vía el comando `eval`
 
-90+ herramientas core + 3 herramientas de gestión de archivos MCP. Incluye consulta XPath (`query_nodes`), inspección JSX (`get_jsx`, `diff_jsx`), descripción semántica (`describe`) y verificación visual (`export_image` devuelve imágenes al modelo).
+El catálogo se descubre en tiempo de ejecución en lugar de documentarse como una cifra fija. Incluye consulta XPath (`query_nodes`), inspección JSX (`get_jsx`, `diff_jsx`), descripción semántica (`describe`) y verificación visual (`export_image`).
 
 ### Deshacer/Rehacer
 
@@ -92,13 +92,9 @@ Colaboración peer-to-peer en tiempo real vía Trystero (WebRTC) + Yjs CRDT. Sin
 
 ### Puente RPC CLI-a-App
 
-Cuando la app de escritorio está en ejecución, los comandos CLI se conectan a ella vía WebSocket en lugar de requerir un archivo .fig. El servidor de automatización corre en `127.0.0.1:7600` (HTTP) y `127.0.0.1:7601` (WebSocket). Los comandos se ejecutan contra el estado del editor en vivo, permitiendo que scripts de automatización y agentes IA interactúen con la app en ejecución.
+El RPC en vivo entre CLI y aplicación está desactivado por ahora. La persistencia local de Board y Trace usa la autoridad limitada del puerto 7602 y no requiere MCP.
 
 ## Próximos pasos
-
-### Conjunto completo de herramientas figma-use
-
-El servidor MCP actualmente expone 90 herramientas. La implementación de referencia en [figma-use](https://github.com/dannote/figma-use) tiene 118. Las herramientas restantes cubren restricciones de layout avanzadas, conexiones de prototipos, edición avanzada de propiedades de componentes y operaciones masivas de documentos.
 
 ### Herramientas de diseño para CI
 

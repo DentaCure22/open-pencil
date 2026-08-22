@@ -12,7 +12,7 @@
 | **Format de fichier** | Kiwi binaire + Zstd | Format propre de Figma — compact, parsing rapide, compatible .fig |
 | **Collaboration** | Trystero + Yjs | P2P WebRTC via signalisation MQTT, sync CRDT, persistance y-indexeddb |
 | **Couleur** | culori | Conversions d'espaces colorimétriques (HSV, RGB, hex) |
-| **IA/MCP** | MCP SDK + Hono | 90+ outils pour le codage IA, transports stdio + HTTP |
+| **IA/MCP** | Pi + MCP SDK + Hono | Chat de tâches Pi et outils MCP découverts à l'exécution via stdio + HTTP |
 | **Transform JSX** | Sucrase | 201 Ko JSX → JS, synchrone, compatible navigateur |
 | **Événements** | nanoevents | 108 octets, émetteur typé pour les mutations du SceneGraph |
 | **Transform JSX** | Sucrase | 201 Ko JSX → JS, synchrone, compatible navigateur |

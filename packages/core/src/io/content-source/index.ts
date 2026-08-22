@@ -1,5 +1,7 @@
 import type { PluginDataEntry, SceneNode } from '@open-pencil/scene-graph'
 
+import { pluginDataEntry, pluginDataValues } from '#core/io/plugin-data'
+
 const PLUGIN_ID = 'open-pencil'
 const KEY_PREFIX = 'content-source/'
 const FORMAT_KEY = `${KEY_PREFIX}format`
@@ -18,18 +20,14 @@ export interface ContentSourceMetadata {
   source: string
 }
 
-function entry(key: string, value: string): PluginDataEntry {
-  return { pluginId: PLUGIN_ID, key, value }
-}
-
 export function contentSourcePluginData(metadata: ContentSourceMetadata): PluginDataEntry[] {
   const data = [
-    entry(FORMAT_KEY, metadata.format),
-    entry(MIME_TYPE_KEY, metadata.mimeType),
-    entry(REVISION_KEY, String(metadata.revision)),
-    entry(SOURCE_KEY, metadata.source)
+    pluginDataEntry(PLUGIN_ID, FORMAT_KEY, metadata.format),
+    pluginDataEntry(PLUGIN_ID, MIME_TYPE_KEY, metadata.mimeType),
+    pluginDataEntry(PLUGIN_ID, REVISION_KEY, String(metadata.revision)),
+    pluginDataEntry(PLUGIN_ID, SOURCE_KEY, metadata.source)
   ]
-  if (metadata.fileName) data.push(entry(FILE_NAME_KEY, metadata.fileName))
+  if (metadata.fileName) data.push(pluginDataEntry(PLUGIN_ID, FILE_NAME_KEY, metadata.fileName))
   return data
 }
 
@@ -43,20 +41,15 @@ export function mergeContentSourcePluginData(
   ]
 }
 
-function valueFor(node: Pick<SceneNode, 'pluginData'>, key: string): string | null {
-  return (
-    node.pluginData.find((item) => item.pluginId === PLUGIN_ID && item.key === key)?.value ?? null
-  )
-}
-
 export function readContentSource(
   node: Pick<SceneNode, 'pluginData'>
 ): ContentSourceMetadata | null {
-  const format = valueFor(node, FORMAT_KEY)
-  const mimeType = valueFor(node, MIME_TYPE_KEY)
-  const revisionValue = valueFor(node, REVISION_KEY)
-  const source = valueFor(node, SOURCE_KEY)
-  if (!format || !mimeType || !revisionValue || source === null) return null
+  const values = pluginDataValues(node, PLUGIN_ID)
+  const format = values.get(FORMAT_KEY)
+  const mimeType = values.get(MIME_TYPE_KEY)
+  const revisionValue = values.get(REVISION_KEY)
+  const source = values.get(SOURCE_KEY)
+  if (!format || !mimeType || !revisionValue || source === undefined) return null
 
   const revision = Number.parseInt(revisionValue, 10)
   if (!Number.isSafeInteger(revision) || revision < 1) return null
@@ -64,7 +57,7 @@ export function readContentSource(
   return {
     format,
     mimeType,
-    fileName: valueFor(node, FILE_NAME_KEY),
+    fileName: values.get(FILE_NAME_KEY) ?? null,
     revision,
     source
   }

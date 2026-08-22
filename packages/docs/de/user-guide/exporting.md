@@ -9,11 +9,10 @@ Einzelne Knoten als Bilder exportieren oder ganze Dokumente als .fig-Dateien spe
 
 ## Bildexport
 
-Wählen Sie einen Knoten und nutzen Sie den Export-Bereich im Eigenschaftspanel.
+Wählen Sie einen Knoten und nutzen Sie das Export-Tastenkürzel oder die Export-Aktion im Kontextmenü. Auf kleinen Bildschirmen sind Export-Einstellungen auch in der mobilen Design-Schublade verfügbar.
 
 ### Export-Einstellungen
 
-- **Skalierung** — 0,5×, 0,75×, 1×, 1,5×, 2×, 3× oder 4×
 - **Skalierung** — 0,5×–4× (für SVG ausgeblendet — Vektoren sind auflösungsunabhängig)
 - **Format** — PNG (transparenter Hintergrund), JPG (weißer Hintergrund), WEBP (transparenter Hintergrund), SVG (Vektor)
 
@@ -25,7 +24,7 @@ Sie können mehrere Export-Einstellungen hinzufügen. Eine Live-Vorschau mit Sch
 |---------|-----|-----------------|
 | Tastenkürzel | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Strg</kbd> + E |
 | Kontextmenü | Rechtsklick <kbd>→</kbd> Exportieren… | Rechtsklick <kbd>→</kbd> Exportieren… |
-| Eigenschaftspanel | Klick auf „Exportieren" | Klick auf „Exportieren" |
+| Mobile Design-Schublade | „Exportieren" antippen | „Exportieren" antippen |
 
 ## Als kopieren
 

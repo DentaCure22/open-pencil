@@ -865,7 +865,7 @@ export function resolveExactVisibleTopLevelObjectId(
   }
   const neighborhood = context.neighborhood
   if (!Array.isArray(neighborhood.nodes)) {
-    throw new Error('Fresh Board context neighborhood did not return nodes.')
+    throw new TypeError('Fresh Board context neighborhood did not return nodes.')
   }
   if (!hasCompleteTopLevelNameCoverage(neighborhood)) {
     throw new Error(

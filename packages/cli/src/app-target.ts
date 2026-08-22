@@ -46,6 +46,14 @@ export const appTargetOptions = {
   }
 } as const
 
+export const exactAppTargetOptions = {
+  'content-document-id': { ...appTargetOptions['content-document-id'], required: true },
+  'document-id': { ...appTargetOptions['document-id'], required: true },
+  'page-id': { ...appTargetOptions['page-id'], required: true },
+  'runtime-instance-id': { ...appTargetOptions['runtime-instance-id'], required: true },
+  'workspace-id': { ...appTargetOptions['workspace-id'], required: true }
+} as const
+
 export type ExactAppTargetRpcArgs = {
   content_document_id: string
   document_id: string

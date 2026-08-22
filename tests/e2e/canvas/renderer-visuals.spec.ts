@@ -64,27 +64,13 @@ test('boolean operations', async () => {
   await expectCanvas('boolean-operations')
 })
 
-test('working canvas atmosphere stays behind opaque scene objects', async () => {
-  await editor.page.addStyleTag({
-    content: `
-      [data-test-id="animated-dither-background"] {
-        background-color: #15171c !important;
-        background-image:
-          linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%),
-          linear-gradient(-45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.2) 75%),
-          linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.2) 75%) !important;
-        background-position: 0 0, 0 8px, 8px -8px, -8px 0 !important;
-        background-size: 16px 16px !important;
-      }
-      [data-test-id="animated-dither-background"] > canvas { display: none !important; }
-    `
-  })
+test('subtle dot grid stays behind opaque scene objects', async () => {
   await editor.page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
+    store.setPageColor({ r: 0.082, g: 0.09, b: 0.11, a: 1 })
     store.graph.createNode('RECTANGLE', store.state.currentPageId, {
-      name: 'Opaque atmosphere control',
+      name: 'Opaque grid control',
       x: 220,
       y: 140,
       width: 360,
@@ -103,7 +89,7 @@ test('working canvas atmosphere stays behind opaque scene objects', async () => 
     store.requestRender()
   })
   await editor.canvas.waitForRender()
-  await expectCanvas('working-canvas-atmosphere-behind-opaque-objects')
+  await expectCanvas('subtle-dot-grid-behind-opaque-scene-objects')
 })
 
 test('gradients and image fill modes', async () => {

@@ -6,7 +6,7 @@ description: Exporter des images (PNG, JPG, WEBP, SVG) et gérer les fichiers .f
 
 ## Exportation d'images
 
-Sélectionnez un nœud et utilisez la section Export dans le panneau de propriétés.
+Sélectionnez un nœud et utilisez le raccourci d'export ou l'action Exporter du menu contextuel. Sur petit écran, les réglages sont aussi dans le tiroir mobile Design.
 
 ### Paramètres d'exportation
 
@@ -19,7 +19,7 @@ Sélectionnez un nœud et utilisez la section Export dans le panneau de proprié
 |--------|-----|-----------------|
 | Raccourci clavier | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>E</kbd> |
 | Menu contextuel | Clic droit <kbd>→</kbd> Exporter… | Clic droit <kbd>→</kbd> Exporter… |
-| Panneau propriétés | Bouton "Exporter" | Bouton "Exporter" |
+| Tiroir mobile Design | Touchez "Exporter" | Touchez "Exporter" |
 
 ## Copier en tant que
 

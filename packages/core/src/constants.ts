@@ -339,6 +339,9 @@ export const AI_PROVIDERS: AIProviderDef[] = [
 export const DEFAULT_AI_PROVIDER: AIProviderID = 'openrouter'
 export const DEFAULT_AI_MODEL = AI_PROVIDERS[0].defaultModel
 
+export const AUTOMATION_HTTP_PORT = 7600
+export const AUTOMATION_WS_PORT = 7601
+
 export const GOOGLE_FONTS_API_KEY = 'AIzaSyD1tYDR_dUEiV-Tw1vksEhZbUytgKW5pc8'
 
 export const CJK_FALLBACK_FAMILIES_MACOS = [
@@ -403,8 +406,8 @@ export const SECTION_DEFAULT_STROKE: Stroke = {
 export const ZOOM_DIVISOR = 50
 export const ZOOM_SCALE_MIN = 0.75
 export const ZOOM_SCALE_MAX = 1.25
-export const DOUBLE_CLICK_FOCUS_MAX_ZOOM = 1.5
-export const DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER = 1.25
+export const DOUBLE_CLICK_FOCUS_MAX_ZOOM = 1.4
+export const DOUBLE_CLICK_FOCUS_ZOOM_MULTIPLIER = 1.1
 
 export const PEN_CLOSE_THRESHOLD = 8
 export const ROTATION_SNAP_DEGREES = 15

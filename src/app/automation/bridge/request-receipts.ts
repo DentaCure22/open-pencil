@@ -1,10 +1,6 @@
-import {
-  objectGraphConnectionById,
-  type PluginDataEntry,
-  type SceneNode
-} from '@open-pencil/scene-graph'
+import { type PluginDataEntry, type SceneNode } from '@open-pencil/scene-graph'
 
-import { nodeSummary } from '@/app/automation/bridge/board-tools/readback'
+import { automationNodeSummary } from '@/app/automation/bridge/node-summary'
 import { isUnknownRecord, type AutomationTarget } from '@/app/automation/bridge/target'
 
 const RECEIPT_LEDGER_LIMIT = 64
@@ -581,18 +577,10 @@ export function mutationRequestReadback(
 ): Record<string, unknown> {
   const nodes = receipt.objectIds.map((id) => {
     const node = target.store.graph.getNode(id)
-    return node ? nodeSummary(target, node) : { id, missing: true }
+    return node ? automationNodeSummary(target, node) : { id, missing: true }
   })
-  const connections = receipt.semanticIds.map(
-    (id) =>
-      objectGraphConnectionById(target.store.graph, target.pageId, id) ?? {
-        id,
-        missing: true
-      }
-  )
   return {
     nodes,
-    ...(connections.length > 0 ? { object_graph_connections: connections } : {}),
     ...(receipt.result === undefined ? {} : { result: receipt.result })
   }
 }

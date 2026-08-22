@@ -48,7 +48,6 @@ export function createOpenPencilAliases(rootDir: string) {
     {
       find: 'opentype.js',
       replacement: resolve(rootDir, 'node_modules/opentype.js/dist/opentype.module.js')
-    },
-    { find: 'beautiful-mermaid', replacement: resolve(rootDir, 'src/app/shell/markdown/index.ts') }
+    }
   ]
 }

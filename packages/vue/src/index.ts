@@ -33,8 +33,10 @@ export type {
 } from '#vue/canvas/surface/frame-scheduler'
 export { useCanvasInput } from '#vue/canvas/useCanvasInput'
 export { useCanvasVirtualReference } from '#vue/canvas/overlays/useCanvasVirtualReference'
+export type { CanvasPresentationViewport } from '#vue/canvas/overlays/useCanvasVirtualReference'
 export { useTextEdit } from '#vue/canvas/text-edit/use'
 export { useCanvasDrop, extractImageFilesFromClipboard } from '#vue/canvas/drop/use'
+export { applyMoveReparent } from '#vue/shared/input/drop-target'
 export { applyMoveSnap } from '#vue/shared/input/move-snap'
 export type { MoveSnapInput, MoveSnapOriginal } from '#vue/shared/input/move-snap'
 

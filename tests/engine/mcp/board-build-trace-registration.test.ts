@@ -49,12 +49,8 @@ function traceBuildPlan() {
         }
       }
     ],
-    connections: [],
     contract: 'board-build-plan/v1',
-    operations: [
-      { kind: 'object.update', object_id: '$trace', patch: { opacity: 0.8 } },
-      { kind: 'connection.delete_traced', orientation: 'vertical' }
-    ]
+    operations: [{ kind: 'object.update', object_id: '$trace', patch: { opacity: 0.8 } }]
   }
 }
 
@@ -107,7 +103,6 @@ describe('Trace-targeted Board build MCP registration', () => {
               selected_object_id: 'frame:card',
               status: 'resolved'
             },
-            trace_connections: { count: 2, items: [], truncated: false },
             trace_region: { height: 80, width: 160, x: 70, y: 50 }
           }
         }
@@ -137,19 +132,13 @@ describe('Trace-targeted Board build MCP registration', () => {
           artifacts: [
             {
               recipe: {
-                placement: { target: { height: 80, kind: 'region', width: 160, x: 70, y: 50 } }
+                placement: {
+                  target: { height: 80, kind: 'near_region', width: 160, x: 70, y: 50 }
+                }
               }
             }
           ],
-          operations: [
-            { object_id: 'frame:card' },
-            {
-              kind: 'connection.delete_traced',
-              object_ids: ['frame:card', 'frame:peer'],
-              orientation: 'vertical',
-              region: { height: 80, width: 160, x: 70, y: 50 }
-            }
-          ]
+          operations: [{ kind: 'object.update', object_id: 'frame:card', patch: { opacity: 0.8 } }]
         },
         trace_id: 'gesture:1'
       },
@@ -160,7 +149,6 @@ describe('Trace-targeted Board build MCP registration', () => {
         contract: 'board-build-trace/v1',
         gesture_id: 'gesture:1',
         resolved_placeholders: {
-          connection_scopes: 1,
           object_references: 1,
           region_references: 1
         },
@@ -169,8 +157,7 @@ describe('Trace-targeted Board build MCP registration', () => {
           board_prepare_edit: 1,
           total: 3,
           trace_get_gesture: 1
-        },
-        traced_connections: 2
+        }
       }
     })
   })

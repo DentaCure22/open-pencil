@@ -12,13 +12,13 @@ Feature-für-Feature-Vergleich der Figma-Design-Funktionen mit dem aktuellen Imp
 
 | Funktion | Status | Anmerkungen |
 |----------|--------|-------------|
-| Werkzeugleiste mit Design-Tools | ✅ | Untere Leiste (UI3-Stil): Auswählen, Frame, Sektion, Rechteck, Ellipse, Linie, Text, Hand, Stift |
-| Ebenen-Panel (linke Seitenleiste) | ✅ | Baumansicht mit Auf-/Zuklappen, Drag-Neuordnung, Sichtbarkeits-Toggle; skalierbare Breite |
-| Seiten-Panel | ✅ | Seiten hinzufügen, löschen, umbenennen; Viewport-Zustand pro Seite |
-| Eigenschafts-Panel (rechte Seitenleiste) | ✅ | Abschnitte: Darstellung, Füllung, Kontur, Effekte, Typografie, Layout, Position; skalierbare Breite |
+| Werkzeugleiste mit Design-Tools | ✅ | Integrierte Werkzeugleiste: Auswählen, Frame, Sektion, Rechteck, Ellipse, Linie, Text, Hand, Stift |
+| Ebenen-Panel (linke Seitenleiste) | ✅ | Schwebende Seitenleiste mit Ebenen, Chats, Assets und Aktivität |
+| Seiten-Panel | ✅ | Workspace-Browser verwaltet Boards und erhält deren Viewport-Zustand |
+| Eigenschafts-Panel (rechte Seitenleiste) | 🟡 | Kein permanentes Desktop-Panel; Kontextsteuerung am Canvas, Design-Steuerung in der mobilen Schublade |
 | Zoom & Schwenken | ✅ | Strg+Scroll, Pinch, <kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>−</kbd> / <kbd>⌘</kbd><kbd>0</kbd>, Leertaste+Ziehen, mittlere Maustaste, Hand-Werkzeug (H) |
 | Canvas-Lineale | ✅ | Oben/links Lineale mit Auswahl-Bändern und Koordinaten-Badges |
-| Canvas-Hintergrundfarbe | ✅ | Pro-Seite-Hintergrund über Eigenschafts-Panel |
+| Canvas-Hintergrundfarbe | 🟡 | Hintergrund bleibt im Dokument erhalten; Desktop-Steuerung ist derzeit nicht sichtbar |
 | Canvas-Hilfslinien | 🔲 | Figma unterstützt ziehbare Hilfslinien von Linealen |
 | Aktionsmenü / Befehlspalette | 🔲 | Figmas Schnellaktionssuche |
 | Kontextmenü | ✅ | Rechtsklick mit Zwischenablage, Z-Ordnung, Gruppierung, Komponente, Sichtbarkeit, Sperre, Verschieben |
@@ -28,7 +28,7 @@ Feature-für-Feature-Vergleich der Figma-Design-Funktionen mit dem aktuellen Imp
 | Benutzerdefinierte Dateiminiatur | 🔲 | Miniatur beim Export generiert, aber kein benutzerdefinierter Auswähler |
 | Nudge-Wert-Einstellungen | 🔲 | Standard 1px/10px; Figma erlaubt benutzerdefinierte Werte |
 | App-Menü (Browser-Modus) | ✅ | Datei, Bearbeiten, Ansicht, Objekt, Text, Anordnen; Tauri verwendet native Menüs |
-| KI-Werkzeuge | 🟡 | 90+ Werkzeuge via Anthropic, OpenAI, Google AI, OpenRouter + MCP-Server; noch keine KI-generierten Bilder oder KI-Suche |
+| KI-Werkzeuge | 🟡 | Pi-Aufgaben-Chat plus zur Laufzeit entdeckter MCP-Katalog; noch keine KI-generierten Bilder oder KI-Suche |
 
 ## Ebenen & Formen
 
@@ -55,7 +55,7 @@ Feature-für-Feature-Vergleich der Figma-Design-Funktionen mit dem aktuellen Imp
 | Intelligente Auswahl (verteilen/ausrichten) | 🔲 | Gleichmäßig verteilen und ausrichten |
 | Layout-Hilfslinien (Spalten, Zeilen, Raster) | 🔲 | Spalten-/Zeilen-/Raster-Hilfslinien auf Frames |
 | Abstände zwischen Ebenen messen | 🔲 | Alt-Hover zeigt Abstände |
-| Objekte in Masse bearbeiten | ✅ | Multi-Selektion-Panel: gemeinsame Werte normal, unterschiedliche zeigen „Mixed" |
+| Objekte in Masse bearbeiten | ✅ | Kontextsteuerung und mobile Design-Schublade unterstützen Mehrfachauswahl |
 | Übereinstimmende Objekte identifizieren | 🔲 | Ähnliche Ebenen finden |
 | Eigenschaften kopieren/einfügen | 🔲 | Füllung/Kontur/Effekte zwischen Ebenen kopieren |
 | Eltern-Kind-Beziehungen | ✅ | Vollständige Hierarchie mit parentIndex, Drag-Reparenting |
@@ -215,7 +215,7 @@ Feature-für-Feature-Vergleich der Figma-Design-Funktionen mit dem aktuellen Imp
 | Code Connect | 🔲 | Design-Komponenten mit Code verknüpfen |
 | Code-Snippets | 🟡 | JSX-Export mit Hervorhebung und Kopieren; keine CSS/Swift/Kotlin-Snippets |
 | Figma für VS Code | 🔲 | Editor-Plugin-Integration |
-| MCP-Server | ✅ | @open-pencil/mcp mit stdio + HTTP-Transporten; 87 Kern-Werkzeuge + 3 Dateiverwaltung = 90 gesamt |
+| MCP-Server | ✅ | `@open-pencil/mcp` mit stdio + HTTP-Transporten und zur Laufzeit entdecktem Werkzeugkatalog |
 | CLI-Werkzeuge | ✅ | Headless-CLI: info, tree, find, export, analyze, node, pages, variables, eval; MCP-Server |
 
 ## Figma Draw

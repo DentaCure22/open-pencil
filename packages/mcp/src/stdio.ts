@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
+import { withPersistedAuthorityRouting } from './persisted-rpc.js'
 import { MCP_VERSION, registerTools } from './server.js'
 import { createStdioRpcBridge } from './stdio-bridge.js'
 
@@ -31,7 +32,11 @@ const bridge = createStdioRpcBridge({
 bridge.connect()
 
 const mcpServer = new McpServer({ name: 'open-pencil', version: MCP_VERSION })
-registerTools(mcpServer, { enableEval, mcpRoot, sendRpc: bridge.sendRpc })
+registerTools(mcpServer, {
+  enableEval,
+  mcpRoot,
+  sendRpc: withPersistedAuthorityRouting(bridge.sendRpc)
+})
 
 const transport = new StdioServerTransport()
 void mcpServer.connect(transport)

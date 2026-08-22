@@ -1,10 +1,12 @@
-import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 
-const editor = useEditorSetup('/?test&html-source')
+test.use({ viewport: { width: 700, height: 800 } })
+
+const editor = useEditorSetupWithClear('/?test&html-source')
 
 test('refreshes an open Code Object inspector after a remote graph update', async () => {
   await editor.page.getByTestId('code-object-start').click()
-  await editor.page.getByRole('tab', { name: 'Code' }).click()
+  await editor.page.getByTestId('mobile-ribbon-code').click()
 
   const stateEditor = editor.page.getByTestId('code-object-state')
   await expect(stateEditor).toHaveValue(/"count": 0/)

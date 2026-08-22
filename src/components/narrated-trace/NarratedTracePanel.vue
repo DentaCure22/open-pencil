@@ -1,10 +1,23 @@
 <script setup lang="ts">
+import { useClipboard } from '@vueuse/core'
 import { computed, ref, shallowRef, watch } from 'vue'
 
+import {
+  mutationRequestReceipts,
+  type MutationRequestReceipt
+} from '@/app/automation/bridge/request-receipts'
+import { useEditorStore } from '@/app/editor/active-store'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
+import { currentLocalWorkspaceAuthorityStatus } from '@/app/workspace-document/local-authority/client'
+import {
+  DURABLE_HISTORY_LABEL,
+  latestAppliedBoardTransaction
+} from '@/app/workspace-document/local-authority/history'
 import {
   buildNarratedTraceActivityFeed,
   clearNarratedTraceMicTurns,
   loadNarratedTraceActivityFeed,
+  narratedTraceActivityMetadata,
   narratedTraceEvidenceAnnotationPath,
   narratedTraceHistory,
   narratedTraceLastQuery,
@@ -25,20 +38,43 @@ import type {
 import Tip from '@/components/ui/Tip.vue'
 
 const FEED_ITEM_LIMIT = 80
+const AGENT_RECEIPT_LIMIT = 8
 
+const store = useEditorStore()
+const { copy } = useClipboard()
 const historicalItems = shallowRef<NarratedTraceActivityItem[]>([])
+const retainedItems = shallowRef<NarratedTraceActivityItem[]>([])
 const evidenceImages = shallowRef<Record<string, string>>({})
 const expandedEventIds = ref(new Set<string>())
+const historyEpoch = ref(0)
 let refreshEpoch = 0
+
+function activityTitle(session: NonNullable<typeof narratedTraceSession.value>) {
+  return (
+    narratedTraceHistory.value.find((record) => record.id === session.id)?.title ??
+    session.title ??
+    'Recent activity'
+  )
+}
 
 const currentItems = computed(() => {
   const session = narratedTraceSession.value
   if (!session) return []
-  const title =
-    narratedTraceHistory.value.find((record) => record.id === session.id)?.title ??
-    session.title ??
-    'Recent activity'
-  return buildNarratedTraceActivityFeed([{ session, title }], FEED_ITEM_LIMIT)
+  return buildNarratedTraceActivityFeed(
+    [{ session, title: activityTitle(session) }],
+    FEED_ITEM_LIMIT
+  )
+})
+
+watch(narratedTraceSession, (session, previousSession) => {
+  if (!session || !previousSession || session.id === previousSession.id) return
+  retainedItems.value = [
+    ...buildNarratedTraceActivityFeed(
+      [{ session: previousSession, title: activityTitle(previousSession) }],
+      FEED_ITEM_LIMIT
+    ),
+    ...retainedItems.value
+  ].slice(0, FEED_ITEM_LIMIT)
 })
 
 const micItems = computed<NarratedTraceActivityItem[]>(() =>
@@ -74,21 +110,103 @@ watch(micTurnIds, (current, previous) => {
   )
 })
 
+function compactRepeatedSelections(items: NarratedTraceActivityItem[]) {
+  const compacted: NarratedTraceActivityItem[] = []
+  let previousSelectionKey: string | null = null
+  for (const item of items) {
+    const selectionKey =
+      item.event.kind === 'selection' && !item.event.evidence
+        ? [
+            item.scope?.workspaceId ?? '',
+            item.scope?.documentId ?? '',
+            item.scope?.pageId ?? '',
+            item.event.target?.frameId ?? '',
+            item.event.target?.stableId ?? ''
+          ].join(':')
+        : null
+    if (selectionKey && selectionKey === previousSelectionKey) continue
+    compacted.push(item)
+    previousSelectionKey = selectionKey
+  }
+  return compacted
+}
+
 const activityItems = computed(() => {
   const byId = new Map<string, NarratedTraceActivityItem>()
-  for (const item of [...currentItems.value, ...micItems.value, ...historicalItems.value]) {
+  for (const item of [
+    ...currentItems.value,
+    ...retainedItems.value,
+    ...micItems.value,
+    ...historicalItems.value
+  ]) {
     const key = `${item.sessionId}:${item.event.id}`
     if (!byId.has(key)) byId.set(key, item)
   }
-  return [...byId.values()]
-    .sort(
-      (first, second) =>
-        second.occurredAtMs - first.occurredAtMs ||
-        second.event.atMs - first.event.atMs ||
-        first.event.id.localeCompare(second.event.id)
-    )
-    .slice(0, FEED_ITEM_LIMIT)
+  const ordered = [...byId.values()].sort(
+    (first, second) =>
+      second.occurredAtMs - first.occurredAtMs ||
+      second.event.atMs - first.event.atMs ||
+      first.event.id.localeCompare(second.event.id)
+  )
+  return compactRepeatedSelections(ordered).slice(0, FEED_ITEM_LIMIT)
 })
+
+const agentReceipts = computed(() => {
+  void store.state.sceneVersion
+  void store.state.currentPageId
+  try {
+    return mutationRequestReceipts(store.graph.getNode(store.state.currentPageId))
+      .slice(-AGENT_RECEIPT_LIMIT)
+      .reverse()
+  } catch {
+    return []
+  }
+})
+
+const latestUndoableAgentRequestId = computed(() => {
+  void store.state.sceneVersion
+  void historyEpoch.value
+  const authority = currentLocalWorkspaceAuthorityStatus()
+  if (!authority || authority.state !== 'ready' || store.undo.undoLabel !== DURABLE_HISTORY_LABEL) {
+    return null
+  }
+  const transaction = latestAppliedBoardTransaction(store, authority.revision)
+  return transaction?.pageId === store.state.currentPageId ? transaction.requestId : null
+})
+
+function agentReceiptKey(receipt: MutationRequestReceipt) {
+  return `agent:${receipt.requestId}`
+}
+
+function agentRouteLabel(route: string) {
+  const label = route.replace(/[-_]/g, ' ')
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function revealAgentReceipt(receipt: MutationRequestReceipt) {
+  const objectIds = revealableAgentObjectIds(receipt)
+  if (objectIds.length === 0) return
+  store.select(objectIds)
+  requestAnimationFrame(() => store.zoomToSelection(editorViewportInsets()))
+}
+
+function revealableAgentObjectIds(receipt: MutationRequestReceipt) {
+  return receipt.objectIds.filter((id) => Boolean(store.graph.getNode(id)))
+}
+
+function canRevealAgentReceipt(receipt: MutationRequestReceipt) {
+  return revealableAgentObjectIds(receipt).length > 0
+}
+
+function copyAgentReceipt(receipt: MutationRequestReceipt) {
+  void copy(JSON.stringify(receipt, null, 2))
+}
+
+function undoAgentReceipt(receipt: MutationRequestReceipt) {
+  if (latestUndoableAgentRequestId.value !== receipt.requestId) return
+  store.undoAction()
+  historyEpoch.value += 1
+}
 
 async function refreshHistory() {
   const epoch = ++refreshEpoch
@@ -114,9 +232,7 @@ watch(
   { immediate: true }
 )
 
-const isCapturing = computed(
-  () => narratedTraceStatus.value === 'recording' || narratedTraceStatus.value === 'paused'
-)
+const isCapturing = computed(() => narratedTraceStatus.value === 'recording')
 const retrievalSummary = computed(() => {
   const receipt = narratedTraceLastQuery.value
   return receipt ? summarizeNarratedTraceRetrieval(receipt) : null
@@ -155,8 +271,7 @@ function deleteMicTranscript(item: NarratedTraceActivityItem) {
 function rowTime(item: NarratedTraceActivityItem) {
   return new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit'
+    minute: '2-digit'
   }).format(new Date(item.occurredAtMs))
 }
 
@@ -192,19 +307,7 @@ function rowCoordinates(item: NarratedTraceActivityItem) {
 }
 
 function rowMetadata(item: NarratedTraceActivityItem) {
-  const scope = item.scope
-  const target = item.event.target
-  const details = [
-    scope?.workspaceId ? `Workspace ${scope.workspaceId}` : undefined,
-    scope ? `Document ${scope.documentName ?? scope.documentId}` : undefined,
-    scope ? `Board ${scope.pageName ?? scope.pageId}` : undefined,
-    item.event.kind === 'transcript' ? `Turn ${item.event.id}` : undefined,
-    target?.route,
-    target?.path.join(' / '),
-    target?.frameId ? `Frame ${target.frameId}` : undefined,
-    target?.stableId ? `ID ${target.stableId}` : undefined
-  ].filter((detail): detail is string => typeof detail === 'string' && detail.length > 0)
-  return [...new Set(details)].join(' · ')
+  return narratedTraceActivityMetadata(item)
 }
 
 function isExpanded(eventId: string) {
@@ -241,18 +344,17 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <h2 class="text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface">
-            History
+            Board activity
           </h2>
           <span
             v-if="isCapturing"
             data-test-id="narrated-trace-capture-status"
-            class="size-1.5 rounded-full"
-            :class="narratedTraceStatus === 'recording' ? 'bg-violet-300' : 'bg-amber-300'"
+            class="size-1.5 rounded-full bg-violet-300"
             aria-label="Capturing activity"
           />
         </div>
         <p class="truncate text-[9.5px] leading-3.5 text-muted/70">
-          Local activity from this app or browser
+          Human and agent changes, anchored to this Board
         </p>
       </div>
       <div class="ml-2 flex shrink-0 items-center gap-1">
@@ -380,25 +482,118 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
     </section>
 
     <div data-test-id="narrated-trace-history" class="min-h-0 flex-1 overflow-auto px-2.5 pb-1">
-      <div v-if="activityItems.length === 0" class="px-1 pt-3 pb-4">
+      <section
+        v-if="agentReceipts.length > 0"
+        data-test-id="agent-activity-feed"
+        aria-label="Recent agent changes"
+        class="mt-2 overflow-hidden rounded-[8px] border border-violet-300/15 bg-violet-300/[0.035]"
+      >
+        <div
+          class="flex items-center gap-2 border-b border-violet-300/10 px-2.5 py-2 text-[9px] font-semibold tracking-[0.04em] text-violet-200/80 uppercase"
+        >
+          <icon-lucide-bot class="size-3.5" />
+          <span>Agent changes</span>
+          <span class="ml-auto tabular-nums text-muted/55">{{ agentReceipts.length }}</span>
+        </div>
+        <article
+          v-for="receipt in agentReceipts"
+          :key="receipt.requestId"
+          data-test-id="agent-activity-row"
+          class="border-b border-violet-300/10 px-2.5 py-2.5 last:border-b-0"
+        >
+          <div class="flex min-w-0 items-start gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[10.5px] leading-4 font-medium text-surface">
+                {{ agentRouteLabel(receipt.route) }}
+              </div>
+              <div class="mt-0.5 text-[8.5px] leading-3.5 text-muted/65">
+                {{ receipt.objectIds.length }}
+                {{ receipt.objectIds.length === 1 ? 'object' : 'objects' }} · revision
+                {{ receipt.mutationReceipt.appliedRevision }}
+              </div>
+            </div>
+            <button
+              v-if="latestUndoableAgentRequestId === receipt.requestId"
+              type="button"
+              data-test-id="agent-activity-undo"
+              aria-label="Undo latest agent change"
+              class="flex h-6 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[9px] font-medium text-muted/70 hover:bg-violet-300/10 hover:text-surface"
+              @click="undoAgentReceipt(receipt)"
+            >
+              <icon-lucide-undo-2 class="size-3" />
+              Undo
+            </button>
+            <button
+              type="button"
+              data-test-id="agent-activity-reveal"
+              class="flex h-6 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[9px] font-medium text-violet-200/80 hover:bg-violet-300/10 hover:text-violet-100 disabled:opacity-40"
+              :disabled="!canRevealAgentReceipt(receipt)"
+              @click="revealAgentReceipt(receipt)"
+            >
+              <icon-lucide-scan-search class="size-3" />
+              Reveal
+            </button>
+            <button
+              type="button"
+              data-test-id="agent-activity-details"
+              class="flex size-6 shrink-0 items-center justify-center rounded-[5px] text-muted/60 hover:bg-violet-300/10 hover:text-surface"
+              :aria-label="
+                isExpanded(agentReceiptKey(receipt))
+                  ? 'Hide agent receipt details'
+                  : 'Show agent receipt details'
+              "
+              @click="toggleExpanded(agentReceiptKey(receipt))"
+            >
+              <icon-lucide-chevron-right
+                class="size-3 transition-transform"
+                :class="isExpanded(agentReceiptKey(receipt)) ? 'rotate-90' : ''"
+              />
+            </button>
+          </div>
+          <div
+            v-if="isExpanded(agentReceiptKey(receipt))"
+            data-test-id="agent-activity-receipt"
+            class="mt-2 rounded-md bg-black/10 p-2 font-mono text-[8px] leading-3.5 text-muted/70"
+          >
+            <div class="break-all text-surface/80">Request {{ receipt.requestId }}</div>
+            <div v-if="receipt.taskId" class="mt-1 break-all">Task {{ receipt.taskId }}</div>
+            <div v-if="receipt.traceId" class="break-all">Trace {{ receipt.traceId }}</div>
+            <div v-if="receipt.mutationReceipt.touchedProperties.length > 0" class="mt-1">
+              {{ receipt.mutationReceipt.touchedProperties.join(' · ') }}
+            </div>
+            <button
+              type="button"
+              data-test-id="agent-activity-copy"
+              class="mt-2 rounded-[4px] bg-white/[0.055] px-2 py-1 font-sans text-[8.5px] font-medium text-surface hover:bg-white/[0.09]"
+              @click="copyAgentReceipt(receipt)"
+            >
+              Copy receipt
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <div v-if="activityItems.length === 0 && agentReceipts.length === 0" class="px-1 pt-3 pb-4">
         <div class="flex items-start gap-2.5">
           <icon-lucide-history class="mt-0.5 size-4 shrink-0 text-muted/75" />
           <div class="min-w-0 flex-1 pt-0.5">
-            <div class="text-[11.5px] leading-4 font-semibold text-surface">No activity yet</div>
+            <div class="text-[11.5px] leading-4 font-semibold text-surface">
+              No Board activity yet
+            </div>
             <div class="mt-0.5 text-[9.5px] leading-3.5 text-muted/75">
-              Trace a region or make an editor change to build context.
+              Agent changes, editor actions, and Trace evidence will appear here.
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else data-test-id="narrated-trace-activity-feed" class="pt-1">
+      <div v-if="activityItems.length > 0" data-test-id="narrated-trace-activity-feed" class="pt-1">
         <article
           v-for="item in activityItems"
           :key="`${item.sessionId}:${item.event.id}`"
           :data-test-id="'narrated-trace-row-' + item.event.kind"
           :aria-label="rowMetadata(item) || undefined"
-          class="group grid grid-cols-[3.25rem_1.25rem_minmax(0,1fr)] gap-x-1.5 rounded-[7px] px-1.5 py-2.5 transition-colors hover:bg-white/[0.055]"
+          class="group grid grid-cols-[3.75rem_1.25rem_minmax(0,1fr)] gap-x-1.5 rounded-[7px] px-1.5 py-2.5 transition-colors hover:bg-white/[0.055]"
         >
           <time class="pt-0.5 text-[8.5px] leading-4 tabular-nums text-muted/55">
             {{ rowTime(item) }}

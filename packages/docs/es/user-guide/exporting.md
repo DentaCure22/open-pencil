@@ -6,7 +6,7 @@ description: Exportar imágenes (PNG, JPG, WEBP, SVG) y gestionar archivos .fig 
 
 ## Exportación de imágenes
 
-Selecciona un nodo y usa la sección Export en el panel de propiedades.
+Selecciona un nodo y usa el atajo de exportación o la acción Exportar del menú contextual. En pantallas pequeñas, los ajustes también están en el cajón móvil de Diseño.
 
 ### Configuración de exportación
 
@@ -19,7 +19,7 @@ Selecciona un nodo y usa la sección Export en el panel de propiedades.
 |--------|-----|-----------------|
 | Atajo de teclado | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>E</kbd> |
 | Menú contextual | Clic derecho <kbd>→</kbd> Exportar… | Clic derecho <kbd>→</kbd> Exportar… |
-| Panel de propiedades | Botón "Exportar" | Botón "Exportar" |
+| Cajón móvil de Diseño | Toca "Exportar" | Toca "Exportar" |
 
 ## Copiar como
 

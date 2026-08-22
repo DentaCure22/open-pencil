@@ -9,7 +9,7 @@ packages/
   cli/               @open-pencil/cli — CLI headless pour opérations .fig
     src/commands/    info, tree, find, export, eval, analyze
   mcp/               @open-pencil/mcp — serveur MCP pour outils IA
-    src/             Transports stdio + HTTP (Hono), 87 outils
+    src/             Transports stdio + HTTP (Hono) et enregistrement des outils
 src/
   components/        Vue SFCs (canevas, panneaux, barre d'outils, sélecteur de couleur)
     properties/      Sections du panneau de propriétés (Apparence, Remplissage, Contour, etc.)

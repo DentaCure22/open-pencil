@@ -722,18 +722,10 @@ test('stateful layout fixtures keep real context-menu interaction on the board',
   canvas.assertNoErrors()
 })
 
-test('expanded variants stay anchored when design context shares the sidebar', async ({ page }) => {
+test('expanded variants stay anchored in the Assets sidebar', async ({ page }) => {
   const canvas = new CanvasHelper(page)
   await page.goto('/?test')
   await canvas.waitForInit()
-  await page.evaluate(() => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('OpenPencil store not initialized')
-    const id = store.createShape('RECTANGLE', 80, 80, 140, 80)
-    store.select([id])
-  })
-  await expect(page.getByTestId('sidebar-context-slot')).toHaveAttribute('data-state', 'open')
-
   await page.getByTestId('left-panel-assets-tab').click()
   await page.getByTestId('assets-search').fill('SensitiveInput')
   const sensitiveInputAsset = page.locator('[data-asset-id="smylr-computed:sensitive-input"]')

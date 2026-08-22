@@ -5,13 +5,20 @@ import type { Ref } from 'vue'
 import { SkiaRenderer } from '@open-pencil/core/canvas'
 import type { Editor } from '@open-pencil/core/editor'
 
-import { makeGLSurface, sizeCanvas, type CanvasGLContext } from '#vue/canvas/surface/gl-surface'
+import {
+  canvasBackingSize,
+  makeGLSurface,
+  sizeCanvas,
+  type CanvasBackingSize,
+  type CanvasGLContext
+} from '#vue/canvas/surface/gl-surface'
 import { useCanvasKitLoader } from '#vue/canvas/surface/kit-loader'
 import { createCanvasRenderLoop } from '#vue/canvas/surface/render-loop'
 import { useCanvasResizeObserver } from '#vue/canvas/surface/resize-observer'
 import type { UseCanvasOptions } from '#vue/canvas/surface/types'
 
 type SurfaceManagerState = {
+  backing: CanvasBackingSize
   renderer: SkiaRenderer | null
   glContext: CanvasGLContext | null
 }
@@ -31,7 +38,11 @@ export function createCanvasSurfaceManager({
   isDestroyed: () => boolean
   shouldShowRulers: () => boolean
 }) {
-  const state: SurfaceManagerState = { renderer: null, glContext: null }
+  const state: SurfaceManagerState = {
+    backing: { dpr: 1, height: 1, width: 1 },
+    renderer: null,
+    glContext: null
+  }
   let sceneBackingRenderTimer: ReturnType<typeof setTimeout> | null = null
 
   function clearSceneBackingRenderTimer() {
@@ -53,7 +64,7 @@ export function createCanvasSurfaceManager({
     state.glContext?.delete()
     state.glContext = null
 
-    sizeCanvas(canvas, editor)
+    state.backing = sizeCanvas(canvas, editor, options)
 
     const result = makeGLSurface(ck, canvas, editor, options, state.glContext)
     state.glContext = result.glContext
@@ -91,6 +102,7 @@ export function createCanvasSurfaceManager({
       canvasRef.value?.clientWidth ?? 0,
       canvasRef.value?.clientHeight ?? 0,
       shouldShowRulers(),
+      state.backing.dpr,
       options?.layer ?? 'full',
       selectionChromeOwnerIds
     )
@@ -111,7 +123,21 @@ export function createCanvasSurfaceManager({
       return
     }
 
-    sizeCanvas(canvas, editor)
+    const nextBacking = canvasBackingSize(
+      canvas.clientWidth,
+      canvas.clientHeight,
+      options?.maxDevicePixelRatio
+    )
+    if (
+      state.backing.dpr === nextBacking.dpr &&
+      state.backing.height === nextBacking.height &&
+      state.backing.width === nextBacking.width &&
+      canvas.height === nextBacking.height &&
+      canvas.width === nextBacking.width
+    ) {
+      return
+    }
+    state.backing = sizeCanvas(canvas, editor, options)
 
     const result = makeGLSurface(ck, canvas, editor, options, state.glContext)
     state.glContext = result.glContext
@@ -149,6 +175,7 @@ export function useCanvasSurfaceLifecycle({
   setCanvasKit,
   getCanvasKitValue,
   lifecycle,
+  onError,
   onReady
 }: {
   canvasRef: Ref<HTMLCanvasElement | null>
@@ -156,15 +183,17 @@ export function useCanvasSurfaceLifecycle({
   setCanvasKit: (ck: CanvasKit | null) => void
   getCanvasKitValue: () => CanvasKit | null
   lifecycle: { destroyed: boolean }
+  onError?: (error: unknown) => void
   onReady?: () => void
 }) {
-  useCanvasKitLoader({
+  const loader = useCanvasKitLoader({
     canvasRef,
     lifecycle,
     setCanvasKit,
     createSurface: surface.createSurface,
     loadFonts: () => surface.getRenderer()?.loadFonts(surface.renderNow),
     renderNow: surface.renderNow,
+    onError,
     onReady
   })
 
@@ -179,4 +208,6 @@ export function useCanvasSurfaceLifecycle({
     cancelResize()
     surface.destroy()
   })
+
+  return { retryCanvasKit: loader.retry }
 }

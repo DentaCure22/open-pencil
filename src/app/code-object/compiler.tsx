@@ -11,24 +11,27 @@ import {
 import * as ReactJsxRuntime from 'react/jsx-runtime'
 import { transform } from 'sucrase'
 
+import { normalizeCodeObjectSurface, type CodeObjectSurface } from '@open-pencil/core/code-object'
+
 import {
   CODE_OBJECT_BOARD_API_VERSION,
   type CodeObjectBoardClient,
-  type CodeObjectConnectionDescriptor,
   type DispatchCodeObjectBoardAction
 } from '@/app/code-object/contracts'
 import type { CodeObjectDocument, CodeObjectState } from '@/app/code-object/model'
+import * as CodeObjectUi from '@/app/code-object/ui-runtime'
 
 export type AuthoredCodeObjectProps = {
   board: CodeObjectBoardClient
   boardApiVersion: typeof CODE_OBJECT_BOARD_API_VERSION
-  connections: CodeObjectConnectionDescriptor[]
   dispatchBoardAction: DispatchCodeObjectBoardAction
   interactionEnabled: boolean
   props: Record<string, unknown>
   renderComponent: () => ReactNode
   setState: (next: CodeObjectState | ((current: CodeObjectState) => CodeObjectState)) => void
   state: CodeObjectState
+  surface: CodeObjectSurface
+  theme: 'dark' | 'light'
 }
 
 type CompiledCodeObject =
@@ -198,11 +201,12 @@ function errorMessage(error: unknown): string {
 }
 
 function codeObjectRequire(moduleId: string): unknown {
+  if (moduleId === '@open-pencil/code-object-ui') return CodeObjectUi
   if (moduleId === 'd3') return D3
   if (moduleId === 'react') return React
   if (moduleId === 'react/jsx-runtime') return ReactJsxRuntime
   throw new Error(
-    `Code Objects can only import "d3", "react", and "react/jsx-runtime"; received "${moduleId}".`
+    `Code Objects can only import "@open-pencil/code-object-ui", "d3", "react", and "react/jsx-runtime"; received "${moduleId}".`
   )
 }
 
@@ -345,7 +349,8 @@ export function AuthoredCodeObject({
   generation,
   interactionEnabled,
   onStateChange,
-  renderComponent
+  renderComponent,
+  theme
 }: {
   board: CodeObjectBoardClient
   dispatchBoardAction: DispatchCodeObjectBoardAction
@@ -355,6 +360,7 @@ export function AuthoredCodeObject({
   interactionEnabled: boolean
   onStateChange: (state: CodeObjectState) => void
   renderComponent: () => ReactNode
+  theme: 'dark' | 'light'
 }) {
   const compiled = useMemo(() => compileCodeObjectSource(document.source), [document.source])
   if (!compiled.component) {
@@ -377,13 +383,14 @@ export function AuthoredCodeObject({
       <AuthoredComponent
         board={board}
         boardApiVersion={CODE_OBJECT_BOARD_API_VERSION}
-        connections={board.connections}
         dispatchBoardAction={dispatchBoardAction}
         interactionEnabled={interactionEnabled}
         props={document.props}
         renderComponent={renderComponent}
         setState={setState}
         state={document.state}
+        surface={normalizeCodeObjectSurface(document.surface)}
+        theme={theme}
       />
       <CodeObjectRenderAcknowledgement
         frameId={frameId}

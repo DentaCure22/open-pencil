@@ -4,7 +4,8 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
+import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
+import { useSceneNodeOverlayStyle } from '@/app/editor/presentation'
 import { sourceObjectSource, type SourceObjectSource } from '@/app/source-object/source'
 
 type SourceObjectItem = {
@@ -13,7 +14,7 @@ type SourceObjectItem = {
 }
 
 const store = useEditorStore()
-const presentationViewport = useEditorPresentationViewport(store)
+const overlayStyle = useSceneNodeOverlayStyle(store)
 const assetUrls = shallowRef<Record<string, string>>({})
 
 const items = computed<SourceObjectItem[]>(() => {
@@ -57,12 +58,12 @@ onBeforeUnmount(() => {
   for (const url of Object.values(assetUrls.value)) URL.revokeObjectURL(url)
 })
 
-function overlayStyle(node: SceneNode) {
-  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
-}
-
 function isSelected(nodeId: string): boolean {
   return store.state.selectedIds.has(nodeId)
+}
+
+function surfaceAcceptsPointer(nodeId: string): boolean {
+  return isSelected(nodeId) && canvasSurfaceCanReceivePointer(store.state.activeTool)
 }
 
 function assetUrl(source: SourceObjectSource): string {
@@ -120,7 +121,10 @@ function byteSize(source: SourceObjectSource): string {
         <span class="text-[9px] font-medium text-[#8f8a99]">Unsupported board preview</span>
         <div
           v-if="isSelected(item.node.id) && assetUrl(item.source)"
-          class="pointer-events-auto flex gap-2"
+          class="flex gap-2"
+          :class="
+            surfaceAcceptsPointer(item.node.id) ? 'pointer-events-auto' : 'pointer-events-none'
+          "
         >
           <a
             :aria-label="`Open attached file: ${item.source.fileName}`"

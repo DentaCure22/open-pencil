@@ -11,6 +11,7 @@ type CanvasKitLoaderOptions = {
   createSurface: (canvas: HTMLCanvasElement) => void
   loadFonts: () => Promise<unknown> | undefined
   renderNow: () => void
+  onError?: (error: unknown) => void
   onReady?: () => void
 }
 
@@ -21,11 +22,13 @@ export function useCanvasKitLoader({
   createSurface,
   loadFonts,
   renderNow,
+  onError,
   onReady
 }: CanvasKitLoaderOptions) {
   const isDestroyed = () => lifecycle.destroyed
+  let initialization: Promise<void> | null = null
 
-  async function init() {
+  async function initialize() {
     const canvas = canvasRef.value
     if (!canvas || isDestroyed()) return
 
@@ -44,12 +47,19 @@ export function useCanvasKitLoader({
       }
       if (isDestroyed()) return
       renderNow()
+      onReady?.()
     } catch (err) {
       console.error('[canvas] CanvasKit init failed', err)
-    } finally {
-      // Always dismiss global loader so a hung font/wasm fetch cannot trap the UI.
-      if (!isDestroyed()) onReady?.()
+      if (!isDestroyed()) onError?.(err)
     }
+  }
+
+  function init() {
+    if (initialization) return initialization
+    initialization = initialize().finally(() => {
+      initialization = null
+    })
+    return initialization
   }
 
   onMounted(() => {
@@ -59,4 +69,6 @@ export function useCanvasKitLoader({
   onScopeDispose(() => {
     lifecycle.destroyed = true
   })
+
+  return { retry: init }
 }

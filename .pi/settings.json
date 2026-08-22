@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "source": "npm:pi-subagents",
+      "autoload": false,
+      "extensions": ["!**"],
+      "skills": ["!**"],
+      "prompts": ["!**"]
+    }
+  ]
+}

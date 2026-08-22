@@ -13,7 +13,7 @@ export function createMermaidSvgSpec(
   const definition = source.trim()
   if (!definition) throw new Error('Paste a Mermaid definition first.')
   return {
-    appearance: options.appearance ?? 'dark',
+    appearance: options.appearance ?? 'auto',
     source: definition,
     revision: MERMAID_DIAGRAM_REVISION,
     parser: MERMAID_SVG_PARSER,
@@ -25,7 +25,7 @@ export function createMermaidSvgSpec(
 
 export function createMermaidSceneSpec(diagram: MermaidDiagram): MermaidSceneSpec {
   return createMermaidSvgSpec(diagram.source, {
-    appearance: diagram.appearance,
+    appearance: 'auto',
     height: diagram.height,
     svg: diagram.svg,
     width: diagram.width

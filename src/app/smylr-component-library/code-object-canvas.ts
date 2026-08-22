@@ -1,19 +1,64 @@
-import type { SceneNode } from '@open-pencil/scene-graph'
+import type { Fill, SceneNode, Stroke } from '@open-pencil/scene-graph'
 
 import {
   codeObjectDocument,
-  createUserCodeObjectDocument,
-  isCodeObjectFrame,
+  createSmylrProductionAppDocument,
   setCodeObjectDocument
 } from '@/app/code-object/model'
 
 import type { EditorStore } from '../editor/session'
-import type { SmylrComputedAssetDefinition } from './computed-catalog'
-import { SMYLR_COMPUTED_ASSET_RENDERER_VERSION } from './computed-catalog'
+import {
+  SMYLR_COMPUTED_ASSET_RENDERER_VERSION,
+  type SmylrComputedAssetDefinition
+} from './computed-catalog'
+import {
+  isSmylrComponentCodeObject,
+  smylrComponentSurfaceHeight,
+  SMYLR_COMPONENT_CODE_OBJECT_KIND,
+  SMYLR_COMPONENT_SURFACE_INSET
+} from './runtime'
+
+export {
+  isSmylrComponentCodeObject,
+  smylrComponentDisplayName,
+  smylrComponentRuntimeHeight,
+  smylrComponentViewport,
+  SMYLR_COMPONENT_SURFACE_INSET,
+  type SmylrComponentViewport
+} from './runtime'
 
 const PLUGIN_ID = 'smylr-production'
-const SMYLR_COMPONENT_CODE_OBJECT_KIND = 'smylr-component-code-object'
+const SMYLR_COMPONENT_METADATA_KEYS = new Set([
+  'componentKind',
+  'componentName',
+  'sourcePath',
+  'fixtureId',
+  'frameHeight',
+  'frameWidth',
+  'interactionHeight',
+  'overlayHeight',
+  'overlayWidth',
+  'rendererVersion',
+  'surfaceInset',
+  'variantId',
+  'variantLabel'
+])
+export const SMYLR_COMPONENT_SURFACE_CORNER_RADIUS = 20
 export const SMYLR_COMPONENT_CODE_OBJECT_PAGE_KIND = 'smylr-component-code-object-page'
+
+const SMYLR_COMPONENT_SURFACE_FILL: Fill = {
+  color: { a: 1, b: 249 / 255, g: 250 / 255, r: 250 / 255 },
+  opacity: 1,
+  type: 'SOLID',
+  visible: true
+}
+const SMYLR_COMPONENT_SURFACE_STROKE: Stroke = {
+  align: 'INSIDE',
+  color: { a: 1, b: 232 / 255, g: 232 / 255, r: 228 / 255 },
+  opacity: 1,
+  visible: true,
+  weight: 1
+}
 
 type ComponentFrameSnapshot = Partial<SceneNode> & { id: string }
 
@@ -21,95 +66,6 @@ type SmylrComponentPreviewRouteOptions = {
   embed?: boolean
   preview?: boolean
 }
-
-const SMYLR_COMPONENT_SOURCE = `type CodeObjectProps = {
-  interactionEnabled: boolean
-  props: {
-    componentName?: string
-    sourcePath?: string
-    variantLabel?: string
-    variantProps?: Record<string, string>
-  }
-  setState: (next: { active: boolean }) => void
-  state: { active?: boolean }
-}
-
-export default function SmylrComponent({
-  interactionEnabled,
-  props,
-  setState,
-  state
-}: CodeObjectProps) {
-  const entries = Object.entries(props.variantProps ?? {})
-  return (
-    <main style={{
-      boxSizing: 'border-box',
-      minHeight: '100%',
-      padding: 24,
-      color: '#1d2b34',
-      fontFamily: 'Inter, ui-sans-serif, system-ui',
-      background: '#f7faf9'
-    }}>
-      <section style={{
-        display: 'flex',
-        minHeight: 180,
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        gap: 18,
-        border: state.active ? '2px solid #20a98b' : '1px solid #dce5e2',
-        borderRadius: 16,
-        padding: 20,
-        background: '#fff',
-        boxShadow: '0 12px 36px #18332b14'
-      }}>
-        <div>
-          <p style={{ margin: 0, color: '#628078', fontSize: 10, fontWeight: 800, letterSpacing: 1.2 }}>
-            SMYLR CODE OBJECT
-          </p>
-          <h1 style={{ margin: '8px 0 4px', fontSize: 22 }}>
-            {props.componentName ?? 'Smylr component'}
-          </h1>
-          <p style={{ margin: 0, color: '#71827d', fontSize: 12 }}>
-            {props.variantLabel ?? 'Default variant'}
-          </p>
-        </div>
-        {entries.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {entries.map(([name, value]) => (
-              <span key={name} style={{
-                borderRadius: 999,
-                padding: '6px 9px',
-                color: '#2b5e52',
-                fontSize: 10,
-                fontWeight: 700,
-                background: '#e8f6f2'
-              }}>
-                {name}: {value}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <button
-          disabled={!interactionEnabled}
-          onClick={() => setState({ active: !state.active })}
-          style={{
-            alignSelf: 'flex-start',
-            border: 0,
-            borderRadius: 10,
-            padding: '9px 13px',
-            color: '#fff',
-            cursor: interactionEnabled ? 'pointer' : 'default',
-            fontSize: 11,
-            fontWeight: 800,
-            background: state.active ? '#1d7d69' : '#263c35'
-          }}
-        >
-          {state.active ? 'Active' : 'Try component'}
-        </button>
-      </section>
-    </main>
-  )
-}`
 
 function pluginData(key: string, value: string): SceneNode['pluginData'][number] {
   return { pluginId: PLUGIN_ID, key, value }
@@ -131,6 +87,19 @@ function samePluginData(left: SceneNode['pluginData'], right: SceneNode['pluginD
   )
 }
 
+function componentSurfaceProps(asset: SmylrComputedAssetDefinition) {
+  return {
+    clipsContent: false,
+    cornerRadius: SMYLR_COMPONENT_SURFACE_CORNER_RADIUS,
+    fills: [{ ...SMYLR_COMPONENT_SURFACE_FILL, color: { ...SMYLR_COMPONENT_SURFACE_FILL.color } }],
+    height: smylrComponentSurfaceHeight(asset),
+    strokes: [
+      { ...SMYLR_COMPONENT_SURFACE_STROKE, color: { ...SMYLR_COMPONENT_SURFACE_STROKE.color } }
+    ],
+    width: asset.frameWidth
+  }
+}
+
 export function smylrComponentPreviewRoute(
   asset: SmylrComputedAssetDefinition,
   variantId?: string,
@@ -141,20 +110,6 @@ export function smylrComponentPreviewRoute(
   if (options.embed) params.push('embed=1')
   if (options.preview) params.push('preview=1')
   return `/open-pencil-renderer?${params.join('&')}`
-}
-
-export function isSmylrComponentCodeObject(node: SceneNode | null | undefined) {
-  return Boolean(
-    isCodeObjectFrame(node) &&
-    node &&
-    pluginValue(node, 'kind') === SMYLR_COMPONENT_CODE_OBJECT_KIND
-  )
-}
-
-export function smylrComponentDisplayName(node: SceneNode) {
-  const componentName = pluginValue(node, 'componentName') ?? node.name.split(' / ')[0] ?? node.name
-  const variantLabel = pluginValue(node, 'variantLabel')
-  return variantLabel ? `${componentName} · ${variantLabel}` : componentName
 }
 
 function findComponentPage(store: EditorStore, fixtureId: string, variantId?: string) {
@@ -173,10 +128,17 @@ function findComponentPage(store: EditorStore, fixtureId: string, variantId?: st
 function componentMetadata(asset: SmylrComputedAssetDefinition, variantId?: string) {
   const variant = asset.variants.find((candidate) => candidate.id === variantId)
   return [
+    pluginData('componentKind', SMYLR_COMPONENT_CODE_OBJECT_KIND),
     pluginData('componentName', asset.name),
     pluginData('sourcePath', asset.sourcePath),
     pluginData('fixtureId', asset.fixtureId),
+    pluginData('frameHeight', String(asset.frameHeight)),
+    pluginData('frameWidth', String(asset.frameWidth)),
+    pluginData('interactionHeight', String(asset.interactionHeight)),
+    pluginData('overlayHeight', String(asset.overlayHeight)),
+    pluginData('overlayWidth', String(asset.overlayWidth)),
     pluginData('rendererVersion', SMYLR_COMPUTED_ASSET_RENDERER_VERSION),
+    pluginData('surfaceInset', String(SMYLR_COMPONENT_SURFACE_INSET)),
     ...(variant
       ? [pluginData('variantId', variant.id), pluginData('variantLabel', variant.label)]
       : [])
@@ -189,18 +151,9 @@ function componentName(asset: SmylrComputedAssetDefinition, variantId?: string) 
 }
 
 function componentDocument(asset: SmylrComputedAssetDefinition, variantId?: string) {
-  const variant = asset.variants.find((candidate) => candidate.id === variantId)
-  return createUserCodeObjectDocument({
-    definitionId: `smylr.component.${asset.fixtureId}${variant ? `.${variant.id}` : ''}`,
-    name: componentName(asset, variantId),
-    props: {
-      componentName: asset.name,
-      sourcePath: asset.sourcePath,
-      variantLabel: variant?.label ?? 'Default',
-      variantProps: structuredClone(variant?.props ?? {})
-    },
-    source: SMYLR_COMPONENT_SOURCE,
-    state: { active: false }
+  return createSmylrProductionAppDocument({
+    label: componentName(asset, variantId),
+    route: smylrComponentPreviewRoute(asset, variantId, { embed: true })
   })
 }
 
@@ -210,18 +163,30 @@ function updateComponentFrame(
   asset: SmylrComputedAssetDefinition,
   variantId?: string
 ) {
-  const metadata = [
-    ...frame.pluginData.filter((entry) => entry.pluginId !== PLUGIN_ID),
-    pluginData('kind', SMYLR_COMPONENT_CODE_OBJECT_KIND),
-    ...componentMetadata(asset, variantId)
-  ]
   const document = componentDocument(asset, variantId)
   const currentDocument = codeObjectDocument(frame)
-  const metadataChanged = !samePluginData(frame.pluginData, metadata)
-  if (metadataChanged) store.graph.updateNode(frame.id, { pluginData: metadata })
-  const documentChanged = currentDocument?.component !== 'user-code'
+  const documentChanged = JSON.stringify(currentDocument) !== JSON.stringify(document)
   if (documentChanged) setCodeObjectDocument(store.graph, frame.id, document)
-  return metadataChanged || documentChanged
+  const currentFrame = store.graph.getNode(frame.id) ?? frame
+  const metadata = [
+    ...currentFrame.pluginData.filter(
+      (entry) => entry.pluginId !== PLUGIN_ID || !SMYLR_COMPONENT_METADATA_KEYS.has(entry.key)
+    ),
+    ...componentMetadata(asset, variantId)
+  ]
+  const metadataChanged = !samePluginData(currentFrame.pluginData, metadata)
+  const surface = componentSurfaceProps(asset)
+  const surfaceChanged =
+    currentFrame.clipsContent !== surface.clipsContent ||
+    currentFrame.cornerRadius !== surface.cornerRadius ||
+    currentFrame.height !== surface.height ||
+    currentFrame.width !== surface.width ||
+    JSON.stringify(currentFrame.fills) !== JSON.stringify(surface.fills) ||
+    JSON.stringify(currentFrame.strokes) !== JSON.stringify(surface.strokes)
+  if (metadataChanged || surfaceChanged) {
+    store.graph.updateNode(frame.id, { ...surface, pluginData: metadata })
+  }
+  return metadataChanged || surfaceChanged || documentChanged
 }
 
 export function ensureSmylrComponentCodeObjectCanvas(
@@ -253,19 +218,12 @@ export function ensureSmylrComponentCodeObjectCanvas(
     changed = true
   }
 
-  let frame = store.graph
-    .getChildren(page.id)
-    .find((node) => pluginValue(node, 'kind') === SMYLR_COMPONENT_CODE_OBJECT_KIND)
+  let frame = store.graph.getChildren(page.id).find((node) => isSmylrComponentCodeObject(node))
   if (!frame) {
     frame = store.graph.createNode('FRAME', page.id, {
-      clipsContent: true,
-      cornerRadius: 0,
-      fills: [],
-      height: asset.interactionHeight,
+      ...componentSurfaceProps(asset),
       name: componentName(asset, variantId),
       pluginData: [],
-      strokes: [],
-      width: asset.overlayWidth,
       x: 96,
       y: 88
     })
@@ -288,17 +246,13 @@ export function placeSmylrComponentCodeObject(
   const parentId = store.state.currentPageId
   const previousSelection = new Set(store.state.selectedIds)
   const displayName = componentName(asset, variantId)
+  const surface = componentSurfaceProps(asset)
   let frame = store.graph.createNode('FRAME', parentId, {
-    clipsContent: true,
-    cornerRadius: 0,
-    fills: [],
-    height: asset.interactionHeight,
+    ...surface,
     name: displayName,
     pluginData: [],
-    strokes: [],
-    width: asset.overlayWidth,
-    x: centerX - asset.overlayWidth / 2,
-    y: centerY - asset.interactionHeight / 2
+    x: centerX - surface.width / 2,
+    y: centerY - surface.height / 2
   })
   updateComponentFrame(store, frame, asset, variantId)
   frame = store.graph.getNode(frame.id) ?? frame

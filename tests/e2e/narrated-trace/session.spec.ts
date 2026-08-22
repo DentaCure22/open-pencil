@@ -23,27 +23,38 @@ test.afterAll(async () => {
 })
 
 test('records bounded semantic editor actions and restores one unified History feed', async () => {
+  const runId = crypto.randomUUID().slice(0, 8)
+  const backgroundName = `Trace E2E background ${runId}`
+  const rectangleName = `Trace E2E rectangle ${runId}`
   await expect(page.getByTestId('narrated-trace-history')).toBeVisible()
   await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveCount(0)
   await expect(page.getByTestId('narrated-trace-timeline')).toHaveCount(0)
 
-  const rectangleId = await page.evaluate(() => {
+  const rectangleId = await page.evaluate((name) => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     store.setTool('RECTANGLE')
     const createdId = store.createShape('RECTANGLE', 120, 120, 100, 80)
     const created = store.graph.getNode(createdId)
     if (!created) throw new Error('Rectangle was not created')
+    store.graph.updateNode(created.id, { name })
     store.clearSelection()
     store.select([created.id])
     return created.id
-  })
+  }, rectangleName)
   await page.waitForTimeout(1300)
 
-  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
-  await expect(page.getByTestId('narrated-trace-row-shape')).toContainText('Rectangle')
-  await expect(page.getByTestId('narrated-trace-row-selection')).toContainText('Rectangle')
-  await expect(page.getByTestId('narrated-trace-row-tool')).toBeVisible()
+  const rectangleShapeRow = page
+    .getByTestId('narrated-trace-row-shape')
+    .filter({ hasText: rectangleName })
+  const rectangleSelectionRow = page
+    .getByTestId('narrated-trace-row-selection')
+    .filter({ hasText: rectangleName })
+  await expect(rectangleShapeRow).toHaveCount(1)
+  await expect(rectangleSelectionRow).toHaveCount(1)
+  await expect(
+    page.getByTestId('narrated-trace-row-tool').filter({ hasText: 'Activated RECTANGLE' })
+  ).toHaveCount(1)
 
   await page.evaluate((nodeId) => {
     const store = window.openPencil?.getStore?.()
@@ -54,8 +65,10 @@ test('records bounded semantic editor actions and restores one unified History f
   }, rectangleId)
   await page.waitForTimeout(800)
 
-  const transformRow = page.getByTestId('narrated-trace-row-edit').first()
-  await expect(transformRow).toContainText('Rectangle')
+  const rectangleEditRows = page
+    .getByTestId('narrated-trace-row-edit')
+    .filter({ hasText: rectangleName })
+  const transformRow = rectangleEditRows.first()
   await expect(transformRow.getByTestId('narrated-trace-row-action')).toHaveText('Edited')
   await expect(transformRow).toContainText('4 changes')
 
@@ -75,18 +88,24 @@ test('records bounded semantic editor actions and restores one unified History f
     })
   }, rectangleId)
   await page.waitForTimeout(800)
-  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
+  await expect(rectangleEditRows).toHaveCount(2)
 
-  await page.evaluate(() => {
+  await page.evaluate((name) => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     store.clearSelection()
     const backgroundId = store.createShape('RECTANGLE', 20, 20, 20, 20)
-    store.updateNode(backgroundId, { width: 24 })
-  })
+    store.graph.updateNode(backgroundId, { name, width: 24 })
+  }, backgroundName)
   await page.waitForTimeout(1300)
-  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
-  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
+  await expect(rectangleShapeRow).toHaveCount(1)
+  await expect(rectangleEditRows).toHaveCount(2)
+  await expect(
+    page.getByTestId('narrated-trace-row-shape').filter({ hasText: backgroundName })
+  ).toHaveCount(0)
+  await expect(
+    page.getByTestId('narrated-trace-row-edit').filter({ hasText: backgroundName })
+  ).toHaveCount(0)
 
   const queryProof = await page.evaluate(async (targetId) => {
     const store = window.openPencil?.getStore?.()
@@ -130,17 +149,31 @@ test('records bounded semantic editor actions and restores one unified History f
     queryProof.scope.pageName ?? queryProof.scope.pageId
   )
 
+  const readPersistedRectangleKinds = () =>
+    page.evaluate(async (name) => {
+      const { loadNarratedTraceActivityFeed } = await import('/src/app/narrated-trace/history.ts')
+      const items = await loadNarratedTraceActivityFeed({ itemLimit: 80 })
+      return items.filter((item) => item.event.target?.name === name).map((item) => item.event.kind)
+    }, rectangleName)
+  await expect.poll(readPersistedRectangleKinds, { timeout: 10_000 }).toContain('shape')
+  const persistedRectangleKinds = await readPersistedRectangleKinds()
+  expect(persistedRectangleKinds.filter((kind) => kind === 'edit')).toHaveLength(2)
+
   await page.reload()
   canvas = new CanvasHelper(page)
   await canvas.waitForInit()
   await page.getByTestId('left-panel-trace-tab').click()
   await expect(page.getByTestId('narrated-trace-activity-feed')).toBeVisible()
-  await expect(page.getByTestId('narrated-trace-row-shape')).toHaveCount(1)
-  await expect(page.getByTestId('narrated-trace-row-edit')).toHaveCount(2)
+  await expect(
+    page.getByTestId('narrated-trace-row-shape').filter({ hasText: rectangleName })
+  ).toHaveCount(1)
+  await expect(
+    page.getByTestId('narrated-trace-row-edit').filter({ hasText: rectangleName })
+  ).toHaveCount(2)
   expect(pageErrors).toEqual([])
 })
 
-test('keeps a consented mic session on for multiple Trace turns until explicit stop', async () => {
+test('keeps a pinned mic session on for multiple Trace turns until explicit stop', async () => {
   await page.evaluate(() => {
     class FakeSpeechRecognition extends EventTarget implements SpeechRecognition {
       static async available(): Promise<SpeechRecognitionAvailability> {
@@ -229,21 +262,9 @@ test('keeps a consented mic session on for multiple Trace turns until explicit s
 
   await page.getByTestId('left-panel-trace-tab').click()
   await page.getByTestId('narrated-trace-mic-toggle').click()
-  const consent = page.getByTestId('narrated-trace-mic-consent')
-  await expect(consent).toContainText('may process speech over the network')
-  await page.waitForTimeout(300)
-  await expect(consent).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.getByTestId('narrated-trace-mic-toggle')).toHaveAccessibleName(
-    'Start Trace microphone'
-  )
-
-  await page.getByTestId('narrated-trace-mic-toggle').click()
-  await expect(consent).toContainText('may process speech over the network')
-  await page.getByTestId('narrated-trace-mic-consent-start').click()
 
   const micToggle = page.getByTestId('narrated-trace-mic-toggle')
-  await expect(micToggle).toHaveAccessibleName('Stop microphone')
+  await expect(micToggle).toHaveAccessibleName('Microphone pinned on · recording continuously')
   await expect(micToggle).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('narrated-trace-row-transcript')).toContainText(
     'The selected card feels crowded'
@@ -262,7 +283,7 @@ test('keeps a consented mic session on for multiple Trace turns until explicit s
       .getByTestId('narrated-trace-row-transcript')
       .filter({ hasText: 'Now I am showing the chart controls' })
   ).toHaveCount(1)
-  await expect(micToggle).toHaveAccessibleName('Stop microphone')
+  await expect(micToggle).toHaveAccessibleName('Microphone pinned on · recording continuously')
   await expect(micToggle).toHaveAttribute('aria-pressed', 'true')
   await page.waitForTimeout(1200)
 
@@ -325,7 +346,9 @@ test('keeps a consented mic session on for multiple Trace turns until explicit s
   )
 
   await micToggle.click()
-  await expect(micToggle).toHaveAccessibleName('Start Trace microphone')
+  await expect(micToggle).toHaveAccessibleName(
+    'Pin microphone on · records continuously, independent of Focus'
+  )
   await expect(micToggle).toHaveAttribute('aria-pressed', 'false')
   await page.getByTestId('narrated-trace-mic-clear').click()
   await expect(page.getByTestId('narrated-trace-row-transcript')).toHaveCount(0)

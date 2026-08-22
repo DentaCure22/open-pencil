@@ -34,7 +34,6 @@ export type BoardBuildNextTarget = {
 
 export type BoardBuildReleaseSummary = {
   artifact_count: number | null
-  connection_count: number | null
   contract: 'board-build-release/v1'
   message: string
   next_build_target: BoardBuildNextTarget | null
@@ -143,16 +142,6 @@ function releaseReceipt(
   }
   const ownerId = stringValue(result.owner_id)
   return ownerId ? { ...receipt, owner_ids: { artifact: ownerId } } : receipt
-}
-
-function connectionCount(result: BoardJsonObject, receipt: BoardJsonObject | null): number | null {
-  for (const candidate of [result.connection_ids, receipt?.connection_ids]) {
-    const count = itemCount(candidate)
-    if (count !== null) return count
-  }
-  const readback = record(result.readback)
-  const plan = record(readback?.plan)
-  return itemCount(readback?.object_graph_connections ?? plan?.connections)
 }
 
 function finalRevision(
@@ -273,7 +262,6 @@ export function boardBuildReleaseSummary(
   const readback = record(result.readback)
   const resolvedTarget = exactTarget(target, result)
   const artifacts = artifactCount(result, receipt)
-  const connections = connectionCount(result, receipt)
   const revision = finalRevision(result, receipt, persistence, target)
   const requestId =
     stringValue(receipt?.requestId) ??
@@ -291,13 +279,11 @@ export function boardBuildReleaseSummary(
   })
 
   if (conclusiveSuccess) {
-    const exactConnectionCount = connections ?? 0
     const limitationText = limitations.length > 0 ? ` Proof limits: ${limitations.join(', ')}.` : ''
     return {
       artifact_count: artifacts,
-      connection_count: exactConnectionCount,
       contract: 'board-build-release/v1',
-      message: `Board build ${mutation} durably on ${exactTargetLabel(resolvedTarget)}: ${countLabel(artifacts, 'artifact', 'artifacts')} and ${countLabel(exactConnectionCount, 'connection', 'connections')} at revision ${String(revision)}.${limitationText}`,
+      message: `Board build ${mutation} durably on ${exactTargetLabel(resolvedTarget)}: ${countLabel(artifacts, 'artifact', 'artifacts')} at revision ${String(revision)}.${limitationText}`,
       next_build_target: nextBuildTarget(persistence, resolvedTarget),
       proof_limitations: limitations,
       request_id: requestId,
@@ -314,7 +300,6 @@ export function boardBuildReleaseSummary(
   ) {
     return {
       artifact_count: 0,
-      connection_count: 0,
       contract: 'board-build-release/v1',
       message: `Board build stopped without mutation on ${exactTargetLabel(resolvedTarget)}${reason ? `: ${reason}` : '.'}`,
       next_build_target: null,
@@ -328,7 +313,6 @@ export function boardBuildReleaseSummary(
 
   return {
     artifact_count: artifacts,
-    connection_count: connections,
     contract: 'board-build-release/v1',
     message: `Board build outcome is unknown on ${exactTargetLabel(resolvedTarget)}; do not claim success or start a new mutation. Recover the same request ID.`,
     next_build_target: null,

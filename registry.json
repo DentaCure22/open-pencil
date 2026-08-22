@@ -1,0 +1,105 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "open-pencil",
+  "homepage": "https://openpencil.dev",
+  "items": [
+    {
+      "name": "code-object-ui",
+      "type": "registry:ui",
+      "title": "OpenPencil Code Object UI",
+      "description": "Theme-aware primitives for trusted OpenPencil Code Objects.",
+      "dependencies": ["@tanstack/react-table@9.1.1", "recharts@3.10.1", "tailwind-merge@3.5.0"],
+      "files": [
+        {
+          "path": "src/app/code-object/ui-runtime/classnames.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/types.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/badge.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/button.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/card.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/data-table.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/sparkline.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/index.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "financial-dashboard",
+      "type": "registry:block",
+      "title": "Financial Dashboard",
+      "description": "A JSON-configured business health dashboard for Code Objects.",
+      "dependencies": ["@tanstack/react-table@9.1.1", "recharts@3.10.1", "tailwind-merge@3.5.0"],
+      "files": [
+        {
+          "path": "src/app/code-object/ui-runtime/classnames.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/types.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/badge.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/button.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/card.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/data-table.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/components/sparkline.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/blocks/financial-dashboard/model.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/blocks/financial-dashboard/view.tsx",
+          "type": "registry:block"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/blocks/financial-dashboard/index.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/blocks/configured-block.tsx",
+          "type": "registry:block"
+        },
+        {
+          "path": "src/app/code-object/ui-runtime/index.ts",
+          "type": "registry:lib"
+        }
+      ]
+    }
+  ]
+}

@@ -10,7 +10,7 @@ async function openProjectBrowser() {
     await expect(browser).not.toBeVisible()
   }
   if (!(await browser.isVisible()))
-    await editor.page.getByTestId('board-dock-more').dispatchEvent('click')
+    await editor.page.getByTestId('workspace-toolbar-button').dispatchEvent('click')
   await expect(browser).toBeVisible()
   const back = editor.page.getByTestId('board-switcher-back')
   if (await back.isVisible()) {
@@ -26,13 +26,13 @@ async function openProjectBrowser() {
 async function switchBoardFromSwitcher(name: string) {
   const browser = editor.page.getByTestId('board-project-browser')
   if (!(await browser.isVisible()))
-    await editor.page.getByTestId('board-dock-more').dispatchEvent('click')
+    await editor.page.getByTestId('workspace-toolbar-button').dispatchEvent('click')
   const back = editor.page.getByTestId('board-switcher-back')
   if (await back.isVisible()) await back.dispatchEvent('click')
   const search = editor.page.getByTestId('board-switcher-search')
   await expect(search).toBeVisible()
   await search.fill(name)
-  await browser.getByRole('button', { name }).click()
+  await browser.getByTestId('board-switcher-board-row').filter({ hasText: name }).first().click()
 }
 
 test.beforeEach(async () => {
@@ -117,11 +117,11 @@ async function openPageAddMenu(name: string) {
   await editor.page.getByRole('button', { name: `Add to ${name}`, exact: true }).click()
 }
 
-test('starts with one logical Page, one Board, and calm collapsed utilities', async () => {
+test('starts with one logical Page, one Board, and Layers ready', async () => {
   await expect(editor.page.getByTestId('layers-shell')).toBeVisible()
   await expect(pageItem('Page 1')).toHaveCount(1)
   await expect(boardItem('Main board')).toHaveCount(1)
-  await expect(editor.page.getByTestId('layers-scroll')).toHaveCount(0)
+  await expect(editor.page.getByTestId('layers-scroll')).toBeVisible()
   await expect(editor.page.getByTestId('assets-panel')).toHaveCount(0)
   expect(await getScenePages()).toHaveLength(1)
 })
@@ -152,24 +152,16 @@ test('creates a Board with a chosen dock identity under its intended Page', asyn
   const hierarchy = await getSidebarHierarchy()
   const overviewBoard = hierarchy.boards.find((board) => board.label === 'Overview')
   expect(overviewBoard?.icon).toBe('flow')
-  await expect(
-    editor.page
-      .getByTestId(`board-dock-board-${overviewBoard?.pageId}`)
-      .locator('[data-board-icon="flow"]')
-  ).toBeVisible()
   editor.canvas.assertNoErrors()
 })
 
-test('keeps the board switcher open until an outside click', async () => {
+test('closes the board switcher after each board selection', async () => {
   const projectBrowser = editor.page.getByTestId('board-project-browser')
 
   await switchBoardFromSwitcher('Main board')
-  await expect(projectBrowser).toBeVisible()
+  await expect(projectBrowser).not.toBeVisible()
 
   await switchBoardFromSwitcher('Overview')
-  await expect(projectBrowser).toBeVisible()
-
-  await editor.page.mouse.click(700, 100)
   await expect(projectBrowser).not.toBeVisible()
 })
 
@@ -189,11 +181,6 @@ test('changes an existing Board icon from the inline rename dropdown', async () 
   const hierarchy = await getSidebarHierarchy()
   const overviewBoard = hierarchy.boards.find((board) => board.label === 'Overview')
   expect(overviewBoard?.icon).toBe('chart')
-  await expect(
-    editor.page
-      .getByTestId(`board-dock-board-${overviewBoard?.pageId}`)
-      .locator('[data-board-icon="chart"]')
-  ).toBeVisible()
 })
 
 test('creates a nested Page with visible hierarchy indentation', async () => {
@@ -224,20 +211,26 @@ test('searches across Page and Board names without exposing unrelated rows', asy
 })
 
 test('keeps canvas content isolated when switching Boards', async () => {
-  await boardItem('Overview').click()
+  await switchBoardFromSwitcher('Main board')
+  await editor.canvas.waitForRender()
+  const mainBoardChildCount = await getCurrentPageChildCount()
+
+  await switchBoardFromSwitcher('Overview')
+  await editor.canvas.waitForRender()
+  const overviewChildCount = await getCurrentPageChildCount()
   // Draw in the unobstructed canvas center; the shell intentionally floats
   // over the left edge of the full-bleed canvas.
   await editor.canvas.drawRect(420, 100, 80, 60)
   await editor.canvas.waitForRender()
-  expect(await getCurrentPageChildCount()).toBe(1)
+  expect(await getCurrentPageChildCount()).toBe(overviewChildCount + 1)
 
   await switchBoardFromSwitcher('Main board')
   await editor.canvas.waitForRender()
-  expect(await getCurrentPageChildCount()).toBe(0)
+  expect(await getCurrentPageChildCount()).toBe(mainBoardChildCount)
 
   await switchBoardFromSwitcher('Overview')
   await editor.canvas.waitForRender()
-  expect(await getCurrentPageChildCount()).toBe(1)
+  expect(await getCurrentPageChildCount()).toBe(overviewChildCount + 1)
   editor.canvas.assertNoErrors()
 })
 

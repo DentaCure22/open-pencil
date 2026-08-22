@@ -227,7 +227,9 @@ export function projectCodexAppServerNotification(
 }
 
 function timeoutPromise(milliseconds: number): Promise<'timeout'> {
-  return new Promise((resolve) => setTimeout(() => resolve('timeout'), milliseconds))
+  return new Promise((resolve) => {
+    setTimeout(() => resolve('timeout'), milliseconds)
+  })
 }
 
 function processExit(child: ChildProcessWithoutNullStreams): Promise<{
@@ -381,6 +383,12 @@ export class CodexAppServerSession {
       ])
     }
     const usage = this.#usageRevision > usageRevisionBeforeInterrupt ? this.#latestUsage : null
+    let usageUnavailableReason: string | null = null
+    if (!usage) {
+      usageUnavailableReason = this.#turnCompleted
+        ? 'Codex app-server completed the interrupted turn without a final exact thread token usage update.'
+        : 'Codex app-server telemetry drain ended before exact thread token usage was observed.'
+    }
     return {
       post_release_boundary_basis: 'emitted_at_ms_with_observation_fallback',
       post_release_raw_response_count: this.#postReleaseRawResponseCount,
@@ -389,11 +397,7 @@ export class CodexAppServerSession {
       turn_completed_observed_monotonic_ms: this.#turnCompletedObservedMonotonicMs,
       turn_status: this.#turnStatus,
       usage,
-      usage_unavailable_reason: usage
-        ? null
-        : this.#turnCompleted
-          ? 'Codex app-server completed the interrupted turn without a final exact thread token usage update.'
-          : 'Codex app-server telemetry drain ended before exact thread token usage was observed.'
+      usage_unavailable_reason: usageUnavailableReason
     }
   }
 

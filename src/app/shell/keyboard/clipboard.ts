@@ -7,6 +7,10 @@ import {
 } from '@/app/editor/clipboard/system'
 import { extractFilesFromClipboard, placeFilesWithFallbackMessage } from '@/app/file-intake/drop'
 import { isEditing } from '@/app/shell/keyboard/focus'
+import {
+  handleLiveContainerCopyCommand,
+  isLiveContainerCopyContext
+} from '@/app/smylr-live-inspector/clipboard'
 import { isTauri } from '@/app/tauri/env'
 
 function cursorPosition(store: EditorStore) {
@@ -19,6 +23,10 @@ export function bindEditorClipboard(store: EditorStore, enabled: () => boolean =
     if (!enabled()) return
     if (isEditing(e)) return
     e.preventDefault()
+    if (isLiveContainerCopyContext(store)) {
+      void handleLiveContainerCopyCommand(store)
+      return
+    }
     if (isTauri()) {
       void copySelectionToTauriClipboard(store)
       return

@@ -28,19 +28,9 @@ import {
 import {
   collabValuesEqual,
   hasStructuralNodeChange,
-  shouldSyncObjectGraphPage,
   syncNodeFieldsToYMap,
   syncNodePropsToYMap
 } from '@/app/collab/yjs/node-record'
-import {
-  getObjectGraphYRecords,
-  objectGraphPageIdsFromYjsEvents,
-  objectGraphPluginDataFromYjs,
-  readObjectGraphYConnections,
-  readYNodePluginData,
-  syncObjectGraphPageToYjs,
-  tombstoneObjectGraphPageInYjs
-} from '@/app/collab/yjs/object-graph'
 import type { EditorStore } from '@/app/editor/active-store'
 
 export { registerYjsObservers } from '@/app/collab/yjs/observers'
@@ -144,18 +134,10 @@ export function bindCollabGraphEvents({
       const ydoc = getYdoc()
       const ynodes = getYnodes()
       if (ydoc && ynodes) {
-        const deletedYnode = ynodes.get(id)
         const parentId = yParentId(ynodes.get(id))
         setSuppressYjsEvents(true)
         try {
           ydoc.transact(() => {
-            if (deletedYnode?.get('type') === 'CANVAS') {
-              tombstoneObjectGraphPageInYjs(
-                getObjectGraphYRecords(ydoc),
-                id,
-                readYNodePluginData(deletedYnode)
-              )
-            }
             ynodes.delete(id)
             syncParentChildIdsFromGraph(store, ynodes, [parentId], syncNodePropsToYMap)
             reconcileYjsParentChildIds(ynodes, {
@@ -236,17 +218,12 @@ export function createYjsGraphSync({
       ydoc.transact(() => {
         let ynode = ynodes.get(nodeId)
         const materializingNode = !ynode
-        const previousPluginData = readYNodePluginData(ynode)
         if (!ynode) {
           ynode = new Y.Map()
           ynodes.set(nodeId, ynode)
           if (indexedYnodes === ynodes) nodeIdsByMap.set(ynode, nodeId)
         }
         syncNodeFieldsToYMap(node, changes, ynode, materializingNode)
-
-        if (shouldSyncObjectGraphPage(node, changes, materializingNode)) {
-          syncObjectGraphPageToYjs(getObjectGraphYRecords(ydoc), node, previousPluginData)
-        }
 
         syncParentChildIdsFromGraph(
           store,
@@ -303,20 +280,8 @@ export function createYjsGraphSync({
     setSuppressYjsEvents(true)
     try {
       const nodes = [...store.graph.getAllNodes()]
-      const previousPagePluginData = new Map(
-        nodes.flatMap((node) =>
-          node.type === 'CANVAS'
-            ? [[node.id, readYNodePluginData(ynodes.get(node.id))] as const]
-            : []
-        )
-      )
       ydoc.transact(() => {
         syncNodeBatchToYjs(nodes, ynodes)
-        const records = getObjectGraphYRecords(ydoc)
-        for (const page of nodes.filter((node) => node.type === 'CANVAS')) {
-          syncObjectGraphPageToYjs(records, page, previousPagePluginData.get(page.id))
-        }
-
         syncGraphImagesToYjs(store, localYimages)
       })
     } catch (error) {
@@ -338,27 +303,6 @@ export function createYjsGraphSync({
     publishGraphReplacementToYjs()
     indexedYnodes = null
     nodeIdsByMap = new WeakMap()
-  }
-
-  function migrateObjectGraphRecordsToYjs() {
-    const store = getStore()
-    const ydoc = getYdoc()
-    const ynodes = getYnodes()
-    if (!ydoc || !ynodes) return
-    setSuppressYjsEvents(true)
-    try {
-      ydoc.transact(() => {
-        const records = getObjectGraphYRecords(ydoc)
-        for (const page of store.graph.getPages()) {
-          if (readObjectGraphYConnections(records, page.id) !== null) continue
-          syncObjectGraphPageToYjs(records, page, readYNodePluginData(ynodes.get(page.id)))
-        }
-      })
-    } catch (error) {
-      logCollabSyncError('Failed to migrate Object Graph records', error)
-    } finally {
-      setSuppressYjsEvents(false)
-    }
   }
 
   function addStructuralChildIds(targets: StructuralSyncTargets, value: unknown) {
@@ -446,13 +390,11 @@ export function createYjsGraphSync({
     if (structuralTargets.childIds.size > 0 || structuralTargets.parentIds.size > 0) {
       reconcileGraphStructure(store, ynodes, structuralTargets)
     }
-    // Reapply page connections after nodes so endpoints exist before runtime reconciliation.
-    applyObjectGraphProjection(store.graph.getPages().map((page) => page.id))
     ensureCurrentPageExists(store)
   }
 
   function applyYnodeToGraph(nodeId: string, ynode: Y.Map<unknown>) {
-    applyNodePropsToGraph(nodeId, yNodeToPropsWithObjectGraph(nodeId, ynode), ynode)
+    applyNodePropsToGraph(nodeId, yNodeToProps(ynode), ynode)
   }
 
   function applyYnodeChangesToGraph(
@@ -477,54 +419,7 @@ export function createYjsGraphSync({
       const source = resolveYjsSourceMetadata(ynode)
       if (source) props.source = source
     }
-    if (ynode.get('type') === 'CANVAS') {
-      const ydoc = getYdoc()
-      if (ydoc) {
-        props.pluginData = objectGraphPluginDataFromYjs(
-          getObjectGraphYRecords(ydoc),
-          nodeId,
-          readYNodePluginData(ynode)
-        )
-      }
-    }
     applyNodePropsToGraph(nodeId, props, ynode)
-  }
-
-  function yNodeToPropsWithObjectGraph(
-    nodeId: string,
-    ynode: Y.Map<unknown>
-  ): Record<string, unknown> {
-    const props = yNodeToProps(ynode)
-    const ydoc = getYdoc()
-    if (ydoc && props.type === 'CANVAS') {
-      props.pluginData = objectGraphPluginDataFromYjs(
-        getObjectGraphYRecords(ydoc),
-        nodeId,
-        readYNodePluginData(ynode)
-      )
-    }
-    return props
-  }
-
-  function applyYjsObjectGraphToGraph(events: Y.YEvent<Y.Map<unknown>>[]) {
-    const ydoc = getYdoc()
-    if (!ydoc) return
-    const records = getObjectGraphYRecords(ydoc)
-    applyObjectGraphProjection(objectGraphPageIdsFromYjsEvents(records, events))
-  }
-
-  function applyObjectGraphProjection(pageIds: Iterable<string>) {
-    const store = getStore()
-    const ydoc = getYdoc()
-    if (!ydoc) return
-    const records = getObjectGraphYRecords(ydoc)
-    for (const pageId of pageIds) {
-      const page = store.graph.getNode(pageId)
-      if (page?.type !== 'CANVAS') continue
-      const nextPluginData = objectGraphPluginDataFromYjs(records, pageId, page.pluginData)
-      if (JSON.stringify(nextPluginData) === JSON.stringify(page.pluginData)) continue
-      store.graph.updateNode(pageId, { pluginData: nextPluginData })
-    }
   }
 
   function applyNodePropsToGraph(
@@ -563,7 +458,7 @@ export function createYjsGraphSync({
       return
     }
 
-    const fullProps = yNodeToPropsWithObjectGraph(nodeId, ynode)
+    const fullProps = yNodeToProps(ynode)
     const type = fullProps.type as SceneNode['type'] | undefined
     if (!type) return
     const parentId = typeof fullProps.parentId === 'string' ? fullProps.parentId : null
@@ -583,8 +478,6 @@ export function createYjsGraphSync({
     syncNodeToYjs,
     syncAllNodesToYjs,
     syncGraphReplacementToYjs,
-    migrateObjectGraphRecordsToYjs,
-    applyYjsToGraph,
-    applyYjsObjectGraphToGraph
+    applyYjsToGraph
   }
 }

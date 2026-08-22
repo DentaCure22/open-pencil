@@ -17,10 +17,10 @@ describe('RPC execution-surface classifier', () => {
     ).toBe('persisted_authority')
   })
 
-  test('honors explicit live identity only for dual-surface commands', () => {
+  test('keeps durable Board commands on authority even with a stale live identity', () => {
     expect(
       classifyRpcExecutionSurface('board_build', { runtime_instance_id: 'runtime:live-editor' })
-    ).toBe('live_runtime')
+    ).toBe('persisted_authority')
     expect(
       classifyRpcExecutionSurface('trace_query', { runtime_instance_id: 'runtime:live-editor' })
     ).toBe('persisted_authority')
@@ -33,8 +33,7 @@ describe('RPC execution-surface classifier', () => {
     )
   })
 
-  test('keeps persisted metadata reads off the live runtime', () => {
-    expect(classifyRpcExecutionSurface('get_mermaid_source')).toBe('persisted_authority')
+  test('keeps persisted search off the live runtime', () => {
     expect(classifyRpcExecutionSurface('workspace_search')).toBe('persisted_authority')
   })
 

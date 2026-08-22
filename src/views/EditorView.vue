@@ -1,8 +1,25 @@
 <script setup lang="ts">
 import { useHead } from '@unhead/vue'
-import { useDebounceFn, useEventListener, useIntervalFn, useUrlSearchParams } from '@vueuse/core'
+import {
+  useDebounceFn,
+  useDraggable,
+  useEventListener,
+  useIntervalFn,
+  useLocalStorage,
+  useUrlSearchParams
+} from '@vueuse/core'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
-import { computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  watch,
+  type CSSProperties
+} from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useViewportKind, formatShortcut, useI18n } from '@open-pencil/vue'
@@ -20,6 +37,14 @@ import {
   type ReloadStateSnapshot
 } from '@/app/document/io/reload-state'
 import { setActiveEditorStore, useEditorStore } from '@/app/editor/active-store'
+import { fullFrameCodeObjectId } from '@/app/code-object/full-frame'
+import {
+  type EditorViewport,
+  useViewportAnimation,
+  viewportMatches,
+  viewportSnapshot
+} from '@/app/editor/viewport-animation'
+import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useKeyboard } from '@/app/shell/keyboard/use'
 import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
@@ -30,11 +55,8 @@ import {
   sidebarWorkspacePluginData,
   type SidebarWorkspace
 } from '@/app/sidebar-workspace/tree'
+import { setAppTheme } from '@/app/shell/theme'
 import { switchSidebarWorkspaceBoard } from '@/app/sidebar-workspace/navigation'
-import {
-  removeDesignedComponentPlaceholders,
-  removeStaleComputedComponentPages
-} from '@/app/smylr-component-library/computed-catalog'
 import {
   bindSmylrProductionDocumentPersistence,
   bindSmylrProductionDocumentWriteGuard,
@@ -76,15 +98,20 @@ import {
 } from '@/app/workspace-document/identity'
 import {
   consumeLocalWorkspaceNavigationIntent,
+  consumeLocalWorkspaceThemeIntent,
   currentLocalWorkspaceAuthorityStatus,
+  publishLocalWorkspacePresence,
   readLocalWorkspaceNavigationIntent,
+  readLocalWorkspaceThemeIntent,
   refreshLocalWorkspaceAuthorityStatus,
   revertLocalWorkspaceBoardTransaction,
-  subscribeLocalWorkspaceAuthorityHead
+  subscribeLocalWorkspaceAuthorityChanges
 } from '@/app/workspace-document/local-authority/client'
 import { createLocalWorkspaceAuthorityHistoryBridge } from '@/app/workspace-document/local-authority/history'
 import { shouldAllowConcurrentLocalWorkspaceWriters } from '@/app/workspace-document/local-authority/mode'
 import { createLocalWorkspaceNavigationConsumer } from '@/app/workspace-document/local-authority/navigation'
+import { revealLocalWorkspaceNavigationTargets } from '@/app/workspace-document/local-authority/reveal'
+import { createLocalWorkspaceThemeConsumer } from '@/app/workspace-document/local-authority/theme'
 import { createLocalWorkspaceDocumentAuthority } from '@/app/workspace-document/local-authority/session'
 import { createLocalWorkspaceAuthorityHeadSynchronizer } from '@/app/workspace-document/local-authority/synchronizer'
 import EmptyBoardStart from '@/components/EmptyBoardStart.vue'
@@ -93,7 +120,6 @@ import MermaidImportDialog from '@/components/diagram/MermaidImportDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import { provideMobileHud } from '@/components/MobileHud/context'
 import SafariBanner from '@/components/SafariBanner.vue'
-import BoardDock from '@/components/sidebar/BoardDock.vue'
 import TabBar from '@/components/TabBar.vue'
 import Toolbar from '@/components/Toolbar/Toolbar.vue'
 import Tip from '@/components/ui/Tip.vue'
@@ -136,13 +162,20 @@ const isCurrentPageEmpty = computed(() => {
   void store.state.sceneVersion
   return store.graph.getChildren(store.state.currentPageId).length === 0
 })
+const nativeStartedPageIds = ref<ReadonlySet<string>>(new Set())
 const showEmptyBoardStart = computed(
   () =>
     !isSmylrProductionWorkspace &&
     showCodeTools &&
+    !store.state.loading &&
     !isCurrentSmylrBoard.value &&
-    isCurrentPageEmpty.value
+    isCurrentPageEmpty.value &&
+    !nativeStartedPageIds.value.has(store.state.currentPageId)
 )
+
+function startNativeBoard() {
+  nativeStartedPageIds.value = new Set([...nativeStartedPageIds.value, store.state.currentPageId])
+}
 
 const { dialogs } = useI18n()
 const { isMobile } = useViewportKind()
@@ -175,6 +208,7 @@ let stopLocalWorkspaceAuthorityHeadSubscription: (() => void) | null = null
 const localWorkspaceRole = ref<LocalWorkspaceAuthorityRole | 'cloud' | 'pending'>(
   isSmylrProductionWorkspace ? 'pending' : 'writer'
 )
+const localWorkspaceHasNewerHead = ref(false)
 const canWriteLocalWorkspaceDocument = () =>
   Boolean(
     !openPencilCloud.state.value.workspace &&
@@ -227,18 +261,13 @@ async function connectOpenPencilWorkspace() {
   const identity = await workspaceIdentityPromise
   if (!isSmylrProductionWorkspace || !productionWorkspaceReady || !identity) return
   const roomId = workspace?.roomId ?? identity.roomId
-  if (connectedWorkspaceRoomId === roomId && collab.state.value.connected) return
+  if (connectedWorkspaceRoomId === roomId && (!workspace || collab.state.value.connected)) return
   connectedWorkspaceRoomId = roomId
   const localSidebarWorkspace = resolveSidebarWorkspace(workspaceStore.graph).workspace
   if (!workspace) {
-    const seedLocalWorkspace = localWorkspaceRole.value === 'writer'
-    collab.connectLocalWorkspace(
-      identity.roomId,
-      seedLocalWorkspace
-        ? () => repairHydratedWorkspace(workspaceStore, localSidebarWorkspace)
-        : undefined,
-      seedLocalWorkspace
-    )
+    if (localWorkspaceRole.value === 'writer') {
+      await repairHydratedWorkspace(workspaceStore, localSidebarWorkspace)
+    }
     return
   }
   collab.connectSharedWorkspace(workspace.roomId, workspace.durableStore, () =>
@@ -267,6 +296,7 @@ async function ensureWorkspaceAuthorityMode() {
     localWorkspaceAuthority?.close()
     localWorkspaceAuthority = null
     localWorkspaceRole.value = 'cloud'
+    localWorkspaceHasNewerHead.value = false
     return
   }
   if (localWorkspaceAuthority) return
@@ -275,6 +305,7 @@ async function ensureWorkspaceAuthorityMode() {
   if (!identity) return
   localWorkspaceReloadStateId = identity.workspaceId
   localWorkspaceRole.value = 'pending'
+  localWorkspaceHasNewerHead.value = false
   const authorityStatus =
     currentLocalWorkspaceAuthorityStatus() ?? (await refreshLocalWorkspaceAuthorityStatus())
   const authority = await connectLocalWorkspaceAuthority({
@@ -288,13 +319,17 @@ async function ensureWorkspaceAuthorityMode() {
   })
   localWorkspaceAuthority = authority
   stopLocalWorkspaceAuthorityHeadSubscription?.()
-  stopLocalWorkspaceAuthorityHeadSubscription = subscribeLocalWorkspaceAuthorityHead(
-    requestLocalWorkspaceAuthorityHeadSynchronization
-  )
+  stopLocalWorkspaceAuthorityHeadSubscription = subscribeLocalWorkspaceAuthorityChanges({
+    onHeadCommitted: requestLocalWorkspaceAuthorityHeadSynchronization,
+    onNavigationQueued: () => void consumePendingLocalNavigation(),
+    onThemeQueued: () => void applyPendingLocalTheme()
+  })
   localWorkspaceRole.value = authority.role
+  if (authority.role === 'writer') localWorkspaceHasNewerHead.value = false
   if (productionWorkspaceReady && authority.role === 'writer') {
     startSmylrDocumentPersistenceTracking()
   }
+  requestLocalWorkspaceAuthorityHeadSynchronization()
 }
 
 async function restoreSmylrViewAfterRefresh(active: ReturnType<typeof getActiveStore>) {
@@ -366,6 +401,7 @@ const localDocumentAuthority = createLocalWorkspaceDocumentAuthority({
   isCloudActive: () => Boolean(openPencilCloud.state.value.workspace),
   onBlocked: ({ newerHead }) => {
     localWorkspaceRole.value = 'viewer'
+    if (newerHead) localWorkspaceHasNewerHead.value = true
     stopSmylrDocumentPersistenceTracking()
     if (newerHead) void synchronizeLocalWorkspaceAuthorityHead(true)
   },
@@ -391,7 +427,8 @@ const localAuthorityNavigation = createLocalWorkspaceNavigationConsumer({
     await switchSidebarWorkspaceBoard(workspaceStore, pageId)
     return activeTab.value?.id === workspaceTab.id && workspaceStore.state.currentPageId === pageId
   },
-  readIntent: readLocalWorkspaceNavigationIntent
+  readIntent: readLocalWorkspaceNavigationIntent,
+  revealTargets: (intent) => revealLocalWorkspaceNavigationTargets(workspaceStore, intent)
 })
 
 function consumePendingLocalNavigation() {
@@ -400,6 +437,61 @@ function consumePendingLocalNavigation() {
     return false
   })
 }
+
+const localAuthorityTheme = createLocalWorkspaceThemeConsumer({
+  applyTheme: setAppTheme,
+  consumeIntent: consumeLocalWorkspaceThemeIntent,
+  readIntent: readLocalWorkspaceThemeIntent
+})
+
+function applyPendingLocalTheme() {
+  return localAuthorityTheme.applyPending().catch((error) => {
+    console.warn('[Local workspace authority] Theme change failed:', error)
+    return false
+  })
+}
+
+// Presence heartbeat: debounced "which Board is on screen" beacon for agents.
+let presenceHeartbeat: ReturnType<typeof setTimeout> | null = null
+function schedulePresenceHeartbeat() {
+  if (presenceHeartbeat) return
+  presenceHeartbeat = setTimeout(() => {
+    presenceHeartbeat = null
+    const authority = currentLocalWorkspaceAuthorityStatus()
+    if (authority?.state !== 'ready') return
+    const workspaceTab = getWorkspaceTab(authority.identity.workspaceId)
+    if (!workspaceTab || workspaceTab.store !== workspaceStore) return
+    const pageId = workspaceStore.state.currentPageId
+    const pageName = workspaceStore.graph.getNode(pageId)?.name
+    if (!pageName) return
+    void publishLocalWorkspacePresence({
+      contentDocumentId: authority.identity.documentId,
+      pageId,
+      pageName,
+      selectedIds: [...workspaceStore.state.selectedIds],
+      viewport: {
+        panX: workspaceStore.state.panX,
+        panY: workspaceStore.state.panY,
+        zoom: workspaceStore.state.zoom
+      },
+      workspaceId: authority.identity.workspaceId
+    }).catch(() => undefined)
+  }, 1500)
+}
+watch(
+  () => [
+    workspaceStore.state.currentPageId,
+    workspaceStore.state.panX,
+    workspaceStore.state.panY,
+    workspaceStore.state.zoom,
+    [...workspaceStore.state.selectedIds].join('\u0000')
+  ],
+  schedulePresenceHeartbeat,
+  { immediate: true }
+)
+onUnmounted(() => {
+  if (presenceHeartbeat) clearTimeout(presenceHeartbeat)
+})
 
 const localAuthorityHeadSynchronizer = createLocalWorkspaceAuthorityHeadSynchronizer({
   canResumeWriting: () =>
@@ -421,6 +513,7 @@ const localAuthorityHeadSynchronizer = createLocalWorkspaceAuthorityHeadSynchron
     ),
   setWritable: (writable) => {
     localWorkspaceRole.value = writable ? 'writer' : 'viewer'
+    if (writable) localWorkspaceHasNewerHead.value = false
   },
   startTracking: startSmylrDocumentPersistenceTracking,
   stopTracking: stopSmylrDocumentPersistenceTracking
@@ -434,11 +527,12 @@ async function synchronizeLocalWorkspaceAuthorityHeadIfChanged(): Promise<boolea
   if (
     !isSmylrProductionWorkspace ||
     !productionWorkspaceReady ||
-    openPencilCloud.state.value.workspace ||
-    !(await localDocumentAuthority.hasNewerHead())
+    openPencilCloud.state.value.workspace
   ) {
     return false
   }
+  if (!(await localDocumentAuthority.hasNewerHead())) return false
+  localWorkspaceHasNewerHead.value = true
   return synchronizeLocalWorkspaceAuthorityHead()
 }
 
@@ -473,21 +567,6 @@ if (isSmylrProductionWorkspace) {
     }
   )
 }
-
-const authorityNavigationMonitor = useIntervalFn(
-  async () => {
-    if (
-      !isSmylrProductionWorkspace ||
-      !productionWorkspaceReady ||
-      openPencilCloud.state.value.workspace
-    ) {
-      return
-    }
-    await consumePendingLocalNavigation()
-  },
-  750,
-  { immediate: false }
-)
 
 function scheduleSmylrDocumentPersistence() {
   persistSmylrDocument()
@@ -559,7 +638,23 @@ useEventListener(window, 'pagehide', () => {
     saveReloadState(localWorkspaceReloadStateId, active.state)
   }
   void saveSmylrProductionView(active)
+  void persistSmylrDocumentNow(active)
 })
+
+useEventListener(document, 'visibilitychange', () => {
+  if (!isSmylrProductionWorkspace || document.visibilityState !== 'hidden') return
+  void persistSmylrDocumentNow(workspaceStore)
+})
+
+useIntervalFn(() => {
+  if (
+    !canWriteLocalWorkspaceDocument() ||
+    localAuthorityHeadSynchronizer.isAcknowledged(workspaceStore.state.sceneVersion)
+  ) {
+    return
+  }
+  void persistSmylrDocumentNow(workspaceStore)
+}, 2000)
 
 /**
  * Seed / re-seed Smylr production canvas.
@@ -595,6 +690,8 @@ async function ensureSmylrProductionWorkspace(force = false) {
   }
 
   const initialPageId = active.state.currentPageId
+  const { removeDesignedComponentPlaceholders, removeStaleComputedComponentPages } =
+    await import('@/app/smylr-component-library/computed-catalog')
   const removedDerivedPages =
     removeDesignedComponentPlaceholders(active.graph) +
     removeStaleComputedComponentPages(active.graph)
@@ -630,23 +727,37 @@ async function ensureSmylrProductionWorkspace(force = false) {
 
 // Defer workspace open until after first paint so the canvas can init and
 // dismiss the splash — never block boot on foundations graph build.
+const WORKSPACE_LOADING_LIMIT_MS = 4_000
+let workspaceLoadingLimit = 0
+
+function clearWorkspaceLoading() {
+  window.clearTimeout(workspaceLoadingLimit)
+  workspaceStore.state.loading = false
+  store.state.loading = false
+}
+
 if (isSmylrProductionWorkspace) {
   onMounted(() => {
     // Double-rAF: let EditorCanvas mount + start CanvasKit before heavy graph work.
+    workspaceLoadingLimit = window.setTimeout(clearWorkspaceLoading, WORKSPACE_LOADING_LIMIT_MS)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        void ensureWorkspaceAuthorityMode()
-          .then(() => ensureSmylrProductionWorkspace())
+        void ensureSmylrProductionWorkspace()
           .then(() => {
             productionWorkspaceReady = true
             startSmylrViewPersistence()
-            authorityNavigationMonitor.resume()
             void consumePendingLocalNavigation()
+            void applyPendingLocalTheme()
+            clearWorkspaceLoading()
+            return ensureWorkspaceAuthorityMode()
+          })
+          .then(() => {
+            requestLocalWorkspaceAuthorityHeadSynchronization()
             return connectOpenPencilWorkspace()
           })
           .catch((e) => console.error('[Smylr Production Workspace]', e))
           .finally(() => {
-            workspaceStore.state.loading = false
+            clearWorkspaceLoading()
           })
       })
     })
@@ -728,22 +839,165 @@ function handleEditorLayout(layout: number[]) {
 const fileAssociationCleanup = ref<(() => void) | null>(null)
 const initialEditorLayout = loadEditorLayout()
 
-type LayersSplitterPanelHandle = {
-  collapse(): void
-  expand(): void
+const showLayersPanel = ref(true)
+const desktopWorkspaceRef = ref<HTMLElement | null>(null)
+const layersSplitterPanelRef = ref<{ collapse: () => void; expand: () => void } | null>(null)
+const layersShellMotionRef = ref<HTMLElement | null>(null)
+const compactSidebarTabDragHandleRef = ref<HTMLElement | null>(null)
+const storedCompactSidebarTabY = useLocalStorage<number | null>(
+  'openpencil-sidebar-full-frame-tab-y-v1',
+  null
+)
+const compactSidebarTabActive = computed(
+  () => Boolean(fullFrameCodeObjectId.value) && !showLayersPanel.value
+)
+const compactSidebarTabY = ref(0)
+let compactSidebarTabPointerOffsetY = 0
+const { isDragging: compactSidebarTabDragging } = useDraggable(layersShellMotionRef, {
+  axis: 'y',
+  disabled: computed(() => !compactSidebarTabActive.value),
+  handle: compactSidebarTabDragHandleRef,
+  initialValue: { x: 12, y: 0 },
+  preventDefault: true,
+  onStart: (_position, event) => {
+    const handle = event.currentTarget
+    const tab = layersShellMotionRef.value?.getBoundingClientRect()
+    compactSidebarTabPointerOffsetY = tab ? event.clientY - tab.top : 0
+    if (handle instanceof HTMLElement) handle.setPointerCapture(event.pointerId)
+  },
+  onMove: (_position, event) => {
+    const bounds = desktopWorkspaceBounds()
+    if (!bounds) return
+    compactSidebarTabY.value = clampCompactSidebarTabY(
+      event.clientY - bounds.top - compactSidebarTabPointerOffsetY
+    )
+  },
+  onEnd: (_position, event) => {
+    const handle = event.currentTarget
+    if (handle instanceof HTMLElement && handle.hasPointerCapture(event.pointerId)) {
+      handle.releasePointerCapture(event.pointerId)
+    }
+    storedCompactSidebarTabY.value = compactSidebarTabY.value
+  }
+})
+const compactSidebarTabStyle = computed<CSSProperties | undefined>(() =>
+  compactSidebarTabActive.value
+    ? {
+        cursor: compactSidebarTabDragging.value ? 'grabbing' : undefined,
+        left: '12px',
+        position: 'absolute',
+        top: `${compactSidebarTabY.value}px`,
+        transform: 'none',
+        translate: 'none'
+      }
+    : undefined
+)
+const lastOpenSidebarInsets = ref<ReturnType<typeof editorViewportInsets>>({})
+const sidebarFocusAdjustment = ref<{
+  adjusted: EditorViewport
+  nodeId: string
+  original: EditorViewport
+} | null>(null)
+const viewportAnimation = useViewportAnimation(store)
+
+function desktopWorkspaceBounds() {
+  return desktopWorkspaceRef.value?.getBoundingClientRect() ?? null
 }
 
-const layersSplitterPanelRef = ref<LayersSplitterPanelHandle>()
-const showLayersPanel = ref(true)
+function clampCompactSidebarTabY(candidate: number) {
+  const bounds = desktopWorkspaceBounds()
+  if (!bounds) return Math.max(12, candidate)
+  const tabHeight = layersShellMotionRef.value?.getBoundingClientRect().height ?? 44
+  return Math.min(Math.max(12, candidate), bounds.height - tabHeight - 12)
+}
+
+function moveCompactSidebarTab(deltaY: number) {
+  compactSidebarTabY.value = clampCompactSidebarTabY(compactSidebarTabY.value + deltaY)
+  storedCompactSidebarTabY.value = compactSidebarTabY.value
+}
+
+async function placeCompactSidebarTab() {
+  if (!compactSidebarTabActive.value) return
+  await nextTick()
+  const bounds = desktopWorkspaceBounds()
+  const tabHeight = layersShellMotionRef.value?.getBoundingClientRect().height ?? 44
+  const preferred =
+    storedCompactSidebarTabY.value ??
+    (bounds ? (bounds.height - tabHeight) / 2 : compactSidebarTabY.value)
+  compactSidebarTabY.value = clampCompactSidebarTabY(preferred)
+}
+
+watch(
+  compactSidebarTabActive,
+  (active) => {
+    if (active) void placeCompactSidebarTab()
+  },
+  { flush: 'post' }
+)
+
+useEventListener(window, 'resize', () => {
+  if (compactSidebarTabActive.value) {
+    compactSidebarTabY.value = clampCompactSidebarTabY(compactSidebarTabY.value)
+  }
+})
+
+function protectSidebarFocus(nodeId: string, insets: ReturnType<typeof editorViewportInsets>) {
+  if (!store.state.selectedIds.has(nodeId)) return
+
+  const previous = viewportSnapshot(store)
+  const focused = store.zoomToNode(nodeId, insets, {
+    maxZoom: Math.min(store.state.zoom, previous.zoom * 0.97)
+  })
+  if (!focused) return
+  const adjusted = viewportSnapshot(store)
+  store.setViewport(previous)
+  sidebarFocusAdjustment.value = { adjusted, nodeId, original: previous }
+  viewportAnimation.animateTo(adjusted)
+}
 
 function closeLayersPanel() {
+  lastOpenSidebarInsets.value = editorViewportInsets()
+  const adjustment = sidebarFocusAdjustment.value
   showLayersPanel.value = false
   layersSplitterPanelRef.value?.collapse()
+  if (fullFrameCodeObjectId.value) void placeCompactSidebarTab()
+  if (
+    adjustment &&
+    store.state.selectedIds.has(adjustment.nodeId) &&
+    (viewportMatches(viewportSnapshot(store), adjustment.adjusted) ||
+      viewportAnimation.isAnimatingTo(adjustment.adjusted))
+  ) {
+    viewportAnimation.animateTo(adjustment.original)
+  } else {
+    sidebarFocusAdjustment.value = null
+    viewportAnimation.cancel()
+  }
 }
 
 function openLayersPanel() {
+  const selectedId =
+    store.state.selectedIds.size === 1 ? store.state.selectedIds.values().next().value : null
   showLayersPanel.value = true
   layersSplitterPanelRef.value?.expand()
+  if (typeof selectedId !== 'string') {
+    sidebarFocusAdjustment.value = null
+    viewportAnimation.cancel()
+    return
+  }
+
+  const adjustment = sidebarFocusAdjustment.value
+  if (
+    adjustment?.nodeId === selectedId &&
+    (viewportMatches(viewportSnapshot(store), adjustment.original) ||
+      viewportAnimation.isAnimatingTo(adjustment.original))
+  ) {
+    viewportAnimation.animateTo(adjustment.adjusted)
+    return
+  }
+
+  sidebarFocusAdjustment.value = null
+  viewportAnimation.cancel()
+  protectSidebarFocus(selectedId, lastOpenSidebarInsets.value)
 }
 
 type PendingOpenFile = {
@@ -776,6 +1030,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.clearTimeout(workspaceLoadingLimit)
   stopSmylrPagePersistence?.()
   stopSmylrSelectionPersistence?.()
   stopSmylrViewportPersistence?.()
@@ -783,7 +1038,6 @@ onUnmounted(() => {
   stopSmylrDocumentPersistenceTracking()
   stopLocalWorkspaceAuthorityHeadSubscription?.()
   stopLocalWorkspaceAuthorityHeadSubscription = null
-  authorityNavigationMonitor.pause()
   releaseAutomationPersistence?.()
   releaseAutomationPersistence = null
   localAuthorityHistory.dispose()
@@ -798,17 +1052,38 @@ onUnmounted(() => {
   <div
     data-test-id="editor-root"
     :data-local-workspace-role="localWorkspaceRole"
+    :aria-busy="store.state.loading"
     class="flex h-screen w-screen flex-col"
     style="overscroll-behavior: none"
   >
     <SafariBanner />
     <CloudWorkspaceGate :enabled="isSmylrProductionWorkspace" />
     <TabBar />
+    <div
+      v-if="isSmylrProductionWorkspace && localWorkspaceRole === 'viewer'"
+      class="pointer-events-none fixed inset-x-0 top-10 z-[90] flex justify-center px-4"
+      data-test-id="local-workspace-viewer"
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        class="border-chrome-border bg-chrome-raised/95 text-muted flex h-8 items-center gap-1.5 rounded-full border px-3 text-[10px] shadow-chrome-menu backdrop-blur-xl"
+      >
+        <icon-lucide-lock-keyhole class="size-3 text-amber-400" />
+        <span>
+          View only ·
+          {{
+            localWorkspaceHasNewerHead ? 'Newer saved Board available' : 'Another tab owns edits'
+          }}
+        </span>
+      </div>
+    </div>
     <MermaidImportDialog />
 
-    <!-- Desktop: full-bleed canvas under one contextual sidebar and two docks -->
+    <!-- Desktop: full-bleed canvas under one contextual sidebar and its tool rail -->
     <div
       v-if="!isMobile && showChrome && store.state.showUI"
+      ref="desktopWorkspaceRef"
       :key="activeTab?.id"
       class="bg-canvas relative min-h-0 flex-1 overflow-hidden"
     >
@@ -818,13 +1093,18 @@ onUnmounted(() => {
       -->
       <div class="absolute inset-0 isolate z-0 flex min-h-0 min-w-0">
         <EditorCanvas />
-        <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
+        <EmptyBoardStart
+          v-if="showEmptyBoardStart"
+          :page-is-empty="isCurrentPageEmpty"
+          @start-native="startNativeBoard"
+        />
       </div>
 
       <!-- Floating chrome over canvas; middle is transparent + click-through -->
       <SplitterGroup
         v-if="!showEmptyBoardStart"
         direction="horizontal"
+        :inert="store.state.loading ? true : undefined"
         :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
         class="pointer-events-none absolute inset-0 z-20 bg-transparent"
         @layout="handleEditorLayout"
@@ -838,33 +1118,70 @@ onUnmounted(() => {
           :min-size="14"
           :max-size="25"
           data-test-id="layers-splitter-panel"
-          class="pointer-events-auto relative flex min-h-0 flex-col overflow-hidden bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+          class="pointer-events-none relative flex min-h-0 flex-col !overflow-visible bg-transparent"
           @collapse="showLayersPanel = false"
           @expand="showLayersPanel = true"
         >
           <div
+            ref="layersShellMotionRef"
             data-test-id="layers-shell-motion"
-            :aria-hidden="!showLayersPanel"
-            :inert="showLayersPanel ? undefined : true"
-            class="flex h-full min-h-0 min-w-0 flex-col py-3 pr-1.5 pl-3 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
-            :class="showLayersPanel ? 'translate-x-0 opacity-100' : '-translate-x-3 opacity-0'"
+            :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
+            :data-full-frame="fullFrameCodeObjectId ? 'true' : 'false'"
+            :data-compact-tab-dragging="compactSidebarTabDragging ? 'true' : 'false'"
+            :style="compactSidebarTabStyle"
+            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-0 -translate-y-1/2 overflow-hidden border border-chrome-border bg-chrome shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
+            :class="
+              showLayersPanel
+                ? 'h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] rounded-[14px] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+                : fullFrameCodeObjectId
+                  ? 'h-11 w-11 rounded-[14px] bg-chrome/95 shadow-lg ring-1 ring-white/5 duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                  : 'h-auto w-11 rounded-[22px] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
+            "
           >
+            <button
+              v-if="compactSidebarTabActive"
+              ref="compactSidebarTabDragHandleRef"
+              type="button"
+              data-test-id="sidebar-compact-tab-drag-handle"
+              aria-label="Move sidebar tab"
+              class="absolute top-1/2 left-0.5 z-40 flex h-6 w-2.5 -translate-y-1/2 touch-none cursor-grab flex-col items-center justify-center gap-0.5 rounded-full active:cursor-grabbing"
+              @keydown.down.prevent="moveCompactSidebarTab(24)"
+              @keydown.up.prevent="moveCompactSidebarTab(-24)"
+            >
+              <span class="size-0.5 rounded-full bg-accent/70" />
+              <span class="size-0.5 rounded-full bg-accent/70" />
+              <span class="size-0.5 rounded-full bg-accent/70" />
+            </button>
             <div
               data-test-id="layers-shell"
-              class="border-chrome-border bg-chrome shadow-chrome-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] border backdrop-blur-2xl [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
+              :aria-hidden="!showLayersPanel"
+              :inert="showLayersPanel ? undefined : true"
+              class="flex min-h-0 min-w-0 flex-col overflow-hidden transition-[opacity,transform] motion-reduce:transition-none [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
+              :class="
+                showLayersPanel
+                  ? 'flex-1 translate-x-0 opacity-100 delay-75 duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
+                  : 'pointer-events-none h-0 w-0 flex-1 -translate-x-2 opacity-0 delay-0 duration-100 ease-in'
+              "
             >
-              <LayersPanel :show-code-tab="showCodeTools" @close="closeLayersPanel" />
+              <LayersPanel />
             </div>
+            <Toolbar
+              embedded
+              :sidebar-open="showLayersPanel"
+              :sidebar-tab-only="Boolean(fullFrameCodeObjectId) && !showLayersPanel"
+              @close-sidebar="closeLayersPanel"
+              @open-sidebar="openLayersPanel"
+            />
           </div>
         </SplitterPanel>
         <SplitterResizeHandle
           data-test-id="left-splitter-handle"
           :disabled="!showLayersPanel"
-          class="relative z-30 cursor-col-resize bg-transparent transition-[width,opacity] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+          class="relative z-30 w-3 cursor-col-resize bg-transparent transition-opacity motion-reduce:transition-none"
           :class="
             showLayersPanel
-              ? 'pointer-events-auto w-3 opacity-100'
-              : 'pointer-events-none w-0 opacity-0'
+              ? 'pointer-events-auto opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+              : 'pointer-events-none opacity-0 duration-100 ease-in'
           "
         />
         <SplitterPanel
@@ -872,34 +1189,10 @@ onUnmounted(() => {
           :default-size="initialEditorLayout[1]"
           :min-size="32"
           data-test-id="canvas-chrome-area"
-          class="pointer-events-none relative min-w-0 bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+          class="pointer-events-none relative min-w-0 bg-transparent"
         >
-          <!-- Keep tools out of the center while the Board dock anchors navigation below. -->
-          <Toolbar :sidebar-open="showLayersPanel" />
-          <BoardDock :sidebar-open="showLayersPanel" />
         </SplitterPanel>
       </SplitterGroup>
-
-      <Transition
-        enter-active-class="transition-[opacity,transform] delay-100 duration-150 ease-out motion-reduce:delay-0 motion-reduce:transition-none"
-        enter-from-class="-translate-x-2 opacity-0"
-        leave-active-class="transition-[opacity,transform] duration-100 ease-in motion-reduce:transition-none"
-        leave-to-class="-translate-x-2 opacity-0"
-      >
-        <div v-if="!showEmptyBoardStart && !showLayersPanel" class="absolute top-3 left-3 z-30">
-          <Tip label="Open layers panel">
-            <button
-              type="button"
-              data-test-id="open-layers-panel"
-              aria-label="Open layers panel"
-              class="border-border bg-panel text-muted hover:bg-hover hover:text-surface flex size-8 cursor-pointer items-center justify-center rounded-lg border shadow-sm transition-colors"
-              @click="openLayersPanel"
-            >
-              <icon-lucide-panel-left-open class="size-4" />
-            </button>
-          </Tip>
-        </div>
-      </Transition>
     </div>
 
     <!-- Mobile layout -->
@@ -909,12 +1202,20 @@ onUnmounted(() => {
       class="flex flex-1 overflow-hidden"
     >
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-          <EditorCanvas />
-        <EmptyBoardStart v-if="showEmptyBoardStart" :page-is-empty="isCurrentPageEmpty" />
-        <MobileHud v-if="!showEmptyBoardStart" />
-        <Toolbar v-if="!showEmptyBoardStart" />
+        <EditorCanvas />
+        <EmptyBoardStart
+          v-if="showEmptyBoardStart"
+          :page-is-empty="isCurrentPageEmpty"
+          @start-native="startNativeBoard"
+        />
+        <MobileHud v-if="!showEmptyBoardStart" :inert="store.state.loading ? true : undefined" />
+        <Toolbar v-if="!showEmptyBoardStart" :inert="store.state.loading ? true : undefined" />
       </div>
-      <MobileDrawer v-if="!showEmptyBoardStart" :show-code-tab="showCodeTools" />
+      <MobileDrawer
+        v-if="!showEmptyBoardStart"
+        :inert="store.state.loading ? true : undefined"
+        :show-code-tab="showCodeTools"
+      />
     </div>
 
     <!-- Collapsed UI (showUI=false) -->
@@ -955,7 +1256,7 @@ onUnmounted(() => {
     <!-- Bare canvas (no chrome, e.g. ?no-chrome) -->
     <div v-else :key="'bare-' + activeTab?.id" class="flex flex-1 overflow-hidden">
       <div class="relative isolate flex min-w-0 flex-1 overflow-hidden">
-      <EditorCanvas />
+        <EditorCanvas />
       </div>
     </div>
   </div>

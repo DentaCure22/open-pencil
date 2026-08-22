@@ -1,19 +1,24 @@
-import { ref, type ComputedRef } from 'vue'
+import { ref, type ComputedRef, type Ref } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import { reconcileTrustedWebAppResidency } from '@/app/code-object/trusted-web-app-runtime'
+import {
+  reconcileTrustedWebAppResidency,
+  trustedWebAppResidencyFrameIds
+} from '@/app/code-object/trusted-web-app-runtime'
 import type { EditorStore } from '@/app/editor/active-store'
 import { isSmylrProductionAppCodeObjectFrame } from '@/app/smylr-production/workspace'
 
 interface TrustedWebAppRuntimeResidencyOptions {
   activeFrameIds: ComputedRef<ReadonlySet<string>>
+  documentVisible: Readonly<Ref<boolean>>
   frames: ComputedRef<SceneNode[]>
   store: EditorStore
 }
 
 export function useTrustedWebAppRuntimeResidency({
   activeFrameIds,
+  documentVisible,
   frames,
   store
 }: TrustedWebAppRuntimeResidencyOptions) {
@@ -29,11 +34,13 @@ export function useTrustedWebAppRuntimeResidency({
   }
 
   function reconcile(activeFrameId = selectedFrameId()) {
-    const eligibleFrameIds = frames.value
-      .filter(
-        (frame) => isSmylrProductionAppCodeObjectFrame(frame) && activeFrameIds.value.has(frame.id)
-      )
-      .map((frame) => frame.id)
+    if (!documentVisible.value) return
+    const productionFrames = frames.value.filter(isSmylrProductionAppCodeObjectFrame)
+    const eligibleFrameIds = trustedWebAppResidencyFrameIds({
+      frameIds: productionFrames.map((frame) => frame.id),
+      relevantFrameIds: activeFrameIds.value,
+      residentFrameIds: residentFrameIds.value
+    })
     residentFrameIds.value = reconcileTrustedWebAppResidency({
       activeFrameId:
         activeFrameId && eligibleFrameIds.includes(activeFrameId) ? activeFrameId : null,

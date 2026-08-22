@@ -101,6 +101,18 @@ const placementTargetSchema = z.discriminatedUnion('kind', [
     .strict()
     .describe(
       'A bounded search region whose x/y are the top-left corner; the builder searches deterministic collision-free candidates inside it.'
+    ),
+  z
+    .object({
+      height: z.number().finite().positive(),
+      kind: z.literal('near_region'),
+      width: z.number().finite().positive(),
+      x: z.number().finite(),
+      y: z.number().finite()
+    })
+    .strict()
+    .describe(
+      'Search collision-free candidates around one bounded region; produced by Trace region materialization.'
     )
 ])
 
@@ -165,20 +177,6 @@ const planCardPlacementSchema = planPlacementSchema.extend({
 })
 
 const plainJsonObjectSchema = z.record(z.string(), z.json())
-const objectGraphPortIdSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9._/-]{0,127}$/u)
-const objectGraphPortSchema = z
-  .object({
-    direction: z.enum(['input', 'output', 'both']),
-    id: objectGraphPortIdSchema,
-    kinds: z
-      .array(z.enum(['action', 'data', 'visual']))
-      .min(1)
-      .max(3),
-    label: z.string().trim().min(1).max(120),
-    offset: z.number().finite().min(0).max(1),
-    side: z.enum(['bottom', 'left', 'right', 'top'])
-  })
-  .strict()
 const codeObjectSourceSchema = z
   .string()
   .trim()
@@ -197,7 +195,6 @@ const codeObjectCreateRecipeSchema = z
     object_key: z.string().trim().min(1).max(160),
     operation: z.literal('create'),
     placement: cardPlacementSchema.optional(),
-    ports: z.array(objectGraphPortSchema).max(256).optional(),
     props: plainJsonObjectSchema.optional(),
     source: codeObjectSourceSchema,
     source_format: z.literal('tsx'),
@@ -226,7 +223,7 @@ const codeObjectRefineRecipeSchema = z
   })
   .strict()
   .describe(
-    'Use code_object refine only for exact-owner full-source replacement based on the current get_code_object response.'
+    'Use code_object refine only for exact-owner full-source replacement of the current Code Object source.'
   )
 
 const recipeSchema = z
@@ -363,18 +360,6 @@ const planArtifactSchema = z
   })
   .strict()
 
-const planConnectionSchema = z
-  .object({
-    automatic: z.boolean().optional(),
-    kind: z.enum(['action', 'data', 'visual']),
-    label: z.string().trim().min(1).max(80).optional(),
-    source: planReferenceSchema,
-    source_port: objectGraphPortIdSchema.optional(),
-    target: planReferenceSchema,
-    target_port: objectGraphPortIdSchema.optional()
-  })
-  .strict()
-
 const planObjectPatchSchema = z
   .object({
     cornerRadius: z.number().finite().min(0).max(100_000).optional(),
@@ -387,34 +372,11 @@ const planObjectPatchSchema = z
   })
   .strict()
 
-const traceRegionSchema = z
-  .object({
-    height: z.number().finite().positive().max(1_000_000),
-    width: z.number().finite().positive().max(1_000_000),
-    x: z.number().finite().min(-1_000_000).max(1_000_000),
-    y: z.number().finite().min(-1_000_000).max(1_000_000)
-  })
-  .strict()
-
 const planOperationSchema = z.union([
   z
     .object({
       kind: z.literal('canonical_object.fork'),
       object_id: z.string().trim().min(1).max(240)
-    })
-    .strict(),
-  z
-    .object({
-      connection_id: z.string().trim().min(1).max(240),
-      kind: z.literal('connection.delete')
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('connection.delete_traced'),
-      object_ids: z.array(z.string().trim().min(1).max(240)).max(25),
-      orientation: z.enum(['any', 'horizontal', 'vertical']),
-      region: traceRegionSchema
     })
     .strict(),
   z
@@ -475,7 +437,6 @@ const planSchema = z
   .object({
     artifacts: z.array(planArtifactSchema).max(32),
     composition: planCompositionSchema.optional(),
-    connections: z.array(planConnectionSchema).max(64),
     contract: z.literal('board-build-plan/v1'),
     operations: z.array(planOperationSchema).max(64).optional()
   })
@@ -491,7 +452,7 @@ const planSchema = z
     }
   })
   .describe(
-    'Universal atomic Board plan. It can create native text/cards, trusted Code Objects, native Mermaid diagrams; edit exact top-level objects; and create page-owned Object Graph connections. Use composition to express relationships and desired feel without inventing columns, ranks, coordinates, or gaps. Only listed composition members may move; unrelated Board content remains untouched.'
+    'Universal atomic Board plan. It can create native text/cards, trusted Code Objects, native Mermaid diagrams, and edit exact top-level objects. Use composition to express desired layout without inventing columns, ranks, coordinates, or gaps. Only listed composition members may move; unrelated Board content remains untouched.'
   )
 
 const commonLogicalInputShape = {
@@ -621,7 +582,7 @@ export function registerBoardBuildTool(mcpServer: McpServer, sendRpc: RpcSender)
   register(
     'board_build',
     {
-      description: `Universal guarded Board builder. For an active Trace gesture, pass trace with latest true or one gesture_id in this same tool call; use the reserved string $trace wherever an exact selected object ID is required and {"kind":"trace_region"} wherever a placement target should use the marked region. The builder resolves Trace, prepares current Board context, validates the materialized recipe or plan, and mutates atomically. Otherwise pass board_context.board_build_base as base, never connect_objects_base. Use native_text for a short note, native_card for a titled idea, native_diagram for Mermaid structure, or code_object for trusted interactive/stateful TSX; plans atomically create, update, move, resize, duplicate, delete, lay out, and connect. ${CODE_OBJECT_TRUST_WARNING} Specialists are optional advice and never authority. Successful responses include receipt, readback, persistence, continuation, and timing proof; reuse next_build_target without another context call, use the same request_id for recovery, and stop unless the outcome is unknown or visibly diverged.`,
+      description: `Universal guarded Board builder. For an active Trace gesture, pass trace with latest true or one gesture_id in this same tool call; use the reserved string $trace wherever an exact selected object ID is required and {"kind":"trace_region"} wherever a placement target should use the marked region. The builder resolves Trace, prepares current Board context, validates the materialized recipe or plan, and mutates atomically. Otherwise pass board_context.board_build_base as base. Use native_text for a short note, native_card for a titled idea, native_diagram for Mermaid structure, or code_object for trusted interactive/stateful TSX; plans atomically create, update, move, resize, duplicate, delete, and lay out. ${CODE_OBJECT_TRUST_WARNING} Specialists are optional advice and never authority. Successful responses include receipt, readback, persistence, continuation, and timing proof; reuse next_build_target without another context call, use the same request_id for recovery, and stop unless the outcome is unknown or visibly diverged.`,
       inputSchema
     },
     async (args) => {

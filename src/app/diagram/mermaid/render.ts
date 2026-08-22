@@ -35,16 +35,23 @@ function svgSize(root: SVGSVGElement): { height: number; width: number } {
   }
 }
 
+function resolvedAppearance(appearance: MermaidAppearance): 'dark' | 'light' {
+  if (appearance !== 'auto') return appearance
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
+}
+
 async function render(source: string, appearance: MermaidAppearance): Promise<MermaidDiagram> {
   const definition = source.trim()
   if (!definition) throw new Error('Paste a Mermaid definition first.')
   if (typeof document === 'undefined') throw new Error('Mermaid SVG rendering requires a browser.')
 
+  const theme = resolvedAppearance(appearance)
+
   const { default: mermaid } = await import('mermaid')
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
-    theme: appearance === 'light' ? 'default' : 'dark'
+    theme: theme === 'light' ? 'default' : 'dark'
   })
 
   const host = document.createElement('div')
@@ -67,7 +74,7 @@ async function render(source: string, appearance: MermaidAppearance): Promise<Me
     root.style.maxWidth = 'none'
     root.style.background = 'transparent'
     return {
-      appearance,
+      appearance: theme,
       source: definition,
       revision: MERMAID_DIAGRAM_REVISION,
       parser: MERMAID_SVG_PARSER,

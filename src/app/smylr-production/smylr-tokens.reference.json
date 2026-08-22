@@ -1,7 +1,13 @@
 {
-  "version": 3,
+  "version": 4,
+  "generated": {
+    "notice": "Generated from typed token metadata and CSS declarations. Do not edit by hand.",
+    "metadata": "src/components/runtime/smylr-open-pencil-token-catalog.ts",
+    "values": "CSS declarations, plus documented static spacing values in typed metadata",
+    "command": "node src/design-system/open-pencil/generate-token-reference.mjs"
+  },
   "themes": ["light", "dark"],
-  "source": "src/styles/globals.css (:root + .dark)",
+  "source": "Typed metadata + CSS :root/.dark declarations",
   "references": [
     "DESIGN.md",
     ".agents/skills/design-system/reference/tokens.md",
@@ -18,18 +24,8 @@
       "valueLight": "oklch(1 0 0)",
       "valueDark": "oklch(0.18 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 1.0,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.063,
-        "g": 0.069,
-        "b": 0.08,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.18 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-background"]
     },
@@ -41,18 +37,8 @@
       "valueLight": "oklch(1 0 0)",
       "valueDark": "oklch(0.28 0.004 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 1.0,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.156,
-        "g": 0.16,
-        "b": 0.168,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.28 0.004 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-card"]
     },
@@ -64,18 +50,8 @@
       "valueLight": "oklch(1 0 0)",
       "valueDark": "oklch(0.24 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 1.0,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.116,
-        "g": 0.123,
-        "b": 0.134,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.24 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-popover"]
     },
@@ -87,18 +63,8 @@
       "valueLight": "oklch(0.94 0.006 262)",
       "valueDark": "oklch(0.18 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.913,
-        "g": 0.922,
-        "b": 0.938,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.063,
-        "g": 0.069,
-        "b": 0.08,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.94 0.006 262)",
+      "resolvedValueDark": "oklch(0.18 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-muted"]
     },
@@ -110,18 +76,8 @@
       "valueLight": "oklch(0.96 0.006 262)",
       "valueDark": "oklch(0.2 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.939,
-        "g": 0.948,
-        "b": 0.964,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.08,
-        "g": 0.087,
-        "b": 0.097,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.006 262)",
+      "resolvedValueDark": "oklch(0.2 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-secondary"]
     },
@@ -130,21 +86,11 @@
       "cssProperty": "background-color",
       "cssVariable": "--accent",
       "label": "Accent surface",
-      "valueLight": "oklch(0.92 0.06 262)",
-      "valueDark": "oklch(0.74 0.16 262)",
+      "valueLight": "var(--primary-tint)",
+      "valueDark": "var(--primary-tint)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.812,
-        "g": 0.9,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.445,
-        "g": 0.66,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.04 262)",
+      "resolvedValueDark": "oklch(0.22 0.04 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-accent"]
     },
@@ -153,21 +99,11 @@
       "cssProperty": "background-color",
       "cssVariable": "--primary",
       "label": "Primary action",
-      "valueLight": "oklch(0.55 0.24 262)",
-      "valueDark": "oklch(0.68 0.18 262)",
+      "valueLight": "oklch(0.827586 0.101277 230.318)",
+      "valueDark": "oklch(0.827586 0.101277 230.318)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.06,
-        "g": 0.378,
-        "b": 0.98,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.344,
-        "g": 0.578,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.827586 0.101277 230.318)",
+      "resolvedValueDark": "oklch(0.827586 0.101277 230.318)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-primary", "text-primary"]
     },
@@ -179,18 +115,8 @@
       "valueLight": "oklch(1 0 0)",
       "valueDark": "oklch(0.1 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 1.0,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.011,
-        "g": 0.013,
-        "b": 0.018,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.1 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-sidebar"]
     },
@@ -202,18 +128,8 @@
       "valueLight": "oklch(0.96 0.04 262)",
       "valueDark": "oklch(0.22 0.04 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.892,
-        "g": 0.951,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.063,
-        "g": 0.103,
-        "b": 0.177,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.04 262)",
+      "resolvedValueDark": "oklch(0.22 0.04 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-primary-tint"]
     },
@@ -225,18 +141,8 @@
       "valueLight": "oklch(0.25 0.008 260)",
       "valueDark": "oklch(0.95 0.004 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.123,
-        "g": 0.132,
-        "b": 0.147,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.929,
-        "g": 0.935,
-        "b": 0.946,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.25 0.008 260)",
+      "resolvedValueDark": "oklch(0.95 0.004 260)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-foreground"]
     },
@@ -248,18 +154,8 @@
       "valueLight": "oklch(0.25 0.008 260)",
       "valueDark": "oklch(0.95 0.004 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.123,
-        "g": 0.132,
-        "b": 0.147,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.929,
-        "g": 0.935,
-        "b": 0.946,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.25 0.008 260)",
+      "resolvedValueDark": "oklch(0.95 0.004 260)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-card-foreground"]
     },
@@ -271,18 +167,8 @@
       "valueLight": "oklch(0.25 0.008 260)",
       "valueDark": "oklch(0.95 0.004 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.123,
-        "g": 0.132,
-        "b": 0.147,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.929,
-        "g": 0.935,
-        "b": 0.946,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.25 0.008 260)",
+      "resolvedValueDark": "oklch(0.95 0.004 260)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-popover-foreground"]
     },
@@ -294,18 +180,8 @@
       "valueLight": "oklch(0.5 0.008 262)",
       "valueDark": "oklch(0.55 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.379,
-        "g": 0.389,
-        "b": 0.407,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.437,
-        "g": 0.445,
-        "b": 0.459,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.5 0.008 262)",
+      "resolvedValueDark": "oklch(0.55 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-muted-foreground"]
     },
@@ -317,18 +193,8 @@
       "valueLight": "oklch(0.3 0.01 262)",
       "valueDark": "oklch(0.8 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.169,
-        "g": 0.18,
-        "b": 0.2,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.735,
-        "g": 0.744,
-        "b": 0.759,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.3 0.01 262)",
+      "resolvedValueDark": "oklch(0.8 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-secondary-foreground"]
     },
@@ -337,21 +203,11 @@
       "cssProperty": "color",
       "cssVariable": "--accent-foreground",
       "label": "Accent text",
-      "valueLight": "oklch(0.25 0.01 262)",
-      "valueDark": "oklch(0.99 0.002 262)",
+      "valueLight": "var(--primary-tint-foreground)",
+      "valueDark": "var(--primary-tint-foreground)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.122,
-        "g": 0.132,
-        "b": 0.151,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.45 0.14 262)",
+      "resolvedValueDark": "oklch(0.72 0.14 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-accent-foreground"]
     },
@@ -360,21 +216,11 @@
       "cssProperty": "color",
       "cssVariable": "--primary-foreground",
       "label": "On primary",
-      "valueLight": "oklch(0.99 0.002 262)",
-      "valueDark": "oklch(0.99 0.002 262)",
+      "valueLight": "oklch(0.25 0.008 260)",
+      "valueDark": "oklch(0.25 0.008 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.25 0.008 260)",
+      "resolvedValueDark": "oklch(0.25 0.008 260)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-primary-foreground"]
     },
@@ -386,18 +232,8 @@
       "valueLight": "oklch(0.45 0.14 262)",
       "valueDark": "oklch(0.72 0.14 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.151,
-        "g": 0.315,
-        "b": 0.634,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.452,
-        "g": 0.639,
-        "b": 0.988,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.45 0.14 262)",
+      "resolvedValueDark": "oklch(0.72 0.14 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-primary-tint-foreground"]
     },
@@ -409,18 +245,8 @@
       "valueLight": "oklch(0.64 0.17 152)",
       "valueDark": "oklch(0.64 0.17 152)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.0,
-        "g": 0.659,
-        "b": 0.332,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.0,
-        "g": 0.659,
-        "b": 0.332,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.64 0.17 152)",
+      "resolvedValueDark": "oklch(0.64 0.17 152)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-success"]
     },
@@ -432,18 +258,8 @@
       "valueLight": "oklch(0.99 0.002 262)",
       "valueDark": "oklch(0.99 0.002 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.99 0.002 262)",
+      "resolvedValueDark": "oklch(0.99 0.002 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-success-foreground"]
     },
@@ -455,18 +271,8 @@
       "valueLight": "oklch(0.96 0.04 152)",
       "valueDark": "oklch(0.22 0.04 152)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.874,
-        "g": 0.981,
-        "b": 0.898,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.041,
-        "g": 0.125,
-        "b": 0.067,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.04 152)",
+      "resolvedValueDark": "oklch(0.22 0.04 152)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-success-tint"]
     },
@@ -478,18 +284,8 @@
       "valueLight": "oklch(0.42 0.12 152)",
       "valueDark": "oklch(0.72 0.12 152)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.0,
-        "g": 0.371,
-        "b": 0.161,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.398,
-        "g": 0.73,
-        "b": 0.497,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.42 0.12 152)",
+      "resolvedValueDark": "oklch(0.72 0.12 152)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-success-tint-foreground"]
     },
@@ -501,18 +297,8 @@
       "valueLight": "oklch(0.88 0.08 152)",
       "valueDark": "oklch(0.35 0.06 152)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.692,
-        "g": 0.907,
-        "b": 0.744,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.125,
-        "g": 0.264,
-        "b": 0.167,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.88 0.08 152)",
+      "resolvedValueDark": "oklch(0.35 0.06 152)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-success-border"]
     },
@@ -524,18 +310,8 @@
       "valueLight": "oklch(0.78 0.14 80)",
       "valueDark": "oklch(0.78 0.14 80)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.902,
-        "g": 0.675,
-        "b": 0.239,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.902,
-        "g": 0.675,
-        "b": 0.239,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.78 0.14 80)",
+      "resolvedValueDark": "oklch(0.78 0.14 80)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-warning"]
     },
@@ -547,18 +323,8 @@
       "valueLight": "oklch(0.2 0.01 80)",
       "valueDark": "oklch(0.2 0.01 80)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.096,
-        "g": 0.085,
-        "b": 0.067,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.096,
-        "g": 0.085,
-        "b": 0.067,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.2 0.01 80)",
+      "resolvedValueDark": "oklch(0.2 0.01 80)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-warning-foreground"]
     },
@@ -570,18 +336,8 @@
       "valueLight": "oklch(0.96 0.04 80)",
       "valueDark": "oklch(0.22 0.04 80)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 0.939,
-        "b": 0.833,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.142,
-        "g": 0.095,
-        "b": 0.012,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.04 80)",
+      "resolvedValueDark": "oklch(0.22 0.04 80)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-warning-tint"]
     },
@@ -593,18 +349,8 @@
       "valueLight": "oklch(0.48 0.1 80)",
       "valueDark": "oklch(0.78 0.1 80)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.482,
-        "g": 0.337,
-        "b": 0.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.851,
-        "g": 0.692,
-        "b": 0.418,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.48 0.1 80)",
+      "resolvedValueDark": "oklch(0.78 0.1 80)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-warning-tint-foreground"]
     },
@@ -616,18 +362,8 @@
       "valueLight": "oklch(0.88 0.08 80)",
       "valueDark": "oklch(0.35 0.06 80)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.955,
-        "g": 0.825,
-        "b": 0.609,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.293,
-        "g": 0.214,
-        "b": 0.066,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.88 0.08 80)",
+      "resolvedValueDark": "oklch(0.35 0.06 80)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-warning-border"]
     },
@@ -639,18 +375,8 @@
       "valueLight": "oklch(0.55 0.16 25)",
       "valueDark": "oklch(0.6 0.16 25)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.741,
-        "g": 0.255,
-        "b": 0.246,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.809,
-        "g": 0.318,
-        "b": 0.302,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.55 0.16 25)",
+      "resolvedValueDark": "oklch(0.6 0.16 25)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-destructive"]
     },
@@ -662,18 +388,8 @@
       "valueLight": "oklch(0.99 0.002 262)",
       "valueDark": "oklch(0.95 0.004 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.984,
-        "g": 0.987,
-        "b": 0.992,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.929,
-        "g": 0.935,
-        "b": 0.946,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.99 0.002 262)",
+      "resolvedValueDark": "oklch(0.95 0.004 260)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-destructive-foreground"]
     },
@@ -685,18 +401,8 @@
       "valueLight": "oklch(0.96 0.04 25)",
       "valueDark": "oklch(0.22 0.04 25)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 0.91,
-        "b": 0.896,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.167,
-        "g": 0.073,
-        "b": 0.067,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.96 0.04 25)",
+      "resolvedValueDark": "oklch(0.22 0.04 25)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["bg-destructive-tint"]
     },
@@ -708,18 +414,8 @@
       "valueLight": "oklch(0.48 0.14 25)",
       "valueDark": "oklch(0.72 0.14 25)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.617,
-        "g": 0.206,
-        "b": 0.198,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.939,
-        "g": 0.496,
-        "b": 0.468,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.48 0.14 25)",
+      "resolvedValueDark": "oklch(0.72 0.14 25)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-destructive-tint-foreground"]
     },
@@ -731,18 +427,8 @@
       "valueLight": "oklch(0.88 0.08 25)",
       "valueDark": "oklch(0.35 0.06 25)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 1.0,
-        "g": 0.767,
-        "b": 0.741,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.336,
-        "g": 0.178,
-        "b": 0.166,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.88 0.08 25)",
+      "resolvedValueDark": "oklch(0.35 0.06 25)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-destructive-border"]
     },
@@ -751,21 +437,11 @@
       "cssProperty": "border-color",
       "cssVariable": "--primary-border",
       "label": "Primary border",
-      "valueLight": "oklch(0.88 0.08 262)",
-      "valueDark": "oklch(0.35 0.06 262)",
+      "valueLight": "oklch(0.753513 0.138989 232.661)",
+      "valueDark": "oklch(0.753513 0.138989 232.661)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.733,
-        "g": 0.849,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.161,
-        "g": 0.228,
-        "b": 0.352,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.753513 0.138989 232.661)",
+      "resolvedValueDark": "oklch(0.753513 0.138989 232.661)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-primary-border"]
     },
@@ -777,18 +453,8 @@
       "valueLight": "oklch(0.93 0.004 262)",
       "valueDark": "oklch(0.38 0.006 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.903,
-        "g": 0.909,
-        "b": 0.92,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.253,
-        "g": 0.26,
-        "b": 0.273,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.93 0.004 262)",
+      "resolvedValueDark": "oklch(0.38 0.006 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-border"]
     },
@@ -797,21 +463,11 @@
       "cssProperty": "border-color",
       "cssVariable": "--border-subtle",
       "label": "Subtle border",
-      "valueLight": "oklch(0.93 0.004 262)",
+      "valueLight": "var(--border)",
       "valueDark": "oklch(0.22 0.004 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.903,
-        "g": 0.909,
-        "b": 0.92,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.1,
-        "g": 0.104,
-        "b": 0.112,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.93 0.004 262)",
+      "resolvedValueDark": "oklch(0.22 0.004 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-border-subtle"]
     },
@@ -823,18 +479,8 @@
       "valueLight": "oklch(0.88 0.005 260)",
       "valueDark": "oklch(0.38 0.008 260)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.837,
-        "g": 0.845,
-        "b": 0.858,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.25,
-        "g": 0.261,
-        "b": 0.277,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.88 0.005 260)",
+      "resolvedValueDark": "oklch(0.38 0.008 260)",
       "sourceFile": "src/styles/globals.css"
     },
     {
@@ -845,18 +491,8 @@
       "valueLight": "oklch(0.91 0.018 262)",
       "valueDark": "oklch(0.3 0.018 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.858,
-        "g": 0.885,
-        "b": 0.932,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.16,
-        "g": 0.18,
-        "b": 0.216,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.91 0.018 262)",
+      "resolvedValueDark": "oklch(0.3 0.018 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-input"]
     },
@@ -865,21 +501,11 @@
       "cssProperty": "border-color",
       "cssVariable": "--ring",
       "label": "Focus ring",
-      "valueLight": "oklch(0.55 0.24 262)",
-      "valueDark": "oklch(0.68 0.18 262)",
+      "valueLight": "var(--primary-border)",
+      "valueDark": "var(--primary-border)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.06,
-        "g": 0.378,
-        "b": 0.98,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.344,
-        "g": 0.578,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.753513 0.138989 232.661)",
+      "resolvedValueDark": "oklch(0.753513 0.138989 232.661)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["ring-ring"]
     },
@@ -888,21 +514,11 @@
       "cssProperty": "border-color",
       "cssVariable": "--shell-page-border",
       "label": "Shell page border",
-      "valueLight": "oklch(0.96 0.01 248)",
-      "valueDark": "oklch(1 0 0)",
+      "valueLight": "oklch(0.96 0.01 248 / 0.55)",
+      "valueDark": "oklch(1 0 0 / 0.22)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.928,
-        "g": 0.951,
-        "b": 0.974,
-        "a": 0.55
-      },
-      "previewDark": {
-        "r": 1,
-        "g": 1,
-        "b": 1,
-        "a": 0.22
-      },
+      "resolvedValueLight": "oklch(0.96 0.01 248 / 0.55)",
+      "resolvedValueDark": "oklch(1 0 0 / 0.22)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["border-shell-page-border"]
     },
@@ -914,18 +530,8 @@
       "valueLight": "oklch(0.55 0.24 262)",
       "valueDark": "oklch(0.68 0.18 262)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.06,
-        "g": 0.378,
-        "b": 0.98,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.344,
-        "g": 0.578,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.55 0.24 262)",
+      "resolvedValueDark": "oklch(0.68 0.18 262)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-chart-1"]
     },
@@ -937,18 +543,8 @@
       "valueLight": "oklch(0.62 0.2 255)",
       "valueDark": "oklch(0.75 0.14 255)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.046,
-        "g": 0.516,
-        "b": 0.981,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.431,
-        "g": 0.692,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.62 0.2 255)",
+      "resolvedValueDark": "oklch(0.75 0.14 255)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-chart-2"]
     },
@@ -960,18 +556,8 @@
       "valueLight": "oklch(0.7 0.17 258)",
       "valueDark": "oklch(0.8 0.11 258)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.337,
-        "g": 0.617,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.569,
-        "g": 0.752,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.7 0.17 258)",
+      "resolvedValueDark": "oklch(0.8 0.11 258)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-chart-3"]
     },
@@ -983,18 +569,8 @@
       "valueLight": "oklch(0.78 0.12 252)",
       "valueDark": "oklch(0.85 0.08 252)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.489,
-        "g": 0.737,
-        "b": 1.0,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.659,
-        "g": 0.823,
-        "b": 1.0,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.78 0.12 252)",
+      "resolvedValueDark": "oklch(0.85 0.08 252)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-chart-4"]
     },
@@ -1006,18 +582,8 @@
       "valueLight": "oklch(0.48 0.22 268)",
       "valueDark": "oklch(0.6 0.16 268)",
       "previewKind": "color",
-      "previewLight": {
-        "r": 0.174,
-        "g": 0.279,
-        "b": 0.842,
-        "a": 1.0
-      },
-      "previewDark": {
-        "r": 0.343,
-        "g": 0.472,
-        "b": 0.874,
-        "a": 1.0
-      },
+      "resolvedValueLight": "oklch(0.48 0.22 268)",
+      "resolvedValueDark": "oklch(0.6 0.16 268)",
       "sourceFile": "src/styles/globals.css",
       "utilities": ["text-chart-5"]
     },
@@ -1026,8 +592,8 @@
       "cssProperty": "border-radius",
       "cssVariable": "--radius-xs",
       "label": "Radius xs",
-      "valueLight": "calc(var(--radius) - 6px) \u00b7 ~4px",
-      "valueDark": "calc(var(--radius) - 6px) \u00b7 ~4px",
+      "valueLight": "calc(var(--radius) - 6px)",
+      "valueDark": "calc(var(--radius) - 6px)",
       "previewKind": "radius",
       "radiusPx": 4,
       "sourceFile": "src/styles/globals.css",
@@ -1038,8 +604,8 @@
       "cssProperty": "border-radius",
       "cssVariable": "--radius-sm",
       "label": "Radius sm",
-      "valueLight": "calc(var(--radius) - 4px) \u00b7 ~6px",
-      "valueDark": "calc(var(--radius) - 4px) \u00b7 ~6px",
+      "valueLight": "calc(var(--radius) - 4px)",
+      "valueDark": "calc(var(--radius) - 4px)",
       "previewKind": "radius",
       "radiusPx": 6,
       "sourceFile": "src/styles/globals.css",
@@ -1049,9 +615,9 @@
       "category": "radius",
       "cssProperty": "border-radius",
       "cssVariable": "--radius-md",
-      "label": "Radius md \u00b7 controls",
-      "valueLight": "calc(var(--radius) - 2px) \u00b7 ~8px",
-      "valueDark": "calc(var(--radius) - 2px) \u00b7 ~8px",
+      "label": "Radius md · controls",
+      "valueLight": "calc(var(--radius) - 2px)",
+      "valueDark": "calc(var(--radius) - 2px)",
       "previewKind": "radius",
       "radiusPx": 8,
       "sourceFile": "src/styles/globals.css",
@@ -1061,9 +627,9 @@
       "category": "radius",
       "cssProperty": "border-radius",
       "cssVariable": "--radius-lg",
-      "label": "Radius lg \u00b7 cards",
-      "valueLight": "var(--radius) \u00b7 10px (0.625rem)",
-      "valueDark": "var(--radius) \u00b7 10px (0.625rem)",
+      "label": "Radius lg · cards",
+      "valueLight": "var(--radius)",
+      "valueDark": "var(--radius)",
       "previewKind": "radius",
       "radiusPx": 10,
       "sourceFile": "src/styles/globals.css",
@@ -1073,9 +639,9 @@
       "category": "radius",
       "cssProperty": "border-radius",
       "cssVariable": "--radius-xl",
-      "label": "Radius xl \u00b7 sections",
-      "valueLight": "calc(var(--radius) + 6px) \u00b7 ~16px",
-      "valueDark": "calc(var(--radius) + 6px) \u00b7 ~16px",
+      "label": "Radius xl · sections",
+      "valueLight": "calc(var(--radius) + 6px)",
+      "valueDark": "calc(var(--radius) + 6px)",
       "previewKind": "radius",
       "radiusPx": 16,
       "sourceFile": "src/styles/globals.css",
@@ -1086,8 +652,8 @@
       "cssProperty": "border-radius",
       "cssVariable": "--radius-2xl",
       "label": "Radius 2xl",
-      "valueLight": "1.5rem \u00b7 24px",
-      "valueDark": "1.5rem \u00b7 24px",
+      "valueLight": "1.5rem",
+      "valueDark": "1.5rem",
       "previewKind": "radius",
       "radiusPx": 24,
       "sourceFile": "src/styles/globals.css",
@@ -1098,10 +664,10 @@
       "cssProperty": "border-radius",
       "cssVariable": "--radius-full",
       "label": "Radius full",
-      "valueLight": "9999px \u00b7 pills/avatars",
-      "valueDark": "9999px \u00b7 pills/avatars",
+      "valueLight": "9999px",
+      "valueDark": "9999px",
       "previewKind": "radius",
-      "radiusPx": 18,
+      "radiusPx": 9999,
       "sourceFile": "src/styles/globals.css",
       "utilities": ["rounded-full"]
     },
@@ -1110,22 +676,24 @@
       "cssProperty": "box-shadow",
       "cssVariable": "--shadow-sm",
       "label": "Shadow sm",
-      "valueLight": "0 1px 2px 6%",
-      "valueDark": "0 1px 2px 15%",
+      "valueLight": "0 1px 2px hsla(0, 0%, 0%, 0.06)",
+      "valueDark": "0 1px 2px hsla(0, 0%, 0%, 0.15)",
       "previewKind": "shadow",
       "shadow": {
         "x": 0,
         "y": 1,
         "blur": 2,
         "spread": 0,
-        "a": 0.06
+        "a": 0.06,
+        "inset": false
       },
       "shadowDark": {
         "x": 0,
         "y": 1,
         "blur": 2,
         "spread": 0,
-        "a": 0.15
+        "a": 0.15,
+        "inset": false
       },
       "sourceFile": "src/styles/globals.css",
       "utilities": ["shadow-sm"]
@@ -1135,22 +703,24 @@
       "cssProperty": "box-shadow",
       "cssVariable": "--shadow-card",
       "label": "Shadow card",
-      "valueLight": "dual layer card elev.",
-      "valueDark": "dual layer dark elev.",
+      "valueLight": "0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent), 0 6px 14px -8px color-mix(in oklch, var(--foreground) 14%, transparent)",
+      "valueDark": "0 1px 2px color-mix(in oklch, var(--background) 75%, transparent), 0 6px 14px -8px color-mix(in oklch, var(--background) 88%, transparent)",
       "previewKind": "shadow",
       "shadow": {
         "x": 0,
         "y": 6,
         "blur": 14,
-        "spread": -4,
-        "a": 0.12
+        "spread": -8,
+        "a": 0.14,
+        "inset": false
       },
       "shadowDark": {
         "x": 0,
         "y": 6,
         "blur": 14,
-        "spread": -4,
-        "a": 0.35
+        "spread": -8,
+        "a": 0.88,
+        "inset": false
       },
       "sourceFile": "src/styles/globals.css",
       "utilities": ["shadow-card"]
@@ -1160,61 +730,218 @@
       "cssProperty": "box-shadow",
       "cssVariable": "--shadow-lg",
       "label": "Shadow lg",
-      "valueLight": "0 4px 8px 10%",
-      "valueDark": "0 4px 8px 25%",
+      "valueLight": "0 4px 8px hsla(0, 0%, 0%, 0.1)",
+      "valueDark": "0 4px 8px hsla(0, 0%, 0%, 0.25)",
       "previewKind": "shadow",
       "shadow": {
         "x": 0,
         "y": 4,
         "blur": 8,
         "spread": 0,
-        "a": 0.1
+        "a": 0.1,
+        "inset": false
       },
       "shadowDark": {
         "x": 0,
         "y": 4,
         "blur": 8,
         "spread": 0,
-        "a": 0.25
+        "a": 0.25,
+        "inset": false
       },
       "sourceFile": "src/styles/globals.css",
       "utilities": ["shadow-lg"]
     },
     {
+      "category": "surface",
+      "cssProperty": "background-color",
+      "cssVariable": "--card-surface-base",
+      "label": "Decorative card base",
+      "valueLight": "var(--card)",
+      "valueDark": "oklch(0.21 0.008 262)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.21 0.008 262)",
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["bg-card-surface-base"]
+    },
+    {
+      "category": "surface",
+      "cssProperty": "background",
+      "cssVariable": "--card-surface-gradient",
+      "label": "Decorative card surface",
+      "valueLight": "var(--card)",
+      "valueDark": "var(--card-surface-base)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.21 0.008 262)",
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["card-surface"]
+    },
+    {
+      "category": "border",
+      "cssProperty": "border-color",
+      "cssVariable": "--card-border",
+      "label": "Card border",
+      "valueLight": "oklch(0.86 0.006 262 / 0.82)",
+      "valueDark": "oklch(1 0 0 / 0.12)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(0.86 0.006 262 / 0.82)",
+      "resolvedValueDark": "oklch(1 0 0 / 0.12)",
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["border-card-border"]
+    },
+    {
+      "category": "surface",
+      "cssProperty": "background",
+      "cssVariable": "--card-inset-bg",
+      "label": "Inset card surface",
+      "valueLight": "oklch(0.95 0.004 262)",
+      "valueDark": "oklch(0.15 0.008 262)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(0.95 0.004 262)",
+      "resolvedValueDark": "oklch(0.15 0.008 262)",
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["card-inset"]
+    },
+    {
+      "category": "border",
+      "cssProperty": "border-color",
+      "cssVariable": "--card-inset-border",
+      "label": "Inset card border",
+      "valueLight": "oklch(0.86 0.006 262 / 0.72)",
+      "valueDark": "oklch(1 0 0 / 0.08)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(0.86 0.006 262 / 0.72)",
+      "resolvedValueDark": "oklch(1 0 0 / 0.08)",
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["border-card-inset-border"]
+    },
+    {
+      "category": "shadow",
+      "cssProperty": "box-shadow",
+      "cssVariable": "--card-inset-shadow",
+      "label": "Inset card depth",
+      "valueLight": "inset 0 1px 2px oklch(0 0 0 / 0.04)",
+      "valueDark": "inset 0 1px 2px oklch(0 0 0 / 0.3)",
+      "previewKind": "shadow",
+      "shadow": {
+        "x": 0,
+        "y": 1,
+        "blur": 2,
+        "spread": 0,
+        "a": 0.04,
+        "inset": true
+      },
+      "shadowDark": {
+        "x": 0,
+        "y": 1,
+        "blur": 2,
+        "spread": 0,
+        "a": 0.3,
+        "inset": true
+      },
+      "sourceFile": "src/styles/card.css",
+      "utilities": ["card-inset"]
+    },
+    {
+      "category": "surface",
+      "cssProperty": "background-color",
+      "cssVariable": "--input-bg",
+      "label": "Input surface",
+      "valueLight": "var(--card)",
+      "valueDark": "var(--secondary)",
+      "previewKind": "color",
+      "resolvedValueLight": "oklch(1 0 0)",
+      "resolvedValueDark": "oklch(0.2 0.006 262)",
+      "sourceFile": "src/styles/ui-primitives.css",
+      "utilities": ["bg-input-bg"]
+    },
+    {
       "category": "shadow",
       "cssProperty": "box-shadow",
       "cssVariable": "--input-shadow",
-      "label": "Shadow input",
-      "valueLight": "none (light)",
-      "valueDark": "none (dark)",
+      "label": "Input depth",
+      "valueLight": "none",
+      "valueDark": "none",
       "previewKind": "shadow",
       "shadow": {
         "x": 0,
         "y": 0,
         "blur": 0,
         "spread": 0,
-        "a": 0
+        "a": 0,
+        "inset": false
       },
       "shadowDark": {
         "x": 0,
         "y": 0,
         "blur": 0,
         "spread": 0,
-        "a": 0
+        "a": 0,
+        "inset": false
       },
-      "sourceFile": "src/styles/globals.css",
+      "sourceFile": "src/styles/ui-primitives.css",
       "utilities": ["shadow-input"]
+    },
+    {
+      "category": "spacing",
+      "cssProperty": "gap",
+      "cssVariable": "--shell-edge-inset",
+      "label": "Shell edge inset",
+      "valueLight": "1rem",
+      "valueDark": "1rem",
+      "previewKind": "spacing",
+      "spacingPx": 16,
+      "sourceFile": "src/styles/authenticated-shell.css",
+      "utilities": ["shell-layout-grid"]
+    },
+    {
+      "category": "spacing",
+      "cssProperty": "gap",
+      "cssVariable": "--shell-column-gap",
+      "label": "Shell column gap",
+      "valueLight": "0.75rem",
+      "valueDark": "0.75rem",
+      "previewKind": "spacing",
+      "spacingPx": 12,
+      "sourceFile": "src/styles/route-surface.css"
+    },
+    {
+      "category": "radius",
+      "cssProperty": "border-radius",
+      "cssVariable": "--shell-section-radius",
+      "label": "Shell section radius",
+      "valueLight": "var(--radius-xl)",
+      "valueDark": "var(--radius-xl)",
+      "previewKind": "radius",
+      "radiusPx": 16,
+      "sourceFile": "src/styles/shell-section.css",
+      "utilities": ["shell-section-surface"]
+    },
+    {
+      "category": "spacing",
+      "cssProperty": "padding",
+      "cssVariable": "--shell-section-padding",
+      "label": "Shell section padding",
+      "valueLight": "1.5rem",
+      "valueDark": "1.5rem",
+      "previewKind": "spacing",
+      "spacingPx": 24,
+      "sourceFile": "src/styles/shell-section.css",
+      "utilities": ["shell-section-padded"]
     },
     {
       "category": "spacing",
       "cssProperty": "gap",
       "cssVariable": "gap-2",
       "label": "Control gap",
-      "valueLight": "8px \u00b7 list items",
-      "valueDark": "8px \u00b7 list items",
+      "valueLight": "0.5rem",
+      "valueDark": "0.5rem",
       "previewKind": "spacing",
       "spacingPx": 8,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
+      "styleValue": "0.5rem",
       "utilities": ["gap-2"]
     },
     {
@@ -1222,23 +949,25 @@
       "cssProperty": "gap",
       "cssVariable": "gap-4",
       "label": "Field gap",
-      "valueLight": "16px \u00b7 form fields",
-      "valueDark": "16px \u00b7 form fields",
+      "valueLight": "1rem",
+      "valueDark": "1rem",
       "previewKind": "spacing",
       "spacingPx": 16,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
+      "styleValue": "1rem",
       "utilities": ["gap-4"]
     },
     {
       "category": "spacing",
-      "cssProperty": "gap",
+      "cssProperty": "padding",
       "cssVariable": "p-5",
       "label": "Card padding",
-      "valueLight": "20px \u00b7 card content",
-      "valueDark": "20px \u00b7 card content",
+      "valueLight": "1.25rem",
+      "valueDark": "1.25rem",
       "previewKind": "spacing",
       "spacingPx": 20,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
+      "styleValue": "1.25rem",
       "utilities": ["p-5"]
     },
     {
@@ -1246,11 +975,12 @@
       "cssProperty": "gap",
       "cssVariable": "gap-6",
       "label": "Section gap",
-      "valueLight": "24px \u00b7 sections/grids",
-      "valueDark": "24px \u00b7 sections/grids",
+      "valueLight": "1.5rem",
+      "valueDark": "1.5rem",
       "previewKind": "spacing",
       "spacingPx": 24,
       "sourceFile": ".agents/skills/design-system/reference/spacing-radius.md",
+      "styleValue": "1.5rem",
       "utilities": ["gap-6"]
     }
   ]

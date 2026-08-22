@@ -4,7 +4,9 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { sceneNodeOverlayStyle, useEditorPresentationViewport } from '@/app/editor/presentation'
+import { focusCanvasSurface } from '@/app/editor/canvas/surface/focus'
+import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
+import { useSceneNodeOverlayStyle } from '@/app/editor/presentation'
 import { spatialMediaSource } from '@/app/spatial-media/source'
 import type { SpatialMediaSource } from '@/app/spatial-media/types'
 
@@ -13,7 +15,7 @@ import SpatialMediaViewport from './SpatialMediaViewport.vue'
 type SpatialMediaItem = { node: SceneNode; source: SpatialMediaSource }
 
 const store = useEditorStore()
-const presentationViewport = useEditorPresentationViewport(store)
+const overlayStyle = useSceneNodeOverlayStyle(store)
 const previewUrls = shallowRef<Record<string, string>>({})
 
 const items = computed<SpatialMediaItem[]>(() => {
@@ -58,16 +60,20 @@ onBeforeUnmount(() => {
   for (const url of Object.values(previewUrls.value)) URL.revokeObjectURL(url)
 })
 
-function overlayStyle(node: SceneNode) {
-  return sceneNodeOverlayStyle(store, node, presentationViewport.value)
-}
-
 function isSelected(nodeId: string): boolean {
   return store.state.selectedIds.has(nodeId)
 }
 
+function isInteractive(nodeId: string): boolean {
+  return isSelected(nodeId) && canvasSurfaceCanReceivePointer(store.state.activeTool)
+}
+
 function previewUrl(source: SpatialMediaSource): string {
   return source.previewHash ? (previewUrls.value[source.previewHash] ?? '') : ''
+}
+
+function focusSpatialMedia(nodeId: string) {
+  focusCanvasSurface(store, nodeId)
 }
 </script>
 
@@ -77,10 +83,15 @@ function previewUrl(source: SpatialMediaSource): string {
     :key="item.node.id"
     :style="overlayStyle(item.node)"
     :class="
-      isSelected(item.node.id) ? 'pointer-events-auto ring-2 ring-[#8b5cf6]' : 'pointer-events-none'
+      isInteractive(item.node.id)
+        ? 'pointer-events-auto ring-2 ring-[#8b5cf6]'
+        : isSelected(item.node.id)
+          ? 'pointer-events-none ring-2 ring-[#8b5cf6]'
+          : 'pointer-events-none'
     "
     class="absolute top-0 left-0 z-[6] overflow-hidden rounded-[12px] shadow-[0_20px_64px_rgba(0,0,0,0.28)]"
     :data-spatial-node-id="item.node.id"
+    @dblclick.stop.prevent="focusSpatialMedia(item.node.id)"
   >
     <SpatialMediaViewport
       :interactive="isSelected(item.node.id)"

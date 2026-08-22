@@ -31,21 +31,6 @@ export const MCP_VERSION: string = packageJson.version
 
 const HEARTBEAT_INTERVAL_MS = 5_000
 
-function stringArgument(body: Record<string, unknown>, key: string): string | undefined {
-  const args = body.args
-  if (!args || typeof args !== 'object') return undefined
-  const value = Reflect.get(args, key)
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function isRpcRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function rpcArguments(body: Record<string, unknown>): Record<string, unknown> {
-  return isRpcRecord(body.args) ? body.args : {}
-}
-
 let installCommandPromise: Promise<string> | null = null
 
 async function resolveMcpInstallCommand(): Promise<string> {
@@ -136,41 +121,6 @@ export function startServer(options: ServerOptions = {}) {
       }
       const authorityStatus = await localWorkspaceStore.status().catch(() => null)
       if (authorityStatus?.state !== 'ready') throw persistedAuthorityUnavailableError(command)
-      if (body.command === 'board_open') {
-        const args = rpcArguments(body)
-        const workspaceId = stringArgument(body, 'workspace_id')
-        const contentDocumentId = stringArgument(body, 'content_document_id')
-        if (workspaceId && contentDocumentId) {
-          const resolution = browserRpc.resolveNavigationRuntime({
-            contentDocumentId,
-            ...(typeof args.editor_runtime_instance_id === 'string'
-              ? { requestedRuntimeInstanceId: args.editor_runtime_instance_id }
-              : {}),
-            workspaceId
-          })
-          let response: unknown
-          try {
-            response = await localWorkspaceBoard.sendRpc({
-              ...body,
-              args: {
-                ...args,
-                editor_candidate_runtime_ids: resolution.candidateRuntimeIds,
-                editor_navigation_status: resolution.status,
-                ...('reason' in resolution ? { editor_navigation_reason: resolution.reason } : {}),
-                ...('runtimeInstanceId' in resolution
-                  ? { editor_runtime_instance_id: resolution.runtimeInstanceId }
-                  : {})
-              }
-            })
-          } catch (error) {
-            throw normalizePersistedExecutionError(command, error)
-          }
-          if ('runtimeInstanceId' in resolution) {
-            browserRpc.notifyNavigationRuntime(resolution.runtimeInstanceId)
-          }
-          return response
-        }
-      }
       try {
         return await localWorkspaceBoard.sendRpc(body)
       } catch (error) {

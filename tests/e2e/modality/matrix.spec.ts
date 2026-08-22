@@ -11,12 +11,15 @@ const EDITED_SOURCE = `export function PatientCard() {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/?test&no-rulers&html-source')
-  await new CanvasHelper(page).waitForInit()
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await canvas.clearCanvas()
 })
 
-test('File Open creates one editable TSX Code Object through edit, undo, save, and reopen', async ({
+test('File Open creates one editable TSX Code Object through the mobile Code panel', async ({
   page
 }) => {
+  await page.setViewportSize({ width: 700, height: 800 })
   await page.evaluate((initialSource) => {
     let persistedSource = initialSource
     let writeCount = 0
@@ -40,10 +43,13 @@ test('File Open creates one editable TSX Code Object through edit, undo, save, a
 
   await page.keyboard.press('Meta+o')
 
-  await expect(page.getByTestId('app-document-name')).toHaveText('PatientCard')
+  await expect(page.getByRole('tab', { name: /PatientCard/ })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
   await expect(page.getByText('Original', { exact: true })).toBeVisible()
   await expect(page.locator('iframe')).toHaveCount(0)
-  await page.getByTestId('sidebar-context-code').click()
+  await page.getByTestId('mobile-ribbon-code').click()
   const editor = page.getByTestId('code-object-source')
   await expect(editor).toHaveValue(ORIGINAL_SOURCE)
 
@@ -56,12 +62,19 @@ test('File Open creates one editable TSX Code Object through edit, undo, save, a
   await page.keyboard.press('Meta+Shift+z')
   await expect(editor).toHaveValue(EDITED_SOURCE)
 
+  await page.setViewportSize({ width: 1280, height: 800 })
   await page.keyboard.press('Meta+s')
   await expect.poll(() => page.evaluate(() => window.openPencil?.test?.writeCount?.() ?? 0)).toBe(1)
 
+  await page
+    .getByRole('tab', { name: /PatientCard/ })
+    .getByRole('button', { name: 'Close PatientCard' })
+    .click()
+  await expect(page.getByTestId('empty-board-start')).toBeVisible()
   await page.keyboard.press('Meta+o')
   await expect(page.getByTestId('tabbar-tab')).toHaveCount(2)
-  await page.getByTestId('sidebar-context-code').click()
+  await page.setViewportSize({ width: 700, height: 800 })
+  await page.getByTestId('mobile-ribbon-code').click()
   await expect(page.getByTestId('code-object-source')).toHaveValue(EDITED_SOURCE)
   await expect(page.getByRole('article', { name: 'Patient summary' })).toContainText('Edited')
   await expect(page.locator('iframe')).toHaveCount(0)
@@ -100,9 +113,8 @@ test('pasted PDF enters the same Code Object intake path as a drop', async ({ pa
 
 test('Insert > Media opens the browser picker and places the selected file', async ({ page }) => {
   await page.getByTestId('code-object-start').click()
-  const menubar = page.locator('[role="menubar"]')
-  if (!(await menubar.isVisible())) await page.getByTestId('app-menu-toggle').click()
-  await page.getByRole('menuitem', { name: 'Insert', exact: true }).click()
+  await page.getByTestId('app-menu-toggle').click()
+  await page.getByTestId('menubar-file').click()
 
   const chooserPromise = page.waitForEvent('filechooser')
   await page.getByRole('menuitem', { name: 'Media…', exact: true }).click()

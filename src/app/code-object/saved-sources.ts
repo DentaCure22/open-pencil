@@ -1,3 +1,7 @@
+import { CONFIGURED_CODE_OBJECT_SOURCE } from '@open-pencil/core/code-object'
+
+export const FINANCIAL_DASHBOARD_SOURCE = CONFIGURED_CODE_OBJECT_SOURCE
+
 export const ANALYTICS_CHART_SOURCE = `type CodeObjectProps = {
   interactionEnabled: boolean
   props: { title?: string }

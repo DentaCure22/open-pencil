@@ -34,7 +34,6 @@ export const narratedTraceInterimText = ref('')
 export const narratedTraceSession = shallowRef<NarratedTraceSession | null>(null)
 
 let clockStartedAt = 0
-let clockAccumulatedMs = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 const coalescedEvents = new Map<string, { eventId: string; updatedAtMs: number }>()
 
@@ -52,9 +51,7 @@ function hasNarratedTraceSession() {
 
 function updateClock() {
   if (narratedTraceStatus.value === 'recording') {
-    narratedTraceElapsedMs.value = Math.round(
-      clockAccumulatedMs + (monotonicNow() - clockStartedAt)
-    )
+    narratedTraceElapsedMs.value = Math.round(monotonicNow() - clockStartedAt)
   }
 }
 
@@ -144,7 +141,6 @@ function updateNarratedTraceEvent(
 export function beginNarratedTraceSession(scope?: NarratedTraceScope) {
   stopClock()
   coalescedEvents.clear()
-  clockAccumulatedMs = 0
   narratedTraceElapsedMs.value = 0
   narratedTraceError.value = null
   narratedTraceInterimText.value = ''
@@ -161,22 +157,8 @@ export function beginNarratedTraceSession(scope?: NarratedTraceScope) {
   schedulePersist()
 }
 
-export function pauseNarratedTraceSession() {
-  if (narratedTraceStatus.value !== 'recording') return
-  stopClock()
-  clockAccumulatedMs = narratedTraceElapsedMs.value
-  narratedTraceStatus.value = 'paused'
-  narratedTraceInterimText.value = ''
-}
-
-export function resumeNarratedTraceSession() {
-  if (narratedTraceStatus.value !== 'paused') return
-  narratedTraceStatus.value = 'recording'
-  startClock()
-}
-
 export function finishNarratedTraceSession() {
-  if (narratedTraceStatus.value !== 'recording' && narratedTraceStatus.value !== 'paused') return
+  if (narratedTraceStatus.value !== 'recording') return
   stopClock()
   const session = narratedTraceSession.value
   if (session) {
@@ -316,9 +298,7 @@ export const narratedTraceContextMarkdown = computed(() =>
 )
 
 async function loadNarratedTraceRecord(sessionId: string) {
-  if (narratedTraceStatus.value === 'recording' || narratedTraceStatus.value === 'paused') {
-    return null
-  }
+  if (narratedTraceStatus.value === 'recording') return null
   const session = await readNarratedTraceRecord(sessionId)
   if (!session) return null
   stopClock()
@@ -333,18 +313,6 @@ export async function openNarratedTraceRecord(sessionId: string) {
   const session = await loadNarratedTraceRecord(sessionId)
   if (!session) return false
   narratedTraceStatus.value = 'review'
-  schedulePersist()
-  return true
-}
-
-export async function continueNarratedTraceRecord(sessionId: string) {
-  const session = await loadNarratedTraceRecord(sessionId)
-  if (!session) return false
-  clockAccumulatedMs = session.durationMs
-  narratedTraceError.value = null
-  narratedTraceInterimText.value = ''
-  narratedTraceStatus.value = 'recording'
-  startClock()
   schedulePersist()
   return true
 }

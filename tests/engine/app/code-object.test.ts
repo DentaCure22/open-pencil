@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 
-import { renderToStaticMarkup } from 'react-dom/server'
-
 import { parseCodeObjectDocument } from '@open-pencil/core/code-object'
 import { deserializeSceneGraph, serializeSceneGraph } from '@open-pencil/core/kiwi'
 
@@ -9,7 +7,6 @@ import { clearCompiledCodeObjectCache, compileCodeObjectSource } from '@/app/cod
 import {
   CODE_OBJECT_PRESETS,
   codeObjectDocument,
-  connectCodeObjects,
   createCodeObjectBoardClient,
   createCodeObject,
   createCodeObjectFromPreset,
@@ -17,16 +14,12 @@ import {
   createPptxDeckDocument,
   createSmylrFlowScreenDocument,
   createUserCodeObjectDocument,
-  disconnectCodeObjects,
   dispatchCodeObjectBoardAction,
   isCodeObjectFrame,
   setCodeObjectBoardShapeAccess,
   updateCodeObjectState
 } from '@/app/code-object/model'
-import {
-  registeredCodeObjectAdapters,
-  renderCodeObjectCompatibilityAdapter
-} from '@/app/code-object/registry'
+import { registeredCodeObjectAdapters } from '@/app/code-object/registry-implementation'
 import { createEditorStore } from '@/app/editor/session'
 
 describe('Code Objects', () => {
@@ -41,34 +34,8 @@ describe('Code Objects', () => {
       { component: 'office-spreadsheet', displayName: 'Spreadsheet' },
       { component: 'pdf-document', displayName: 'PDF document' },
       { component: 'pptx-deck', displayName: 'PowerPoint deck' },
-      { component: 'smylr-flow-screen', displayName: 'Smylr flow screen' },
-      {
-        component: 'registry:database-schema-node:*:v2',
-        displayName: 'React Flow UI database schema node'
-      }
+      { component: 'smylr-flow-screen', displayName: 'Smylr flow screen' }
     ])
-
-    const schemaDocument = createUserCodeObjectDocument({
-      definitionId: 'registry:database-schema-node:test:products:v2',
-      name: 'Products',
-      props: {
-        fields: [
-          { key: 'PK', name: 'id', required: true, type: 'uuid' },
-          { key: 'FK', name: 'warehouse_id', required: false, type: 'uuid' }
-        ],
-        table: 'Products'
-      }
-    })
-    const schemaMarkup = renderToStaticMarkup(
-      renderCodeObjectCompatibilityAdapter({
-        document: schemaDocument,
-        interactionEnabled: false,
-        onStateChange: () => undefined
-      })
-    )
-    expect(schemaMarkup).toContain('data-slot="base-node-content"')
-    expect(schemaMarkup).toContain('data-openpencil-field="warehouse_id"')
-    expect(schemaMarkup).toContain('Products')
 
     const store = createEditorStore()
     const document = createSmylrFlowScreenDocument({
@@ -239,113 +206,6 @@ describe('Code Objects', () => {
     })
   })
 
-  test('runs a connected cross-object state change as one board-owned Undo step', () => {
-    const store = createEditorStore()
-    const controller = createCodeObject(store, {
-      document: createUserCodeObjectDocument({
-        name: 'Controller',
-        state: { count: 0 }
-      }),
-      height: 320,
-      name: 'Controller',
-      width: 480
-    })
-    const target = createCodeObject(store, {
-      document: createUserCodeObjectDocument({
-        name: 'Target',
-        state: { count: 0 }
-      }),
-      height: 320,
-      name: 'Target',
-      width: 480
-    })
-    const connection = connectCodeObjects(store, controller.id, target.id)
-    if (!connection) throw new Error('Code Objects were not connected')
-
-    const receipt = dispatchCodeObjectBoardAction(
-      store,
-      controller.id,
-      {
-        connectionId: connection.id,
-        sourceStatePatch: { count: 1 },
-        targetStatePatch: { count: 1 },
-        type: 'code-object.state.patch'
-      },
-      { interactionEnabled: true }
-    )
-
-    expect(receipt).toMatchObject({
-      actorFrameId: controller.id,
-      changed: true,
-      status: 'applied',
-      targetFrameId: target.id,
-      type: 'code-object.state.patch'
-    })
-    expect(receipt.actionId).toMatch(/^code-action:/)
-    expect(codeObjectDocument(store.graph.getNode(controller.id))?.state).toEqual({ count: 1 })
-    expect(codeObjectDocument(store.graph.getNode(target.id))?.state).toEqual({ count: 1 })
-
-    store.undo.undo()
-    expect(codeObjectDocument(store.graph.getNode(controller.id))?.state).toEqual({ count: 0 })
-    expect(codeObjectDocument(store.graph.getNode(target.id))?.state).toEqual({ count: 0 })
-
-    store.undo.redo()
-    expect(codeObjectDocument(store.graph.getNode(controller.id))?.state).toEqual({ count: 1 })
-    expect(codeObjectDocument(store.graph.getNode(target.id))?.state).toEqual({ count: 1 })
-  })
-
-  test('denies unapproved or non-interactive cross-object actions without changing state', () => {
-    const store = createEditorStore()
-    const controller = createCodeObject(store, {
-      document: createUserCodeObjectDocument({ name: 'Controller', state: { count: 0 } }),
-      height: 320,
-      name: 'Controller',
-      width: 480
-    })
-    const target = createCodeObject(store, {
-      document: createUserCodeObjectDocument({ name: 'Target', state: { count: 0 } }),
-      height: 320,
-      name: 'Target',
-      width: 480
-    })
-    const connection = connectCodeObjects(store, controller.id, target.id)
-    if (!connection) throw new Error('Code Objects were not connected')
-
-    const notInteracting = dispatchCodeObjectBoardAction(
-      store,
-      controller.id,
-      {
-        connectionId: connection.id,
-        targetStatePatch: { count: 2 },
-        type: 'code-object.state.patch'
-      },
-      { interactionEnabled: false }
-    )
-    expect(notInteracting).toMatchObject({
-      changed: false,
-      reason: 'interaction-required',
-      status: 'denied'
-    })
-
-    expect(disconnectCodeObjects(store, controller.id, connection.id)).toBe(true)
-    const disconnected = dispatchCodeObjectBoardAction(
-      store,
-      controller.id,
-      {
-        connectionId: connection.id,
-        targetStatePatch: { count: 3 },
-        type: 'code-object.state.patch'
-      },
-      { interactionEnabled: true }
-    )
-    expect(disconnected).toMatchObject({
-      changed: false,
-      reason: 'connection-missing',
-      status: 'denied'
-    })
-    expect(codeObjectDocument(store.graph.getNode(target.id))?.state).toEqual({ count: 0 })
-  })
-
   test('gives an approved Code Object an undoable remote for its own native board shapes', async () => {
     const store = createEditorStore()
     const controller = createCodeObject(store, {
@@ -511,6 +371,7 @@ describe('Code Objects', () => {
       'office-document',
       'office-spreadsheet',
       'user-code',
+      'user-code',
       'user-code'
     ])
 
@@ -518,7 +379,7 @@ describe('Code Objects', () => {
     const orbit = frames[3]
     const bloom = frames[4]
     const chart = frames[8]
-    const form = frames[9]
+    const form = frames[10]
     if (!boardRemote || !orbit || !bloom || !chart || !form) {
       throw new Error('Code Object presets were not created')
     }

@@ -17,17 +17,9 @@ Abre y guarda archivos nativos de Figma directamente. El pipeline de importació
 - **Variables** — tokens de diseño con colecciones, modos (Claro/Oscuro), tipos color/float/string/boolean, vinculación de variables
 - **Secciones** — contenedores organizacionales con adopción automática de hijos y píldoras de título
 
-## Panel de propiedades
+## Espacio de trabajo y controles de objeto
 
-Pestañas contextuales Diseño | Código | IA:
-
-- **Apariencia** — opacidad, radio de esquina (uniforme o por esquina), visibilidad
-- **Relleno** — sólido, gradiente (lineal/radial/angular/diamante), imagen
-- **Trazo** — color, grosor, alineación (interior/centro/exterior), grosores por lado, cap, join, dash
-- **Efectos** — sombra paralela, sombra interior, desenfoque de capa, desenfoque de fondo, desenfoque de primer plano
-- **Tipografía** — selector de fuentes con scroll virtual y búsqueda, peso, tamaño, alineación, botones de estilo
-- **Layout** — controles de auto-layout cuando está habilitado
-- **Exportación** — escala, formato (PNG/JPG/WEBP/SVG), vista previa en vivo
+La barra lateral flotante reúne Capas, Chats, Recursos y Actividad. Las acciones específicas del objeto permanecen junto al lienzo y en la barra de herramientas integrada. En pantallas estrechas, el cajón móvil muestra los controles de Diseño y el código fuente de los Code Objects que lo admiten.
 
 ## Renderizado
 
@@ -63,17 +55,17 @@ Abre múltiples documentos en pestañas. <kbd>⌘</kbd><kbd>T</kbd> nueva pesta�
 
 CLI: `openpencil export design.fig -f jsx --style tailwind`
 
-## Chat IA
+## Chat de tareas
 
-Pulsa <kbd>⌘</kbd><kbd>J</kbd> para abrir el asistente IA. 90+ herramientas que pueden crear formas, aplicar estilos, gestionar layout, trabajar con componentes y variables, ejecutar operaciones booleanas, analizar tokens de diseño y exportar assets. Conecta Anthropic, OpenAI, Google AI, OpenRouter o cualquier endpoint compatible.
+Abre **CHATS** en la barra lateral izquierda para iniciar o continuar una tarea de programación con Pi. La barra lateral y las tarjetas del Board comparten conversación, modelo, herramientas, adjuntos y seguimientos.
 
-Las llamadas a herramientas se muestran como entradas colapsables. Verificación visual — el asistente renderiza su trabajo y lo compara con tu solicitud. Soporte completo de deshacer para todas las mutaciones de IA.
+Las herramientas activas permanecen abiertas; la actividad terminada se resume de forma compacta.
 
-Ver [Chat IA](/programmable/ai-chat) para configuración y detalles de proveedores.
+Consulta [Chat de tareas](/programmable/ai-chat).
 
 ## Servidor MCP
 
-Conecta Claude Code, Cursor, Windsurf, o cualquier cliente MCP para leer y escribir archivos `.fig` de forma headless. 90+ herramientas. Dos transportes: stdio y HTTP.
+Conecta Claude Code, Cursor, Windsurf o cualquier cliente MCP para leer y escribir archivos `.fig` sin interfaz. Los clientes descubren el catálogo actual en tiempo de ejecución mediante stdio o HTTP.
 
 ```sh
 npm install -g @open-pencil/mcp

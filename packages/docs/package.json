@@ -1,8 +1,8 @@
 {
   "name": "@open-pencil/docs",
   "version": "0.1.0",
-  "license": "MIT",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",
@@ -10,7 +10,9 @@
     "preview": "vitepress preview"
   },
   "devDependencies": {
+    "@vue/server-renderer": "^3.5.29",
     "vitepress": "^1.6.4",
-    "vitepress-plugin-llms": "1.12.2"
+    "vitepress-plugin-llms": "1.12.2",
+    "vue": "^3.5.29"
   }
 }

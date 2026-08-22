@@ -3,10 +3,22 @@ import { watch } from 'vue'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '@/app/editor/session'
+import {
+  liveInspectorActiveFrameId,
+  liveInspectorDocument,
+  liveInspectorSelectedId,
+  liveInspectorSelectedRect,
+  liveInspectorSelectionEpoch
+} from '@/app/smylr-live-inspector/session'
 
-import { changesForNarratedTraceNodeUpdate } from './activity'
+import {
+  changesForNarratedTraceNodeUpdate,
+  snapshotNarratedTraceNode,
+  type NarratedTraceNodeSnapshot
+} from './activity'
 import { narratedTraceAnnotationTool } from './annotation'
 import { isNarratedTraceCanvasInkNode } from './canvas-ink'
+import { narratedTraceTargetForLiveInspectorSelection } from './live-inspector-target'
 import { narratedTraceScopeForStore } from './scope'
 import {
   appendNarratedTraceEvent,
@@ -36,7 +48,6 @@ type PendingTargetActivity = {
 type PendingCreation = {
   intentConfirmed: boolean
   scope: NarratedTraceScope
-  timer: ReturnType<typeof setTimeout>
 }
 
 const ACTIVITY_SESSION_IDLE_MS = 900
@@ -44,26 +55,32 @@ const COMPLETED_EDIT_IDLE_MS = 650
 const SELECTION_COALESCE_MS = 1200
 
 let stops: StopBinding[] = []
-let nodeSnapshots = new Map<string, SceneNode>()
+let nodeSnapshots = new Map<string, NarratedTraceNodeSnapshot>()
 let pendingNodeActivities = new Map<string, PendingTargetActivity>()
 let pendingCreations = new Map<string, PendingCreation>()
+let creationFlushTimer: ReturnType<typeof setTimeout> | null = null
 let ownedActivitySessionId: string | null = null
 let activitySessionTimer: ReturnType<typeof setTimeout> | null = null
 let lastSelectionKey = ''
 let lastSelectionAt = 0
 let lastSelectedNodeIds = new Set<string>()
 
-function snapshotGraph(editor: EditorStore) {
-  nodeSnapshots = new Map([...editor.graph.nodes].map(([id, node]) => [id, structuredClone(node)]))
+function snapshotSelectedNodes(editor: EditorStore, selectedIds = editor.state.selectedIds) {
+  nodeSnapshots = new Map(
+    [...selectedIds].flatMap((id) => {
+      const node = editor.graph.getNode(id)
+      return node ? [[id, snapshotNarratedTraceNode(node)] as const] : []
+    })
+  )
 }
 
-function routeForNode(node: SceneNode): string | undefined {
+function routeForNode(node: NarratedTraceNodeSnapshot): string | undefined {
   return node.pluginData.find((entry) => entry.key === 'route')?.value
 }
 
-function sceneNodePath(editor: EditorStore, node: SceneNode): string[] {
+function sceneNodePath(editor: EditorStore, node: NarratedTraceNodeSnapshot): string[] {
   const path: string[] = []
-  let current: SceneNode | undefined = node
+  let current: NarratedTraceNodeSnapshot | undefined = node
   let depth = 0
   while (current && depth < 32) {
     path.unshift(current.name || current.type)
@@ -73,7 +90,10 @@ function sceneNodePath(editor: EditorStore, node: SceneNode): string[] {
   return path
 }
 
-function sceneNodeTarget(editor: EditorStore, node: SceneNode): NarratedTraceTarget {
+function sceneNodeTarget(
+  editor: EditorStore,
+  node: NarratedTraceNodeSnapshot
+): NarratedTraceTarget {
   const liveNode = editor.graph.getNode(node.id)
   return {
     bounds: liveNode
@@ -135,7 +155,6 @@ function scheduleActivitySessionFinish() {
 
 function ensureActivitySession(scope: NarratedTraceScope) {
   const currentSession = narratedTraceSession.value
-  if (narratedTraceStatus.value === 'paused') return false
   if (narratedTraceStatus.value === 'recording') {
     if (ownedActivitySessionId && currentSession?.id === ownedActivitySessionId) {
       if (sameScope(currentSession.scope, scope)) return true
@@ -203,29 +222,35 @@ function queueNodeActivity(
   })
 }
 
-function flushCreation(editor: EditorStore, nodeId: string) {
-  const pending = pendingCreations.get(nodeId)
-  if (!pending) return
-  pendingCreations.delete(nodeId)
-  const node = editor.graph.getNode(nodeId)
-  if (!pending.intentConfirmed || !node || isNarratedTraceCanvasInkNode(node)) return
-  const target = sceneNodeTarget(editor, node)
-  recordActivity(pending.scope, {
-    kind: 'shape',
-    label: `Created ${target.name}`,
-    target
-  })
+function flushCreations(editor: EditorStore) {
+  creationFlushTimer = null
+  const creations = pendingCreations
+  pendingCreations = new Map()
+  for (const [nodeId, pending] of creations) {
+    const node = editor.graph.getNode(nodeId)
+    if (!pending.intentConfirmed || !node || isNarratedTraceCanvasInkNode(node)) continue
+    const target = sceneNodeTarget(editor, node)
+    recordActivity(pending.scope, {
+      kind: 'shape',
+      label: `Created ${target.name}`,
+      target
+    })
+  }
+}
+
+function scheduleCreationFlush(editor: EditorStore) {
+  if (creationFlushTimer) return
+  creationFlushTimer = setTimeout(() => flushCreations(editor), COMPLETED_EDIT_IDLE_MS)
 }
 
 function queueCreation(editor: EditorStore, node: SceneNode) {
   if (editor.state.loading || isNarratedTraceCanvasInkNode(node)) return
   const existing = pendingCreations.get(node.id)
-  if (existing) clearTimeout(existing.timer)
   pendingCreations.set(node.id, {
     intentConfirmed: existing?.intentConfirmed ?? editor.state.selectedIds.has(node.id),
-    scope: narratedTraceScopeForStore(editor),
-    timer: setTimeout(() => flushCreation(editor, node.id), COMPLETED_EDIT_IDLE_MS)
+    scope: existing?.scope ?? narratedTraceScopeForStore(editor)
   })
+  scheduleCreationFlush(editor)
 }
 
 function recordSelection(editor: EditorStore, target: NarratedTraceTarget) {
@@ -235,6 +260,7 @@ function recordSelection(editor: EditorStore, target: NarratedTraceTarget) {
     scope.documentId,
     scope.pageId,
     target.frameId ?? '',
+    target.route ?? '',
     target.stableId
   ].join(':')
   const now = Date.now()
@@ -258,6 +284,7 @@ function bindEditorEvents(editor: EditorStore) {
   stops.push(
     editor.onEditorEvent('selection:changed', (selectedIds) => {
       lastSelectedNodeIds = new Set(selectedIds)
+      snapshotSelectedNodes(editor, lastSelectedNodeIds)
       for (const selectedId of selectedIds) {
         const pendingCreation = pendingCreations.get(selectedId)
         if (pendingCreation) pendingCreation.intentConfirmed = true
@@ -268,24 +295,20 @@ function bindEditorEvents(editor: EditorStore) {
       recordSelection(editor, sceneNodeTarget(editor, node))
     }),
     editor.onEditorEvent('node:created', (node) => {
-      nodeSnapshots.set(node.id, structuredClone(node))
       queueCreation(editor, node)
     }),
     editor.onEditorEvent('node:updated', (id, changes) => {
-      const previous = nodeSnapshots.get(id)
+      const selected = lastSelectedNodeIds.has(id)
+      const previous = selected ? nodeSnapshots.get(id) : undefined
       const current = editor.graph.getNode(id)
-      if (current) nodeSnapshots.set(id, structuredClone(current))
+      if (current && selected) nodeSnapshots.set(id, snapshotNarratedTraceNode(current))
       if (!current || editor.state.loading) return
       const pendingCreation = pendingCreations.get(id)
       if (pendingCreation) {
-        clearTimeout(pendingCreation.timer)
-        pendingCreations.set(id, {
-          ...pendingCreation,
-          timer: setTimeout(() => flushCreation(editor, id), COMPLETED_EDIT_IDLE_MS)
-        })
+        scheduleCreationFlush(editor)
         return
       }
-      if (!lastSelectedNodeIds.has(id)) return
+      if (!selected) return
       queueNodeActivity(editor, current, changesForNarratedTraceNodeUpdate(previous, changes))
     }),
     editor.onEditorEvent('node:deleted', (id) => {
@@ -293,7 +316,6 @@ function bindEditorEvents(editor: EditorStore) {
       nodeSnapshots.delete(id)
       const pendingCreation = pendingCreations.get(id)
       if (pendingCreation) {
-        clearTimeout(pendingCreation.timer)
         pendingCreations.delete(id)
         return
       }
@@ -319,7 +341,7 @@ function bindEditorEvents(editor: EditorStore) {
     editor.onEditorEvent('node:reparented', (nodeId, oldParentId, newParentId) => {
       const node = editor.graph.getNode(nodeId)
       if (!node || editor.state.loading || !lastSelectedNodeIds.has(nodeId)) return
-      nodeSnapshots.set(nodeId, structuredClone(node))
+      nodeSnapshots.set(nodeId, snapshotNarratedTraceNode(node))
       queueNodeActivity(editor, node, [
         { after: newParentId, before: oldParentId ?? undefined, property: 'parentId' }
       ])
@@ -334,17 +356,19 @@ function bindEditorEvents(editor: EditorStore) {
     }),
     editor.onEditorEvent('graph:replaced', () => {
       for (const pending of pendingNodeActivities.values()) clearTimeout(pending.timer)
-      for (const pending of pendingCreations.values()) clearTimeout(pending.timer)
+      if (creationFlushTimer) clearTimeout(creationFlushTimer)
+      creationFlushTimer = null
       pendingNodeActivities = new Map()
       pendingCreations = new Map()
-      snapshotGraph(editor)
+      snapshotSelectedNodes(editor)
     })
   )
 }
 
 function clearPendingActivities() {
   for (const pending of pendingNodeActivities.values()) clearTimeout(pending.timer)
-  for (const pending of pendingCreations.values()) clearTimeout(pending.timer)
+  if (creationFlushTimer) clearTimeout(creationFlushTimer)
+  creationFlushTimer = null
   pendingNodeActivities = new Map()
   pendingCreations = new Map()
 }
@@ -354,7 +378,7 @@ export function bindNarratedTraceEditor(editor: EditorStore) {
   stops = []
   finishOwnedActivitySession()
   clearPendingActivities()
-  snapshotGraph(editor)
+  snapshotSelectedNodes(editor)
   lastSelectionKey = ''
   lastSelectionAt = 0
   lastSelectedNodeIds = new Set(editor.state.selectedIds)
@@ -368,6 +392,25 @@ export function bindNarratedTraceEditor(editor: EditorStore) {
         kind: 'tool',
         label: `Activated Trace ${tool === 'ink' ? 'Ink' : 'Focus'}`
       })
+    }),
+    watch(liveInspectorSelectionEpoch, () => {
+      if (editor.state.loading) return
+      const frameId = liveInspectorActiveFrameId.value
+      const document = liveInspectorDocument.value
+      const selectedId = liveInspectorSelectedId.value
+      const selectedRect = liveInspectorSelectedRect.value
+      const frame = frameId ? editor.graph.getNode(frameId) : undefined
+      if (!frameId || !document || !selectedId || !selectedRect || !frame) return
+
+      const target = narratedTraceTargetForLiveInspectorSelection({
+        document,
+        frameBounds: editor.graph.getAbsoluteBounds(frameId),
+        frameId,
+        framePath: sceneNodePath(editor, frame),
+        selectedId,
+        selectedRect
+      })
+      if (target) recordSelection(editor, target)
     })
   )
 }

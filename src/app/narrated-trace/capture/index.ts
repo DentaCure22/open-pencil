@@ -1,3 +1,4 @@
+import { rectIntersectionRatio, rectsIntersect } from '@open-pencil/scene-graph/geometry'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -51,15 +52,6 @@ function blobImageUrl(blob: Blob) {
   return URL.createObjectURL(blob)
 }
 
-function intersects(first: Rect, second: Rect) {
-  return (
-    first.x < second.x + second.width &&
-    first.x + first.width > second.x &&
-    first.y < second.y + second.height &&
-    first.y + first.height > second.y
-  )
-}
-
 function regionForElement(element: Element, areaRect: DOMRect): Rect {
   const rect = element.getBoundingClientRect()
   return {
@@ -79,22 +71,7 @@ function sourceMatchesTarget(
   const ownerFrameId = source.closest<HTMLElement>('[data-code-object-id]')?.dataset.codeObjectId
   if (ownerFrameId === target.frameId) return true
   if (!(source instanceof HTMLImageElement) || !target.bounds) return false
-  const overlapWidth = Math.max(
-    0,
-    Math.min(sourceRegion.x + sourceRegion.width, target.bounds.x + target.bounds.width) -
-      Math.max(sourceRegion.x, target.bounds.x)
-  )
-  const overlapHeight = Math.max(
-    0,
-    Math.min(sourceRegion.y + sourceRegion.height, target.bounds.y + target.bounds.height) -
-      Math.max(sourceRegion.y, target.bounds.y)
-  )
-  const overlapArea = overlapWidth * overlapHeight
-  const smallerArea = Math.min(
-    sourceRegion.width * sourceRegion.height,
-    target.bounds.width * target.bounds.height
-  )
-  return smallerArea > 0 && overlapArea / smallerArea >= 0.8
+  return rectIntersectionRatio(sourceRegion, target.bounds) >= 0.8
 }
 
 function defaultOmissions(area: HTMLElement, areaRect: DOMRect) {
@@ -109,7 +86,7 @@ function defaultOmissions(area: HTMLElement, areaRect: DOMRect) {
 function omissionsForCapture(area: HTMLElement, areaRect: DOMRect, cropBounds: Rect) {
   const supplied = captureOmissionProvider?.(area) ?? []
   return [...defaultOmissions(area, areaRect), ...supplied].filter((omission) =>
-    intersects(omission.bounds, cropBounds)
+    rectsIntersect(omission.bounds, cropBounds)
   )
 }
 
@@ -164,7 +141,7 @@ function drawRasterSources(
       continue
     }
     const sourceRegion = regionForElement(source, areaRect)
-    if (!intersects(sourceRegion, cropBounds)) continue
+    if (!rectsIntersect(sourceRegion, cropBounds)) continue
     const intersection: Rect = {
       height: Math.max(
         0,
@@ -255,7 +232,7 @@ function drawEvidenceAnnotation(
   cropBounds: Rect,
   scale: number
 ) {
-  if (annotation.points.length === 0 || !intersects(annotation.bounds, cropBounds)) return false
+  if (annotation.points.length === 0 || !rectsIntersect(annotation.bounds, cropBounds)) return false
   context.save()
   context.strokeStyle = annotation.color
   context.lineWidth = Math.max(1, annotation.strokeWidth * scale)

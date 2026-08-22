@@ -1,3 +1,4 @@
+import { IS_BROWSER } from '@open-pencil/core/constants'
 /**
  * Brand Guidelines board — from real Smylr brand sources:
  *   public/brand/* (icon, wordmark, lockup light/dark)
@@ -367,7 +368,7 @@ export function createSmylrBrandDesignPage(graph: SceneGraph, pageNode: SceneNod
 
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
-    if (typeof window !== 'undefined') {
+    if (IS_BROWSER) {
       window.dispatchEvent(new CustomEvent('smylr-foundations-hmr', { detail: 'brand' }))
     }
   })

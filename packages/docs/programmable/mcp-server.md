@@ -161,14 +161,13 @@ persisted Board work, agents use the public Board CLI facade:
           "placement": { "target": { "kind": "auto" } }
         }
       }
-    ],
-    "connections": []
+    ]
   }
 }
 ```
 
-The plan may combine native artifacts, Mermaid, Code Objects, semantic composition, object
-operations, and meaningful Object Graph connections in one atomic transaction. Use
+The plan may combine native artifacts, Mermaid, Code Objects, semantic composition, and object
+operations in one atomic transaction. Use
 `--request-file` only when the complete request is too large for practical shell quoting.
 
 Runtime IDs, context tokens, expected revisions, fresh-context handshakes, fingerprints, retries,
@@ -181,18 +180,16 @@ Trace remains optional read-only context. Local coding agents normally read the 
 `--gesture-id` to a build command. Use `board present` only when the user asks to reveal the saved
 result in a connected editor; it is not required for persistence.
 
-### Standalone file and primitive editing
+### Primitive editing
 
-Use the lower-level MCP tools when the user explicitly asks to inspect or edit a standalone `.fig`
-file, or when working below the persisted Board workflow:
+Use the lower-level MCP tools when working below the persisted Board workflow:
 
 1. **Discover targets** — call `list_documents`.
-2. **Open** — use `open_file` or `new_document` for the explicit standalone file workflow.
-3. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`.
-4. **Create** — `create_shape`, `render` (JSX).
-5. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`.
-6. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`.
-7. **Save** — `save_file` to write back to `.fig`.
+2. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`.
+3. **Create** — `create_shape`, `render` (JSX).
+4. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`.
+5. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`.
+6. **Export** — use the format-specific export tools when a file is required.
 
 These tools are not a substitute for the public Board facade. Normal persisted Board changes belong
 in one `board-build-request/v1`; OpenPencil prepares and validates authority internally.
@@ -201,7 +198,7 @@ in one `board-build-request/v1`; OpenPencil prepares and validates authority int
 
 For Product Maps, technical flows, journeys, and state diagrams, include a `native_diagram`
 artifact with complete Mermaid source inside the request's `board-build-plan/v1`. OpenPencil
-handles placement, native node generation, connections, persistence, and Undo as part of the same
+handles placement, native node generation, persistence, and Undo as part of the same
 `board build`.
 
 Use an optional semantic placement hint only when the user asks for a relationship such as “below
@@ -220,7 +217,7 @@ are defense in depth, not confinement. Run only source authored for the user's r
 untrusted content belongs behind the product's sandboxed embed boundary.
 
 Refinement should target the exact existing owner in the plan so OpenPencil can preserve identity,
-state, geometry, metadata, and Object Graph connections. Runtime selection, current source and
+state, geometry, and metadata. Runtime selection, current source and
 revision checks, persistence, and replay remain internal to the Board builder.
 
 ## AI Agent Skill
@@ -233,15 +230,14 @@ npx skills add open-pencil/skills@open-pencil
 
 Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [skills](https://skills.sh). The skill covers the CLI, MCP tools, JSX rendering, eval, and the running app's automation bridge.
 
-## Tools (91)
+## Tools
+
+The running server reports the authoritative catalog for its version. The main groups include:
 
 ### Document
 
 | Tool             | Description                                  |
 | ---------------- | -------------------------------------------- |
-| `open_file`      | Open a `.fig` file for editing               |
-| `save_file`      | Save the current document to a `.fig` file   |
-| `new_document`   | Create a new empty document                  |
 | `list_documents` | List open app documents/tabs and their pages |
 
 ### Read
@@ -264,7 +260,6 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [sk
 | `node_children`      | Get direct children of a node                                                          |
 | `node_tree`          | Get the subtree rooted at a node                                                       |
 | `node_bindings`      | Get variable bindings on a node                                                        |
-| `get_mermaid_source` | Read retained Mermaid source, stable frame identity, bounds, and reconciliation status |
 
 ### Create
 
@@ -278,7 +273,6 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [sk
 | `create_component`       | Convert a frame/group into a component                                                         |
 | `create_instance`        | Create an instance of a component                                                              |
 | `node_to_component`      | Convert an existing node into a component in-place                                             |
-| `insert_mermaid_diagram` | Create or update one source-retaining Mermaid SVG frame on an ordinary Board                   |
 
 ### Modify
 

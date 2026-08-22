@@ -75,10 +75,10 @@ describe('OpenPencil automation mutation queue', () => {
     expect(store.graph.getNode(node.id)?.fills).not.toEqual(originalFills)
     expect(store.graph.getNode(node.id)?.strokes).not.toEqual(originalStrokes)
 
-    expect(store.undo.undo()).toBe('MCP: set_stroke')
+    expect(store.undo.undo()).toBe('Agent: set_stroke')
     expect(store.graph.getNode(node.id)?.fills).not.toEqual(originalFills)
     expect(store.graph.getNode(node.id)?.strokes).toEqual(originalStrokes)
-    expect(store.undo.undo()).toBe('MCP: set_fill')
+    expect(store.undo.undo()).toBe('Agent: set_fill')
     expect(store.graph.getNode(node.id)?.fills).toEqual(originalFills)
   })
 
