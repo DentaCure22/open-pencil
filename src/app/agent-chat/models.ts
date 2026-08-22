@@ -27,6 +27,15 @@ export type AgentModelSelection = {
   model: string
 }
 
+export type AgentPromptAnnotation = {
+  comment: string
+  endOffset: number
+  id: string
+  quote: string
+  sourceMessageId: string
+  startOffset: number
+}
+
 const REASONING_EFFORTS = new Set<AgentReasoningEffort>([
   'low',
   'medium',
@@ -251,6 +260,7 @@ function sanitizeConversationModels(models: readonly AgentModelDefinition[]) {
 }
 
 export type AgentPromptSubmission = AgentModelSelection & {
+  annotations: AgentPromptAnnotation[]
   attachments: File[]
 }
 

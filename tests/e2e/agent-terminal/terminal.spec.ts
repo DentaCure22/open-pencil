@@ -1,7 +1,42 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
 import { setLocalStorageItem } from '#tests/helpers/storage'
+
+async function dragSelectText(page: Page, target: Locator) {
+  const points = await target.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    let node = walker.nextNode()
+    while (node) {
+      const textNode = node as Text
+      if (textNode.data.trim()) nodes.push(textNode)
+      node = walker.nextNode()
+    }
+    const first = nodes.at(0)
+    const last = nodes.at(-1)
+    if (!first || !last) throw new Error('Selection target has no text nodes')
+    const firstRange = document.createRange()
+    firstRange.setStart(first, 0)
+    firstRange.setEnd(first, Math.min(1, first.length))
+    const lastVisibleOffset = last.data.trimEnd().length
+    const lastRange = document.createRange()
+    lastRange.setStart(last, Math.max(0, lastVisibleOffset - 1))
+    lastRange.setEnd(last, lastVisibleOffset)
+    const firstRect = firstRange.getBoundingClientRect()
+    const lastRect = lastRange.getBoundingClientRect()
+    return {
+      end: { x: firstRect.left + 1, y: firstRect.top + firstRect.height / 2 },
+      start: { x: lastRect.right - 1, y: lastRect.top + lastRect.height / 2 }
+    }
+  })
+  await page.mouse.move(points.start.x, points.start.y)
+  await page.mouse.down()
+  await page.mouse.move(points.end.x, points.end.y, { steps: 12 })
+  const selectedBeforePointerUp = await page.evaluate(() => window.getSelection()?.toString() ?? '')
+  await page.mouse.up()
+  return selectedBeforePointerUp
+}
 
 function taskThread() {
   return {
@@ -142,8 +177,23 @@ test('keeps one normal mounted chat through design and interaction modes', async
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height - 36)
 
   await expect(host).toHaveAttribute('data-code-object-mode', 'interact')
+  await expect(host).toHaveCSS('pointer-events', 'auto')
   await expect(surface).toHaveAttribute('data-residency-probe', 'surface')
   await expect(composer).toBeFocused()
+  const selectableMessage = surface
+    .getByTestId('ai-message')
+    .filter({ hasText: 'Scrollable Board conversation message 28.' })
+  await selectableMessage.scrollIntoViewIfNeeded()
+  const selectedBeforePointerUp = await dragSelectText(page, selectableMessage)
+  expect(selectedBeforePointerUp).toContain('Scrollable Board conversation message 28')
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
+    .toContain('Scrollable Board conversation message 28')
+  await expect(page.getByTestId('ai-selection-actions')).toBeVisible()
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await page.keyboard.press('x')
+  await expect(composer).toHaveValue('x')
+  await composer.fill('')
   await activity.getByTestId('ai-turn-duration').click()
   const reasoning = activity.getByTestId('ai-reasoning')
   await reasoning.getByTestId('ai-reasoning-toggle').click()

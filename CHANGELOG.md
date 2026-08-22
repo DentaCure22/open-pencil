@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Turn selected agent transcript text into anchored annotations without copying
+  it into the draft. Sidebar and Board chats keep compact numbered markers,
+  reopenable comments, optional speech dictation, retry state, and submit the
+  quoted context only with the dispatched prompt.
 - Make agent chat text natively selectable and offer a compact selection action
   for copying or quoting an excerpt into the current composer. The shared model
   picker now shows live provider subscription capacity when Pi exposes it, and

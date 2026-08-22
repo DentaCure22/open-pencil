@@ -282,32 +282,6 @@ test('shows Pi context remaining and measured stream throughput', async ({ page 
   ).toBe(true)
 })
 
-test('selects transcript text and quotes it into the composer', async ({ page }) => {
-  const workers = [worker(0)]
-  await mockThreads(page, workers)
-  await page.goto('/?test&no-rulers')
-  await new CanvasHelper(page).waitForInit()
-  await page.getByTestId('left-panel-chats-tab').click()
-  await page.getByTestId('agent-thread-selector').getByText('Human task title 0').click()
-
-  const conversation = page.getByTestId('agent-selected-conversation')
-  const message = conversation.getByTestId('ai-message').filter({ hasText: 'message 24' })
-  await expect(message).toHaveCSS('user-select', 'text')
-  await message.locator('p').selectText()
-  await expect
-    .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
-    .toBe('Task 0 conversation message 24')
-  await message.dispatchEvent('pointerup')
-
-  const actions = page.getByTestId('ai-selection-actions')
-  await expect(actions).toBeVisible()
-  await expect(actions).toHaveScreenshot('agent-selection-actions.png')
-  await actions.getByRole('button', { name: 'Add to chat' }).click()
-  await expect(conversation.getByRole('textbox', { name: 'Follow up' })).toHaveValue(
-    '> Task 0 conversation message 24\n\n'
-  )
-})
-
 test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page }) => {
   let lifecycle: 'complete' | 'streaming' = 'streaming'
   let followUpAttempts = 0

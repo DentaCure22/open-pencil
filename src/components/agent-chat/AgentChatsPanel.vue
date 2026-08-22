@@ -9,6 +9,7 @@ import {
   agentConversationScope,
   conversationSelection,
   seedConversationModel,
+  type AgentPromptAnnotation,
   type AgentPromptSubmission
 } from '@/app/agent-chat/models'
 import {
@@ -32,9 +33,11 @@ const selectedId = ref<string | null>(null)
 const creating = ref(false)
 const pendingThreadId = ref<string | null>(null)
 const followUp = ref('')
+const annotations = ref<AgentPromptAnnotation[]>([])
 const submitting = ref(false)
 const error = ref('')
 const lastFollowUp = ref('')
+const lastAnnotations = ref<AgentPromptAnnotation[]>([])
 const panel = ref<HTMLElement | null>(null)
 const view = ref<'conversation' | 'list'>('list')
 const transcriptScrollTop = new Map<string, number>()
@@ -154,6 +157,7 @@ async function restoreTranscriptScroll(id: string) {
 }
 
 async function selectThread(thread: AgentConversationThread) {
+  if (selectedId.value !== thread.id) annotations.value = []
   creating.value = false
   pendingThreadId.value = null
   selectedId.value = thread.id
@@ -181,6 +185,7 @@ async function startNewConversation() {
   selectedId.value = null
   view.value = 'conversation'
   followUp.value = ''
+  annotations.value = []
   error.value = ''
   search.value = ''
   await nextTick()
@@ -258,15 +263,23 @@ watch(
 async function submitFollowUp(
   submission: AgentPromptSubmission = {
     ...conversationSelection(selectedModelScope.value),
+    annotations: annotations.value,
     attachments: []
   }
 ) {
   const thread = selectedThread.value
   const message = followUp.value.trim()
-  if ((!creating.value && !thread?.nativeThreadId) || !message || submitting.value) return
+  if (
+    (!creating.value && !thread?.nativeThreadId) ||
+    (!message && !submission.annotations.length) ||
+    submitting.value
+  ) {
+    return
+  }
   error.value = ''
   submitting.value = true
   lastFollowUp.value = message
+  lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
   try {
     const receipt = await submitAgentConversation({
       nativeThreadId: thread?.nativeThreadId ?? null,
@@ -277,6 +290,7 @@ async function submitFollowUp(
       threadId: conversationThreadId.value
     })
     followUp.value = ''
+    annotations.value = []
     if (creating.value) {
       pendingThreadId.value = `agent:${receipt.threadId}`
       await refresh(true)
@@ -289,10 +303,15 @@ async function submitFollowUp(
 }
 
 async function retryFollowUp() {
-  if (!lastFollowUp.value) return
+  if (!lastFollowUp.value && !lastAnnotations.value.length) return
   followUp.value = lastFollowUp.value
+  annotations.value = lastAnnotations.value.map((annotation) => ({ ...annotation }))
   error.value = ''
-  await submitFollowUp()
+  await submitFollowUp({
+    ...conversationSelection(selectedModelScope.value),
+    annotations: annotations.value,
+    attachments: []
+  })
 }
 
 async function stopConversation() {
@@ -321,7 +340,7 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
   <section
     ref="panel"
     data-test-id="agent-chats-panel"
-    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain"
+    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain select-text"
     @keydown="containScrollKey"
     @touchstart.stop
     @touchmove.stop
@@ -432,7 +451,8 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
         <template v-if="selectedThread || creating">
           <AiConversationSurface
             v-model="followUp"
-            :can-retry="Boolean(error && lastFollowUp)"
+            v-model:annotations="annotations"
+            :can-retry="Boolean(error && (lastFollowUp || lastAnnotations.length))"
             :can-stop="canStopSelected"
             :context-usage="selectedThread?.contextUsage"
             :disabled="!creating && !selectedThread?.nativeThreadId"

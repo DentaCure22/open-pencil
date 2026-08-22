@@ -1,5 +1,6 @@
 import { toast } from '@/app/shell/ui'
 
+import { promptWithAnnotations } from './annotations'
 import {
   dispatchAgentPrompt,
   followUpAgentConversation,
@@ -56,10 +57,11 @@ export async function submitAgentConversation(input: {
   steer?: boolean
   threadId: string
 }): Promise<{ jobId: string; threadId: string }> {
-  const requestId = beginOptimisticConversation(input.threadId, input.prompt)
+  const annotatedPrompt = promptWithAnnotations(input.prompt, input.selection.annotations)
+  const requestId = beginOptimisticConversation(input.threadId, annotatedPrompt)
   try {
     const prompt = promptWithAttachments(
-      input.prompt,
+      annotatedPrompt,
       await uploadAgentAttachments(input.selection.attachments)
     )
     if (!input.nativeThreadId) {

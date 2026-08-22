@@ -62,6 +62,7 @@ async function copyMessage() {
   <article
     v-if="hasContent"
     data-test-id="ai-message"
+    :data-message-id="message.id"
     :data-role="message.role"
     class="flex w-full gap-2 font-sans text-[14px] font-normal leading-[1.58] tracking-normal select-text"
     :class="message.role === 'user' ? 'justify-end' : 'justify-start'"

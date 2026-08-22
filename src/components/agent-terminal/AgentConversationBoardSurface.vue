@@ -5,7 +5,6 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { stopAgentConversation, submitAgentConversation } from '@/app/agent-chat/actions'
 import {
   applyRoutedComposerKey,
-  isAgentConversationViewport,
   shouldRouteKeyToAgentComposer
 } from '@/app/agent-chat/composer-focus'
 import { useAgentBoardConversation } from '@/app/agent-chat/board-conversation'
@@ -25,6 +24,7 @@ import {
   agentConversationScope,
   conversationSelection,
   seedConversationModel,
+  type AgentPromptAnnotation,
   type AgentPromptSubmission
 } from '@/app/agent-chat/models'
 
@@ -70,9 +70,11 @@ const modelScope = computed(() =>
   })
 )
 const message = ref('')
+const annotations = ref<AgentPromptAnnotation[]>([])
 const sending = ref(false)
 const error = ref('')
 const lastMessage = ref('')
+const lastAnnotations = ref<AgentPromptAnnotation[]>([])
 const surface = ref<HTMLElement | null>(null)
 const isDraft = computed(() => isAgentConversationDraftId(workerConversationId))
 const conversationIdentity = computed(
@@ -130,10 +132,11 @@ const conversationMessages = computed(() =>
 )
 async function send(submission: AgentPromptSubmission) {
   const draft = message.value.trim()
-  if (!canCompose.value || !draft || sending.value) return
+  if (!canCompose.value || (!draft && !submission.annotations.length) || sending.value) return
   error.value = ''
   sending.value = true
   lastMessage.value = draft
+  lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
   try {
     await submitAgentConversation({
       nativeThreadId: thread.value?.nativeThreadId ?? null,
@@ -147,6 +150,7 @@ async function send(submission: AgentPromptSubmission) {
       threadId: conversationIdentity.value
     })
     message.value = ''
+    annotations.value = []
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -154,10 +158,15 @@ async function send(submission: AgentPromptSubmission) {
   }
 }
 async function retry() {
-  if (!lastMessage.value) return
+  if (!lastMessage.value && !lastAnnotations.value.length) return
   message.value = lastMessage.value
+  annotations.value = lastAnnotations.value.map((annotation) => ({ ...annotation }))
   error.value = ''
-  await send({ ...conversationSelection(modelScope.value), attachments: [] })
+  await send({
+    ...conversationSelection(modelScope.value),
+    annotations: annotations.value,
+    attachments: []
+  })
 }
 async function stop() {
   if (!thread.value || !canStop.value) return
@@ -168,11 +177,6 @@ async function stop() {
     error.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
-function keepComposerFocused(event: FocusEvent) {
-  if (!interactionEnabled || !isAgentConversationViewport(event.target)) return
-  surface.value?.querySelector('textarea')?.focus({ preventScroll: true })
-}
-
 useEventListener(
   window,
   'keydown',
@@ -220,11 +224,11 @@ watch(
     data-test-id="agent-chat-board-surface"
     data-agent-kind="task"
     :data-conversation-id="workerConversationId"
-    @focusin="keepComposerFocused"
   >
     <AiConversationSurface
       v-model="message"
-      :can-retry="Boolean(error && lastMessage)"
+      v-model:annotations="annotations"
+      :can-retry="Boolean(error && (lastMessage || lastAnnotations.length))"
       :can-stop="canStop"
       :context-usage="thread?.contextUsage"
       :disabled="!canCompose"

@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import {
   conversationSelection,
   GLOBAL_MODEL_SCOPE,
+  type AgentPromptAnnotation,
   type AgentPromptSubmission
 } from '@/app/agent-chat/models'
 import {
@@ -21,6 +22,7 @@ import type { AiConversationStatus } from './types'
 const {
   canRetry = false,
   canStop = false,
+  annotations = [],
   contextUsage,
   disabled = false,
   label = 'Message input',
@@ -30,6 +32,7 @@ const {
   scope,
   status = 'ready'
 } = defineProps<{
+  annotations?: AgentPromptAnnotation[]
   canRetry?: boolean
   canStop?: boolean
   contextUsage?: AgentConversationContextUsage
@@ -44,6 +47,7 @@ const {
 const modelScope = computed(() => scope || GLOBAL_MODEL_SCOPE)
 
 const emit = defineEmits<{
+  'open-annotation': [id: string]
   retry: []
   send: [submission: AgentPromptSubmission]
   stop: []
@@ -57,11 +61,16 @@ const dictating = computed(() => speechDictationActiveOwner.value === dictationO
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
 const hasDraft = computed(() => Boolean(modelValue.trim()))
-const canSend = computed(() => !disabled && hasDraft.value)
-const showStop = computed(() => !hasDraft.value && busy.value && canStop)
+const hasAnnotations = computed(() => annotations.length > 0)
+const canSend = computed(() => !disabled && (hasDraft.value || hasAnnotations.value))
+const showStop = computed(() => !hasDraft.value && !hasAnnotations.value && busy.value && canStop)
 const showRetry = computed(
   () =>
-    !hasDraft.value && !showStop.value && (status === 'error' || status === 'stopped') && canRetry
+    !hasDraft.value &&
+    !hasAnnotations.value &&
+    !showStop.value &&
+    (status === 'error' || status === 'stopped') &&
+    canRetry
 )
 function keydown(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'd') {
@@ -88,6 +97,7 @@ function submitPrompt() {
   pendingSubmission.value = true
   emit('send', {
     ...conversationSelection(modelScope.value),
+    annotations: annotations.map((annotation) => ({ ...annotation })),
     attachments: [...attachments.value]
   })
 }
@@ -125,9 +135,9 @@ function input(event: Event) {
 }
 
 watch(
-  () => modelValue,
-  async (value) => {
-    if (pendingSubmission.value && !value.trim()) {
+  () => [modelValue, annotations.length] as const,
+  async ([value, annotationCount]) => {
+    if (pendingSubmission.value && !value.trim() && annotationCount === 0) {
       attachments.value = []
       pendingSubmission.value = false
     }
@@ -157,6 +167,19 @@ onBeforeUnmount(() => stopSpeechDictation(dictationOwner))
     @pointerdown="focusComposer"
     @submit.prevent="submitPrompt"
   >
+    <div v-if="annotations.length" class="flex min-w-0 flex-wrap gap-1.5 px-2 pt-2 pb-0.5">
+      <button
+        type="button"
+        data-test-id="ai-prompt-annotation-summary"
+        class="border-chrome-control-border bg-chrome-control flex h-8 max-w-full items-center gap-2 rounded-[10px] border px-2.5 text-[12px] font-medium text-surface shadow-sm hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        @click="$emit('open-annotation', annotations[0]!.id)"
+      >
+        <icon-lucide-message-square-text class="size-3.5 shrink-0 text-muted" />
+        <span class="truncate">
+          {{ annotations.length }} annotation{{ annotations.length === 1 ? '' : 's' }}
+        </span>
+      </button>
+    </div>
     <div
       v-if="attachments.length"
       class="flex min-w-0 flex-wrap items-center gap-1.5 px-2 pt-2 pb-1"
@@ -218,7 +241,7 @@ onBeforeUnmount(() => stopSpeechDictation(dictationOwner))
         <AiModelAndEffortSelect :scope="modelScope" />
       </div>
       <button
-        v-if="hasDraft"
+        v-if="hasDraft || hasAnnotations"
         type="submit"
         data-test-id="ai-prompt-send"
         :aria-label="sendLabel"
