@@ -1363,6 +1363,22 @@ function agentReactShapeDocument(parsed: Record<string, unknown>): ReactShapeDoc
   return null
 }
 
+function trustedSurfaceDocument(parsed: Record<string, unknown>): ReactShapeDocument | null {
+  if (parsed.component !== 'smylr-production-app') return null
+  const label = recordString(parsed, 'label')
+  const route = recordString(parsed, 'route')
+  if (!label || !route) return null
+  const viewportPreset = isRecord(parsed.viewport) ? parsed.viewport.preset : undefined
+  return materializeFrameOwnedFields(parsed, {
+    ...createSmylrProductionAppDocument({
+      label,
+      route,
+      ...(isCodeObjectViewportPresetId(viewportPreset) ? { viewportPreset } : {})
+    }),
+    state: normalizeSmylrProductionAppState()
+  })
+}
+
 function standardReactShapeDocument(
   parsed: Record<string, unknown>,
   state: Record<string, unknown>
@@ -1433,20 +1449,6 @@ function standardReactShapeDocument(
       state: normalizePdfDocumentState(state)
     })
   }
-  if (parsed.component === 'smylr-production-app') {
-    const label = recordString(parsed, 'label')
-    const route = recordString(parsed, 'route')
-    if (!label || !route) return null
-    const viewportPreset = isRecord(parsed.viewport) ? parsed.viewport.preset : undefined
-    return materializeFrameOwnedFields(parsed, {
-      ...createSmylrProductionAppDocument({
-        label,
-        route,
-        ...(isCodeObjectViewportPresetId(viewportPreset) ? { viewportPreset } : {})
-      }),
-      state: normalizeSmylrProductionAppState()
-    })
-  }
   return null
 }
 
@@ -1479,6 +1481,8 @@ export function reactShapeDocument(node: SceneNode | null | undefined): ReactSha
   if (!parsed) return null
   const agent = agentReactShapeDocument(parsed)
   if (agent) return agent
+  const trustedSurface = trustedSurfaceDocument(parsed)
+  if (trustedSurface) return trustedSurface
   const standard = standardReactShapeDocument(parsed, parsed.state)
   if (standard) return standard
   if (parsed.component !== 'smylr-flow-screen') return userCodeRecoveryDocument(parsed)

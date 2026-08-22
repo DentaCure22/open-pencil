@@ -207,6 +207,135 @@ describe('file-native Trace persistence', () => {
     expect((await readdir(root)).some((fileName) => fileName.endsWith('.tmp'))).toBe(false)
   })
 
+  test('evicts the oldest unpinned evidence by capture count and releases task pins', async () => {
+    const root = await temporaryRoot()
+    const store = new LocalWorkspaceTraceFileStore({
+      maxEvidenceBytes: 100,
+      maxEvidenceCount: 2,
+      root
+    })
+
+    await store.writeEvidence({
+      bytes: new Uint8Array([1]),
+      evidenceId: 'evidence:pinned',
+      mimeType: 'image/png'
+    })
+    expect(await store.pinEvidence('evidence:pinned', 'agent-thread:active')).toBe('pinned')
+    await store.writeEvidence({
+      bytes: new Uint8Array([2]),
+      evidenceId: 'evidence:oldest-unpinned',
+      mimeType: 'image/png'
+    })
+    await store.writeEvidence({
+      bytes: new Uint8Array([3]),
+      evidenceId: 'evidence:newest',
+      mimeType: 'image/png'
+    })
+
+    expect(await store.evidenceStatus('evidence:pinned')).toBe('ready')
+    expect(await store.evidenceStatus('evidence:oldest-unpinned')).toBe('evicted')
+    expect(await store.readEvidence('evidence:oldest-unpinned')).toBeNull()
+    expect(
+      await store.evidenceOverview([
+        'evidence:pinned',
+        'evidence:oldest-unpinned',
+        'evidence:newest'
+      ])
+    ).toMatchObject({
+      contract: 'trace-evidence-overview/v1',
+      evidence: {
+        'evidence:newest': { pinned: false, status: 'ready' },
+        'evidence:oldest-unpinned': { pinned: false, status: 'evicted' },
+        'evidence:pinned': { pinned: true, status: 'ready' }
+      },
+      limits: { bytes: 100, count: 2 },
+      usage: {
+        bytes: 2,
+        count: 2,
+        evictableCount: 1,
+        evictedCount: 1,
+        pinnedCount: 1
+      }
+    })
+    expect(await store.releaseEvidencePins('agent-thread:active')).toBe(1)
+
+    await store.writeEvidence({
+      bytes: new Uint8Array([4]),
+      evidenceId: 'evidence:after-release',
+      mimeType: 'image/png'
+    })
+    expect(await store.evidenceStatus('evidence:pinned')).toBe('evicted')
+    expect(await store.evidenceStatus('evidence:newest')).toBe('ready')
+    expect(await store.evidenceStatus('evidence:after-release')).toBe('ready')
+  })
+
+  test('deduplicates identical captures by content hash before applying the byte limit', async () => {
+    const root = await temporaryRoot()
+    const store = new LocalWorkspaceTraceFileStore({
+      maxEvidenceBytes: 4,
+      maxEvidenceCount: 10,
+      root
+    })
+    const duplicateBytes = new Uint8Array([1, 2, 3])
+
+    const first = await store.writeEvidence({
+      bytes: duplicateBytes,
+      evidenceId: 'evidence:duplicate-1',
+      mimeType: 'image/png'
+    })
+    const second = await store.writeEvidence({
+      bytes: duplicateBytes,
+      evidenceId: 'evidence:duplicate-2',
+      mimeType: 'image/png'
+    })
+    expect((await stat(first.path)).ino).toBe((await stat(second.path)).ino)
+    expect(await store.evidenceStatus('evidence:duplicate-1')).toBe('ready')
+    expect(await store.evidenceStatus('evidence:duplicate-2')).toBe('ready')
+    expect((await store.evidenceOverview([])).usage.deduplicatedCount).toBe(1)
+
+    await store.writeEvidence({
+      bytes: new Uint8Array([4, 5, 6]),
+      evidenceId: 'evidence:replacement',
+      mimeType: 'image/png'
+    })
+    expect(await store.evidenceStatus('evidence:duplicate-1')).toBe('evicted')
+    expect(await store.evidenceStatus('evidence:duplicate-2')).toBe('evicted')
+    expect(await store.evidenceStatus('evidence:replacement')).toBe('ready')
+
+    const restarted = new LocalWorkspaceTraceFileStore({
+      maxEvidenceBytes: 4,
+      maxEvidenceCount: 10,
+      root
+    })
+    expect(await restarted.evidenceStatus('evidence:duplicate-1')).toBe('evicted')
+    expect((await restarted.readEvidence('evidence:replacement'))?.bytes).toEqual(
+      new Uint8Array([4, 5, 6])
+    )
+  })
+
+  test('preserves an evicted evidence marker in the direct Trace context', async () => {
+    const root = await temporaryRoot()
+    const store = new LocalWorkspaceTraceFileStore({
+      maxEvidenceBytes: 100,
+      maxEvidenceCount: 1,
+      root
+    })
+    await store.writeEvidence({
+      bytes: new Uint8Array([1]),
+      evidenceId: 'evidence:focus',
+      mimeType: 'image/png'
+    })
+    await store.writeEvidence({
+      bytes: new Uint8Array([2]),
+      evidenceId: 'evidence:newer',
+      mimeType: 'image/png'
+    })
+
+    const context = await store.writeCurrentContext({ gesture: traceGesture() })
+    expect(context.evidence?.status).toBe('evicted')
+    expect(context.evidence?.evidence_id).toBe('evidence:focus')
+  })
+
   test('marks truncated targeting ambiguous without replacing precise IDs with owners', async () => {
     const root = await temporaryRoot()
     const store = new LocalWorkspaceTraceFileStore({ root })

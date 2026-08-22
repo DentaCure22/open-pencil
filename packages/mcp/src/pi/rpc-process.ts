@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { StringDecoder } from 'node:string_decoder'
 
 const COMMAND_TIMEOUT_MS = 15_000
+const FORCE_CLOSE_MS = 1_000
 
 export type PiRpcRecord = Record<string, unknown> & { type: string }
 
@@ -59,6 +60,7 @@ export class PiRpcProcess {
   private readonly decoder = new StringDecoder('utf8')
   private readonly responseWaiters = new Map<string, ResponseWaiter>()
   private closing = false
+  private forceCloseTimer: ReturnType<typeof setTimeout> | null = null
   private pending = ''
   private stderr = ''
 
@@ -77,13 +79,17 @@ export class PiRpcProcess {
     this.child.stderr.on('data', (chunk: Buffer) => {
       this.stderr = `${this.stderr}${chunk.toString()}`.slice(-16_000)
     })
+    this.child.stdin.on('error', (error) => {
+      this.rejectResponseWaiters(error.message || 'Pi RPC stdin failed.')
+    })
+    this.child.on('error', (error) => {
+      this.rejectResponseWaiters(error.message || 'Pi RPC process failed.')
+    })
     this.child.once('exit', (code, signal) => {
+      if (this.forceCloseTimer) clearTimeout(this.forceCloseTimer)
+      this.forceCloseTimer = null
       const detail = this.stderr.trim()
-      for (const waiter of this.responseWaiters.values()) {
-        clearTimeout(waiter.timer)
-        waiter.reject(new Error(detail || 'Pi RPC process exited.'))
-      }
-      this.responseWaiters.clear()
+      this.rejectResponseWaiters(detail || 'Pi RPC process exited.')
       options.onExit(code, signal, detail)
     })
   }
@@ -138,6 +144,10 @@ export class PiRpcProcess {
     if (this.closing) return
     this.closing = true
     this.child.kill('SIGTERM')
+    this.forceCloseTimer = setTimeout(() => {
+      if (this.child.exitCode === null) this.child.kill('SIGKILL')
+    }, FORCE_CLOSE_MS)
+    this.forceCloseTimer.unref()
   }
 
   private consume(chunk: string, flush = false): void {
@@ -153,6 +163,14 @@ export class PiRpcProcess {
     const line = this.pending.replace(/\r$/, '')
     this.pending = ''
     this.consumeLine(line)
+  }
+
+  private rejectResponseWaiters(detail: string): void {
+    for (const waiter of this.responseWaiters.values()) {
+      clearTimeout(waiter.timer)
+      waiter.reject(new Error(detail))
+    }
+    this.responseWaiters.clear()
   }
 
   private consumeLine(line: string): void {

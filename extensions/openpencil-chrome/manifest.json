@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "OpenPencil Select",
+  "version": "0.4.0",
+  "description": "Capture Chrome element sessions with selectors, context screenshots, and optional motion recording for OpenPencil.",
+  "action": {
+    "default_title": "Select for OpenPencil"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:1420/*", "http://127.0.0.1:1420/*"],
+      "js": ["openpencil-bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "host_permissions": ["<all_urls>"],
+  "permissions": ["offscreen", "scripting", "storage", "tabCapture"]
+}

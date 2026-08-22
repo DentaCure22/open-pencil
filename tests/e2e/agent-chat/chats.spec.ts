@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+
 import { expect, test, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
@@ -76,6 +78,31 @@ function worker(index: number) {
   }
 }
 
+function messagesApprovalThread(index: number) {
+  const thread = worker(index)
+  thread.state = 'needs_attention'
+  return {
+    ...thread,
+    messages: [...thread.messages] as object[],
+    pendingUiRequests: [
+      {
+        id: `message-approval-${String(index)}`,
+        method: 'select' as const,
+        options: ['Allow once', 'Allow for session', 'Deny'],
+        requestedAt: '2026-08-22T14:30:00.000Z',
+        title:
+          'MCP: messages__send wants to run send_message\n\nArguments:\n' +
+          JSON.stringify({
+            chat_guid: 'iMessage;-;test-recipient',
+            recipient_label: 'Test Recipient',
+            text: 'Be there in 10 minutes.'
+          })
+      }
+    ],
+    recentUpdate: 'Waiting for your approval.'
+  }
+}
+
 test('keeps one clean task list and preserves a conversation while navigating back', async ({
   page
 }) => {
@@ -130,9 +157,40 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   await expect(conversation.getByTestId('agent-selected-header')).toContainText(
     'Human task title 11'
   )
+  await expect(conversation.getByTestId('agent-selected-header')).toHaveCSS(
+    'border-bottom-width',
+    '0px'
+  )
+  const headerFade = conversation.getByTestId('ai-conversation-header-fade')
+  await expect(headerFade).toBeVisible()
+  const headerFadeBackground = await headerFade.evaluate(
+    (element) => getComputedStyle(element).backgroundImage
+  )
+  expect(headerFadeBackground).toContain('linear-gradient')
   await expect(conversation.getByText('Task 11 conversation message 24')).toBeVisible()
   const composer = conversation.getByRole('textbox', { name: 'Follow up' })
   const viewport = conversation.getByTestId('ai-conversation-viewport')
+  const chapterRail = conversation.getByRole('navigation', { name: 'User messages' })
+  const chapterMarkers = chapterRail.getByTestId('ai-conversation-chapter-marker')
+  await expect(chapterRail).toBeVisible()
+  await expect(chapterMarkers).toHaveCount(12)
+  const viewportBox = expectDefined(await viewport.boundingBox(), 'conversation viewport bounds')
+  const chapterRailBox = expectDefined(await chapterRail.boundingBox(), 'chapter rail bounds')
+  const chapterRailCenter = chapterRailBox.y + chapterRailBox.height / 2
+  const viewportCenter = viewportBox.y + viewportBox.height / 2
+  expect(chapterRailCenter - viewportCenter).toBeGreaterThan(24)
+  expect(chapterRailCenter - viewportCenter).toBeLessThan(40)
+  await chapterMarkers.nth(2).hover()
+  const chapterTooltip = page.getByTestId('ai-conversation-chapter-tooltip')
+  await expect(chapterTooltip).toContainText('Task 11 conversation message 5')
+  await expect(chapterTooltip).toContainText('Task 11 conversation message 6')
+  const hoveredMarkerBox = await chapterMarkers.nth(2).locator('span').nth(1).boundingBox()
+  const distantMarkerBox = await chapterMarkers.nth(8).locator('span').nth(1).boundingBox()
+  expect(hoveredMarkerBox?.width).toBeGreaterThan(
+    (distantMarkerBox?.width ?? Number.POSITIVE_INFINITY) * 2
+  )
+  await chapterMarkers.nth(2).click()
+  await expect(conversation.getByText('Task 11 conversation message 5')).toBeInViewport()
   await composer.fill('Draft preserved while browsing history')
   await viewport.evaluate((element) => {
     element.scrollTop = 120
@@ -171,8 +229,26 @@ test('keeps one clean task list and preserves a conversation while navigating ba
     })
   ).toEqual(cameraBefore)
 
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight
+      )
+    )
+    .toBeGreaterThan(100)
   await composer.fill('Give me a concise status update.')
   await conversation.getByRole('button', { name: 'Send message' }).click()
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight
+      )
+    )
+    .toBeLessThanOrEqual(1)
   await expect
     .poll(() => followUps)
     .toEqual([
@@ -183,12 +259,158 @@ test('keeps one clean task list and preserves a conversation while navigating ba
     ])
 })
 
+test('shows the exact Messages send and waits for the in-chat Send button', async ({ page }) => {
+  const approvalThread = messagesApprovalThread(20)
+  const responses: Array<{ requestId: string; value?: string }> = []
+  await mockThreads(page, [approvalThread])
+  await page.route(
+    /\/agent-router\/v1\/pi\/conversations\/[^/]+\/ui\/[^/]+\/respond$/,
+    async (route) => {
+      const url = new URL(route.request().url())
+      responses.push({
+        requestId: decodeURIComponent(url.pathname.split('/ui/')[1]?.split('/')[0] ?? ''),
+        ...(route.request().postDataJSON() as { value?: string })
+      })
+      approvalThread.pendingUiRequests = []
+      approvalThread.messages.push({
+        completedAt: '2026-08-22T14:30:02.000Z',
+        createdAt: '2026-08-22T14:30:01.000Z',
+        id: 'message-send-tool',
+        parts: [
+          {
+            input: JSON.stringify({
+              chat_guid: 'iMessage;-;test-recipient',
+              recipient_label: 'Test Recipient',
+              text: 'Be there in 10 minutes.'
+            }),
+            name: 'messages__send',
+            output: 'Message sent.',
+            state: 'success',
+            type: 'tool'
+          }
+        ],
+        role: 'assistant',
+        text: ''
+      })
+      await route.fulfill({ body: '{"accepted":true}', contentType: 'application/json' })
+    }
+  )
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 20').click()
+
+  const approval = page.getByTestId('agent-ui-approval')
+  await expect(approval).toContainText('Message Test Recipient')
+  await expect(approval).toContainText('Test Recipient')
+  await expect(approval.getByTestId('agent-message-approval-text')).toHaveText(
+    'Be there in 10 minutes.'
+  )
+  await expect(page.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await expect(page.getByText(/Needs attention/)).toHaveCount(0)
+  await expect
+    .poll(() =>
+      approval.evaluate((element) => ({
+        boxShadow: getComputedStyle(element).boxShadow,
+        height: element.getBoundingClientRect().height
+      }))
+    )
+    .toEqual({ boxShadow: 'none', height: 50 })
+  await expect
+    .poll(() =>
+      approval
+        .getByRole('button', { name: 'Send', exact: true })
+        .evaluate((element) => element.getBoundingClientRect().width)
+    )
+    .toBe(32)
+  expect(responses).toEqual([])
+
+  await approval.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect
+    .poll(() => responses)
+    .toEqual([{ requestId: 'message-approval-20', value: 'Allow once' }])
+  await expect(approval).toHaveAttribute('data-state', 'sent')
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Sent')
+  await expect(page.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await expect
+    .poll(() => approval.evaluate((element) => getComputedStyle(element).boxShadow))
+    .toBe('none')
+})
+
+test('settles a declined Messages approval into the cancelled state', async ({ page }) => {
+  const approvalThread = messagesApprovalThread(21)
+  const responses: Array<{ requestId: string; value?: string }> = []
+  await mockThreads(page, [approvalThread])
+  await page.route(
+    /\/agent-router\/v1\/pi\/conversations\/[^/]+\/ui\/[^/]+\/respond$/,
+    async (route) => {
+      const url = new URL(route.request().url())
+      responses.push({
+        requestId: decodeURIComponent(url.pathname.split('/ui/')[1]?.split('/')[0] ?? ''),
+        ...(route.request().postDataJSON() as { value?: string })
+      })
+      approvalThread.pendingUiRequests = []
+      await route.fulfill({ body: '{"accepted":true}', contentType: 'application/json' })
+    }
+  )
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 21').click()
+
+  const approval = page.getByTestId('agent-ui-approval')
+  await approval.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect.poll(() => responses).toEqual([{ requestId: 'message-approval-21', value: 'Deny' }])
+  await expect(approval).toHaveAttribute('data-state', 'cancelled')
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Cancelled')
+})
+
 test('steers a running task from the live composer instead of queueing a follow-up', async ({
   page
 }) => {
   const steers: string[] = []
   const followUps: string[] = []
-  await mockThreads(page, [worker(0)])
+  const running = worker(0)
+  await mockThreads(page, [
+    {
+      ...running,
+      messages: [
+        {
+          createdAt: running.createdAt,
+          id: 'initial-prompt',
+          role: 'user',
+          text: 'Start the task.'
+        },
+        {
+          createdAt: running.createdAt,
+          id: 'initial-activity',
+          parts: [
+            {
+              state: 'streaming',
+              text: '',
+              type: 'reasoning'
+            },
+            {
+              input: '{"prompt":"A calm abstract dental illustration"}',
+              name: 'ima2-media_generate_image',
+              state: 'running',
+              type: 'tool'
+            }
+          ],
+          role: 'assistant',
+          text: ''
+        },
+        {
+          createdAt: running.createdAt,
+          id: 'first-steer',
+          role: 'user',
+          text: 'Keep the current direction.'
+        }
+      ]
+    }
+  ])
   await page.route(/\/agent-router\/v1\/pi\/conversations\/[^/]+\/steer$/, async (route) => {
     steers.push((route.request().postDataJSON() as { message: string }).message)
     await route.fulfill({
@@ -207,6 +429,14 @@ test('steers a running task from the live composer instead of queueing a follow-
 
   const panel = page.getByTestId('agent-chats-panel')
   await panel.getByTestId('agent-thread-selector').getByText('Human task title 0').click()
+  await expect(panel.getByText('No final response')).toHaveCount(0)
+  const imageGeneration = panel.getByTestId('ai-image-generation')
+  await expect(imageGeneration).toBeVisible()
+  await expect(imageGeneration).toHaveAttribute('data-state', 'running')
+  const imageDuration = imageGeneration.locator('xpath=../..').getByTestId('ai-turn-duration')
+  await expect(imageDuration).toContainText('Creating image for')
+  await expect(imageDuration).not.toContainText('Working')
+  await expect(panel.getByTestId('ai-reasoning')).toHaveCount(0)
   const composer = panel.getByRole('textbox', { name: 'Follow up' })
   await expect(composer).toHaveAttribute('placeholder', 'Add instructions…')
   await expect(panel.getByRole('button', { name: 'Stop response' })).toBeVisible()
@@ -216,10 +446,99 @@ test('steers a running task from the live composer instead of queueing a follow-
   await expect.poll(() => steers).toEqual(['Keep the current work, but make the card smaller.'])
   expect(followUps).toEqual([])
   await expect(composer).toHaveValue('')
+  await expect(panel.getByText('No final response')).toHaveCount(0)
+  await expect(imageGeneration).toBeVisible()
+  await expect(imageGeneration).toHaveAttribute('data-state', 'running')
+})
+
+test('copies user prompts and assistant responses', async ({ page }) => {
+  const thread = {
+    ...worker(1),
+    id: 'copy-thread',
+    messages: [
+      {
+        createdAt: '2026-08-16T12:00:00.000Z',
+        id: 'copy-user',
+        role: 'user',
+        text: 'User prompt to copy.'
+      },
+      {
+        createdAt: '2026-08-16T12:00:01.000Z',
+        id: 'copy-assistant',
+        role: 'assistant',
+        text: 'Assistant response to copy.'
+      }
+    ],
+    task: 'Copy controls'
+  }
+  await mockThreads(page, [thread])
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+
+  const panel = page.getByTestId('agent-chats-panel')
+  await panel.getByTestId('agent-thread-selector').getByText('Copy controls').click()
+  const userMessage = panel.locator('[data-test-id="ai-message"][data-role="user"]')
+  const userCopy = userMessage.getByRole('button', { name: 'Copy prompt' })
+  const userActions = userMessage.getByTestId('ai-message-actions')
+  await expect(userMessage.getByTestId('ai-message-time')).toHaveAttribute(
+    'datetime',
+    '2026-08-16T12:00:00.000Z'
+  )
+  await expect(userMessage.getByTestId('ai-message-time')).toHaveText(/\d{1,2}:\d{2}/)
+  await expect(userActions).toHaveCSS('opacity', '0')
+  const userContentBox = await userMessage.getByTestId('ai-message-content').boundingBox()
+  const userActionsBox = await userActions.boundingBox()
+  expect(userActionsBox?.y).toBeGreaterThanOrEqual(
+    (userContentBox?.y ?? 0) + (userContentBox?.height ?? Number.POSITIVE_INFINITY)
+  )
+  await userMessage.hover()
+  await expect(userActions).toHaveCSS('opacity', '1')
+  await userCopy.click()
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe('User prompt to copy.')
+
+  const assistantMessage = panel.locator('[data-test-id="ai-message"][data-role="assistant"]')
+  const assistantCopy = assistantMessage.getByRole('button', { name: 'Copy message' })
+  const assistantActions = assistantMessage.getByTestId('ai-message-actions')
+  await expect(assistantMessage.getByTestId('ai-message-time')).toHaveAttribute(
+    'datetime',
+    '2026-08-16T12:00:01.000Z'
+  )
+  await expect(assistantMessage.getByTestId('ai-message-time')).toHaveText(/\d{1,2}:\d{2}/)
+  await expect(assistantActions).toHaveCSS('opacity', '0')
+  const assistantContentBox = await assistantMessage.getByTestId('ai-message-content').boundingBox()
+  const assistantActionsBox = await assistantActions.boundingBox()
+  expect(assistantActionsBox?.y).toBeGreaterThanOrEqual(
+    (assistantContentBox?.y ?? 0) + (assistantContentBox?.height ?? Number.POSITIVE_INFINITY)
+  )
+  await assistantMessage.hover()
+  await expect(assistantActions).toHaveCSS('opacity', '1')
+  await assistantCopy.click()
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe('Assistant response to copy.')
 })
 
 test('shows Pi context remaining and measured stream throughput', async ({ page }) => {
-  const workers = [{ ...worker(0), state: 'completed' }]
+  const estimatedWorker = {
+    ...worker(1),
+    contextUsage: { ...worker(1).contextUsage, tokensPerSecondEstimated: true }
+  }
+  const unavailableWorker = {
+    ...worker(2),
+    contextUsage: {
+      autoCompactionEnabled: true,
+      cacheHitPercent: 86,
+      compacting: false,
+      contextWindow: 500_000,
+      percent: 18,
+      tokens: 90_000
+    }
+  }
+  const workers = [{ ...worker(0), state: 'completed' }, estimatedWorker, unavailableWorker]
   await mockThreads(page, workers)
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
@@ -235,11 +554,29 @@ test('shows Pi context remaining and measured stream throughput', async ({ page 
   await expect(page.getByRole('tooltip')).toContainText('Auto-compaction on')
   const ring = contextIndicator.getByTestId('ai-context-ring')
   await expect(ring).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(ring).toHaveCSS('overflow', 'hidden')
+  const progress = contextIndicator.getByTestId('ai-context-progress')
+  await expect(progress).toHaveAttribute('stroke-linecap', 'round')
   expect(
-    await contextIndicator
-      .getByTestId('ai-context-progress')
-      .evaluate((element) => getComputedStyle(element).maskImage)
-  ).not.toBe('none')
+    await progress.evaluate((element) => {
+      const circle = element as SVGCircleElement
+      return circle.r.baseVal.value + Number(circle.getAttribute('stroke-width')) / 2
+    })
+  ).toBeLessThan(6)
+  await expect(ring).toHaveScreenshot('agent-context-ring.png')
+
+  await conversation.getByTestId('agent-thread-back').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 1').click()
+  await expect(contextIndicator.getByTestId('ai-context-throughput')).toHaveText('~25 t/s')
+  await expect(contextIndicator).toHaveAttribute('aria-label', /estimated from streamed text/)
+
+  await conversation.getByTestId('agent-thread-back').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 2').click()
+  await expect(contextIndicator.getByTestId('ai-context-throughput')).toHaveText('— t/s')
+  await expect(contextIndicator).toHaveAttribute('aria-label', /Throughput unavailable/)
+
+  await conversation.getByTestId('agent-thread-back').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 0').click()
   const toolbar = conversation.getByTestId('ai-prompt-toolbar')
   const model = toolbar.getByTestId('agent-model-trigger')
   await expect(model).toContainText('Grok 4.6')
@@ -286,6 +623,9 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   let lifecycle: 'complete' | 'streaming' = 'streaming'
   let followUpAttempts = 0
   let stopAttempts = 0
+  let imageEvidenceBase64 = ''
+  const imageEditHandoffs: Array<{ displayPrompt: string; evidenceId: string; message: string }> =
+    []
   const sentMessages: string[] = []
   const messages = [
     ...Array.from({ length: 18 }, (_, index) => ({
@@ -315,6 +655,18 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
           name: 'verify',
           output: 'Passed',
           state: 'success',
+          type: 'tool'
+        },
+        {
+          images: [
+            {
+              alt: 'Generated enamel illustration',
+              url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><defs><linearGradient id="g"><stop stop-color="%236366f1"/><stop offset="1" stop-color="%2306b6d4"/></linearGradient></defs><rect x="36" y="20" width="248" height="200" rx="52" fill="url(%23g)"/><circle cx="160" cy="120" r="62" fill="white" fill-opacity=".85"/></svg>'
+            }
+          ],
+          input: '{"prompt":"A translucent enamel anatomy illustration"}',
+          name: 'ima2-media_generate_image',
+          state: 'running',
           type: 'tool'
         },
         { error: 'Permission denied', name: 'write_file', state: 'error', type: 'tool' },
@@ -365,8 +717,26 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await page.route(
     'http://127.0.0.1:7602/agent-router/v1/pi/conversations/rich-thread/follow-up',
     async (route) => {
+      const body = route.request().postDataJSON() as {
+        displayPrompt?: string
+        evidenceId?: string
+        message: string
+      }
+      if (body.evidenceId) {
+        imageEditHandoffs.push({
+          displayPrompt: body.displayPrompt ?? '',
+          evidenceId: body.evidenceId,
+          message: body.message
+        })
+        await route.fulfill({
+          body: '{"dispatchedAt":"2026-08-16T00:02:00.000Z","jobId":"job-image-edit","state":"queued","threadId":"rich-thread"}',
+          contentType: 'application/json',
+          status: 202
+        })
+        return
+      }
       followUpAttempts += 1
-      sentMessages.push((route.request().postDataJSON() as { message: string }).message)
+      sentMessages.push(body.message)
       if (followUpAttempts === 1) {
         await route.fulfill({
           body: '{"error":"Temporary agent error"}',
@@ -390,6 +760,11 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
       await route.fulfill({ body: '{"stopped":true}', contentType: 'application/json' })
     }
   )
+  await page.route('http://127.0.0.1:7602/local-workspace/v1/trace/evidence', async (route) => {
+    imageEvidenceBase64 =
+      (route.request().postDataJSON() as { evidenceBase64?: string }).evidenceBase64 ?? ''
+    await route.fulfill({ body: '{"persisted":true}', contentType: 'application/json' })
+  })
 
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
@@ -419,6 +794,16 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   const toolGroup = panel.getByTestId('ai-tool-group')
   await expect(toolGroup).toContainText('Read files, searched, used tools, edited files')
   await expect(panel.getByTestId('ai-tool-call')).toHaveCount(0)
+  const imageGeneration = panel.getByTestId('ai-image-generation')
+  await expect(imageGeneration).toBeVisible()
+  await expect(imageGeneration).toHaveAttribute('data-provider', 'codex')
+  await expect(imageGeneration).toHaveAttribute('data-state', 'running')
+  await expect(imageGeneration).toContainText('Creating image')
+  await expect(imageGeneration).toContainText('A translucent enamel anatomy illustration')
+  const replyBox = await panel.getByText('Structured response', { exact: true }).boundingBox()
+  const imageBox = await imageGeneration.boundingBox()
+  expect(imageBox?.y).toBeGreaterThan(replyBox?.y ?? Number.POSITIVE_INFINITY)
+  await expect(imageGeneration).toHaveScreenshot('agent-image-generation-loading.png')
   await toolGroup.getByTestId('ai-tool-group-toggle').click()
   await expect(panel.getByTestId('ai-tool-call')).toHaveCount(5)
   await expect(panel.getByRole('button', { name: 'Approve' })).toHaveCount(0)
@@ -456,7 +841,7 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   )
   await expect(screenshotTool.getByAltText('Board screenshot')).toBeVisible()
   const failedTool = panel.getByTestId('ai-tool-call').filter({ hasText: 'Edited files' })
-  await failedTool.getByRole('button', { name: 'Show tool output' }).click()
+  await failedTool.getByTestId('ai-tool-disclosure').click()
   await expect(failedTool).toContainText('Permission denied')
   await expect(panel.getByTestId('ai-code-block')).toContainText('const status = "ready"')
   await expect(panel.getByText('agent-notes.txt')).toBeVisible()
@@ -469,6 +854,73 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await expect.poll(() => stopAttempts).toBe(1)
   await expect(panel.getByTestId('ai-conversation-status')).toHaveCount(0)
   await expect(durationDivider).toContainText('Worked for 2m 0s')
+  await expect(imageGeneration).toHaveAttribute('data-state', 'success')
+  await expect(imageGeneration.getByAltText('Generated enamel illustration')).toBeVisible()
+  await expect(imageGeneration).not.toContainText('Image created')
+  await expect(imageGeneration).not.toContainText('Codex Image')
+  const completedImageSize = await imageGeneration.evaluate((element) => {
+    const image = element.querySelector('img')
+    const stage = element.querySelector('button')
+    if (!image || !stage) return null
+    const cardBox = element.getBoundingClientRect()
+    const stageBox = stage.getBoundingClientRect()
+    const imageBox = image.getBoundingClientRect()
+    return {
+      backgroundImage: getComputedStyle(stage).backgroundImage,
+      height: imageBox.height,
+      leftInset: imageBox.left - stageBox.left,
+      objectFit: getComputedStyle(image).objectFit,
+      rightInset: stageBox.right - imageBox.right,
+      widthDifference: Math.abs(cardBox.width - imageBox.width)
+    }
+  })
+  expect(completedImageSize?.height).toBeLessThanOrEqual(340)
+  expect(completedImageSize?.widthDifference).toBeGreaterThanOrEqual(16)
+  expect(completedImageSize?.leftInset).toBeGreaterThanOrEqual(7)
+  expect(completedImageSize?.rightInset).toBeGreaterThanOrEqual(7)
+  expect(completedImageSize?.objectFit).toBe('contain')
+  expect(completedImageSize?.backgroundImage).toContain('linear-gradient')
+  await imageGeneration.getByRole('button', { name: 'Annotate generated image' }).click()
+  const imageEditor = page.getByTestId('context-comment-screenshot-editor')
+  await expect(imageEditor).toBeVisible()
+  await expect(imageEditor.getByAltText('Generated image being annotated')).toBeVisible()
+  await expect(imageEditor.getByTestId('context-comment-resize-capture')).toHaveCount(0)
+  await expect.poll(() => imageEvidenceBase64.length).toBeGreaterThan(0)
+  expect(
+    await page.evaluate(
+      (base64) =>
+        new Promise<number>((resolve, reject) => {
+          const image = new Image()
+          image.onload = () => {
+            const canvas = document.createElement('canvas')
+            canvas.width = image.naturalWidth
+            canvas.height = image.naturalHeight
+            const context = canvas.getContext('2d')
+            if (!context) return reject(new Error('Canvas context unavailable'))
+            context.drawImage(image, 0, 0)
+            resolve(context.getImageData(0, 0, 1, 1).data[3])
+          }
+          image.onerror = () => reject(new Error('Evidence image unavailable'))
+          image.src = `data:image/png;base64,${base64}`
+        }),
+      imageEvidenceBase64
+    )
+  ).toBe(0)
+  await imageEditor
+    .getByTestId('context-comment-capture-image')
+    .click({ position: { x: 160, y: 90 } })
+  await imageEditor.getByRole('textbox', { name: 'Image comment 1' }).fill('Make this edge softer')
+  await imageEditor.getByRole('textbox', { name: 'Additional instructions' }).fill('Keep alpha.')
+  await imageEditor.getByRole('button', { name: 'Send image edit' }).click()
+  await expect(imageEditor).toHaveCount(0)
+  await expect.poll(() => imageEditHandoffs).toHaveLength(1)
+  expect(imageEditHandoffs[0]?.displayPrompt).toContain('Make this edge softer')
+  expect(imageEditHandoffs[0]?.message).toContain('Edit the attached generated image')
+  expect(imageEditHandoffs[0]?.message).toContain(
+    'Preserve its alpha channel and keep the background transparent.'
+  )
+  expect(imageEditHandoffs[0]?.message).toContain('Do not flatten it onto white, black')
+  expect(imageEditHandoffs[0]?.message).toContain('Keep alpha.')
   await expect(panel.getByTestId('ai-reasoning')).toHaveCount(0)
   await durationDivider.click()
   await expect(panel.getByTestId('ai-reasoning')).toHaveAttribute('data-state', 'complete')
@@ -553,4 +1005,101 @@ test('clears an accepted follow-up and exposes Stop while the job runs', async (
   await expect(panel.getByRole('button', { name: 'Stop response' })).toBeVisible()
   releaseJob?.()
   await expect(panel.getByText('Done.')).toBeVisible()
+})
+
+test('shows one video generation card and opens the completed clip in a viewer', async ({
+  page
+}) => {
+  const videoTool: {
+    input: string
+    name: string
+    state: string
+    type: string
+    videos?: Array<{ mimeType: string; name: string; url: string }>
+  } = {
+    input: '{"prompt":"A cinematic paper airplane crossing a studio"}',
+    name: 'ima2-media_generate_video',
+    state: 'running',
+    type: 'tool'
+  }
+  const thread = {
+    canFollowUp: true,
+    createdAt: '2026-08-22T02:00:00.000Z',
+    effort: 'high',
+    id: 'video-thread',
+    messages: [
+      {
+        createdAt: '2026-08-22T02:00:00.000Z',
+        id: 'video-prompt',
+        role: 'user',
+        text: 'Make a short video.'
+      },
+      {
+        createdAt: '2026-08-22T02:00:01.000Z',
+        id: 'video-tool',
+        parts: [{ state: 'streaming', text: '', type: 'reasoning' }, videoTool],
+        role: 'assistant',
+        text: ''
+      }
+    ],
+    model: 'xai-auth/grok-4.6',
+    recentUpdate: 'Generating video',
+    state: 'running',
+    task: 'Video generation',
+    updatedAt: '2026-08-22T02:00:01.000Z',
+    workerId: 'worker-video'
+  }
+  await mockThreads(page, [thread])
+  await page.route(/\/agent-router\/v1\/pi\/media\/.*\.webm$/, (route) =>
+    route.fulfill({
+      contentType: 'video/webm',
+      path: resolve('packages/demos/videos/toolbar.webm')
+    })
+  )
+
+  async function openVideoThread() {
+    await page.goto('/?test&no-rulers')
+    await new CanvasHelper(page).waitForInit()
+    await page.getByTestId('left-panel-chats-tab').click()
+    const panel = page.getByTestId('agent-chats-panel')
+    await panel.getByTestId('agent-thread-selector').getByText('Video generation').click()
+    return panel
+  }
+
+  let panel = await openVideoThread()
+  const runningCard = panel.getByTestId('ai-video-generation')
+  await expect(runningCard).toHaveAttribute('data-state', 'running')
+  await expect(runningCard).toContainText('Creating video…')
+  await expect(panel.getByTestId('ai-turn-duration')).toContainText('Creating video for')
+  await expect(panel.getByTestId('ai-reasoning')).toHaveCount(0)
+
+  thread.state = 'completed'
+  thread.recentUpdate = 'Video generated'
+  thread.updatedAt = '2026-08-22T02:00:05.000Z'
+  videoTool.state = 'success'
+  videoTool.videos = [
+    {
+      mimeType: 'video/webm',
+      name: 'generated.webm',
+      url: '/agent-router/v1/pi/media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webm'
+    }
+  ]
+
+  panel = await openVideoThread()
+  const completedCard = panel.getByTestId('ai-video-generation')
+  await expect(completedCard).toHaveAttribute('data-state', 'success')
+  const inlineVideo = completedCard.locator('video')
+  await expect(inlineVideo).toBeVisible()
+  await expect(inlineVideo).toHaveAttribute('controls', '')
+  await expect.poll(() => inlineVideo.evaluate((element) => element.readyState)).toBeGreaterThan(0)
+  const promptBox = await panel.getByText('Make a short video.').boundingBox()
+  const cardBox = await completedCard.boundingBox()
+  expect(cardBox?.y).toBeGreaterThan(promptBox?.y ?? Number.POSITIVE_INFINITY)
+
+  await completedCard.getByRole('button', { name: 'Open generated video 1 in viewer' }).click()
+  const viewer = page.getByTestId('ai-video-viewer')
+  await expect(viewer).toBeVisible()
+  await expect(viewer.locator('video')).toHaveAttribute('controls', '')
+  await viewer.getByRole('button', { name: 'Close video viewer' }).click()
+  await expect(viewer).toHaveCount(0)
 })

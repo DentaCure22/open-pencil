@@ -8,6 +8,7 @@ import { createHead } from '@unhead/vue/client'
 import { createApp } from 'vue'
 
 import './app.css'
+import { installBrowserElementBridge } from '@/app/browser-inspector/bridge'
 import { preloadFonts } from '@/app/editor/fonts'
 import { IS_TAURI } from '@/constants'
 
@@ -21,6 +22,7 @@ const smylrEmbed = __SMYLR_OPENPENCIL_EMBED__ !== undefined && __SMYLR_OPENPENCI
 preloadFonts()
 const head = createHead()
 createApp(App).use(router).use(head).mount('#app')
+installBrowserElementBridge()
 
 if (smylrEmbed && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   void navigator.serviceWorker.getRegistrations().then((regs) => {

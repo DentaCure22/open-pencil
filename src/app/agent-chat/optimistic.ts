@@ -1,9 +1,11 @@
 import { reactive } from 'vue'
 
-import type { AiMessage } from './types'
+import type { AiMessage, AiMessagePart } from './types'
 
 type OptimisticConversation = {
   error: string
+  parts: AiMessagePart[]
+  previewUrls: string[]
   requestId: string
   response: string
   startedAt: string
@@ -17,10 +19,45 @@ function requestId(): string {
   return crypto.randomUUID()
 }
 
-export function beginOptimisticConversation(threadId: string, text: string): string {
+function releasePreviewUrls(conversation: OptimisticConversation | undefined): void {
+  if (!conversation) return
+  for (const url of conversation.previewUrls) URL.revokeObjectURL(url)
+  conversation.previewUrls = []
+}
+
+function optimisticAttachmentParts(files: File[]): {
+  parts: AiMessagePart[]
+  previewUrls: string[]
+} {
+  const previewUrls: string[] = []
+  const parts = files.map((file): AiMessagePart => {
+    if (file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file)
+      previewUrls.push(url)
+      return { alt: file.name, type: 'image', url }
+    }
+    return {
+      ...(file.type ? { mediaType: file.type } : {}),
+      name: file.name,
+      size: file.size,
+      type: 'attachment'
+    }
+  })
+  return { parts, previewUrls }
+}
+
+export function beginOptimisticConversation(
+  threadId: string,
+  text: string,
+  attachments: File[] = []
+): string {
   const id = requestId()
+  releasePreviewUrls(conversations[threadId])
+  const preview = optimisticAttachmentParts(attachments)
   conversations[threadId] = {
     error: '',
+    parts: preview.parts,
+    previewUrls: preview.previewUrls,
     requestId: id,
     response: '',
     startedAt: new Date().toISOString(),
@@ -66,23 +103,43 @@ function matchesAuthoritativeUser(message: AiMessage, pending: OptimisticConvers
   )
 }
 
+function hasAttachmentParts(message: AiMessage): boolean {
+  return Boolean(message.parts?.some((part) => part.type === 'attachment' || part.type === 'image'))
+}
+
 export function mergeOptimisticMessages(threadId: string, messages: AiMessage[]): AiMessage[] {
   const pending = conversations[threadId]
   if (!pending) return messages
-  const hasUser = messages.some((message) => matchesAuthoritativeUser(message, pending))
+  const authoritativeUser = messages.find((message) => matchesAuthoritativeUser(message, pending))
+  const hasUser = Boolean(authoritativeUser)
+  const hasAuthoritativeAttachments = Boolean(
+    authoritativeUser && hasAttachmentParts(authoritativeUser)
+  )
   const hasResponse = messages.some(
     (message) =>
       message.role === 'assistant' && Date.parse(message.createdAt) >= Date.parse(pending.startedAt)
   )
   if (hasResponse) {
+    releasePreviewUrls(pending)
     Reflect.deleteProperty(conversations, threadId)
     return messages
   }
-  const optimisticMessages: AiMessage[] = [...messages]
+  if (hasAuthoritativeAttachments) releasePreviewUrls(pending)
+  const optimisticMessages: AiMessage[] = messages.map((message) => {
+    if (
+      pending.parts.length &&
+      matchesAuthoritativeUser(message, pending) &&
+      !hasAttachmentParts(message)
+    ) {
+      return { ...message, parts: pending.parts }
+    }
+    return message
+  })
   if (!hasUser) {
     optimisticMessages.push({
       createdAt: pending.startedAt,
       id: `optimistic:${pending.requestId}`,
+      ...(pending.parts.length ? { parts: pending.parts } : {}),
       role: 'user',
       text: pending.text
     })

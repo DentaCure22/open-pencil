@@ -16,6 +16,7 @@ export type LocalWorkspaceTraceEvidenceReference = {
 }
 
 export type LocalWorkspaceTraceImageStatus =
+  | 'evicted'
   | 'included'
   | 'missing'
   | 'not_requested'

@@ -179,6 +179,14 @@ function recordActivity(
   return eventId
 }
 
+export function recordNarratedTraceActivity(
+  scope: NarratedTraceScope,
+  event: NarratedTraceEventInput,
+  options: NarratedTraceAppendOptions = {}
+) {
+  return recordActivity(scope, event, options)
+}
+
 function mergeChanges(existing: Map<string, NarratedTraceChange>, incoming: NarratedTraceChange[]) {
   for (const change of incoming) {
     const previous = existing.get(change.property)

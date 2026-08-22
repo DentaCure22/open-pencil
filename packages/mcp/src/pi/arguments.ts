@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+
 import type { AgentReasoningEffort } from '#mcp/agent-models/catalog'
 
 export type PiLaunchMode = 'fork' | 'new' | 'resume'
@@ -12,6 +14,23 @@ export type PiRpcArgumentsInput = {
 }
 
 const PI_THINKING = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_TOTAL_INPUT_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_INPUT_IMAGES = 10
+
+export type PiPromptInput = {
+  images?: Array<{ data: string; mimeType: string; type: 'image' }>
+  message: string
+}
+
+function imageMimeType(filePath: string): string | null {
+  const extension = /\.([^./]+)$/.exec(filePath)?.[1]?.toLowerCase()
+  if (extension === 'png') return 'image/png'
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg'
+  if (extension === 'webp') return 'image/webp'
+  if (extension === 'gif') return 'image/gif'
+  return null
+}
 
 export function parsePiModelId(modelId: string): { model: string; provider: string } {
   const slash = modelId.indexOf('/')
@@ -51,5 +70,37 @@ export function piRpcArguments(input: PiRpcArgumentsInput): string[] {
 
 export function piPromptWithEvidence(prompt: string, evidencePath?: string): string {
   if (!evidencePath) return prompt
-  return `${prompt}\n\nBoard evidence is attached at ${evidencePath}. Read that file if the task needs what the user pointed at.`
+  return `${prompt}\n\nVisual evidence is attached at ${evidencePath}. Read that image if the task needs what the user pointed at.`
+}
+
+export async function piPromptInputWithEvidence(
+  prompt: string,
+  evidencePath?: string,
+  imagePaths: readonly string[] = []
+): Promise<PiPromptInput> {
+  const message = piPromptWithEvidence(prompt, evidencePath)
+  const paths = [...new Set([...(evidencePath ? [evidencePath] : []), ...imagePaths])].slice(
+    0,
+    MAX_INPUT_IMAGES
+  )
+  const images: NonNullable<PiPromptInput['images']> = []
+  let totalBytes = 0
+  for (const imagePath of paths) {
+    const mimeType = imageMimeType(imagePath)
+    if (!mimeType) continue
+    try {
+      const data = await readFile(imagePath)
+      if (
+        data.byteLength > MAX_INPUT_IMAGE_BYTES ||
+        totalBytes + data.byteLength > MAX_TOTAL_INPUT_IMAGE_BYTES
+      ) {
+        continue
+      }
+      totalBytes += data.byteLength
+      images.push({ data: data.toString('base64'), mimeType, type: 'image' })
+    } catch {
+      continue
+    }
+  }
+  return images.length ? { images, message } : { message }
 }

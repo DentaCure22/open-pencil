@@ -48,14 +48,14 @@ test('Design-mode wheel zoom works over a Code Object', async () => {
     .toBeLessThan(before)
 })
 
-test('floating editor chrome follows light and dark themes', async () => {
-  const chrome = [
-    editor.page.getByTestId('layers-shell-motion'),
-    editor.page.getByTestId('toolbar-motion')
-  ]
+test('floating editor chrome follows themes with a more opaque sidebar', async () => {
+  const sidebar = editor.page.getByTestId('layers-shell-motion')
+  const toolbar = editor.page.getByTestId('toolbar-motion')
   const readChrome = () =>
     Promise.all(
-      chrome.map((element) => element.evaluate((node) => getComputedStyle(node).backgroundColor))
+      [sidebar, toolbar].map((element) =>
+        element.evaluate((node) => getComputedStyle(node).backgroundColor)
+      )
     )
   const utilityTabs = editor.page.getByRole('tablist', { name: 'Sidebar utilities' })
 
@@ -75,9 +75,8 @@ test('floating editor chrome follows light and dark themes', async () => {
     (element) => getComputedStyle(element).backgroundColor
   )
 
-  expect(new Set(lightChrome).size).toBe(1)
-  expect(new Set(darkChrome).size).toBe(1)
-  expect(lightChrome[0]).not.toBe(darkChrome[0])
+  expect(lightChrome).toEqual(['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.9)'])
+  expect(darkChrome).toEqual(['rgba(21, 22, 26, 0.98)', 'rgba(21, 22, 26, 0.96)'])
   expect(lightUtilityTabs).not.toBe(darkUtilityTabs)
   expect(darkUtilityTabs).toBe('rgba(0, 0, 0, 0.3)')
 })

@@ -118,7 +118,7 @@ export const liveInspectorClipboardHtmlByNode = shallowRef<Map<string, string>>(
 export const liveInspectorPreviewMode = ref(false)
 export const liveInspectorActiveFrameId = ref<string | null>(null)
 export const liveInspectorPendingSelectedId = ref<string | null>(null)
-export const liveInspectorReloadTick = ref(0)
+const liveInspectorReloadTicks = shallowRef<Map<string, number>>(new Map())
 export const liveInspectorRoute = ref<string | null>(null)
 export const liveInspectorSelectedId = ref<string | null>(null)
 /** Bumps on every live-container claim so re-selecting the same id reclaims native ownership. */
@@ -1044,16 +1044,25 @@ export function markLiveInspectorFrameUnavailable(src: string) {
 }
 
 const RELOAD_COALESCE_MS = 400
-let lastLiveInspectorReloadAt = 0
+const lastLiveInspectorReloadAtByFrame = new Map<string, number>()
 
-export function reloadLiveInspectorFrame() {
+export function liveInspectorReloadTickFor(frameId: string): number {
+  return liveInspectorReloadTicks.value.get(frameId) ?? 0
+}
+
+export function reloadLiveInspectorFrame(frameId = liveInspectorActiveFrameId.value) {
+  if (!frameId) return false
   const now = Date.now()
-  if (now - lastLiveInspectorReloadAt < RELOAD_COALESCE_MS) return
-  lastLiveInspectorReloadAt = now
+  const previousReloadAt = lastLiveInspectorReloadAtByFrame.get(frameId) ?? 0
+  if (now - previousReloadAt < RELOAD_COALESCE_MS) return false
+  lastLiveInspectorReloadAtByFrame.set(frameId, now)
   clearLiveInspectorDocumentState({ preserveDrafts: true, preserveSelection: true })
   liveInspectorStatus.value = 'loading'
   liveInspectorAuthStatus.value = 'unknown'
-  liveInspectorReloadTick.value += 1
+  const reloadTicks = new Map(liveInspectorReloadTicks.value)
+  reloadTicks.set(frameId, (reloadTicks.get(frameId) ?? 0) + 1)
+  liveInspectorReloadTicks.value = reloadTicks
+  return true
 }
 
 export function setLiveInspectorInteractionMode(mode: LiveInspectorInteractionMode) {

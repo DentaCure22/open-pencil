@@ -60,6 +60,36 @@ export type LocalWorkspaceAuthorityReceipt = {
   workspaceId: string
 }
 
+export type LocalWorkspaceTraceEvidenceOverview = {
+  contract: 'trace-evidence-overview/v1'
+  evidence: Record<
+    string,
+    {
+      pinned: boolean
+      status: 'evicted' | 'missing' | 'ready'
+    }
+  >
+  limits: {
+    bytes: number
+    count: number
+  }
+  usage: {
+    bytes: number
+    count: number
+    deduplicatedCount: number
+    evictableCount: number
+    evictedCount: number
+    pinnedCount: number
+  }
+}
+
+export type LocalWorkspaceTraceActivityPagePayload = {
+  contract: 'trace-activity-page/v1'
+  hasMore: boolean
+  items: unknown[]
+  nextCursor: string | null
+}
+
 export type LocalWorkspaceNavigationRegion = Rect
 
 export type LocalWorkspaceNavigationIntent = {
@@ -111,7 +141,12 @@ type LocalWorkspaceAuthorityChange =
       revision: number
       workspaceId: string
     }
-  | { changed: false; navigationSequence?: number; revision: number; themeSequence?: number }
+  | {
+      changed: false
+      navigationSequence?: number
+      revision: number
+      themeSequence?: number
+    }
 
 export type LocalWorkspaceAuthorityChangeListeners = {
   onHeadCommitted(): void
@@ -695,6 +730,39 @@ export async function readLocalWorkspaceTraceSessionSummaries(): Promise<unknown
   return payload.summaries
 }
 
+export async function readLocalWorkspaceTraceActivityPage(
+  input: {
+    before?: string
+    limit?: number
+  } = {}
+): Promise<LocalWorkspaceTraceActivityPagePayload> {
+  if (!IS_BROWSER) {
+    return {
+      contract: 'trace-activity-page/v1',
+      hasMore: false,
+      items: [],
+      nextCursor: null
+    }
+  }
+  const query = new URLSearchParams()
+  if (input.before) query.set('before', input.before)
+  if (input.limit !== undefined) query.set('limit', String(input.limit))
+  const serializedQuery = query.toString()
+  const payload = await authorityRequest(
+    `/trace/activity${serializedQuery ? `?${serializedQuery}` : ''}`
+  )
+  if (
+    !isRecord(payload) ||
+    payload.contract !== 'trace-activity-page/v1' ||
+    typeof payload.hasMore !== 'boolean' ||
+    !Array.isArray(payload.items) ||
+    (payload.nextCursor !== null && typeof payload.nextCursor !== 'string')
+  ) {
+    throw new TypeError('Local workspace authority returned an invalid Trace activity page')
+  }
+  return payload as LocalWorkspaceTraceActivityPagePayload
+}
+
 export async function readLocalWorkspaceTraceSession(sessionId: string): Promise<unknown> {
   if (!IS_BROWSER) return null
   try {
@@ -732,7 +800,10 @@ export async function persistLocalWorkspaceTraceEvidence(input: {
   sessionId: string
 }): Promise<void> {
   if (!IS_BROWSER) return
-  const payload = await authorityRequest('/trace/evidence', { body: input, method: 'POST' })
+  const payload = await authorityRequest('/trace/evidence', {
+    body: input,
+    method: 'POST'
+  })
   if (!isRecord(payload) || payload.persisted !== true) {
     throw new TypeError('Local workspace authority returned an invalid Trace evidence receipt')
   }
@@ -752,7 +823,10 @@ export async function readLocalWorkspaceTraceEvidence(evidenceId: string): Promi
     ) {
       throw new TypeError('Local workspace authority returned invalid Trace evidence')
     }
-    return { evidenceBase64: payload.evidenceBase64, mimeType: payload.mimeType }
+    return {
+      evidenceBase64: payload.evidenceBase64,
+      mimeType: payload.mimeType
+    }
   } catch (error) {
     if (
       error instanceof LocalWorkspaceAuthorityClientError &&
@@ -762,6 +836,48 @@ export async function readLocalWorkspaceTraceEvidence(evidenceId: string): Promi
     }
     throw error
   }
+}
+
+function isLocalWorkspaceTraceEvidenceOverview(
+  value: unknown
+): value is LocalWorkspaceTraceEvidenceOverview {
+  if (!isRecord(value) || value.contract !== 'trace-evidence-overview/v1') return false
+  const limits = isRecord(value.limits) ? value.limits : null
+  const usage = isRecord(value.usage) ? value.usage : null
+  const evidence = isRecord(value.evidence) ? value.evidence : null
+  return Boolean(
+    limits &&
+    typeof limits.bytes === 'number' &&
+    typeof limits.count === 'number' &&
+    usage &&
+    typeof usage.bytes === 'number' &&
+    typeof usage.count === 'number' &&
+    typeof usage.deduplicatedCount === 'number' &&
+    typeof usage.evictableCount === 'number' &&
+    typeof usage.evictedCount === 'number' &&
+    typeof usage.pinnedCount === 'number' &&
+    evidence &&
+    Object.values(evidence).every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.pinned === 'boolean' &&
+        (entry.status === 'evicted' || entry.status === 'missing' || entry.status === 'ready')
+    )
+  )
+}
+
+export async function readLocalWorkspaceTraceEvidenceOverview(
+  evidenceIds: readonly string[]
+): Promise<LocalWorkspaceTraceEvidenceOverview | null> {
+  if (!IS_BROWSER) return null
+  const payload = await authorityRequest('/trace/evidence-overview', {
+    body: { evidenceIds: [...new Set(evidenceIds)].slice(0, 100) },
+    method: 'POST'
+  })
+  if (!isLocalWorkspaceTraceEvidenceOverview(payload)) {
+    throw new TypeError('Local workspace authority returned an invalid Trace evidence overview')
+  }
+  return payload
 }
 
 export async function initializeLocalWorkspaceAuthority(

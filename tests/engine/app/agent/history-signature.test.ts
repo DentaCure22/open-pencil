@@ -79,4 +79,28 @@ describe('agent history signature', () => {
     expect(signature).not.toBe(agentHistorySignature(previous))
     expect(signature).not.toContain('iVBORw')
   })
+
+  test('changes when a tool receives a video without embedding its URL in the signature', () => {
+    const previous = history('Generating video')
+    const next = structuredClone(previous)
+    const url = '/agent-router/v1/pi/media/1234567890abcdef.webm'
+    next.threads[0]?.messages.push({
+      createdAt: '2026-08-17T12:01:10.000Z',
+      id: 'tool-video',
+      parts: [
+        {
+          name: 'ima2-media_generate_video',
+          state: 'success',
+          type: 'tool',
+          videos: [{ mimeType: 'video/webm', name: 'generated.webm', url }]
+        }
+      ],
+      role: 'assistant',
+      text: ''
+    })
+
+    const signature = agentHistorySignature(next)
+    expect(signature).not.toBe(agentHistorySignature(previous))
+    expect(signature).not.toContain(url)
+  })
 })

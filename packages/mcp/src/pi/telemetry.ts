@@ -7,6 +7,7 @@ type MutableGenerationTiming = {
   firstTokenAt: number | null
   generatedCharacters: number
   generationBaseTokens: number | null
+  generationElapsedMs: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,10 +63,21 @@ function estimatedConversationTokens(thread: AgentConversationThread): number {
   return approximateTokensFromCharacters(messageCharacters(thread))
 }
 
-function resetGenerationTiming(timing: MutableGenerationTiming): void {
+function resetActiveGenerationTiming(timing: MutableGenerationTiming): void {
   timing.firstTokenAt = null
   timing.generatedCharacters = 0
   timing.generationBaseTokens = null
+}
+
+function resetGenerationTiming(timing: MutableGenerationTiming): void {
+  resetActiveGenerationTiming(timing)
+  timing.generationElapsedMs = 0
+}
+
+function finishGenerationTiming(timing: MutableGenerationTiming, completedAt: number): void {
+  if (timing.firstTokenAt === null) return
+  const elapsedMs = completedAt - timing.firstTokenAt
+  if (Number.isFinite(elapsedMs) && elapsedMs > 0) timing.generationElapsedMs += elapsedMs
 }
 
 function measuredTokensPerSecond(
@@ -83,17 +95,33 @@ export function hydrateEstimatedAntigravityTelemetry(thread: AgentConversationTh
   if (!isAntigravityThread(thread) || !thread.contextUsage) return false
   const estimatedTokens = estimatedConversationTokens(thread)
   const tokens = Math.max(thread.contextUsage.tokens ?? 0, estimatedTokens)
+  const retained = retainedContextUsage(thread.contextUsage)
   thread.contextUsage = {
     autoCompactionEnabled: thread.contextUsage.autoCompactionEnabled,
     compacting: thread.contextUsage.compacting,
     contextWindow: thread.contextUsage.contextWindow,
-    ...(thread.contextUsage.lastCompactedAt
-      ? { lastCompactedAt: thread.contextUsage.lastCompactedAt }
-      : {}),
+    ...retained,
     percent: percentage((tokens / thread.contextUsage.contextWindow) * 100),
     tokens,
     tokensEstimated: true
   }
+  return true
+}
+
+export function applyMeasuredAntigravityThroughput(
+  thread: AgentConversationThread,
+  outputTokens: number,
+  generationElapsedMs: number
+): boolean {
+  if (!isAntigravityThread(thread) || !thread.contextUsage) return false
+  if (!Number.isFinite(outputTokens) || outputTokens <= 0) return false
+  if (!Number.isFinite(generationElapsedMs) || generationElapsedMs <= 0) return false
+  thread.contextUsage = {
+    ...thread.contextUsage,
+    tokensPerSecond: percentage((outputTokens * 1_000) / generationElapsedMs),
+    tokensPerSecondBasis: 'streamed-output'
+  }
+  delete thread.contextUsage.tokensPerSecondEstimated
   return true
 }
 
@@ -239,8 +267,13 @@ function applyAssistantEndTelemetry(
 ): boolean {
   if (!isRecord(event.message)) return false
   const message = event.message
-  if (message.role !== 'assistant' || !isRecord(message.usage) || !thread.contextUsage) {
-    resetGenerationTiming(timing)
+  if (message.role !== 'assistant') {
+    resetActiveGenerationTiming(timing)
+    return false
+  }
+  finishGenerationTiming(timing, now)
+  if (!isRecord(message.usage) || !thread.contextUsage) {
+    resetActiveGenerationTiming(timing)
     return false
   }
   const { output, ...context } = usageContext(message.usage, thread.contextUsage.contextWindow)
@@ -250,6 +283,7 @@ function applyAssistantEndTelemetry(
       approximateTokensFromCharacters(timing.generatedCharacters),
       approximateTokensFromCharacters(metricText(message).length)
     )
+    const tokensPerSecond = measuredTokensPerSecond(estimatedOutput, timing.firstTokenAt, now)
     const visibleTokens = estimatedConversationTokens(thread)
     const tokens = Math.max(
       visibleTokens,
@@ -264,9 +298,16 @@ function applyAssistantEndTelemetry(
         : {}),
       percent: percentage((tokens / thread.contextUsage.contextWindow) * 100),
       tokens,
-      tokensEstimated: true
+      tokensEstimated: true,
+      ...(tokensPerSecond !== undefined
+        ? {
+            tokensPerSecond,
+            tokensPerSecondBasis: 'streamed-output' as const,
+            tokensPerSecondEstimated: true
+          }
+        : {})
     }
-    resetGenerationTiming(timing)
+    resetActiveGenerationTiming(timing)
     return true
   }
   const tokensPerSecond = measuredTokensPerSecond(output, timing.firstTokenAt, now)
@@ -283,7 +324,7 @@ function applyAssistantEndTelemetry(
     delete thread.contextUsage.tokensPerSecond
     delete thread.contextUsage.tokensPerSecondBasis
   }
-  resetGenerationTiming(timing)
+  resetActiveGenerationTiming(timing)
   return true
 }
 
@@ -302,11 +343,19 @@ function applyMessageUpdateTelemetry(
     const output = approximateTokensFromCharacters(timing.generatedCharacters)
     const baseTokens = timing.generationBaseTokens ?? estimatedConversationTokens(thread)
     const tokens = Math.max(baseTokens + output, estimatedConversationTokens(thread))
+    const tokensPerSecond = measuredTokensPerSecond(output, timing.firstTokenAt, now)
     thread.contextUsage = {
       ...thread.contextUsage,
       percent: percentage((tokens / thread.contextUsage.contextWindow) * 100),
       tokens,
-      tokensEstimated: true
+      tokensEstimated: true,
+      ...(tokensPerSecond !== undefined
+        ? {
+            tokensPerSecond,
+            tokensPerSecondBasis: 'streamed-output' as const,
+            tokensPerSecondEstimated: true
+          }
+        : {})
     }
     return true
   }

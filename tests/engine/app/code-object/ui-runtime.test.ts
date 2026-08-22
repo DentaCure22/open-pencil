@@ -6,7 +6,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   ConfiguredBlock,
   normalizeEstimatesListModel,
-  normalizeFinancialDashboardModel
+  normalizeFinancialDashboardModel,
+  normalizeVideoPlayerModel,
+  VideoPlayer
 } from '@/app/code-object/ui-runtime'
 
 describe('Code Object UI runtime', () => {
@@ -94,5 +96,36 @@ describe('Code Object UI runtime', () => {
     expect(estimates).toContain('TEST - AI Solutions Demo')
     expect(estimates).toContain('#1006')
     expect(estimates).toContain('$100.00')
+  })
+
+  test('exports and renders the reusable video player through the registry', () => {
+    const model = normalizeVideoPlayerModel({
+      controls: true,
+      fit: 'cover',
+      src: 'https://example.com/generated.webm',
+      title: 'Generated motion study'
+    })
+    expect(model).toMatchObject({
+      autoplay: false,
+      controls: true,
+      fit: 'cover',
+      src: 'https://example.com/generated.webm',
+      title: 'Generated motion study'
+    })
+
+    const direct = renderToStaticMarkup(createElement(VideoPlayer, model))
+    expect(direct).toContain('data-video-player')
+    expect(direct).toContain('Generated motion study')
+
+    const configured = renderToStaticMarkup(
+      createElement(ConfiguredBlock, {
+        block: 'video-player',
+        config: model,
+        interactionEnabled: true
+      })
+    )
+    expect(configured).toContain('<video')
+    expect(configured).toContain('controls=""')
+    expect(configured).toContain('https://example.com/generated.webm')
   })
 })

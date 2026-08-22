@@ -8,7 +8,7 @@ import { registerLiveParentTools } from './tool/live-parent-registration.js'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
-    `openpencil-dispatch-mcp\n\nOpenPencil MCP: dispatch_work, board_where, board_screenshot, board_go, set_theme. Used by the OpenPencil Codex plugin and Board workers.\n`
+    `openpencil-dispatch-mcp\n\nOpenPencil MCP: list_agent_chats, get_agent_chat_context, dispatch_work, board_where, board_screenshot, board_go, set_theme. Used by the OpenPencil Codex plugin and Board workers.\n`
   )
   process.exit(0)
 }

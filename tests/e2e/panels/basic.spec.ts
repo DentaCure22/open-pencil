@@ -86,9 +86,28 @@ test('the single contextual sidebar closes and reopens', async () => {
   })
   expect(
     await shellMotion.evaluate((element) => getComputedStyle(element).transitionProperty)
-  ).toBe('opacity, transform')
+  ).toBe('width, height, border-radius')
 
+  const closingShellWidthsPromise = shellMotion.evaluate(
+    (element) =>
+      new Promise<number[]>((resolve) => {
+        const samples: number[] = []
+        const startedAt = performance.now()
+        const sample = () => {
+          samples.push(element.getBoundingClientRect().width)
+          if (performance.now() - startedAt < 220) requestAnimationFrame(sample)
+          else resolve(samples)
+        }
+        requestAnimationFrame(sample)
+      })
+  )
   await editor.page.getByTestId('close-layers-panel').click()
+  const closingShellWidths = await closingShellWidthsPromise
+  expect(Math.min(...closingShellWidths)).toBeGreaterThanOrEqual(43)
+  expect(Math.max(...closingShellWidths)).toBeGreaterThan(80)
+  expect(
+    closingShellWidths.slice(1).some((width, index) => width > closingShellWidths[index] + 1)
+  ).toBe(false)
   await expect(splitter).toHaveAttribute('data-state', 'collapsed')
   await expect(sidebar).not.toBeVisible()
   await expect(editor.page.getByTestId('open-layers-panel')).toBeVisible()
@@ -101,5 +120,27 @@ test('the single contextual sidebar closes and reopens', async () => {
   await expect
     .poll(async () => (await splitter.boundingBox())?.width ?? 0)
     .toBeGreaterThan(initialBounds.width - 2)
+  editor.canvas.assertNoErrors()
+})
+
+test('Chats moves from the canvas into the editor tool rail', async () => {
+  await expect(editor.page.getByTestId('agent-terminals-toggle')).toHaveCount(0)
+
+  await editor.page.getByTestId('close-layers-panel').click()
+  await expect(editor.page.getByTestId('layers-splitter-panel')).toHaveAttribute(
+    'data-state',
+    'collapsed'
+  )
+
+  await editor.page.getByTestId('toolbar-chats').click()
+  await expect(editor.page.getByTestId('layers-splitter-panel')).toHaveAttribute(
+    'data-state',
+    'expanded'
+  )
+  await expect(editor.page.getByTestId('left-panel-chats-tab')).toHaveAttribute(
+    'data-state',
+    'active'
+  )
+  await expect(editor.page.getByTestId('left-panel-chats-content')).toBeVisible()
   editor.canvas.assertNoErrors()
 })

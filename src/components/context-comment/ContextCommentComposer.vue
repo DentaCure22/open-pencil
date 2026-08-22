@@ -9,23 +9,20 @@ import {
   contextCommentDictationError,
   contextCommentState,
   dispatchContextComment,
-  setContextCommentCapture,
+  prepareContextCommentScreenCapture,
   setContextCommentText,
-  startContextCommentCapture,
   startContextCommentDictation,
   stopContextCommentCapture,
   stopContextCommentDictation
 } from '@/app/context-comment'
 import { CONTEXT_COMMENT_MODEL_SCOPE, conversationSelection } from '@/app/agent-chat/models'
 import { useEditorStore } from '@/app/editor/active-store'
-import { readNarratedTraceEvidenceImage } from '@/app/narrated-trace'
 import { toast } from '@/app/shell/ui'
 import AiModelAndEffortSelect from '@/components/ai-elements/AiModelAndEffortSelect.vue'
 
 const store = useEditorStore()
 const composer = ref<HTMLElement | null>(null)
 const input = ref<HTMLTextAreaElement | null>(null)
-const preview = ref<string | null>(null)
 const hostSize = ref({ height: 0, width: 0 })
 
 const COMMENT_COMPOSER_GAP = 10
@@ -105,7 +102,6 @@ function ensureComposerBelowLiveTarget() {
 watch(
   () => draft.value?.id,
   async (id) => {
-    preview.value = null
     if (!id) return
     await nextTick()
     syncHostSize()
@@ -116,15 +112,12 @@ watch(
   }
 )
 
-watch(
-  () => draft.value?.capture,
-  async (capture) => {
-    preview.value = capture ? await readNarratedTraceEvidenceImage(capture) : null
-  }
-)
-
 function updateText(event: Event) {
   setContextCommentText((event.target as HTMLTextAreaElement).value)
+}
+
+function beginCapture() {
+  void prepareContextCommentScreenCapture(store)
 }
 
 function inputKeydown(event: KeyboardEvent) {
@@ -168,21 +161,30 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   if (event.key !== 'Escape') return
   if (contextCommentState.captureMode) {
     event.preventDefault()
+    const cancelScreenshotFlow = draft.value?.flow === 'screenshot' && !draft.value.capture
     stopContextCommentCapture()
+    if (cancelScreenshotFlow) close()
     return
   }
+  if (draft.value?.capture) return
   if (draft.value) close()
 })
 </script>
 
 <template>
   <section
-    v-if="draft && !contextCommentState.captureMode"
+    v-if="
+      draft &&
+      draft.flow === 'comment' &&
+      !draft.capture &&
+      !contextCommentState.captureMode &&
+      !contextCommentState.capturePreparing
+    "
     ref="composer"
     data-test-id="context-comment-composer"
     class="bg-chrome-raised/97 absolute z-[80] flex max-w-[calc(100%-24px)] items-center gap-1 overflow-visible rounded-full border border-surface/20 p-1 shadow-[0_24px_70px_rgba(0,0,0,0.34),0_8px_24px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-black/20 backdrop-blur-2xl"
     :style="composerStyle"
-    :aria-label="`Comment on ${draft.target.label}`"
+    :aria-label="`Comment on ${draft.target?.label ?? 'image'}`"
   >
     <button
       type="button"
@@ -190,29 +192,9 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
       aria-label="Attach screenshot region"
       :disabled="contextCommentState.dispatching"
       class="flex size-11 shrink-0 items-center justify-center rounded-full bg-chrome-control text-surface ring-1 ring-inset ring-chrome-control-border transition-colors hover:bg-hover disabled:opacity-40"
-      @click="startContextCommentCapture"
+      @click="beginCapture"
     >
       <icon-lucide-plus class="size-[22px]" />
-    </button>
-
-    <button
-      v-if="preview"
-      type="button"
-      aria-label="Remove attached screenshot"
-      class="group relative size-11 shrink-0 overflow-hidden rounded-full border border-border"
-      @click="setContextCommentCapture(null)"
-    >
-      <img
-        :src="preview"
-        alt="Attached screenshot crop"
-        data-test-id="context-comment-capture-preview"
-        class="size-full object-cover"
-      />
-      <span
-        class="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <icon-lucide-x class="size-3.5" />
-      </span>
     </button>
 
     <textarea

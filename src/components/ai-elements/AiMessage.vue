@@ -34,9 +34,8 @@ const sources = computed(
       { type: 'source' }
     >[]
 )
-const hasContent = computed(
+const hasMessageBody = computed(
   () =>
-    attachments.value.length > 0 ||
     sources.value.length > 0 ||
     contentParts.value.some((part) => {
       if (part.type === 'text') return Boolean(part.text.trim())
@@ -44,6 +43,7 @@ const hasContent = computed(
       return true
     })
 )
+const hasContent = computed(() => attachments.value.length > 0 || hasMessageBody.value)
 const copied = refAutoReset(false, 1_500)
 const copyText = computed(() =>
   contentParts.value
@@ -52,6 +52,17 @@ const copyText = computed(() =>
     .trim()
 )
 const { copy } = useClipboard({ source: copyText })
+const messageTime = computed(() => {
+  const timestamp = Date.parse(message.createdAt)
+  if (!Number.isFinite(timestamp)) return ''
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
+    timestamp
+  )
+})
+const copyLabel = computed(() => {
+  const subject = message.role === 'user' ? 'Prompt' : 'Message'
+  return copied.value ? `${subject} copied` : `Copy ${subject.toLowerCase()}`
+})
 async function copyMessage() {
   await copy(copyText.value)
   copied.value = true
@@ -64,46 +75,67 @@ async function copyMessage() {
     data-test-id="ai-message"
     :data-message-id="message.id"
     :data-role="message.role"
-    class="flex w-full gap-2 font-sans text-[14px] font-normal leading-[1.58] tracking-normal select-text"
+    class="group/message flex w-full gap-2 font-sans text-[14px] font-normal leading-[1.58] tracking-normal select-text"
     :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="min-w-0"
-      :class="[
-        message.role === 'user'
-          ? 'max-w-[calc(100%_-_1rem)] rounded-[18px] bg-hover/90 px-3.5 py-2.5 text-surface'
-          : message.role === 'system'
-            ? 'w-full px-0 py-1 text-[12px] text-muted'
-            : 'w-full text-surface'
-      ]"
+      class="flex min-w-0 flex-col"
+      :class="
+        message.role === 'user' ? 'max-w-[calc(100%_-_1rem)] items-end' : 'w-full items-start'
+      "
     >
-      <template v-for="(part, index) in contentParts" :key="`${part.type}-${String(index)}`">
-        <Markdown
-          v-if="part.type === 'text' && message.role === 'assistant'"
-          :content="part.text"
-          :controls="false"
-          :mermaid="false"
-          :previewers="false"
-          class="assistant-markdown"
-        />
-        <p v-else-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</p>
-        <AiCodeBlock
-          v-else-if="part.type === 'code'"
-          :code="part.code"
-          :filename="part.filename"
-          :language="part.language"
-        />
-      </template>
       <AiAttachments v-if="attachments.length" :parts="attachments" />
-      <AiSources v-if="sources.length" :sources="sources" />
       <div
-        v-if="message.role === 'assistant' && copyText"
-        class="mt-0.5 flex h-5 items-center gap-1 select-none"
+        v-if="hasMessageBody"
+        data-test-id="ai-message-content"
+        class="min-w-0"
+        :class="[
+          message.role === 'user'
+            ? 'rounded-[18px] bg-hover/90 px-3.5 py-2.5 text-surface'
+            : message.role === 'system'
+              ? 'w-full px-0 py-1 text-[12px] text-muted'
+              : 'w-full text-surface'
+        ]"
       >
+        <template v-for="(part, index) in contentParts" :key="`${part.type}-${String(index)}`">
+          <Markdown
+            v-if="part.type === 'text' && message.role === 'assistant'"
+            :content="part.text"
+            :controls="false"
+            :mermaid="false"
+            :previewers="false"
+            class="assistant-markdown"
+          />
+          <p v-else-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</p>
+          <AiCodeBlock
+            v-else-if="part.type === 'code'"
+            :code="part.code"
+            :filename="part.filename"
+            :language="part.language"
+          />
+        </template>
+        <AiSources v-if="sources.length" :sources="sources" />
+      </div>
+      <div
+        v-if="message.role !== 'system' && (messageTime || copyText)"
+        data-test-id="ai-message-actions"
+        class="pointer-events-none mt-1 flex h-5 items-center gap-1 opacity-0 transition-opacity duration-150 select-none group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 motion-reduce:transition-none [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+        :class="message.role === 'user' ? 'justify-end' : ''"
+      >
+        <time
+          v-if="messageTime"
+          data-test-id="ai-message-time"
+          :datetime="message.createdAt"
+          class="text-[11px] leading-none text-muted/75"
+        >
+          {{ messageTime }}
+        </time>
         <button
+          v-if="copyText"
           type="button"
-          :aria-label="copied ? 'Message copied' : 'Copy message'"
-          class="flex size-5 items-center justify-center rounded-[5px] text-muted hover:bg-hover hover:text-surface"
+          data-test-id="ai-message-copy"
+          :aria-label="copyLabel"
+          class="flex size-5 items-center justify-center rounded-[5px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
           @click="copyMessage"
         >
           <icon-lucide-check v-if="copied" class="size-3.5" />

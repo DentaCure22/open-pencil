@@ -4,6 +4,20 @@ import { contextCommentPrompt } from '@/app/context-comment/prompt'
 import type { ContextCommentDraft } from '@/app/context-comment/types'
 
 const draft: ContextCommentDraft = {
+  annotations: [
+    {
+      comment: 'remove this tag',
+      id: 'annotation-1',
+      x: 0.474,
+      y: 0.222
+    },
+    {
+      comment: 'this should be shorter',
+      id: 'annotation-2',
+      x: 0.23,
+      y: 0.788
+    }
+  ],
   capture: {
     annotation: {
       bounds: { height: 80, width: 160, x: 10, y: 20 },
@@ -19,8 +33,16 @@ const draft: ContextCommentDraft = {
     mimeType: 'image/png',
     omissions: [],
     source: 'frame-snapshot',
+    sourceHasTransparency: true,
     width: 480
   },
+  captureContext: {
+    boardBounds: { height: 200, width: 400, x: 100, y: 50 },
+    screenBounds: { height: 400, width: 800, x: 240, y: 160 },
+    viewport: { panX: 40, panY: 60, zoom: 2 }
+  },
+  captureSource: null,
+  flow: 'screenshot',
   id: 'comment-1',
   target: {
     frameId: 'frame-1',
@@ -83,10 +105,26 @@ const draft: ContextCommentDraft = {
 }
 
 describe('context comment worker prompt', () => {
-  test('sends the live container selection, not just a label', () => {
+  test('sends normalized screenshot comments and the live container selection', () => {
     const prompt = contextCommentPrompt(draft)
 
-    expect(prompt).toStartWith('center this please')
+    expect(prompt).toStartWith(
+      [
+        'Image 1:',
+        '1. (x: 47.4%, y: 22.2%) remove this tag',
+        '2. (x: 23%, y: 78.8%) this should be shorter',
+        '',
+        'Additional instructions:',
+        'center this please',
+        '',
+        'Board context:',
+        'Crop (page space): x 100, y 50, width 400, height 200',
+        'Viewport: panX 40, panY 60, zoom 2',
+        'Comment points (page space):',
+        '1. (x: 289.6, y: 94.4)',
+        '2. (x: 192, y: 207.6)'
+      ].join('\n')
+    )
     expect(prompt).toContain('Target: Popover anchor')
     expect(prompt).toContain('Route: /patients')
     expect(prompt).toContain('Board frame: frame-1')
@@ -112,7 +150,10 @@ describe('context comment worker prompt', () => {
   test('uses the selected object when there is no live container', () => {
     const prompt = contextCommentPrompt({
       ...draft,
+      annotations: [],
       capture: null,
+      captureContext: null,
+      flow: 'comment',
       target: {
         ...draft.target,
         kind: 'selection',
@@ -135,5 +176,43 @@ describe('context comment worker prompt', () => {
     expect(prompt).not.toContain('continue or steer')
     expect(prompt).not.toContain('create one new visible task')
     expect(prompt).not.toContain('Preserve one writer')
+  })
+
+  test('turns image annotations into an edit request for the existing conversation', () => {
+    const prompt = contextCommentPrompt({
+      ...draft,
+      destination: {
+        action: 'follow-up',
+        kind: 'agent-conversation',
+        modelScope: 'task:thread-1',
+        threadId: 'thread-1'
+      },
+      target: null
+    })
+
+    expect(prompt).toStartWith('Edit the attached generated image using the image editing tool.')
+    expect(prompt).toContain('The source image has a transparent background.')
+    expect(prompt).toContain('Preserve its alpha channel and keep the background transparent.')
+    expect(prompt).toContain('Do not flatten it onto white, black, or any solid color')
+    expect(prompt).toContain('1. (x: 47.4%, y: 22.2%) remove this tag')
+    expect(prompt).toContain('Additional instructions:\ncenter this please')
+    expect(prompt).not.toContain('Target:')
+  })
+
+  test('does not add a transparency constraint for an opaque source image', () => {
+    const prompt = contextCommentPrompt({
+      ...draft,
+      capture: draft.capture ? { ...draft.capture, sourceHasTransparency: false } : null,
+      destination: {
+        action: 'follow-up',
+        kind: 'agent-conversation',
+        modelScope: 'task:thread-1',
+        threadId: 'thread-1'
+      },
+      target: null
+    })
+
+    expect(prompt).not.toContain('transparent background')
+    expect(prompt).not.toContain('Preserve its alpha channel')
   })
 })

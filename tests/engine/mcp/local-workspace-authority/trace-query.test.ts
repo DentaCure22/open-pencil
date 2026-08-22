@@ -19,6 +19,10 @@ import { LocalWorkspaceAuthorityStore } from '#mcp/local-workspace-authority/sto
 const roots: string[] = []
 
 type Fixture = Awaited<ReturnType<typeof fixture>>
+type PersistedTraceSessionProof = {
+  contextDraft?: Array<{ sourceEventId: string }>
+  events?: Array<{ id: string }>
+}
 
 function savedDocument(graph: SceneGraph) {
   return {
@@ -49,7 +53,10 @@ async function fixture() {
     x: 100,
     y: 200
   })
-  const nested = graph.createNode('TEXT', first.id, { name: 'Nested title', text: 'Nested title' })
+  const nested = graph.createNode('TEXT', first.id, {
+    name: 'Nested title',
+    text: 'Nested title'
+  })
   const second = graph.createNode('FRAME', page.id, {
     height: 120,
     name: 'Second card',
@@ -146,7 +153,11 @@ function result(value: unknown) {
   const payload = (value as { result?: unknown }).result
   if (!payload || typeof payload !== 'object') throw new Error('Expected RPC result')
   return payload as {
-    matches: Array<{ events: unknown[]; scope: { pageId: string }; sessionId: string }>
+    matches: Array<{
+      events: unknown[]
+      scope: { pageId: string }
+      sessionId: string
+    }>
     reason?: string
     status: string
     taskCursor?: string
@@ -158,6 +169,52 @@ afterEach(async () => {
 })
 
 describe('persisted Trace history query', () => {
+  test('pages a continuous activity timeline and preserves context rows', async () => {
+    const f = await fixture()
+    await persistSession(f, {
+      id: 'session:older',
+      pageId: f.page.id,
+      startedAt: '2026-08-22T12:00:00.000Z',
+      text: 'Older activity'
+    })
+    await persistSession(f, {
+      id: 'session:newer',
+      pageId: f.page.id,
+      startedAt: '2026-08-22T13:00:00.000Z',
+      text: 'Newer activity'
+    })
+
+    const first = await f.store.traceActivityPage({ limit: 5 })
+    expect(first).toMatchObject({
+      contract: 'trace-activity-page/v1',
+      hasMore: true
+    })
+    expect(first.items).toHaveLength(5)
+    expect(first.items.every((item) => item.sessionId === 'session:newer')).toBe(true)
+    expect(first.nextCursor).toBeString()
+
+    const second = await f.store.traceActivityPage({
+      before: first.nextCursor ?? undefined,
+      limit: 5
+    })
+    expect(second.items).toHaveLength(5)
+    expect(
+      second.items.every(
+        (item) =>
+          !first.items.some(
+            (firstItem) =>
+              firstItem.sessionId === item.sessionId && firstItem.event.id === item.event.id
+          )
+      )
+    ).toBe(true)
+    expect(second.items[0]?.occurredAtMs).toBeLessThan(first.items.at(-1)?.occurredAtMs ?? 0)
+
+    const persisted = (await f.store.traceSession('session:newer')) as PersistedTraceSessionProof
+    expect(persisted.contextDraft?.map((entry) => entry.sourceEventId)).toEqual(
+      persisted.events?.map((event) => event.id)
+    )
+  })
+
   test('returns one compact current Board packet and opt-in persisted image', async () => {
     const f = await fixture()
     const capturedAt = '2026-08-02T12:00:00.000Z'
@@ -277,7 +334,10 @@ describe('persisted Trace history query', () => {
     })) as { result: { gesture: Record<string, unknown>; status: string } }
     expect(response.result).toMatchObject({
       gesture: {
-        boardOrigin: { pageId: f.page.id, workspaceId: f.head.identity.workspaceId },
+        boardOrigin: {
+          pageId: f.page.id,
+          workspaceId: f.head.identity.workspaceId
+        },
         candidates: {
           collapsedCount: 1,
           count: 2,
@@ -381,7 +441,10 @@ describe('persisted Trace history query', () => {
         command: 'trace_query'
       })
     )
-    expect(excluded).toMatchObject({ reason: 'no_relevant_trace', status: 'empty' })
+    expect(excluded).toMatchObject({
+      reason: 'no_relevant_trace',
+      status: 'empty'
+    })
   })
 
   test('resolves saved spoken turns after authority restart by latest, id, and text', async () => {

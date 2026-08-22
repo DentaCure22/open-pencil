@@ -13,12 +13,17 @@ function imageFingerprint(image: { alt?: string; url: string }): string {
   return `${image.alt ?? ''}:${String(image.url.length)}:${cheapHash(image.url)}`
 }
 
+function videoFingerprint(video: { mimeType?: string; name?: string; url: string }): string {
+  return `${video.name ?? ''}:${video.mimeType ?? ''}:${String(video.url.length)}:${cheapHash(video.url)}`
+}
+
 function partFingerprint(part: AiMessagePart): string {
   if (part.type === 'text') return `x${String(part.text.length)}`
   if (part.type === 'reasoning') return `r${part.state ?? ''}${String(part.text.length)}`
   if (part.type === 'tool') {
     const images = part.images?.map(imageFingerprint).join(',') ?? ''
-    return `t${part.name}:${part.state}:${String(part.output?.length ?? 0)}:${String(part.error?.length ?? 0)}:${images}`
+    const videos = part.videos?.map(videoFingerprint).join(',') ?? ''
+    return `t${part.name}:${part.state}:${String(part.output?.length ?? 0)}:${String(part.error?.length ?? 0)}:${images}:${videos}`
   }
   if (part.type === 'code') return `c${part.language ?? ''}${String(part.code.length)}`
   if (part.type === 'attachment') return `a${part.name}${String(part.size ?? 0)}`
@@ -42,6 +47,7 @@ function threadFingerprint(thread: AgentConversationThread): string {
     thread.nativeThreadId,
     thread.model,
     thread.effort,
+    JSON.stringify(thread.pendingUiRequests),
     JSON.stringify(thread.contextUsage ?? null),
     String(thread.messages.length),
     thread.messages.map(messageFingerprint).join(',')

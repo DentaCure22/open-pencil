@@ -47,7 +47,8 @@ export default defineConfig(async ({ command, mode }) => {
       Components({ resolvers: [IconsResolver({ prefix: 'icon' })] }),
       openPencilLocalWorkspaceAuthorityPlugin(command, host, {
         localWorkspaceId: env.OPENPENCIL_LOCAL_WORKSPACE_ID?.trim(),
-        localWorkspaceRoot: env.OPENPENCIL_LOCAL_WORKSPACE_ROOT?.trim()
+        localWorkspaceRoot: env.OPENPENCIL_LOCAL_WORKSPACE_ROOT?.trim(),
+        smylrAppRoot: env.OPENPENCIL_SMYLR_APP_ROOT?.trim()
       }),
       vue(),
       openPencilPwaPlugin(base)

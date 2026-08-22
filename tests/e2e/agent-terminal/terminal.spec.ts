@@ -165,6 +165,16 @@ test('keeps one normal mounted chat through design and interaction modes', async
     'Board task conversation. Click to interact or drag to move.'
   )
   await expect(surface).toHaveAttribute('data-agent-kind', 'task')
+  await expect(surface.getByTestId('agent-conversation-header')).toHaveCSS(
+    'border-bottom-width',
+    '0px'
+  )
+  const headerFade = surface.getByTestId('ai-conversation-header-fade')
+  await expect(headerFade).toBeVisible()
+  const headerFadeBackground = await headerFade.evaluate(
+    (element) => getComputedStyle(element).backgroundImage
+  )
+  expect(headerFadeBackground).toContain('linear-gradient')
   await expect(surface).toContainText('Task transcript ready.')
   await expect(surface.getByTestId('ai-message')).toHaveCount(29)
   const activity = surface.getByTestId('ai-activity-disclosure').last()
@@ -183,8 +193,9 @@ test('keeps one normal mounted chat through design and interaction modes', async
   const selectableMessage = surface
     .getByTestId('ai-message')
     .filter({ hasText: 'Scrollable Board conversation message 28.' })
-  await selectableMessage.scrollIntoViewIfNeeded()
-  const selectedBeforePointerUp = await dragSelectText(page, selectableMessage)
+  const selectableMessageContent = selectableMessage.getByTestId('ai-message-content')
+  await selectableMessageContent.scrollIntoViewIfNeeded()
+  const selectedBeforePointerUp = await dragSelectText(page, selectableMessageContent)
   expect(selectedBeforePointerUp).toContain('Scrollable Board conversation message 28')
   await expect
     .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))

@@ -3,7 +3,10 @@ import type { AiConversationStatus, AiMessage, AiMessagePart, AiToolState } from
 const CODE_FENCE = /```([^\n`]*)\n([\s\S]*?)```/g
 
 export function messageParts(message: AiMessage): AiMessagePart[] {
-  if (message.parts?.length) return message.parts
+  if (message.parts?.length) {
+    if (!message.text || message.parts.some((part) => part.type === 'text')) return message.parts
+    return [{ text: message.text, type: 'text' }, ...message.parts]
+  }
   if (!message.text) return []
   if (message.role === 'user' || message.role === 'system') {
     return [{ text: message.text, type: 'text' }]
@@ -65,6 +68,8 @@ type ToolInputRecord = {
   items?: unknown
   path?: unknown
   pattern?: unknown
+  prompt?: unknown
+  provider?: unknown
   query?: unknown
   search?: unknown
   server?: unknown
@@ -87,6 +92,7 @@ export type AiToolKind =
   | 'read'
   | 'search'
   | 'tool'
+  | 'video'
   | 'web'
 
 const SHORT_TOOL_INPUT_KEYS = [
@@ -209,12 +215,65 @@ function displayToolName(name: string, input?: string): string {
   return 'connected app'
 }
 
+function mediaToolInput(input?: string): ToolInputRecord | null {
+  const parsed = input?.trim() ? parseJsonInput(input.trim()) : undefined
+  if (!isToolInputRecord(parsed)) return null
+  return isToolInputRecord(parsed.Arguments) ? parsed.Arguments : parsed
+}
+
+export function isImageGenerationTool(name: string, input?: string): boolean {
+  const normalized = displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
+  return (
+    normalized.includes('generate image') ||
+    normalized.includes('image generation') ||
+    normalized.includes('edit image') ||
+    normalized === 'imagegen'
+  )
+}
+
+export function imageGenerationPrompt(input?: string): string {
+  const parsed = mediaToolInput(input)
+  return parsed ? stringField(parsed.prompt) : ''
+}
+
+export function imageGenerationProvider(name: string, input?: string): 'codex' | 'grok' {
+  const normalized = displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
+  const parsed = mediaToolInput(input)
+  const provider = parsed ? stringField(parsed.provider).toLowerCase() : ''
+  return normalized.includes('grok') || normalized.includes('xai') || provider === 'grok'
+    ? 'grok'
+    : 'codex'
+}
+
+export function isVideoGenerationTool(name: string, input?: string): boolean {
+  const normalized = displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
+  return (
+    normalized.includes('generate video') ||
+    normalized.includes('video generation') ||
+    normalized.includes('edit video') ||
+    normalized.includes('extend video') ||
+    normalized.includes('video gen') ||
+    normalized.includes('grok video')
+  )
+}
+
+export function videoGenerationPrompt(input?: string): string {
+  const parsed = mediaToolInput(input)
+  return parsed ? stringField(parsed.prompt) : ''
+}
+
+export function isMediaGenerationTool(name: string, input?: string): boolean {
+  return isImageGenerationTool(name, input) || isVideoGenerationTool(name, input)
+}
+
 function includesToolTerm(value: string, terms: readonly string[]): boolean {
   return terms.some((term) => value.includes(term))
 }
 
 export function toolCallKind(name: string, input?: string): AiToolKind {
   const normalized = displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
+  if (isVideoGenerationTool(name, input)) return 'video'
+  if (isImageGenerationTool(name, input)) return 'image'
   if (includesToolTerm(normalized, ['search', 'grep'])) return 'search'
   if (
     includesToolTerm(normalized, ['command', 'shell']) ||
@@ -250,6 +309,8 @@ export function toolCallLabel(name: string, input?: string): string {
   if (kind === 'connected-app') return 'Connected app'
   if (kind === 'message') return 'Sent message to worker'
   if (kind === 'handoff') return 'Created worker handoff'
+  if (kind === 'image' && isImageGenerationTool(name, input)) return 'Generated image'
+  if (kind === 'video') return 'Generated video'
   return displayName.replaceAll('_', ' ')
 }
 
@@ -264,6 +325,8 @@ export function toolCallProgressLabel(name: string, input?: string): string {
   if (kind === 'connected-app') return 'Connecting app'
   if (kind === 'message') return 'Sending message to worker'
   if (kind === 'handoff') return 'Creating worker handoff'
+  if (kind === 'image' && isImageGenerationTool(name, input)) return 'Generating image'
+  if (kind === 'video') return 'Generating video'
   return `Running ${displayName.replaceAll('_', ' ')}`
 }
 
@@ -282,6 +345,7 @@ const TOOL_GROUP_LABELS: Record<AiToolKind, string> = {
   read: 'Read files',
   search: 'Searched',
   tool: 'Used tools',
+  video: 'Generated videos',
   web: 'Fetched web'
 }
 
@@ -292,11 +356,14 @@ export function toolGroupLabel(
   for (const tool of tools) {
     const kind = toolCallKind(tool.name, tool.input)
     const running = tool.state === 'pending' || tool.state === 'running'
+    const generatedImage = kind === 'image' && isImageGenerationTool(tool.name, tool.input)
+    const generatedVideo = kind === 'video' && isVideoGenerationTool(tool.name, tool.input)
     if (!labels.has(kind) || running) {
-      labels.set(
-        kind,
-        running ? toolCallProgressLabel(tool.name, tool.input) : TOOL_GROUP_LABELS[kind]
-      )
+      let label = TOOL_GROUP_LABELS[kind]
+      if (generatedImage) label = 'Generated image'
+      if (generatedVideo) label = 'Generated video'
+      if (running) label = toolCallProgressLabel(tool.name, tool.input)
+      labels.set(kind, label)
     }
   }
   return [...labels.values()]

@@ -1,0 +1,2 @@
+export const transparencyCheckerboardClass =
+  'bg-[var(--color-checkerboard)] bg-[image:linear-gradient(45deg,var(--color-checkerboard-muted)_25%,transparent_25%),linear-gradient(-45deg,var(--color-checkerboard-muted)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--color-checkerboard-muted)_75%),linear-gradient(-45deg,transparent_75%,var(--color-checkerboard-muted)_75%)] bg-[size:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0]'

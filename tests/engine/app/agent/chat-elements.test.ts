@@ -5,6 +5,10 @@ import {
   conversationStatus,
   formatAttachmentSize,
   formatElapsedDuration,
+  imageGenerationPrompt,
+  imageGenerationProvider,
+  isImageGenerationTool,
+  isVideoGenerationTool,
   latestMessageCreatedAt,
   messageParts,
   resolveReasoningActivityState,
@@ -13,7 +17,8 @@ import {
   toolCallKind,
   toolGroupLabel,
   toolCallLabel,
-  toolCallProgressLabel
+  toolCallProgressLabel,
+  videoGenerationPrompt
 } from '@/components/ai-elements/model'
 
 function message(overrides: Partial<AiMessage> = {}): AiMessage {
@@ -42,6 +47,21 @@ describe('AI Elements Vue chat model', () => {
       { title: 'OpenPencil', type: 'source', url: 'https://openpencil.dev' }
     ]
     expect(messageParts(message({ parts }))).toEqual(parts)
+  })
+
+  test('keeps user text visible when the turn also has attachments', () => {
+    expect(
+      messageParts(
+        message({
+          parts: [{ alt: 'Reference', type: 'image', url: 'blob:reference' }],
+          role: 'user',
+          text: 'What is happening here?'
+        })
+      )
+    ).toEqual([
+      { text: 'What is happening here?', type: 'text' },
+      { alt: 'Reference', type: 'image', url: 'blob:reference' }
+    ])
   })
 
   test('splits legacy fenced code into copyable code parts', () => {
@@ -106,7 +126,7 @@ describe('AI Elements Vue chat model', () => {
         'call_mcp_tool',
         '{"Arguments":{"provider":"oauth"},"ToolName":"ima2-media_generate_image","toolSummary":"Generate through Codex OAuth"}'
       )
-    ).toBe('ima2-media generate image')
+    ).toBe('Generated image')
     expect(
       toolCallLabel(
         'call_mcp_tool',
@@ -120,6 +140,27 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallKind('openpencil_board_screenshot')).toBe('image')
     expect(toolCallKind('codex_apps_exa_web_fetch_exa')).toBe('web')
     expect(
+      isImageGenerationTool(
+        'call_mcp_tool',
+        '{"Arguments":{"prompt":"A clean tooth cutout"},"ToolName":"ima2-media_generate_image"}'
+      )
+    ).toBe(true)
+    expect(
+      imageGenerationPrompt(
+        '{"Arguments":{"prompt":"A clean tooth cutout"},"ToolName":"ima2-media_generate_image"}'
+      )
+    ).toBe('A clean tooth cutout')
+    expect(imageGenerationProvider('ima2-media_generate_image', '{"prompt":"Default"}')).toBe(
+      'codex'
+    )
+    expect(imageGenerationProvider('ima2-media_generate_grok_image', '{}')).toBe('grok')
+    expect(
+      imageGenerationProvider(
+        'call_mcp_tool',
+        '{"Arguments":{"provider":"grok"},"ToolName":"ima2-media_generate_image"}'
+      )
+    ).toBe('grok')
+    expect(
       toolGroupLabel([
         { input: '{"path":"a.ts"}', name: 'read_file', state: 'success' },
         { input: '{"path":"b.ts"}', name: 'read_file', state: 'success' },
@@ -130,6 +171,21 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallProgressLabel('Run command')).toBe('Running command')
     expect(toolCallProgressLabel('read_file')).toBe('Reading')
     expect(toolCallProgressLabel('search')).toBe('Searching')
+    expect(toolCallProgressLabel('ima2-media_generate_image')).toBe('Generating image')
+    expect(
+      isVideoGenerationTool(
+        'call_mcp_tool',
+        '{"Arguments":{"prompt":"A cat running"},"ToolName":"ima2-media_generate_video"}'
+      )
+    ).toBe(true)
+    expect(
+      videoGenerationPrompt(
+        '{"Arguments":{"prompt":"A cat running"},"ToolName":"ima2-media_generate_video"}'
+      )
+    ).toBe('A cat running')
+    expect(toolCallKind('ima2-media_edit_video')).toBe('video')
+    expect(toolCallLabel('ima2-media_generate_video')).toBe('Generated video')
+    expect(toolCallProgressLabel('ima2-media_generate_video')).toBe('Generating video')
   })
 
   test('uses the whole turn for one elapsed-time divider', () => {

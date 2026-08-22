@@ -15,6 +15,8 @@ import {
 import { mergeOptimisticMessages, optimisticConversation } from '@/app/agent-chat/optimistic'
 import { AiConversationSurface, conversationStatus } from '@/components/ai-elements'
 import { plainConversationPreview } from '@/app/agent-chat/presentation'
+import { agentConversationDisplayTitle } from '@/app/agent-chat/thread-preferences'
+import { resolveBrowserCaptureAttachments } from '@/app/browser-inspector/attachment'
 import {
   isAgentConversationDraftId,
   markAgentConversationDraftAccepted
@@ -27,6 +29,7 @@ import {
   type AgentPromptAnnotation,
   type AgentPromptSubmission
 } from '@/app/agent-chat/models'
+import AgentConversationContextMenu from '@/components/agent-chat/AgentConversationContextMenu.vue'
 
 const { frameId, interactionEnabled, threadName, workerConversationId } = defineProps<{
   frameId: string
@@ -71,14 +74,19 @@ const modelScope = computed(() =>
 )
 const message = ref('')
 const annotations = ref<AgentPromptAnnotation[]>([])
+const attachments = ref<File[]>([])
 const sending = ref(false)
 const error = ref('')
 const lastMessage = ref('')
 const lastAnnotations = ref<AgentPromptAnnotation[]>([])
+const lastAttachments = ref<File[]>([])
 const surface = ref<HTMLElement | null>(null)
 const isDraft = computed(() => isAgentConversationDraftId(workerConversationId))
 const conversationIdentity = computed(
   () => resolvedThreadId.value || workerConversationId || `draft:${frameId}`
+)
+const displayTitle = computed(() =>
+  thread.value ? agentConversationDisplayTitle(thread.value) : title.value
 )
 const optimistic = computed(() => optimisticConversation(conversationIdentity.value))
 const optimisticSending = computed(
@@ -132,25 +140,41 @@ const conversationMessages = computed(() =>
 )
 async function send(submission: AgentPromptSubmission) {
   const draft = message.value.trim()
-  if (!canCompose.value || (!draft && !submission.annotations.length) || sending.value) return
+  if (
+    !canCompose.value ||
+    (!draft && !submission.annotations.length && !submission.attachments.length) ||
+    sending.value
+  ) {
+    return
+  }
   error.value = ''
   sending.value = true
+  const captureResolution = await resolveBrowserCaptureAttachments(submission.attachments)
+  const effectiveSubmission = {
+    ...submission,
+    attachments: captureResolution.attachments
+  }
   lastMessage.value = draft
   lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
+  lastAttachments.value = [...submission.attachments]
+  message.value = ''
+  annotations.value = []
+  attachments.value = []
   try {
     await submitAgentConversation({
+      ...(captureResolution.contextPrompt
+        ? { contextPrompt: captureResolution.contextPrompt }
+        : {}),
       nativeThreadId: thread.value?.nativeThreadId ?? null,
       onAccepted: isDraft.value
         ? (receipt) => markAgentConversationDraftAccepted(store, frameId, receipt.threadId)
         : undefined,
       prompt: draft,
       refresh,
-      selection: submission,
+      selection: effectiveSubmission,
       steer: steering.value,
       threadId: conversationIdentity.value
     })
-    message.value = ''
-    annotations.value = []
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -158,14 +182,15 @@ async function send(submission: AgentPromptSubmission) {
   }
 }
 async function retry() {
-  if (!lastMessage.value && !lastAnnotations.value.length) return
+  if (!lastMessage.value && !lastAnnotations.value.length && !lastAttachments.value.length) return
   message.value = lastMessage.value
   annotations.value = lastAnnotations.value.map((annotation) => ({ ...annotation }))
+  attachments.value = [...lastAttachments.value]
   error.value = ''
   await send({
     ...conversationSelection(modelScope.value),
     annotations: annotations.value,
-    attachments: []
+    attachments: attachments.value
   })
 }
 async function stop() {
@@ -228,7 +253,10 @@ watch(
     <AiConversationSurface
       v-model="message"
       v-model:annotations="annotations"
-      :can-retry="Boolean(error && (lastMessage || lastAnnotations.length))"
+      v-model:attachments="attachments"
+      :can-retry="
+        Boolean(error && (lastMessage || lastAnnotations.length || lastAttachments.length))
+      "
       :can-stop="canStop"
       :context-usage="thread?.contextUsage"
       :disabled="!canCompose"
@@ -246,22 +274,24 @@ watch(
       @stop="stop"
     >
       <template #header>
-        <header
-          data-test-id="agent-conversation-header"
-          class="border-border/55 flex h-10 shrink-0 items-center gap-2 border-b bg-agent-surface px-3"
-        >
-          <span class="min-w-0 flex-1 truncate text-[12px] font-medium tracking-[-0.01em]">
-            {{ title }}
-          </span>
-          <span
-            v-if="headerStatus"
-            :aria-label="headerStatus"
-            class="size-1.5 shrink-0 rounded-full"
-            data-test-id="agent-conversation-status-dot"
-            role="status"
-            :class="liveStatusDotClass"
-          />
-        </header>
+        <AgentConversationContextMenu :thread="thread">
+          <header
+            data-test-id="agent-conversation-header"
+            class="flex h-10 shrink-0 items-center gap-2 px-3"
+          >
+            <span class="min-w-0 flex-1 truncate text-[12px] font-medium tracking-[-0.01em]">
+              {{ displayTitle }}
+            </span>
+            <span
+              v-if="headerStatus"
+              :aria-label="headerStatus"
+              class="size-1.5 shrink-0 rounded-full"
+              data-test-id="agent-conversation-status-dot"
+              role="status"
+              :class="liveStatusDotClass"
+            />
+          </header>
+        </AgentConversationContextMenu>
       </template>
     </AiConversationSurface>
   </article>

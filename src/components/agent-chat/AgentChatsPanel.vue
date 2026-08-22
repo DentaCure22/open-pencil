@@ -3,8 +3,19 @@ import { useEventListener, useNow } from '@vueuse/core'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 import { stopAgentConversation, submitAgentConversation } from '@/app/agent-chat/actions'
+import {
+  messageApprovalPreview,
+  messageToolPreview,
+  type MessageApprovalPreview,
+  type MessageApprovalState
+} from '@/app/agent-chat/approval'
 import { threadLiveWorkingLabel } from '@/app/agent-chat/board-conversation'
-import { type AgentConversationState, type AgentConversationThread } from '@/app/agent-chat/client'
+import {
+  type AgentConversationState,
+  type AgentConversationThread,
+  type AgentExtensionUiResponse,
+  respondToAgentUiRequest
+} from '@/app/agent-chat/client'
 import {
   agentConversationScope,
   conversationSelection,
@@ -18,12 +29,29 @@ import {
   useAgentConversationHistory
 } from '@/app/agent-chat/history-store'
 import { mergeOptimisticMessages, optimisticConversation } from '@/app/agent-chat/optimistic'
-import { agentConversationTitle, plainConversationPreview } from '@/app/agent-chat/presentation'
+import { plainConversationPreview } from '@/app/agent-chat/presentation'
+import {
+  agentConversationDisplayTitle,
+  isAgentConversationArchived,
+  isAgentConversationPinned,
+  isAgentConversationUnread,
+  setAgentConversationUnread,
+  sortAgentConversationThreads
+} from '@/app/agent-chat/thread-preferences'
+import {
+  browserCaptureAttachmentFromDrag,
+  browserCaptureAttachmentKey,
+  isBrowserCaptureAttachment,
+  resolveBrowserCaptureAttachments
+} from '@/app/browser-inspector/attachment'
+import { hasBrowserCaptureDrag, readBrowserCaptureDrag } from '@/app/browser-inspector/drag'
 import {
   writeAgentConversationDrag,
   writeNewAgentConversationDrag
 } from '@/app/agent-terminal/drag'
 import { AiConversationSurface, conversationStatus } from '@/components/ai-elements'
+import AgentConversationApproval from '@/components/agent-chat/AgentConversationApproval.vue'
+import AgentConversationContextMenu from '@/components/agent-chat/AgentConversationContextMenu.vue'
 import Tip from '@/components/ui/Tip.vue'
 
 const { error: historyError, history, refresh } = useAgentConversationHistory()
@@ -34,13 +62,23 @@ const creating = ref(false)
 const pendingThreadId = ref<string | null>(null)
 const followUp = ref('')
 const annotations = ref<AgentPromptAnnotation[]>([])
+const attachments = ref<File[]>([])
 const submitting = ref(false)
 const error = ref('')
+const respondingUiRequests = ref<string[]>([])
+const messageApprovalFeedback = ref<{
+  preview: MessageApprovalPreview
+  state: Exclude<MessageApprovalState, 'pending'>
+} | null>(null)
 const lastFollowUp = ref('')
 const lastAnnotations = ref<AgentPromptAnnotation[]>([])
+const lastAttachments = ref<File[]>([])
 const panel = ref<HTMLElement | null>(null)
 const view = ref<'conversation' | 'list'>('list')
+const showArchived = ref(false)
+const captureDropTargetId = ref<string | null>(null)
 const transcriptScrollTop = new Map<string, number>()
+const browserCaptureDrafts = new Map<string, File[]>()
 
 const selectedThread = computed(
   () => history.value?.threads.find((thread) => thread.id === selectedId.value) ?? null
@@ -57,15 +95,21 @@ const selectedModelScope = computed(() =>
 )
 const filteredThreads = computed(() => {
   const query = search.value.trim().toLowerCase()
-  const threads = history.value?.threads ?? []
+  const threads = (history.value?.threads ?? []).filter(
+    (thread) => isAgentConversationArchived(thread) === showArchived.value
+  )
   if (!query) return threads
   return threads.filter((thread) =>
-    [thread.task, thread.recentUpdate].join(' ').toLowerCase().includes(query)
+    [agentConversationDisplayTitle(thread), thread.task, thread.recentUpdate]
+      .join(' ')
+      .toLowerCase()
+      .includes(query)
   )
 })
-const listedThreads = computed(() =>
-  [...filteredThreads.value].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+const archivedCount = computed(
+  () => history.value?.threads.filter(isAgentConversationArchived).length ?? 0
 )
+const listedThreads = computed(() => sortAgentConversationThreads(filteredThreads.value))
 const conversationThreadId = computed(
   () => selectedThread.value?.id ?? (creating.value ? 'new-task' : '')
 )
@@ -74,6 +118,10 @@ const optimisticSending = computed(
   () =>
     optimistic.value?.state === 'submitted' ||
     (optimistic.value?.state === 'thinking' && selectedThread.value?.state !== 'running')
+)
+const hasPendingApproval = computed(() => Boolean(selectedThread.value?.pendingUiRequests.length))
+const hasApprovalSurface = computed(
+  () => hasPendingApproval.value || Boolean(messageApprovalFeedback.value)
 )
 const uiStatus = computed(() =>
   conversationStatus({
@@ -85,12 +133,16 @@ const uiStatus = computed(() =>
 const selectedStatusMessage = computed(() => {
   const immediate = optimistic.value?.error || error.value || historyError.value
   if (immediate) return immediate
+  if (hasApprovalSurface.value) return undefined
   if (selectedThread.value?.state !== 'needs_attention') return undefined
   return plainConversationPreview(selectedThread.value.recentUpdate, 140) || undefined
 })
 const canStopSelected = computed(
   () =>
-    Boolean(selectedThread.value?.canFollowUp && selectedThread.value.state === 'running') ||
+    Boolean(
+      selectedThread.value?.canFollowUp &&
+      (selectedThread.value.state === 'running' || selectedThread.value.pendingUiRequests.length)
+    ) ||
     Boolean(
       selectedThread.value &&
       optimistic.value &&
@@ -100,6 +152,28 @@ const canStopSelected = computed(
 const visibleMessages = computed(() =>
   mergeOptimisticMessages(conversationThreadId.value, selectedThread.value?.messages ?? [])
 )
+const messageApprovalCard = computed(() => {
+  const feedback = messageApprovalFeedback.value
+  if (!feedback) return null
+  if (feedback.state !== 'sending') return feedback
+  for (const message of [...(selectedThread.value?.messages ?? [])].reverse()) {
+    for (const part of [...(message.parts ?? [])].reverse()) {
+      if (part.type !== 'tool') continue
+      const preview = messageToolPreview(part)
+      if (
+        !preview ||
+        preview.recipient !== feedback.preview.recipient ||
+        preview.text !== feedback.preview.text
+      ) {
+        continue
+      }
+      if (part.state === 'success') return { preview, state: 'sent' as const }
+      if (part.state === 'error') return { preview, state: 'failed' as const }
+      return feedback
+    }
+  }
+  return feedback
+})
 
 function stateTone(state: AgentConversationState): string {
   if (state === 'needs_attention') return 'bg-red-400'
@@ -124,7 +198,7 @@ function beginThreadDrag(event: DragEvent, thread: AgentConversationThread) {
   writeAgentConversationDrag(event, {
     conversationId: thread.nativeThreadId,
     threadId: thread.id,
-    title: agentConversationTitle(thread)
+    title: agentConversationDisplayTitle(thread)
   })
 }
 
@@ -157,9 +231,21 @@ async function restoreTranscriptScroll(id: string) {
 }
 
 async function selectThread(thread: AgentConversationThread) {
-  if (selectedId.value !== thread.id) annotations.value = []
+  if (selectedId.value !== thread.id) {
+    const previousDraftId = conversationThreadId.value
+    if (previousDraftId) {
+      browserCaptureDrafts.set(
+        previousDraftId,
+        attachments.value.filter(isBrowserCaptureAttachment)
+      )
+    }
+    annotations.value = []
+    attachments.value = [...(browserCaptureDrafts.get(thread.id) ?? [])]
+    messageApprovalFeedback.value = null
+  }
   creating.value = false
   pendingThreadId.value = null
+  setAgentConversationUnread(thread, false)
   selectedId.value = thread.id
   view.value = 'conversation'
   await restoreTranscriptScroll(thread.id)
@@ -167,6 +253,41 @@ async function selectThread(thread: AgentConversationThread) {
   panel.value
     ?.querySelector<HTMLTextAreaElement>('[data-test-id="ai-prompt-input"] textarea')
     ?.focus({ preventScroll: true })
+}
+
+function browserCaptureDragEnter(event: DragEvent, thread: AgentConversationThread) {
+  if (!hasBrowserCaptureDrag(event.dataTransfer)) return
+  event.preventDefault()
+  event.stopPropagation()
+  captureDropTargetId.value = thread.id
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function browserCaptureDragLeave(event: DragEvent, thread: AgentConversationThread) {
+  if (captureDropTargetId.value !== thread.id) return
+  const current = event.currentTarget
+  const related = event.relatedTarget
+  if (current instanceof HTMLElement && related instanceof Node && current.contains(related)) return
+  captureDropTargetId.value = null
+}
+
+async function dropBrowserCaptureOnThread(event: DragEvent, thread: AgentConversationThread) {
+  const payload = readBrowserCaptureDrag(event.dataTransfer)
+  captureDropTargetId.value = null
+  if (!payload) return
+  event.preventDefault()
+  event.stopPropagation()
+  const attachment = browserCaptureAttachmentFromDrag(payload)
+  if (!attachment) return
+  await selectThread(thread)
+  const key = browserCaptureAttachmentKey(attachment)
+  attachments.value = [
+    ...attachments.value.filter(
+      (candidate) => !key || browserCaptureAttachmentKey(candidate) !== key
+    ),
+    attachment
+  ].slice(-5)
+  browserCaptureDrafts.set(thread.id, attachments.value.filter(isBrowserCaptureAttachment))
 }
 
 async function showThreadList() {
@@ -180,12 +301,18 @@ async function showThreadList() {
 
 async function startNewConversation() {
   retainTranscriptScroll()
+  const previousDraftId = conversationThreadId.value
+  if (previousDraftId) {
+    browserCaptureDrafts.set(previousDraftId, attachments.value.filter(isBrowserCaptureAttachment))
+  }
   creating.value = true
   pendingThreadId.value = null
   selectedId.value = null
+  messageApprovalFeedback.value = null
   view.value = 'conversation'
   followUp.value = ''
   annotations.value = []
+  attachments.value = [...(browserCaptureDrafts.get('new-task') ?? [])]
   error.value = ''
   search.value = ''
   await nextTick()
@@ -271,26 +398,37 @@ async function submitFollowUp(
   const message = followUp.value.trim()
   if (
     (!creating.value && !thread?.nativeThreadId) ||
-    (!message && !submission.annotations.length) ||
+    (!message && !submission.annotations.length && !submission.attachments.length) ||
     submitting.value
   ) {
     return
   }
   error.value = ''
   submitting.value = true
+  const captureResolution = await resolveBrowserCaptureAttachments(submission.attachments)
+  const effectiveSubmission = {
+    ...submission,
+    attachments: captureResolution.attachments
+  }
   lastFollowUp.value = message
   lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
+  lastAttachments.value = [...submission.attachments]
+  followUp.value = ''
+  annotations.value = []
+  attachments.value = []
+  browserCaptureDrafts.delete(conversationThreadId.value)
   try {
     const receipt = await submitAgentConversation({
+      ...(captureResolution.contextPrompt
+        ? { contextPrompt: captureResolution.contextPrompt }
+        : {}),
       nativeThreadId: thread?.nativeThreadId ?? null,
       prompt: message,
       refresh,
-      selection: submission,
+      selection: effectiveSubmission,
       steer: steeringSelectedThread.value,
       threadId: conversationThreadId.value
     })
-    followUp.value = ''
-    annotations.value = []
     if (creating.value) {
       pendingThreadId.value = `agent:${receipt.threadId}`
       await refresh(true)
@@ -303,14 +441,15 @@ async function submitFollowUp(
 }
 
 async function retryFollowUp() {
-  if (!lastFollowUp.value && !lastAnnotations.value.length) return
+  if (!lastFollowUp.value && !lastAnnotations.value.length && !lastAttachments.value.length) return
   followUp.value = lastFollowUp.value
   annotations.value = lastAnnotations.value.map((annotation) => ({ ...annotation }))
+  attachments.value = [...lastAttachments.value]
   error.value = ''
   await submitFollowUp({
     ...conversationSelection(selectedModelScope.value),
     annotations: annotations.value,
-    attachments: []
+    attachments: attachments.value
   })
 }
 
@@ -321,6 +460,31 @@ async function stopConversation() {
     await stopAgentConversation(thread.nativeThreadId, thread.id)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function respondToApproval(requestId: string, response: AgentExtensionUiResponse) {
+  const thread = selectedThread.value
+  if (!thread || respondingUiRequests.value.includes(requestId)) return
+  const request = thread.pendingUiRequests.find((candidate) => candidate.id === requestId)
+  const preview = request ? messageApprovalPreview(request) : null
+  if (preview) {
+    const approved = response.confirmed === true || /^allow once$/i.test(response.value ?? '')
+    messageApprovalFeedback.value = {
+      preview,
+      state: approved ? 'sending' : 'cancelled'
+    }
+  }
+  error.value = ''
+  respondingUiRequests.value = [...respondingUiRequests.value, requestId]
+  try {
+    await respondToAgentUiRequest(thread.nativeThreadId, requestId, response)
+    await refresh(true)
+  } catch (cause) {
+    if (preview) messageApprovalFeedback.value = null
+    error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    respondingUiRequests.value = respondingUiRequests.value.filter((id) => id !== requestId)
   }
 }
 
@@ -375,6 +539,23 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
               <icon-lucide-x class="size-3 stroke-[1.6]" />
             </button>
           </label>
+          <Tip
+            v-if="archivedCount"
+            :label="showArchived ? 'Show active tasks' : 'Show archived tasks'"
+          >
+            <button
+              type="button"
+              data-test-id="agent-thread-archive-toggle"
+              :aria-label="showArchived ? 'Show active tasks' : 'Show archived tasks'"
+              :aria-pressed="showArchived"
+              class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+              :class="showArchived ? 'bg-chrome-detail text-surface' : ''"
+              @click="showArchived = !showArchived"
+            >
+              <icon-lucide-archive-restore v-if="showArchived" class="size-3.5 stroke-[1.6]" />
+              <icon-lucide-archive v-else class="size-3.5 stroke-[1.6]" />
+            </button>
+          </Tip>
           <Tip label="New task">
             <button
               type="button"
@@ -395,49 +576,82 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
           class="scrollbar-thin min-h-0 flex-1 touch-pan-y overflow-y-auto px-2.5 pb-2 overscroll-y-contain"
           data-test-id="agent-thread-list"
         >
-          <button
+          <AgentConversationContextMenu
             v-for="thread in listedThreads"
             :key="thread.id"
-            type="button"
-            draggable="true"
-            :data-agent-thread-id="thread.id"
-            :data-test-id="`agent-chat-thread-${thread.id}`"
-            :aria-current="selectedId === thread.id ? 'true' : undefined"
-            :aria-label="`${agentConversationTitle(thread)}; drag to place on board`"
-            class="mb-0.5 flex w-full cursor-grab flex-col justify-center rounded-[8px] border border-transparent px-2.5 text-left hover:bg-hover active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-component/35"
-            :class="[
-              showThreadPreview(thread) ? 'min-h-[48px] py-1.5' : 'h-10',
-              selectedId === thread.id ? 'border-border/70 bg-chrome-detail' : ''
-            ]"
-            @dragstart="beginThreadDrag($event, thread)"
-            @click="selectThread(thread)"
+            :thread="thread"
           >
-            <span class="flex min-w-0 items-center gap-2">
-              <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-surface">
-                {{ agentConversationTitle(thread) }}
-              </span>
-              <span class="shrink-0 text-[9.5px] tabular-nums text-muted/80">
-                {{ relativeTime(thread.updatedAt) }}
-              </span>
-            </span>
-            <span
-              v-if="showThreadPreview(thread)"
-              class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-muted"
+            <button
+              type="button"
+              draggable="true"
+              :data-agent-thread-id="thread.id"
+              :data-test-id="`agent-chat-thread-${thread.id}`"
+              :aria-current="selectedId === thread.id ? 'true' : undefined"
+              :aria-label="`${agentConversationDisplayTitle(thread)}; drag to place on board`"
+              class="relative mb-0.5 flex w-full cursor-grab flex-col justify-center overflow-hidden rounded-[8px] border border-transparent px-2.5 text-left hover:bg-hover active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-component/35"
+              :class="[
+                showThreadPreview(thread) ? 'min-h-[48px] py-1.5' : 'h-10',
+                selectedId === thread.id ? 'border-border/70 bg-chrome-detail' : '',
+                captureDropTargetId === thread.id ? 'border-accent/60 bg-accent/10' : ''
+              ]"
+              @dragenter="browserCaptureDragEnter($event, thread)"
+              @dragleave="browserCaptureDragLeave($event, thread)"
+              @dragover="browserCaptureDragEnter($event, thread)"
+              @dragstart="beginThreadDrag($event, thread)"
+              @drop="dropBrowserCaptureOnThread($event, thread)"
+              @click="selectThread(thread)"
             >
               <span
-                v-if="showStateDot(thread.state)"
-                class="size-1.5 shrink-0 rounded-full"
-                :class="stateTone(thread.state)"
+                v-if="captureDropTargetId === thread.id"
                 aria-hidden="true"
-              />
-              <span class="truncate">{{ threadPreview(thread) }}</span>
-            </span>
-          </button>
+                class="bg-chrome-raised/95 absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[11px] font-medium text-accent backdrop-blur-sm"
+              >
+                <icon-lucide-link class="size-3 stroke-[1.8]" />
+                Drop to attach
+              </span>
+              <span class="flex min-w-0 items-center gap-2">
+                <span
+                  v-if="isAgentConversationUnread(thread)"
+                  class="size-1.5 shrink-0 rounded-full bg-accent"
+                  aria-label="Unread"
+                />
+                <icon-lucide-pin
+                  v-if="isAgentConversationPinned(thread)"
+                  class="size-3 shrink-0 stroke-[1.6] text-muted"
+                  aria-label="Pinned"
+                />
+                <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-surface">
+                  {{ agentConversationDisplayTitle(thread) }}
+                </span>
+                <span class="shrink-0 text-[9.5px] tabular-nums text-muted/80">
+                  {{ relativeTime(thread.updatedAt) }}
+                </span>
+              </span>
+              <span
+                v-if="showThreadPreview(thread)"
+                class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-muted"
+              >
+                <span
+                  v-if="showStateDot(thread.state)"
+                  class="size-1.5 shrink-0 rounded-full"
+                  :class="stateTone(thread.state)"
+                  aria-hidden="true"
+                />
+                <span class="truncate">{{ threadPreview(thread) }}</span>
+              </span>
+            </button>
+          </AgentConversationContextMenu>
           <div
             v-if="!listedThreads.length"
             class="px-2 py-8 text-center text-[11px] leading-4 text-muted"
           >
-            {{ search.trim() ? 'No matching tasks' : 'No tasks yet' }}
+            {{
+              search.trim()
+                ? 'No matching tasks'
+                : showArchived
+                  ? 'No archived tasks'
+                  : 'No tasks yet'
+            }}
           </div>
         </nav>
       </div>
@@ -452,7 +666,11 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
           <AiConversationSurface
             v-model="followUp"
             v-model:annotations="annotations"
-            :can-retry="Boolean(error && (lastFollowUp || lastAnnotations.length))"
+            v-model:attachments="attachments"
+            :approval-visible="hasApprovalSurface"
+            :can-retry="
+              Boolean(error && (lastFollowUp || lastAnnotations.length || lastAttachments.length))
+            "
             :can-stop="canStopSelected"
             :context-usage="selectedThread?.contextUsage"
             :disabled="!creating && !selectedThread?.nativeThreadId"
@@ -473,36 +691,58 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
             @stop="stopConversation"
           >
             <template #header>
+              <AgentConversationContextMenu :thread="selectedThread">
+                <div
+                  class="flex h-10 shrink-0 items-center gap-1.5 px-2"
+                  data-test-id="agent-selected-header"
+                >
+                  <Tip label="Back to tasks">
+                    <button
+                      type="button"
+                      data-test-id="agent-thread-back"
+                      aria-label="Back to tasks"
+                      class="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+                      @click="showThreadList"
+                    >
+                      <icon-lucide-arrow-left class="size-3.5 stroke-[1.6]" />
+                    </button>
+                  </Tip>
+                  <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-surface">
+                    {{
+                      creating
+                        ? 'New task'
+                        : selectedThread
+                          ? agentConversationDisplayTitle(selectedThread)
+                          : 'Task'
+                    }}
+                  </span>
+                  <span
+                    v-if="selectedThread && showStateDot(selectedThread.state)"
+                    :aria-label="selectedThread.state.replace('_', ' ')"
+                    class="size-1.5 shrink-0 rounded-full"
+                    :class="stateTone(selectedThread.state)"
+                    role="status"
+                  />
+                </div>
+              </AgentConversationContextMenu>
+            </template>
+            <template #approval>
               <div
-                class="border-border/55 flex h-10 shrink-0 items-center gap-1.5 border-b px-2"
-                data-test-id="agent-selected-header"
+                v-if="selectedThread?.pendingUiRequests.length || messageApprovalCard"
+                class="agent-conversation-column flex flex-col gap-2 pb-3"
+                data-test-id="agent-approval-column"
               >
-                <Tip label="Back to tasks">
-                  <button
-                    type="button"
-                    data-test-id="agent-thread-back"
-                    aria-label="Back to tasks"
-                    class="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
-                    @click="showThreadList"
-                  >
-                    <icon-lucide-arrow-left class="size-3.5 stroke-[1.6]" />
-                  </button>
-                </Tip>
-                <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-surface">
-                  {{
-                    creating
-                      ? 'New task'
-                      : selectedThread
-                        ? agentConversationTitle(selectedThread)
-                        : 'Task'
-                  }}
-                </span>
-                <span
-                  v-if="selectedThread && showStateDot(selectedThread.state)"
-                  :aria-label="selectedThread.state.replace('_', ' ')"
-                  class="size-1.5 shrink-0 rounded-full"
-                  :class="stateTone(selectedThread.state)"
-                  role="status"
+                <AgentConversationApproval
+                  v-for="request in selectedThread?.pendingUiRequests ?? []"
+                  :key="request.id"
+                  :busy="respondingUiRequests.includes(request.id)"
+                  :request="request"
+                  @respond="respondToApproval"
+                />
+                <AgentConversationApproval
+                  v-if="!selectedThread?.pendingUiRequests.length && messageApprovalCard"
+                  :preview="messageApprovalCard.preview"
+                  :state="messageApprovalCard.state"
                 />
               </div>
             </template>

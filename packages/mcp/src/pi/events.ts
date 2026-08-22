@@ -2,8 +2,15 @@ import { createHash } from 'node:crypto'
 
 import type { AgentConversationMessage, AgentConversationThread } from '#mcp/agent-router/contracts'
 
+import {
+  antigravityActivities,
+  antigravityToolImages,
+  pendingAntigravityOutput,
+  type AntigravityActivity
+} from './antigravity-activity'
+import { MAX_IMAGE_BASE64_LENGTH } from './image-preview'
+
 const MAX_ACTIVITY_TEXT = 12_000
-const MAX_IMAGE_BASE64_LENGTH = 3 * 1024 * 1024
 const MAX_STATUS_TEXT = 160
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -133,67 +140,181 @@ function streamingAssistantId(turnKey: string): string {
   return `pi-agent:${turnKey}:assistant`
 }
 
+function preSteerAssistantId(turnKey: string, steeringMessageId: string): string {
+  return `${streamingAssistantId(turnKey)}:before-steer:${steeringMessageId}`
+}
+
+function streamingAssistantText(message?: AgentConversationMessage): string {
+  if (!message) return ''
+  if (message.text) return message.text
+  const legacyPart = message.parts?.find((part) => part.type === 'reasoning')
+  return legacyPart?.type === 'reasoning' ? legacyPart.text : ''
+}
+
+export function finalizePiStreamingAssistant(
+  thread: AgentConversationThread,
+  turnKey: string,
+  steeringMessageId: string,
+  completedAt: string
+): boolean {
+  const id = streamingAssistantId(turnKey)
+  const current = thread.messages.find((message) => message.id === id)
+  if (!current) return false
+  const text = streamingAssistantText(current)
+  if (!text.trim()) return false
+  const index = thread.messages.indexOf(current)
+  thread.messages[index] = {
+    completedAt,
+    createdAt: current.createdAt,
+    id: preSteerAssistantId(turnKey, steeringMessageId),
+    role: 'assistant',
+    text
+  }
+  return true
+}
+
+export function restorePiStreamingAssistant(
+  thread: AgentConversationThread,
+  turnKey: string,
+  steeringMessageId: string
+): void {
+  const current = thread.messages.find(
+    (message) => message.id === preSteerAssistantId(turnKey, steeringMessageId)
+  )
+  if (!current) return
+  current.id = streamingAssistantId(turnKey)
+  Reflect.deleteProperty(current, 'completedAt')
+}
+
 function thinkingId(turnKey: string, contentIndex: number): string {
   return `pi-thinking:${turnKey}:${String(contentIndex)}`
 }
 
-type AntigravityActivityDetail = { input?: string; output?: string }
-type AntigravityActivity =
-  | ({ description: string; type: 'edit' } & AntigravityActivityDetail)
-  | ({ name: string; type: 'tool' } & AntigravityActivityDetail)
-
-function parsedAntigravityInput(value: string): Record<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function antigravityToolName(label: string, input: string): string {
-  const parsed = parsedAntigravityInput(input)
-  const bridgedName = parsed && typeof parsed.ToolName === 'string' ? parsed.ToolName.trim() : ''
-  if (!bridgedName) return label
-  if (bridgedName !== 'mcp') return bridgedName
-
-  const args = isRecord(parsed?.Arguments) ? parsed.Arguments : null
-  if (typeof args?.tool === 'string' && args.tool.trim()) return args.tool.trim()
-  if (typeof args?.search === 'string' && args.search.trim()) return 'connected_app_search'
-  return bridgedName
-}
-
-function antigravityActivities(value: unknown): AntigravityActivity[] {
-  if (typeof value !== 'string') return []
-  const activities: AntigravityActivity[] = []
-  const pattern =
-    /\[agy (edit|tool): ([^\]\r\n]+)\](?:\r?\n\[agy input\]\r?\n([\s\S]*?)\r?\n\[\/agy input\])?(?:\r?\n\[agy output\]\r?\n([\s\S]*?)\r?\n\[\/agy output\])?/g
-  for (const match of value.matchAll(pattern)) {
-    const label = match[2]?.trim()
-    if (!label) continue
-    const input = safeActivityText(match[3])
-    const output = safeActivityText(match[4])
-    activities.push(
-      match[1] === 'edit'
-        ? {
-            description: label,
-            ...(input ? { input } : {}),
-            ...(output ? { output } : {}),
-            type: 'edit'
-          }
-        : {
-            ...(input ? { input } : {}),
-            name: antigravityToolName(label, input),
-            ...(output ? { output } : {}),
-            type: 'tool'
-          }
-    )
-  }
-  return activities
-}
-
 function antigravityToolPrefix(turnKey: string, contentIndex: number): string {
   return `pi-agy-tool:${turnKey}:${String(contentIndex)}:`
+}
+
+type AgentToolPart = Extract<
+  NonNullable<AgentConversationMessage['parts']>[number],
+  { type: 'tool' }
+>
+
+function antigravityActivityIdentity(activity: AntigravityActivity): {
+  input?: string
+  name: string
+} {
+  const input = activity.input ?? (activity.type === 'edit' ? activity.description : undefined)
+  return {
+    ...(input ? { input } : {}),
+    name: activity.type === 'edit' ? 'edit' : activity.name
+  }
+}
+
+function antigravityActivityStatus(activity: AntigravityActivity): string {
+  return activity.type === 'edit'
+    ? `Editing ${activity.description}…`
+    : `${activity.name.replaceAll('_', ' ')}…`
+}
+
+function previousAntigravityTool(
+  thread: AgentConversationThread,
+  prefix: string,
+  offset: number
+): { message: AgentConversationMessage; part: AgentToolPart } | null {
+  const message = thread.messages.find(
+    (candidate) => candidate.id === `${prefix}${String(offset - 1)}`
+  )
+  const part = message?.parts?.length === 1 ? message.parts[0] : undefined
+  return message && part?.type === 'tool' ? { message, part } : null
+}
+
+function completeRepeatedAntigravityActivity(
+  thread: AgentConversationThread,
+  prefix: string,
+  offset: number,
+  activity: AntigravityActivity | undefined,
+  now: string
+): string | null {
+  if (!activity) return null
+  const previous = previousAntigravityTool(thread, prefix, offset)
+  if (!previous) return null
+  const { input, name } = antigravityActivityIdentity(activity)
+  if (
+    previous.part.name !== name ||
+    previous.part.input !== input ||
+    !pendingAntigravityOutput(previous.part.output) ||
+    pendingAntigravityOutput(activity.output)
+  ) {
+    return null
+  }
+  const images =
+    activity.type === 'tool' ? antigravityToolImages(activity.name, activity.output ?? '') : []
+  upsertMessage(thread, {
+    completedAt: now,
+    createdAt: previous.message.createdAt,
+    id: previous.message.id,
+    parts: [
+      {
+        ...(images.length ? { images } : {}),
+        ...(input ? { input } : {}),
+        name,
+        ...(activity.output ? { output: activity.output } : {}),
+        state: 'success',
+        type: 'tool'
+      }
+    ],
+    role: 'assistant',
+    text: ''
+  })
+  return antigravityActivityStatus(activity)
+}
+
+function completePreviousAntigravityActivity(
+  thread: AgentConversationThread,
+  prefix: string,
+  offset: number,
+  now: string
+): void {
+  const previous = previousAntigravityTool(thread, prefix, offset)
+  if (!previous || previous.part.state !== 'running') return
+  upsertMessage(thread, {
+    ...previous.message,
+    completedAt: now,
+    parts: [{ ...previous.part, state: 'success' }]
+  })
+}
+
+function appendAntigravityActivities(
+  thread: AgentConversationThread,
+  activities: AntigravityActivity[],
+  prefix: string,
+  offset: number,
+  now: string,
+  append: boolean
+): void {
+  for (const [index, activity] of activities.entries()) {
+    const { input, name } = antigravityActivityIdentity(activity)
+    const images =
+      activity.type === 'tool' ? antigravityToolImages(activity.name, activity.output ?? '') : []
+    const running = append && index === activities.length - 1
+    upsertMessage(thread, {
+      ...(running ? {} : { completedAt: now }),
+      createdAt: now,
+      id: `${prefix}${String(offset + index)}`,
+      parts: [
+        {
+          ...(input ? { input } : {}),
+          ...(images.length ? { images } : {}),
+          name,
+          ...(activity.output ? { output: activity.output } : {}),
+          state: running ? 'running' : 'success',
+          type: 'tool'
+        }
+      ],
+      role: 'assistant',
+      text: ''
+    })
+  }
 }
 
 function syncAntigravityActivities(
@@ -204,37 +325,26 @@ function syncAntigravityActivities(
   now: string,
   append: boolean
 ): string | null {
-  const activities = antigravityActivities(value)
+  const activities = antigravityActivities(value, safeActivityText)
   if (!activities.length) return null
   const prefix = antigravityToolPrefix(turnKey, contentIndex)
   const offset = append
     ? thread.messages.filter((message) => message.id.startsWith(prefix)).length
     : 0
-  for (const [index, activity] of activities.entries()) {
-    const name = activity.type === 'edit' ? 'edit' : activity.name
-    const input = activity.input ?? (activity.type === 'edit' ? activity.description : undefined)
-    upsertMessage(thread, {
-      completedAt: now,
-      createdAt: now,
-      id: `${prefix}${String(offset + index)}`,
-      parts: [
-        {
-          ...(input ? { input } : {}),
-          name,
-          ...(activity.output ? { output: activity.output } : {}),
-          state: 'success',
-          type: 'tool'
-        }
-      ],
-      role: 'assistant',
-      text: ''
-    })
+  if (append && offset > 0 && activities.length === 1) {
+    const completed = completeRepeatedAntigravityActivity(
+      thread,
+      prefix,
+      offset,
+      activities[0],
+      now
+    )
+    if (completed) return completed
   }
+  if (append && offset > 0) completePreviousAntigravityActivity(thread, prefix, offset, now)
+  appendAntigravityActivities(thread, activities, prefix, offset, now, append)
   const latest = activities.at(-1)
-  if (!latest) return null
-  return latest.type === 'edit'
-    ? `Editing ${latest.description}…`
-    : `${latest.name.replaceAll('_', ' ')}…`
+  return latest ? antigravityActivityStatus(latest) : null
 }
 
 function markRunning(thread: AgentConversationThread, detail = 'Pi is running.'): boolean {
@@ -350,14 +460,13 @@ function applyMessageUpdate(
   if (update.type === 'text_delta' && typeof update.delta === 'string') {
     const id = streamingAssistantId(turnKey)
     const existing = thread.messages.find((message) => message.id === id)
-    const previous = existing?.parts?.find((part) => part.type === 'reasoning')?.text ?? ''
+    const previous = streamingAssistantText(existing)
     const text = `${previous}${update.delta}`
     upsertMessage(thread, {
       createdAt: now,
       id,
-      parts: [{ state: 'streaming', text, type: 'reasoning' }],
       role: 'assistant',
-      text: ''
+      text
     })
     thread.recentUpdate = text.trim().slice(0, 500) || 'Writing response…'
     return true

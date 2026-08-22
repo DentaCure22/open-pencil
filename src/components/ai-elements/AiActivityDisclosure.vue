@@ -6,6 +6,8 @@ import AiReasoning from './AiReasoning.vue'
 import AiToolGroup from './AiToolGroup.vue'
 import {
   formatElapsedDuration,
+  isMediaGenerationTool,
+  isVideoGenerationTool,
   latestMessageCreatedAt,
   messageParts,
   resolveReasoningActivityState
@@ -22,6 +24,34 @@ const { endedAt, messages, startedAt, status, workingLabel } = defineProps<{
 
 const now = useNow({ interval: 1_000 })
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
+const runningMediaKind = computed<'image' | 'video' | null>(() => {
+  let kind: 'image' | 'video' | null = null
+  for (const message of messages) {
+    for (const part of messageParts(message)) {
+      if (
+        part.type !== 'tool' ||
+        (part.state !== 'pending' && part.state !== 'running') ||
+        !isMediaGenerationTool(part.name, part.input)
+      ) {
+        continue
+      }
+      const next = isVideoGenerationTool(part.name, part.input) ? 'video' : 'image'
+      if (kind && kind !== next) return null
+      kind = next
+    }
+  }
+  return kind
+})
+const hasOtherToolActivity = computed(() =>
+  messages.some((message) =>
+    messageParts(message).some(
+      (part) => part.type === 'tool' && !isMediaGenerationTool(part.name, part.input)
+    )
+  )
+)
+const mediaFocused = computed(() =>
+  runningMediaKind.value && !hasOtherToolActivity.value ? runningMediaKind.value : null
+)
 const requiresInteraction = computed(
   () =>
     status === 'needs_attention' &&
@@ -37,7 +67,11 @@ const hasTerminalToolFailure = computed(
     )
 )
 const staysOpen = computed(
-  () => busy.value || requiresInteraction.value || hasTerminalToolFailure.value
+  () =>
+    busy.value ||
+    Boolean(mediaFocused.value) ||
+    requiresInteraction.value ||
+    hasTerminalToolFailure.value
 )
 const expanded = ref(staysOpen.value)
 watch(staysOpen, (value) => {
@@ -54,7 +88,8 @@ type ActivityItem = {
 const rawActivity = computed(() =>
   messages.flatMap((message): ActivityItem[] =>
     messageParts(message).flatMap((part, index) =>
-      part.type === 'reasoning' || part.type === 'tool'
+      (part.type === 'reasoning' && !mediaFocused.value) ||
+      (part.type === 'tool' && !isMediaGenerationTool(part.name, part.input))
         ? [{ index: 0, key: `${message.id}:${String(index)}`, part }]
         : []
     )
@@ -93,13 +128,20 @@ const activity = computed(() => {
 const resolvedEndAt = computed(() => endedAt ?? latestMessageCreatedAt(messages) ?? startedAt)
 const elapsedMs = computed(() => {
   const start = Date.parse(startedAt ?? '')
-  const end = busy.value ? now.value.getTime() : Date.parse(resolvedEndAt.value ?? '')
+  const end =
+    busy.value || mediaFocused.value ? now.value.getTime() : Date.parse(resolvedEndAt.value ?? '')
   return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : undefined
 })
 const duration = computed(() =>
   elapsedMs.value === undefined ? '' : formatElapsedDuration(elapsedMs.value)
 )
 const label = computed(() => {
+  if (mediaFocused.value) {
+    const medium = mediaFocused.value === 'video' ? 'video' : 'image'
+    return elapsedMs.value === undefined || elapsedMs.value < 1_000
+      ? `Creating ${medium}`
+      : `Creating ${medium} for ${duration.value}`
+  }
   if (busy.value) {
     if (elapsedMs.value === undefined || elapsedMs.value < 1_000) {
       return workingLabel || 'Working'

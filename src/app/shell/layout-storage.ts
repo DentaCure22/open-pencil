@@ -1,7 +1,7 @@
 import { IS_BROWSER } from '@open-pencil/core/constants'
 
 const EDITOR_LAYOUT_KEY = 'open-pencil:editor-layout'
-const DEFAULT_EDITOR_LAYOUT = [20, 80]
+const DEFAULT_EDITOR_LAYOUT = [27, 73]
 
 export function loadEditorLayout(): number[] {
   if (!IS_BROWSER) return DEFAULT_EDITOR_LAYOUT

@@ -14,6 +14,20 @@ test.describe.configure({ mode: 'serial' })
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await browser.newPage()
   page.on('pageerror', (error) => pageErrors.push(error))
+  await page.addInitScript(() => {
+    let displayMediaRequests = 0
+    Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {
+      configurable: true,
+      value: async () => {
+        displayMediaRequests += 1
+        throw new Error('Narrated Trace must not request browser display capture')
+      }
+    })
+    Object.defineProperty(window, '__openPencilDisplayMediaRequests', {
+      configurable: true,
+      get: () => displayMediaRequests
+    })
+  })
   await page.goto('/?test&no-rulers')
   canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -52,7 +66,19 @@ test('shows page coordinates and captures an intentional blank-canvas Focus', as
   const pixels = await readNarratedTraceEvidencePixels(evidence)
   expect(pixels.nonWhite).toBeGreaterThan(100)
   expect(pixels.violet).toBeGreaterThan(5)
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, '__openPencilDisplayMediaRequests')))
+    .toBe(0)
   await expect(row.getByTestId('narrated-trace-evidence-status')).toHaveCount(0)
+  await page.getByTestId('narrated-trace-evidence-overview-trigger').click()
+  const overview = page.getByTestId('narrated-trace-evidence-overview')
+  await expect(overview).toBeVisible()
+  await expect(overview).toContainText('Evidence buffer')
+  await expect(overview).toContainText('/ 100')
+  await expect(overview).toContainText('/ 250 MB')
+  await expect(overview).toContainText('captures')
+  await expect(page.getByTestId('narrated-trace-evidence-capacity')).toBeVisible()
+  await page.keyboard.press('Escape')
 
   await page.evaluate(async () => {
     const { narratedTraceSession, removeNarratedTraceRecord } =

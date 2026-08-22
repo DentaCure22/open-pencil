@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import IconMessageSquarePlus from '~icons/lucide/message-square-plus'
+import IconScan from '~icons/lucide/scan'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { openContextCommentForSelection } from '@/app/context-comment'
+import { startContextCommentScreenshot } from '@/app/context-comment'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import Tip from '@/components/ui/Tip.vue'
 
@@ -10,14 +10,14 @@ const store = useEditorStore()
 </script>
 
 <template>
-  <Tip label="Add contextual comment" side="right">
+  <Tip label="Screenshot and comment" side="right">
     <span @pointerdown.stop>
       <ToolButton
-        :icon="IconMessageSquarePlus"
-        label="Add contextual comment"
+        :icon="IconScan"
+        label="Screenshot and comment"
         variant="utility"
         data-test-id="context-comment-tool"
-        @click="openContextCommentForSelection(store)"
+        @click="startContextCommentScreenshot(store)"
       />
     </span>
   </Tip>

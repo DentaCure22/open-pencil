@@ -207,6 +207,8 @@ describe('MCP server', () => {
     expect(names).toContain('get_page_tree')
     expect(names).toContain('render')
     expect(names).toContain('board_build')
+    expect(names).toContain('list_agent_chats')
+    expect(names).toContain('get_agent_chat_context')
     expect(names).toContain('dispatch_work')
     expect(names).toContain('set_theme')
     expect(names).not.toContain('query_trace_history')

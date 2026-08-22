@@ -20,6 +20,17 @@ const DEFAULT_PI_MODELS_STORE_PATH = path.join(homedir(), '.pi', 'agent', 'model
 
 const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const
 const THINKING_EFFORTS: AgentReasoningEffort[] = ['low', 'medium', 'high', 'xhigh']
+const CARRIED_MODEL_EFFORTS: Readonly<Record<string, readonly AgentReasoningEffort[]>> = {
+  'antigravity/gemini-3-1-pro': ['low', 'high'],
+  'antigravity/gemini-3-7-flash': ['low', 'medium', 'high'],
+  'cursor/composer-2.5-fast': ['medium'],
+  'cursor/cursor-grok-4.6-fast': ['low', 'medium', 'high', 'xhigh'],
+  'openai-codex/gpt-5.6-luna': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'openai-codex/gpt-5.6-sol': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'openai-codex/gpt-5.6-terra': ['low', 'medium', 'high', 'xhigh', 'max'],
+  'xai-auth/grok-4.6': ['low', 'medium', 'high', 'xhigh'],
+  'xai-auth/grok-composer-2.5-fast': ['medium']
+}
 
 export type PiCatalogPaths = {
   authPath?: string
@@ -30,27 +41,74 @@ export type PiCatalogPaths = {
   storePath?: string
 }
 
+type EnabledModelPattern = {
+  effort?: AgentReasoningEffort
+  pattern: string
+}
+
 export const FALLBACK_PI_MODELS: AgentModelDefinition[] = [
   {
     defaultEffort: 'high',
-    efforts: [...THINKING_EFFORTS],
+    efforts: ['low', 'medium', 'high', 'xhigh'],
     group: 'xAI',
     id: 'xai-auth/grok-4.6',
     label: 'Grok 4.6'
   },
   {
     defaultEffort: 'medium',
-    efforts: [...THINKING_EFFORTS],
+    efforts: ['medium'],
+    group: 'xAI',
+    id: 'xai-auth/grok-composer-2.5-fast',
+    label: 'Grok Composer 2.5 Fast'
+  },
+  {
+    defaultEffort: 'medium',
+    efforts: ['medium'],
     group: 'Cursor',
     id: 'cursor/composer-2.5-fast',
     label: 'Composer 2.5 Fast'
   },
   {
-    defaultEffort: 'medium',
-    efforts: [...THINKING_EFFORTS],
+    defaultEffort: 'high',
+    efforts: ['low', 'medium', 'high', 'xhigh'],
+    group: 'Cursor',
+    id: 'cursor/cursor-grok-4.6-fast',
+    label: 'Cursor Grok 4.6 Fast'
+  },
+  {
+    defaultEffort: 'high',
+    efforts: ['low', 'medium', 'high'],
+    group: 'Antigravity',
+    id: 'antigravity/gemini-3-7-flash',
+    label: 'Gemini 3.7 Flash'
+  },
+  {
+    defaultEffort: 'high',
+    efforts: ['low', 'high'],
+    group: 'Antigravity',
+    id: 'antigravity/gemini-3-1-pro',
+    label: 'Gemini 3.1 Pro'
+  },
+  {
+    defaultEffort: 'high',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     group: 'OpenAI',
     id: 'openai-codex/gpt-5.6-luna',
     label: 'GPT-5.6 Luna'
+  },
+  {
+    defaultEffort: 'high',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    group: 'OpenAI',
+    id: 'openai-codex/gpt-5.6-sol',
+    label: 'GPT-5.6 Sol'
+  },
+  {
+    defaultEffort: 'high',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    group: 'OpenAI',
+    id: 'openai-codex/gpt-5.6-terra',
+    label: 'GPT-5.6 Terra'
   }
 ]
 
@@ -70,9 +128,24 @@ function readJson(filePath: string): unknown {
   }
 }
 
-function enabledGlobs(settings: Record<string, unknown> | null): string[] {
+function parseEnabledModelPattern(value: string): EnabledModelPattern {
+  const separator = value.lastIndexOf(':')
+  if (separator === -1) return { pattern: value }
+  const effort = value.slice(separator + 1)
+  if (!isEffort(effort)) return { pattern: value }
+  return {
+    effort,
+    pattern: value.slice(0, separator)
+  }
+}
+
+function enabledModelPatterns(
+  settings: Record<string, unknown> | null
+): EnabledModelPattern[] {
   if (!settings || !Array.isArray(settings.enabledModels)) return []
-  return settings.enabledModels.filter((value): value is string => typeof value === 'string')
+  return settings.enabledModels
+    .filter((value): value is string => typeof value === 'string')
+    .map(parseEnabledModelPattern)
 }
 
 function preferredModelId(settings: Record<string, unknown> | null): string {
@@ -89,13 +162,32 @@ function preferredEffort(settings: Record<string, unknown> | null): AgentReasoni
   return isEffort(requested) ? requested : DEFAULT_PI_REASONING_EFFORT
 }
 
-function modelEnabled(provider: string, modelId: string, globs: readonly string[]): boolean {
-  if (globs.length === 0) return true
+function modelPatternMatches(pattern: string, provider: string, modelId: string): boolean {
   const full = `${provider}/${modelId}`
-  return globs.some((glob) => {
-    if (glob.endsWith('/*')) return provider === glob.slice(0, -2)
-    return glob === full || glob === modelId
-  })
+  if (pattern.endsWith('/*')) return provider === pattern.slice(0, -2)
+  return pattern === full || pattern === modelId
+}
+
+function modelEnabled(
+  provider: string,
+  modelId: string,
+  patterns: readonly EnabledModelPattern[]
+): boolean {
+  if (patterns.length === 0) return true
+  return patterns.some(({ pattern }) => modelPatternMatches(pattern, provider, modelId))
+}
+
+function modelPreferredEffort(
+  provider: string,
+  modelId: string,
+  patterns: readonly EnabledModelPattern[],
+  fallback: AgentReasoningEffort
+): AgentReasoningEffort {
+  return (
+    patterns.find(
+      ({ effort, pattern }) => effort && modelPatternMatches(pattern, provider, modelId)
+    )?.effort ?? fallback
+  )
 }
 
 function isCuratedBoardModel(provider: string, modelId: string): boolean {
@@ -135,11 +227,13 @@ function definition(
   preferredEffort: AgentReasoningEffort,
   label?: string
 ): AgentModelDefinition {
-  const efforts = thinking ? [...THINKING_EFFORTS] : (['medium'] as AgentReasoningEffort[])
+  const id = `${provider}/${modelId}`
+  const efforts = [
+    ...(CARRIED_MODEL_EFFORTS[id] ?? (thinking ? THINKING_EFFORTS : ['medium']))
+  ] as AgentReasoningEffort[]
   const defaultEffort = efforts.includes(preferredEffort)
     ? preferredEffort
     : (efforts[0] ?? DEFAULT_PI_REASONING_EFFORT)
-  const id = `${provider}/${modelId}`
   return {
     defaultEffort,
     efforts,
@@ -153,8 +247,8 @@ export function parsePiListModels(
   text: string,
   settings: Record<string, unknown> | null = null
 ): AgentModelDefinition[] {
-  const globs = enabledGlobs(settings)
-  const effort = preferredEffort(settings)
+  const patterns = enabledModelPatterns(settings)
+  const fallbackEffort = preferredEffort(settings)
   const models: AgentModelDefinition[] = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
@@ -166,9 +260,16 @@ export function parsePiListModels(
     const modelId = fields.slice(1, -4).join(' ')
     if (!provider || !modelId) continue
     if (thinkingFlag !== 'yes' && thinkingFlag !== 'no') continue
-    if (!modelEnabled(provider, modelId, globs)) continue
+    if (!modelEnabled(provider, modelId, patterns)) continue
     if (!isCuratedBoardModel(provider, modelId)) continue
-    models.push(definition(provider, modelId, thinkingFlag === 'yes', effort))
+    models.push(
+      definition(
+        provider,
+        modelId,
+        thinkingFlag === 'yes',
+        modelPreferredEffort(provider, modelId, patterns, fallbackEffort)
+      )
+    )
   }
   return models
 }
@@ -184,8 +285,8 @@ function storeModels(
   const authed = isRecord(auth)
     ? new Set(Object.keys(auth).filter((key) => isRecord(auth[key])))
     : new Set<string>()
-  const globs = enabledGlobs(settings)
-  const effort = preferredEffort(settings)
+  const patterns = enabledModelPatterns(settings)
+  const fallbackEffort = preferredEffort(settings)
   const models: AgentModelDefinition[] = []
   for (const [provider, entry] of Object.entries(data)) {
     if (!isRecord(entry) || !Array.isArray(entry.models)) continue
@@ -193,12 +294,20 @@ function storeModels(
     for (const model of entry.models) {
       if (!isRecord(model) || typeof model.id !== 'string' || !model.id.trim()) continue
       const id = model.id.trim()
-      if (!modelEnabled(provider, id, globs)) continue
+      if (!modelEnabled(provider, id, patterns)) continue
       if (!isCuratedBoardModel(provider, id)) continue
       const map = isRecord(model.thinkingLevelMap) ? model.thinkingLevelMap : null
       const thinking = !map || Object.values(map).some((value) => value !== null)
       const name = typeof model.name === 'string' ? model.name : undefined
-      models.push(definition(provider, id, thinking, effort, name))
+      models.push(
+        definition(
+          provider,
+          id,
+          thinking,
+          modelPreferredEffort(provider, id, patterns, fallbackEffort),
+          name
+        )
+      )
     }
   }
   return models

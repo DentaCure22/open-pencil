@@ -8,6 +8,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { registerAgentAttachmentRoutes } from './agent-attachments/routes'
+import { AgentAttachmentStore } from './agent-attachments/store'
+import { resolveFfmpegExecutable } from './agent-attachments/video'
 import type { AgentConversationRouter } from './agent-router/contracts'
 import { registerAgentRoutes } from './agent-router/routes'
 import { localAppLaunchersFromEnv } from './local-apps/config'
@@ -41,12 +43,14 @@ const store = new LocalWorkspaceAuthorityStore({
   semanticServices: false
 })
 const app = new Hono()
+const attachmentStore = new AgentAttachmentStore(localWorkspaceRoot)
 const boardRuntime = new LocalWorkspaceBoardRuntime(store)
 const localAppManager = new LocalAppManager(localAppLaunchersFromEnv())
 const sharedAgentRouterConfig = {
   executable: agentExecutable,
   historyPath: path.join(localWorkspaceRoot, 'pi-conversations.json'),
-  workerCount: Number.parseInt(process.env.OPENPENCIL_PI_WORKER_COUNT ?? '4', 10),
+  stallTimeoutMs: Number.parseInt(process.env.OPENPENCIL_PI_STALL_TIMEOUT_MS ?? '900000', 10),
+  watchdogProbeMs: Number.parseInt(process.env.OPENPENCIL_PI_WATCHDOG_PROBE_MS ?? '30000', 10),
   workspaceRoot: agentWorkspaceRoot
 }
 const agentRouter: AgentConversationRouter = new PiAgentRouter({
@@ -54,6 +58,7 @@ const agentRouter: AgentConversationRouter = new PiAgentRouter({
   models: loadPiAgentModels(),
   sessionDir: path.join(localWorkspaceRoot, 'pi-sessions')
 })
+await attachmentStore.reconcile(agentRouter.conversations().map((thread) => thread.id))
 
 if (configuredCorsOrigins && configuredCorsOrigins.length > 0) {
   app.use(
@@ -73,16 +78,20 @@ registerLocalWorkspaceAuthorityRoutes(app, {
 })
 registerAgentAttachmentRoutes(app, {
   authorityRoot: localWorkspaceRoot,
-  getAuthToken: () => authToken
+  ffmpegExecutable: resolveFfmpegExecutable(process.env, agentExecutable),
+  getAuthToken: () => authToken,
+  store: attachmentStore
 })
 registerLocalAppRoutes(app, {
   getAuthToken: () => authToken,
   manager: localAppManager
 })
 registerAgentRoutes(app, {
+  attachmentStore,
   authorityRoot: localWorkspaceRoot,
   getAuthToken: () => authToken,
-  router: agentRouter
+  router: agentRouter,
+  traceEvidence: store
 })
 
 // Publish local agent credentials so MCP tools (e.g. dispatch_work) can reach

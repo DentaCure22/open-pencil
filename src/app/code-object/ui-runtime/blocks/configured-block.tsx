@@ -10,6 +10,7 @@ import {
   type CodeObjectUiBlockName
 } from '@open-pencil/core/code-object'
 
+import { normalizeVideoPlayerModel, VideoPlayer } from '../components/video-player'
 import type { CodeObjectUiActionHandler } from '../types'
 import { EstimatesList, normalizeEstimatesListModel } from './estimates-list'
 import { FinancialDashboard, normalizeFinancialDashboardModel } from './financial-dashboard'
@@ -55,9 +56,23 @@ function EstimatesListRenderer({
   )
 }
 
+function VideoPlayerRenderer({ config, interactionEnabled }: ConfiguredUiBlockRendererProps) {
+  const model = normalizeVideoPlayerModel(config)
+  return (
+    <main className="size-full min-h-full overflow-hidden bg-black">
+      <VideoPlayer
+        {...model}
+        autoplay={interactionEnabled && model.autoplay}
+        controls={interactionEnabled && model.controls}
+      />
+    </main>
+  )
+}
+
 const UI_BLOCK_RENDERERS = {
   'estimates-list': EstimatesListRenderer,
-  'financial-dashboard': FinancialDashboardRenderer
+  'financial-dashboard': FinancialDashboardRenderer,
+  'video-player': VideoPlayerRenderer
 } satisfies Record<CodeObjectUiBlockName, ComponentType<ConfiguredUiBlockRendererProps>>
 
 function UiBlockError({ detail, title }: { detail: string; title: string }) {

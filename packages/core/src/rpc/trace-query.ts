@@ -35,6 +35,8 @@ export type TraceQueryScope = {
   workspaceId?: string
 }
 
+export type TraceEvidenceStatus = 'evicted' | 'failed' | 'pending' | 'ready'
+
 export type TraceHistoryEvent = {
   anchor?: {
     pageRegion: Rect
@@ -43,6 +45,7 @@ export type TraceHistoryEvent = {
   changes?: Array<{ property: string }>
   durationMs?: number
   evidence?: { evidenceId: string }
+  evidenceStatus?: TraceEvidenceStatus
   id: string
   kind: string
   label: string
@@ -57,7 +60,17 @@ export type TraceHistoryEvent = {
   text?: string
 }
 
+export type TraceHistoryContextEntry = {
+  editedText?: string
+  included: boolean
+  note?: string
+  removed: boolean
+  sourceEventId: string
+}
+
 export type TraceHistorySession = {
+  /** Optional only for legacy file-native records written before context rows were preserved. */
+  contextDraft?: TraceHistoryContextEntry[]
   durationMs: number
   events: TraceHistoryEvent[]
   id: string
@@ -117,6 +130,7 @@ export type TraceQueryEvent = {
   anchor?: TraceHistoryEvent['anchor']
   atMs: number
   evidenceId?: string
+  evidenceStatus?: TraceEvidenceStatus
   id: string
   kind: string
   label: string
@@ -437,7 +451,10 @@ function scoreSession(
 ): ScoredSession {
   const cursorEventIds = cursor ? new Set(cursor.eventIds) : new Set<string>()
   const scoredEvents = session.events
-    .map((event) => ({ event, ...eventScore(event, queryTerms, input, cursorEventIds) }))
+    .map((event) => ({
+      event,
+      ...eventScore(event, queryTerms, input, cursorEventIds)
+    }))
     .sort(
       (left, right) =>
         right.score - left.score ||
@@ -471,6 +488,7 @@ function buildQueryEvent(event: TraceHistoryEvent): TraceQueryEvent {
     anchor: event.anchor ? structuredClone(event.anchor) : undefined,
     atMs: event.atMs,
     evidenceId: event.evidence?.evidenceId,
+    evidenceStatus: event.evidenceStatus,
     id: event.id,
     kind: event.kind,
     label: event.label,
@@ -589,7 +607,12 @@ function prepareQuery(input: TraceQueryInput): TraceQueryResult | PreparedQuery 
   if (queryTerms.length === 0 && !hasQueryContext(input, cursor)) {
     return buildTraceEmptyResult('ambiguous_query')
   }
-  return { cursor, queryTerms, since: since ?? undefined, until: until ?? undefined }
+  return {
+    cursor,
+    queryTerms,
+    since: since ?? undefined,
+    until: until ?? undefined
+  }
 }
 
 function scopedSummaries(
@@ -646,7 +669,10 @@ async function rankedSessions(
 ) {
   const scope = prepared.cursor ? cursorScope(prepared.cursor) : input.scope
   const candidates = scoped
-    .map((summary) => ({ score: summaryScore(summary, prepared.queryTerms, input), summary }))
+    .map((summary) => ({
+      score: summaryScore(summary, prepared.queryTerms, input),
+      summary
+    }))
     .sort(
       (left, right) =>
         right.score - left.score ||
@@ -828,7 +854,11 @@ export function resolveTraceSpokenTurn(
       newest &&
       nowEpochMs - newest.endedAtEpochMs > SPOKEN_TURN_FRESHNESS_MS
     ) {
-      return { reason: 'spoken_turn_stale', staleTurn: structuredClone(newest), status: 'empty' }
+      return {
+        reason: 'spoken_turn_stale',
+        staleTurn: structuredClone(newest),
+        status: 'empty'
+      }
     }
   }
 
@@ -1109,7 +1139,10 @@ export async function queryTraceSpokenTurnWindow(
       return {
         matches: [],
         reason: 'malformed_trace_window',
-        scanned: { indexCandidates: candidates.length, sessions: loaded.length },
+        scanned: {
+          indexCandidates: candidates.length,
+          sessions: loaded.length
+        },
         sourceSpokenTurn,
         status: 'ambiguous'
       }
@@ -1117,7 +1150,10 @@ export async function queryTraceSpokenTurnWindow(
     if (events.length > 0) entries.push({ events, session, summary })
   }
 
-  const scanned = { indexCandidates: candidates.length, sessions: loaded.length }
+  const scanned = {
+    indexCandidates: candidates.length,
+    sessions: loaded.length
+  }
   const contextTargets =
     input.turnContext === true ? turnContextTargets(entries, resolution.turn) : undefined
   const eventCount = entries.reduce((total, entry) => total + entry.events.length, 0)
@@ -1215,7 +1251,10 @@ export async function queryTraceRecords(
     return {
       matches,
       reason: 'ambiguous_matches',
-      scanned: { indexCandidates: candidates.length, sessions: sessions.length },
+      scanned: {
+        indexCandidates: candidates.length,
+        sessions: sessions.length
+      },
       status: 'ambiguous'
     }
   }

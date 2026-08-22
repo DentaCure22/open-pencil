@@ -1,7 +1,7 @@
 import type { AgentModelSelection } from '@/app/agent-chat/models'
 import { localWorkspaceAuthorityFetch } from '@/app/workspace-document/local-authority/client'
 
-import { contextCommentPrompt } from './prompt'
+import { contextCommentImageInstructions, contextCommentPrompt } from './prompt'
 import type { ContextCommentDispatchReceipt, ContextCommentDraft } from './types'
 
 type ContextCommentDispatchPayload = {
@@ -28,7 +28,7 @@ async function dispatchDirectly(
   try {
     response = await localWorkspaceAuthorityFetch('/agent-router/v1/pi/dispatch', {
       body: JSON.stringify({
-        displayPrompt: draft.text,
+        displayPrompt: draft.capture ? contextCommentImageInstructions(draft) : draft.text,
         ...(draft.capture ? { evidenceId: draft.capture.evidenceId } : {}),
         effort: selection.effort,
         model: selection.model,
@@ -54,12 +54,52 @@ async function dispatchDirectly(
   }
 }
 
+async function dispatchToConversation(
+  draft: ContextCommentDraft,
+  prompt: string,
+  selection: AgentModelSelection
+): Promise<ContextCommentDispatchReceipt> {
+  const destination = draft.destination
+  if (!destination || !draft.capture) throw new Error('The image edit destination is unavailable.')
+  let response: Response
+  try {
+    response = await localWorkspaceAuthorityFetch(
+      `/agent-router/v1/pi/conversations/${encodeURIComponent(destination.threadId)}/${destination.action}`,
+      {
+        body: JSON.stringify({
+          displayPrompt: `Edit image\n\n${contextCommentImageInstructions(draft)}`,
+          effort: selection.effort,
+          evidenceId: draft.capture.evidenceId,
+          message: prompt,
+          model: selection.model
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        signal: AbortSignal.timeout(15_000)
+      }
+    )
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : 'The image edit could not be sent.')
+  }
+  const payload = dispatchPayload(await response.json().catch(() => null))
+  if (!response.ok) {
+    throw new Error(
+      typeof payload.error === 'string'
+        ? payload.error
+        : `Image edit handoff failed (${String(response.status)}).`
+    )
+  }
+  return { targetThreadId: payload.threadId ?? destination.threadId }
+}
+
 export async function dispatchContextComment(
   draft: ContextCommentDraft,
   selection: AgentModelSelection
 ): Promise<ContextCommentDispatchReceipt> {
   const prompt = contextCommentPrompt(draft)
-  const receipt = await dispatchDirectly(draft, prompt, selection)
+  const receipt = draft.destination
+    ? await dispatchToConversation(draft, prompt, selection)
+    : await dispatchDirectly(draft, prompt, selection)
   window.dispatchEvent(
     new CustomEvent('openpencil:context-comment-dispatched', {
       detail: receipt

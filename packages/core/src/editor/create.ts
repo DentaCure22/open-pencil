@@ -208,15 +208,30 @@ export function createEditor(options?: EditorOptions) {
     }
   }
 
-  function replaceGraph(newGraph: SceneGraph) {
+  function replaceGraph(newGraph: SceneGraph, options: { preserveViewState?: boolean } = {}) {
     for (const renderer of _renderers) renderer.invalidateAllPictures()
+    const previousPageId = state.currentPageId
+    const previousSelectedIds = state.selectedIds
+    const previousHoveredNodeId = state.hoveredNodeId
     _graph = newGraph
     subscribeToGraph()
-    const previousPageId = state.currentPageId
-    state.currentPageId = _graph.getPages()[0]?.id ?? _graph.rootId
-    setSelectedIds(new Set())
-    state.hoveredNodeId = null
-    pages.clearPageViewports()
+    const previousPage = options.preserveViewState ? _graph.getNode(previousPageId) : null
+    const preservesCurrentPage = Boolean(
+      previousPage?.type === 'CANVAS' && previousPage.parentId === _graph.rootId
+    )
+    state.currentPageId = preservesCurrentPage
+      ? previousPageId
+      : (_graph.getPages()[0]?.id ?? _graph.rootId)
+    setSelectedIds(
+      preservesCurrentPage
+        ? new Set([...previousSelectedIds].filter((id) => _graph.getNode(id)))
+        : new Set()
+    )
+    state.hoveredNodeId =
+      preservesCurrentPage && previousHoveredNodeId && _graph.getNode(previousHoveredNodeId)
+        ? previousHoveredNodeId
+        : null
+    if (!preservesCurrentPage) pages.clearPageViewports()
     emitEditorEvent('graph:replaced', _graph)
     if (previousPageId !== state.currentPageId) {
       emitEditorEvent('page:changed', state.currentPageId, previousPageId)

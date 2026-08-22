@@ -92,6 +92,31 @@ describe('agent history reconciliation', () => {
     expect(reconciled.threads[0]?.messages[1]?.parts?.[0]).toHaveProperty('images')
   })
 
+  test('replaces a tool row when its generated video arrives', () => {
+    const previous = history('Generating video')
+    const next = structuredClone(previous)
+    const toolMessage = next.threads[0]?.messages[1]
+    const toolPart = toolMessage?.parts?.[0]
+    if (!toolMessage || toolPart?.type !== 'tool') throw new Error('Missing tool fixture')
+    toolMessage.parts = [
+      {
+        ...toolPart,
+        videos: [
+          {
+            mimeType: 'video/webm',
+            name: 'generated.webm',
+            url: '/agent-router/v1/pi/media/clip.webm'
+          }
+        ]
+      }
+    ]
+
+    const reconciled = reconcileAgentConversationHistory(previous, next)
+
+    expect(reconciled.threads[0]?.messages[1]).toBe(toolMessage)
+    expect(reconciled.threads[0]?.messages[1]?.parts?.[0]).toHaveProperty('videos')
+  })
+
   test('replaces a message when its turn completion timestamp arrives', () => {
     const previous = history('Running')
     const next = structuredClone(previous)

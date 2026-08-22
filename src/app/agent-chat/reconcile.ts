@@ -23,6 +23,22 @@ function sameToolPart(
       (image, index) => image.url === nextImages[index]?.url && image.alt === nextImages[index]?.alt
     )
   })()
+  const previousVideos = previous.videos
+  const nextVideos = next.videos
+  const sameVideos = (() => {
+    if (previousVideos === nextVideos) return true
+    if (!previousVideos || !nextVideos || previousVideos.length !== nextVideos.length) {
+      return false
+    }
+    return previousVideos.every((video, index) => {
+      const nextVideo = nextVideos[index]
+      return (
+        video.url === nextVideo.url &&
+        video.name === nextVideo.name &&
+        video.mimeType === nextVideo.mimeType
+      )
+    })
+  })()
   return (
     previous.name === next.name &&
     previous.state === next.state &&
@@ -30,6 +46,7 @@ function sameToolPart(
     previous.output === next.output &&
     previous.error === next.error &&
     sameImages &&
+    sameVideos &&
     previous.approval?.id === next.approval?.id &&
     previous.approval?.state === next.approval?.state
   )
@@ -118,6 +135,7 @@ function sameThread(previous: AgentConversationThread, next: AgentConversationTh
     previous.model === next.model,
     previous.effort === next.effort,
     previous.createdAt === next.createdAt,
+    JSON.stringify(previous.pendingUiRequests) === JSON.stringify(next.pendingUiRequests),
     JSON.stringify(previous.contextUsage ?? null) === JSON.stringify(next.contextUsage ?? null)
   ].every(Boolean)
   return (
@@ -183,14 +201,25 @@ function reconcileThread(
   }
 }
 
-export function reconcileAgentConversationHistory(
+export function mapAgentConversationHistory(
   previous: AgentConversationHistory | null,
-  next: AgentConversationHistory
+  next: AgentConversationHistory,
+  mapThread: (
+    previousThread: AgentConversationThread | undefined,
+    nextThread: AgentConversationThread
+  ) => AgentConversationThread
 ): AgentConversationHistory {
   if (!previous) return next
   const previousById = new Map(previous.threads.map((thread) => [thread.id, thread]))
   return {
     ...next,
-    threads: next.threads.map((thread) => reconcileThread(previousById.get(thread.id), thread))
+    threads: next.threads.map((thread) => mapThread(previousById.get(thread.id), thread))
   }
+}
+
+export function reconcileAgentConversationHistory(
+  previous: AgentConversationHistory | null,
+  next: AgentConversationHistory
+): AgentConversationHistory {
+  return mapAgentConversationHistory(previous, next, reconcileThread)
 }

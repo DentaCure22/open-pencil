@@ -81,10 +81,21 @@ const ESTIMATES_LIST_CONFIG_SCHEMA = v.strictObject({
   title: optionalText(160)
 })
 
-export const CODE_OBJECT_UI_BLOCK_CAPABILITIES = ['actions', 'charts', 'tables'] as const
+const VIDEO_PLAYER_CONFIG_SCHEMA = v.strictObject({
+  autoplay: v.optional(v.boolean()),
+  controls: v.optional(v.boolean()),
+  fit: v.optional(v.picklist(['contain', 'cover'])),
+  loop: v.optional(v.boolean()),
+  muted: v.optional(v.boolean()),
+  poster: optionalText(4_096),
+  src: requiredText(4_096),
+  title: optionalText(240)
+})
+
+export const CODE_OBJECT_UI_BLOCK_CAPABILITIES = ['actions', 'charts', 'media', 'tables'] as const
 
 export type CodeObjectUiBlockCapability = (typeof CODE_OBJECT_UI_BLOCK_CAPABILITIES)[number]
-export type CodeObjectUiBlockName = 'estimates-list' | 'financial-dashboard'
+export type CodeObjectUiBlockName = 'estimates-list' | 'financial-dashboard' | 'video-player'
 
 export type CodeObjectUiBlockDefinition = {
   capabilities: readonly CodeObjectUiBlockCapability[]
@@ -129,6 +140,20 @@ const UI_BLOCK_REGISTRY = [
       label: 'Estimates list',
       sizing: 'content',
       surface: { background: 'transparent', overflow: 'scroll' }
+    }
+  },
+  {
+    configSchema: VIDEO_PLAYER_CONFIG_SCHEMA,
+    definition: {
+      capabilities: ['media'],
+      configSchema: jsonSchema(VIDEO_PLAYER_CONFIG_SCHEMA),
+      defaultSize: { height: 360, width: 640 },
+      defaultState: {},
+      description: 'A reusable native video player with playback controls and fit options',
+      id: 'video-player',
+      label: 'Video player',
+      sizing: 'viewport',
+      surface: { background: 'surface', overflow: 'clip' }
     }
   }
 ] satisfies readonly {

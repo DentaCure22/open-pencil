@@ -320,7 +320,7 @@ export async function applySmylrProductionDocument(
     const identity = await loadOpenPencilWorkspaceIdentity()
     stampOpenPencilWorkspaceIdentity(graph, identity)
     store.state.documentName = OPENPENCIL_WORKSPACE_DOCUMENT_NAME
-    store.replaceGraph(graph)
+    store.replaceGraph(graph, { preserveViewState: true })
     store.undo.clear()
     return true
   } catch (error) {

@@ -5,6 +5,7 @@ import { mkdir, realpath, unlink } from 'node:fs/promises'
 import path from 'node:path'
 
 import type {
+  TraceHistoryContextEntry,
   TraceHistoryEvent,
   TraceHistorySession,
   TraceQueryRecordSummary,
@@ -30,7 +31,12 @@ import {
   type LocalWorkspaceTraceGesture,
   type LocalWorkspaceTraceGestureRead
 } from './trace'
-import { LocalWorkspaceTraceFileStore, type LocalWorkspaceTraceFileEvent } from './trace-file-store'
+import {
+  LocalWorkspaceTraceFileStore,
+  type LocalWorkspaceTraceEvidenceOverview,
+  type LocalWorkspaceTraceEvidencePinResult,
+  type LocalWorkspaceTraceFileEvent
+} from './trace-file-store'
 import {
   LOCAL_WORKSPACE_AUTHORITY_VERSION,
   LOCAL_WORKSPACE_NAVIGATION_INTENT_VERSION,
@@ -63,7 +69,11 @@ const AUTHORITY_HISTORY_DIRECTORY = 'history'
 const MAX_HISTORY_SNAPSHOTS = 64
 const MAX_RECEIPTS = 500
 const DEFAULT_NAVIGATION_INTENT_TTL_MS = 60_000
+const DEFAULT_TRACE_ACTIVITY_PAGE_LIMIT = 80
+const MAX_TRACE_ACTIVITY_PAGE_LIMIT = 80
 const rootWriteTails = new Map<string, Promise<void>>()
+
+export const LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT = 'trace-activity-page/v1'
 
 type PersistedLocalWorkspaceAuthorityMetadata = {
   authorityId: string
@@ -413,6 +423,40 @@ function traceHistoryEvents(value: unknown): TraceHistoryEvent[] {
   })
 }
 
+function traceContextDraft(
+  value: unknown,
+  events: readonly TraceHistoryEvent[]
+): TraceHistoryContextEntry[] {
+  if (!Array.isArray(value)) throw new TypeError('Trace session context draft must be an array.')
+  const entries = new Map<string, TraceHistoryContextEntry>()
+  for (const candidate of value) {
+    const entry = jsonRecord(candidate)
+    if (
+      !entry ||
+      typeof entry.sourceEventId !== 'string' ||
+      typeof entry.included !== 'boolean' ||
+      typeof entry.removed !== 'boolean'
+    ) {
+      throw new TypeError('Trace session context entry is invalid.')
+    }
+    entries.set(entry.sourceEventId, {
+      ...(typeof entry.editedText === 'string' ? { editedText: entry.editedText } : {}),
+      included: entry.included,
+      ...(typeof entry.note === 'string' ? { note: entry.note } : {}),
+      removed: entry.removed,
+      sourceEventId: entry.sourceEventId
+    })
+  }
+  return events.map(
+    (event) =>
+      entries.get(event.id) ?? {
+        included: true,
+        removed: false,
+        sourceEventId: event.id
+      }
+  )
+}
+
 function traceRect(value: unknown): Rect | undefined {
   if (value === undefined) return undefined
   const rect = jsonRecord(value)
@@ -464,9 +508,11 @@ function traceSession(value: unknown): TraceHistorySession {
     throw new TypeError('Trace session payload is invalid.')
   }
   const scope = traceScope(session.scope)
+  const events = traceHistoryEvents(session.events)
   return {
+    contextDraft: traceContextDraft(session.contextDraft, events),
     durationMs: session.durationMs,
-    events: traceHistoryEvents(session.events),
+    events,
     id: session.id,
     ...(scope ? { scope } : {}),
     startedAt: session.startedAt
@@ -676,6 +722,30 @@ export type LocalWorkspaceTraceHistorySnapshot = {
   summaries: TraceQueryRecordSummary[]
 }
 
+export type LocalWorkspaceTraceActivityItem = {
+  context: TraceHistoryContextEntry
+  event: TraceHistoryEvent
+  occurredAtMs: number
+  scope?: TraceQueryScope
+  sessionId: string
+  sessionStartedAt: string
+  title: string
+}
+
+export type LocalWorkspaceTraceActivityPage = {
+  contract: typeof LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT
+  hasMore: boolean
+  items: LocalWorkspaceTraceActivityItem[]
+  nextCursor: string | null
+}
+
+type TraceActivityCursor = {
+  atMs: number
+  eventId: string
+  occurredAtMs: number
+  sessionId: string
+}
+
 function replayTraceFileEvents(events: readonly LocalWorkspaceTraceFileEvent[]): TraceFileSnapshot {
   const snapshot: TraceFileSnapshot = {
     gestures: new Map(),
@@ -716,6 +786,131 @@ function replayTraceFileEvents(events: readonly LocalWorkspaceTraceFileEvent[]):
     else spokenTurnSessionIds.delete(event.spokenTurn.id)
   }
   return snapshot
+}
+
+function traceActivityContext(
+  session: TraceHistorySession,
+  event: TraceHistoryEvent
+): TraceHistoryContextEntry {
+  return (
+    session.contextDraft?.find((entry) => entry.sourceEventId === event.id) ?? {
+      included: true,
+      removed: false,
+      sourceEventId: event.id
+    }
+  )
+}
+
+function compareTraceActivity(
+  first: {
+    event: Pick<TraceHistoryEvent, 'atMs' | 'id'>
+    occurredAtMs: number
+    sessionId: string
+  },
+  second: {
+    event: Pick<TraceHistoryEvent, 'atMs' | 'id'>
+    occurredAtMs: number
+    sessionId: string
+  }
+) {
+  return (
+    second.occurredAtMs - first.occurredAtMs ||
+    second.event.atMs - first.event.atMs ||
+    first.sessionId.localeCompare(second.sessionId) ||
+    first.event.id.localeCompare(second.event.id)
+  )
+}
+
+function encodeTraceActivityCursor(item: LocalWorkspaceTraceActivityItem) {
+  const cursor: TraceActivityCursor = {
+    atMs: item.event.atMs,
+    eventId: item.event.id,
+    occurredAtMs: item.occurredAtMs,
+    sessionId: item.sessionId
+  }
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+}
+
+function decodeTraceActivityCursor(value: string | undefined): TraceActivityCursor | null {
+  if (value === undefined) return null
+  const normalized = value.trim()
+  if (!normalized || normalized.length > 512)
+    throw new TypeError('Trace activity cursor is invalid.')
+  try {
+    const decoded = jsonRecord(JSON.parse(Buffer.from(normalized, 'base64url').toString('utf8')))
+    if (
+      !decoded ||
+      typeof decoded.atMs !== 'number' ||
+      !Number.isFinite(decoded.atMs) ||
+      typeof decoded.eventId !== 'string' ||
+      !decoded.eventId ||
+      typeof decoded.occurredAtMs !== 'number' ||
+      !Number.isFinite(decoded.occurredAtMs) ||
+      typeof decoded.sessionId !== 'string' ||
+      !decoded.sessionId
+    ) {
+      throw new TypeError('Trace activity cursor is invalid.')
+    }
+    return {
+      atMs: decoded.atMs,
+      eventId: decoded.eventId,
+      occurredAtMs: decoded.occurredAtMs,
+      sessionId: decoded.sessionId
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'Trace activity cursor is invalid.') {
+      throw error
+    }
+    throw new TypeError('Trace activity cursor is invalid.')
+  }
+}
+
+function traceActivityPage(
+  snapshot: TraceFileSnapshot,
+  input: { before?: string; limit?: number }
+): LocalWorkspaceTraceActivityPage {
+  const limit = input.limit ?? DEFAULT_TRACE_ACTIVITY_PAGE_LIMIT
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TRACE_ACTIVITY_PAGE_LIMIT) {
+    throw new TypeError(
+      `Trace activity limit must be between 1 and ${String(MAX_TRACE_ACTIVITY_PAGE_LIMIT)}.`
+    )
+  }
+  const cursor = decodeTraceActivityCursor(input.before)
+  const items = [...snapshot.sessions.values()]
+    .flatMap((session): LocalWorkspaceTraceActivityItem[] => {
+      const startedAtMs = Date.parse(session.startedAt)
+      const summary = snapshot.summaries.get(session.id)
+      return session.events.map((event) => ({
+        context: structuredClone(traceActivityContext(session, event)),
+        event: structuredClone(event),
+        occurredAtMs: (Number.isNaN(startedAtMs) ? 0 : startedAtMs) + event.atMs,
+        ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
+        sessionId: session.id,
+        sessionStartedAt: session.startedAt,
+        title: summary?.title || 'Recent activity'
+      }))
+    })
+    .sort(compareTraceActivity)
+  const startIndex = cursor
+    ? items.findIndex(
+        (item) =>
+          compareTraceActivity(item, {
+            event: { atMs: cursor.atMs, id: cursor.eventId },
+            occurredAtMs: cursor.occurredAtMs,
+            sessionId: cursor.sessionId
+          }) > 0
+      )
+    : 0
+  const safeStartIndex = startIndex < 0 ? items.length : startIndex
+  const pageItems = items.slice(safeStartIndex, safeStartIndex + limit)
+  const hasMore = safeStartIndex + pageItems.length < items.length
+  const nextCursorItem = pageItems.at(-1)
+  return {
+    contract: LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT,
+    hasMore,
+    items: pageItems,
+    nextCursor: hasMore && nextCursorItem ? encodeTraceActivityCursor(nextCursorItem) : null
+  }
 }
 
 type DirectTraceSelection = {
@@ -1076,7 +1271,11 @@ export class LocalWorkspaceAuthorityStore {
     session: unknown
     spokenTurns?: unknown
     summary: unknown
-  }): Promise<{ gestureCount: number; spokenTurnCount: number; summary: unknown }> {
+  }): Promise<{
+    gestureCount: number
+    spokenTurnCount: number
+    summary: unknown
+  }> {
     return this.withWriteLock(async () => {
       const metadata = await this.ensureMetadata()
       const state = await this.readState(metadata)
@@ -1143,7 +1342,7 @@ export class LocalWorkspaceAuthorityStore {
 
   traceSessionSummaries(): Promise<unknown[]> {
     return this.withReadLock(async () => {
-      const snapshot = await this.readTraceSnapshot()
+      const snapshot = await this.readTraceSnapshot(false)
       return [...snapshot.summaries.values()]
         .sort((first, second) => {
           const firstUpdated = jsonRecord(first)?.updatedAt
@@ -1157,6 +1356,34 @@ export class LocalWorkspaceAuthorityStore {
           return secondTime - firstTime || second.id.localeCompare(first.id)
         })
         .map((summary) => structuredClone(summary))
+    })
+  }
+
+  traceActivityPage(input: {
+    before?: string
+    limit?: number
+  }): Promise<LocalWorkspaceTraceActivityPage> {
+    return this.withReadLock(async () => {
+      const snapshot = await this.readTraceSnapshot(false)
+      const page = traceActivityPage(snapshot, input)
+      const evidenceIds = [
+        ...new Set(
+          page.items.flatMap((item) =>
+            item.event.evidence?.evidenceId ? [item.event.evidence.evidenceId] : []
+          )
+        )
+      ]
+      if (evidenceIds.length === 0) return page
+      const statuses = await this.traceFiles.evidenceStatuses(evidenceIds)
+      return {
+        ...page,
+        items: page.items.map((item) => {
+          const evidenceId = item.event.evidence?.evidenceId
+          const evidenceStatus = evidenceId ? statuses.get(evidenceId) : undefined
+          if (evidenceStatus !== 'evicted' && evidenceStatus !== 'ready') return item
+          return { ...item, event: { ...item.event, evidenceStatus } }
+        })
+      }
     })
   }
 
@@ -1198,7 +1425,7 @@ export class LocalWorkspaceAuthorityStore {
     const normalizedSessionId = normalizedId(sessionId)
     if (!normalizedSessionId) throw new TypeError('Trace session ID is required.')
     return this.withWriteLock(async () => {
-      const snapshot = await this.readTraceSnapshot()
+      const snapshot = await this.readTraceSnapshot(false)
       if (!snapshot.sessions.has(normalizedSessionId)) return false
       await this.traceFiles.appendSessionDeleted(normalizedSessionId)
       const metadata = await this.ensureMetadata()
@@ -1253,13 +1480,42 @@ export class LocalWorkspaceAuthorityStore {
     })
   }
 
+  pinTraceEvidence(
+    evidenceId: string,
+    pinId: string
+  ): Promise<LocalWorkspaceTraceEvidencePinResult> {
+    return this.withWriteLock(() => this.traceFiles.pinEvidence(evidenceId, pinId))
+  }
+
+  unpinTraceEvidence(evidenceId: string, pinId: string): Promise<boolean> {
+    return this.withWriteLock(() => this.traceFiles.unpinEvidence(evidenceId, pinId))
+  }
+
+  releaseTraceEvidencePins(pinId: string): Promise<number> {
+    return this.withWriteLock(() => this.traceFiles.releaseEvidencePins(pinId))
+  }
+
+  traceEvidenceOverview(
+    evidenceIds: readonly string[]
+  ): Promise<LocalWorkspaceTraceEvidenceOverview> {
+    return this.withWriteLock(() => this.traceFiles.evidenceOverview(evidenceIds))
+  }
+
   async traceGesture(selector: {
     gestureId?: string
     includeImage?: boolean
     latest?: boolean
   }): Promise<
-    | { gesture: LocalWorkspaceTraceGestureRead; scanned: { sessions: number }; status: 'matched' }
-    | { reason: 'gesture_not_found'; scanned: { sessions: number }; status: 'empty' }
+    | {
+        gesture: LocalWorkspaceTraceGestureRead
+        scanned: { sessions: number }
+        status: 'matched'
+      }
+    | {
+        reason: 'gesture_not_found'
+        scanned: { sessions: number }
+        status: 'empty'
+      }
   > {
     const gestureId = normalizedId(selector.gestureId)
     if (Boolean(gestureId) === (selector.latest === true)) {
@@ -1276,7 +1532,11 @@ export class LocalWorkspaceAuthorityStore {
               second.gestureId.localeCompare(first.gestureId)
           )[0]
       if (!gesture) {
-        return { reason: 'gesture_not_found' as const, scanned, status: 'empty' as const }
+        return {
+          reason: 'gesture_not_found' as const,
+          scanned,
+          status: 'empty' as const
+        }
       }
       const persisted = structuredClone(gesture)
       if (!persisted.evidence) {
@@ -1295,8 +1555,12 @@ export class LocalWorkspaceAuthorityStore {
       }
       const image = await this.traceFiles.readEvidence(persisted.evidence.evidenceId)
       if (!image) {
+        const imageStatus = await this.traceFiles.evidenceStatus(persisted.evidence.evidenceId)
         return {
-          gesture: { ...persisted, imageStatus: 'missing' as const },
+          gesture: {
+            ...persisted,
+            imageStatus: imageStatus === 'evicted' ? ('evicted' as const) : ('missing' as const)
+          },
           scanned,
           status: 'matched' as const
         }
@@ -1972,8 +2236,34 @@ export class LocalWorkspaceAuthorityStore {
     await writeJsonFile(filePath, value)
   }
 
-  private async readTraceSnapshot(): Promise<TraceFileSnapshot> {
-    return replayTraceFileEvents(await this.traceFiles.readEvents())
+  private async readTraceSnapshot(includeEvidenceStatuses = true): Promise<TraceFileSnapshot> {
+    const snapshot = replayTraceFileEvents(await this.traceFiles.readEvents())
+    if (!includeEvidenceStatuses) return snapshot
+    const evidenceIds = [
+      ...new Set(
+        [...snapshot.sessions.values()].flatMap((session) =>
+          session.events.flatMap((event) =>
+            event.evidence?.evidenceId ? [event.evidence.evidenceId] : []
+          )
+        )
+      )
+    ]
+    if (evidenceIds.length === 0) return snapshot
+    const statuses = await this.traceFiles.evidenceStatuses(evidenceIds)
+    for (const [sessionId, session] of snapshot.sessions) {
+      snapshot.sessions.set(sessionId, {
+        ...session,
+        events: session.events.map((event) => {
+          const evidenceId = event.evidence?.evidenceId
+          const evidenceStatus = evidenceId ? statuses.get(evidenceId) : undefined
+          if (evidenceStatus === 'evicted' || evidenceStatus === 'ready') {
+            return { ...event, evidenceStatus }
+          }
+          return event
+        })
+      })
+    }
+    return snapshot
   }
 
   private async removeDirectTraceContext(): Promise<void> {

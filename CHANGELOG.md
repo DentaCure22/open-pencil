@@ -2,10 +2,123 @@
 
 ## Unreleased
 
+- Add a Codex-style user-message chapter rail to shared sidebar and Board agent
+  conversations. Four or more prompts gain scroll-synced markers, neighbor
+  expansion on hover, prompt/response preview cards, click-to-jump highlighting,
+  keyboard access, and drag scrubbing through long transcripts. Transcript text
+  and the prompt bar now share one centered inset in both sidebar and Board chat
+  surfaces while the chapter rail remains pinned to the wall. Narrow sidebar
+  chats use a compact 32 px inset while wider Board chat objects retain 44 px.
+  The chapter rail sits slightly below the transcript midpoint so it feels
+  centered against the full chat surface, including the composer.
+  The desktop sidebar now opens at 27% of the workspace and can stretch to 30%
+  when more reading room is useful.
+- Show Pi tool approvals inside the active task instead of auto-declining them.
+  Messages sends now display the exact recipient and text with compact Send and
+  Cancel actions, and remain blocked until the user chooses Send.
+- Let Pi model scopes pin a supported reasoning level per provider/model, keeping
+  OpenPencil's live model catalog aligned with the curated Pi configuration.
+- Replace the bulky agent composer context fill with a slim, bounded circular
+  gauge, and keep its throughput readout visible. Provider output uses measured `t/s`;
+  Gemini/Antigravity turns upgrade their live estimate from local generation
+  metadata when available, while missing defensible timing stays unavailable.
+- Restyle the Trace evidence buffer with OpenPencil's semantic chrome, surface,
+  accent, and status tokens so its menu stays legible and polished in both light
+  and dark themes. Trace rows now replace the persistent `Details` label with a
+  hover disclosure chevron that turns downward when its metadata and screenshot
+  are expanded. Focus and Ink evidence now uses OpenPencil's local CanvasKit,
+  DOM, image, and video compositor without requesting browser screen sharing.
+  Live cross-origin iframe pixels remain explicitly unavailable.
+- Add one **Inspect Chrome** action to the vertical Editor tools rail. Its unpacked
+  extension runs a persistent multi-select session with animated DOM boundaries,
+  numbered retained selections, surrounding-context screenshots, optional pinned
+  annotations, and bounded motion recording. Sessions stay in a side-by-side,
+  horizontally scrollable basket at the top of every sidebar tab, record into
+  Trace, and can be dragged into sidebar or Board agent chats without sending.
+- Make photo and video drag-and-drop reliable across the full Board surface,
+  including over native media and other overlay-backed objects. Dropped photos
+  become native image rectangles, while videos become movable, source-backed
+  playback frames that retain their original bytes.
+- Let agent-chat composers accept files, images, and videos through the picker,
+  paste, or drag and drop. Attachments now share the compact annotation-chip
+  treatment, support attachment-only prompts, and keep large plain-text pastes in
+  a removable `Pasted text` chip above annotations and media instead of clipping
+  the composer. Shorter text remains editable in a bounded scrolling input. Allow
+  local video files up to 100 MB each within a 250 MB batch. Local videos are
+  sampled into a compact timeline filmstrip and sent to the agent as actual vision
+  input while keeping the original clip available for denser, timestamp-specific
+  inspection. Sending now transfers the draft out of the composer immediately,
+  keeps image previews and file or video cards above and outside the sent text
+  bubble, and preserves those attachments when the authoritative conversation
+  replaces the optimistic preview.
+- Let user prompts and assistant responses share the same one-click copy affordance
+  beneath the message alongside its local timestamp. The copy action stays quiet
+  with the timestamp until message hover or keyboard focus and gives
+  prompt-specific accessible feedback after copying.
+- Add a shared task context menu to sidebar rows, open sidebar conversations, and
+  Board agent-chat headers. Tasks can be pinned, renamed, marked unread, archived
+  and restored, shared through the system sheet, or copied as a complete hydrated
+  transcript, latest response, or stable task ID.
+- Keep the selected interaction highlight flush against Code Object edges instead
+  of leaving a visible gap between the object and its outline.
+- Replace the hard divider beneath Board and sidebar conversation headers with a
+  soft scroll-edge fade so transcript content visually recedes beneath the title
+  bar.
+- Move Board and sidebar agent transcripts to the latest message whenever the
+  user submits or retries a prompt, even after they have scrolled up in history.
+- Increase the floating sidebar surface opacity slightly so canvas content no
+  longer competes with the chat transcript while the chrome remains translucent.
+- Let the Next.js client inside each embedded Smylr iframe exclusively own Fast
+  Refresh. OpenPencil no longer opens a competing private HMR socket or polls the
+  dev server, so agent edits update the resident frame instead of remounting it.
+- Preserve stable Code Object roots, iframe DOM runtimes, Board selection, and the
+  active viewport while local-authority edits or OpenPencil HMR update the Board.
+  Explicit iframe refreshes now target only the selected frame.
+- Forward the configured Smylr project root from Vite's local environment into
+  the local authority so the selected-frame play button can find its allowlisted
+  launcher instead of reporting `Launcher not configured`.
+- Make Pi conversations lighter and more resilient. Generated images now live
+  outside the conversation JSON and streaming updates are saved in small
+  batches. Every new conversation receives its own unbounded worker identity,
+  durable Pi session entries repair missed tool and final-answer events, Board
+  evidence is sent to Pi as an actual image, and a liveness watchdog releases a
+  stuck process while preserving its resumable session.
+- Add a screenshot-first Board comment tool. Drag over any Board region, place
+  multiple numbered comments directly on the captured image, revise or resize
+  the crop, add optional overall instructions, and send the image with
+  normalized image coordinates, absolute Board-space points, and crop/viewport
+  geometry through the existing contextual worker route. OpenPencil now composes
+  the visible Board directly instead of recording its browser tab, so repeated
+  captures require no chooser and leave no persistent sharing strip. Crops that
+  include live cross-origin iframes are rejected rather than attaching blank or
+  misleading pixels.
+  Each numbered pin now records its durable Board/object target plus
+  modality-specific context: image coordinates, captured video or audio time,
+  document page or slide, Code Object and semantic DOM identity, live-element
+  identity, diagram identity, agent conversation, or an explicitly projected-only
+  3D point. The compact target chip shows what the agent will receive.
+- Show image generation as a first-class agent-chat card with a grainy live
+  loading state, image-specific progress, an intrinsically sized completed MCP
+  preview, and a transparent checkerboard with enough inset to keep rounded cards
+  from clipping image pixels. Generated images open in the same numbered-comment
+  editor as Board screenshots; image evidence keeps its alpha channel and is sent
+  back to the exact task as a steer or follow-up for editing. Transparent sources
+  add an explicit no-flattening constraint to the edit prompt. Durable results
+  recover even when rendering finishes after an interrupted turn. Safe Antigravity
+  tool markers now remain live until their next step or terminal update instead of
+  appearing completed immediately.
+- Show Grok video generation in the same first-class agent-chat flow: a single
+  grainy `Creating video` card replaces duplicate thought/tool rows, completed
+  clips render directly below the turn with native playback and a larger viewer,
+  and interrupted durable jobs recover their actual video without embedding large
+  media payloads in conversation JSON. A shared Vue video player now powers both
+  chat clips and native Board video evidence, while `VideoPlayer` and the registered
+  `video-player` block expose the same primitive to Code Objects.
 - Turn selected agent transcript text into anchored annotations without copying
   it into the draft. Sidebar and Board chats keep compact numbered markers,
-  reopenable comments, optional speech dictation, retry state, and submit the
-  quoted context only with the dispatched prompt.
+  reopenable comments, optional speech dictation, retry state, per-annotation
+  deletion from the editor, and one-step clear-all from the composer before the
+  quoted context is dispatched.
 - Make agent chat text natively selectable and offer a compact selection action
   for copying or quoting an excerpt into the current composer. The shared model
   picker now shows live provider subscription capacity when Pi exposes it, and
@@ -16,14 +129,32 @@
   remains canonical; the authority emits a disposable, revisioned
   `workspace.index.jsonl` for `rg` discovery. Trace now uses append-only rotated
   JSONL, a bounded `trace-context.json`, and separate PNG evidence instead of
-  SQLite. The live parent launches or continues a Pi worker directly, with no
-  LLM dispatcher turn, and the plugin now has only live-parent and worker roles.
+  SQLite. The live parent launches, continues, or forks a Pi worker directly,
+  with no LLM dispatcher turn, and the plugin now has only live-parent and worker roles.
+  The parent can read six high-signal previews of resident Pi chats, optionally
+  inspect one bounded human-facing transcript when routing is ambiguous, then
+  continue a matching chat, steer it when it is still running, fork its native
+  context for independent work, or start clean. Tool output, reasoning, session
+  data, transcript copying, and a separate dispatcher registry stay out of the
+  routing context. Inventory reads now distinguish currently running chats from
+  completed chats that remain resumable, avoid duplicate generic searches, and
+  never imply that resident chats are visibly placed on the current Board.
   Board workers keep normal Pi tools, connected apps, and machine access. They
   receive only read-only `board_where` and `board_screenshot` from OpenPencil;
   dispatch, navigation, and theme remain parent-only. Saved-scene screenshots
   are bounded to exact object IDs and stay inside the expandable tool result
   that produced them. They load the short file skill explicitly for
   Board work, and presence includes a bounded current selection for targeting.
+- Bound Trace screenshot evidence to the newest 100 unique captures or 250 MB,
+  whichever comes first. Identical images share storage; agent-task evidence is
+  pinned until its conversation is removed, and evicted PNGs leave their Trace
+  events intact with an explicit `evicted` evidence status. The Activity panel
+  now shows live buffer usage, pins, evictions, and deduplication in a compact
+  evidence dropdown, with cleaner rows that surface each image's state.
+- Page older Trace activity through one bounded cursor request instead of replaying
+  the full store once per session. The Activity panel can move between earlier,
+  newer, and latest 80-event windows, lazily loads visible screenshots, and
+  preserves context-draft rows so saved and legacy sessions remain reviewable.
 - Make the local authority the only durable Board command engine. The optional
   browser bridge is now limited to live presentation, selection, export, file,
   theme, and primitive-tool operations; Board open writes one authority navigation
@@ -46,9 +177,9 @@
   dragged onto the Board to place or reposition that exact conversation, and the New task
   control can be dragged out to place a fresh chat composer. The composer keeps the context
   meter, visible model name, and terminal action grouped on the right.
-  The canvas Chats control now opens a Board-grouped switcher for placed chats;
-  selecting one focuses its existing card, while its remove action deletes only
-  the undoable Board card and leaves the task in chat history.
+  Frame, Section, Rectangle, and the other shape tools now share one creation
+  flyout. Chats has moved from the floating canvas pill into the editor tool rail,
+  where it opens the sidebar directly on CHATS.
 - Surface Antigravity's safe tool markers, bounded command inputs and edit diffs, and generic
   thought lifecycle in the shared activity disclosure. Connected-app bridge calls retain their
   concrete tool identity, and tool inputs remain expandable even when no result is returned.
@@ -70,6 +201,10 @@
 - Sending from a running agent chat now uses Pi's native steering channel. The
   instruction joins the active turn at its next tool boundary without aborting
   it, creating a replacement job, or waiting in an OpenPencil follow-up queue.
+  Assistant text already streamed stays in the transcript before the steering
+  instruction, while a steer sent before visible text no longer creates a false
+  “No final response” warning. An image generation already in progress also
+  keeps its loading card across steering and resolves in place when its result arrives.
   Running composers expose the same send-first interaction as Codex with an
   “Add instructions…” prompt and a Stop action whenever the draft is empty.
 - A frame’s box is its group. Children sitting fully outside that box leave
@@ -139,10 +274,6 @@
   page-owner locks, lexical fallback, and fat directed-work packets. Board workers
   use the JSONL index, Trace files, and ordinary file tools on `workspace.json`;
   CLI/MCP mutation adapters are not part of their contract.
-- Remount live Smylr Board iframes from the OpenPencil parent when Turbopack
-  reports a real module update. Removed the extra in-iframe HMR socket and the
-  `dev-paint` / `dev-reload` paint-flush protocol — those never updated the
-  canvas. Ignore the noisy `built` hash-0 stream.
 - Keep Board workers as resident Pi sessions with one short `$openpencil` file
   contract. Dispatch stays Board-only so ordinary Codex work remains in its own task.
 - Keep Worker and embedded Smylr apps attached to the Board camera. Agent hosts no

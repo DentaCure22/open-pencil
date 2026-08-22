@@ -20,6 +20,7 @@ export type AiMessagePart =
       output?: string
       state: AiToolState
       type: 'tool'
+      videos?: Array<{ mimeType?: string; name?: string; url: string }>
     }
   | { code: string; filename?: string; language?: string; type: 'code' }
   | { mediaType?: string; name: string; size?: number; type: 'attachment'; url?: string }

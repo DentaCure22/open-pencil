@@ -46,6 +46,7 @@ import CodeObjectOverlays from './canvas/CodeObjectOverlays.vue'
 import ContainerNavigationStatus from './canvas/ContainerNavigationStatus.vue'
 import ContextCommentComposer from './context-comment/ContextCommentComposer.vue'
 import ContextCommentCropOverlay from './context-comment/ContextCommentCropOverlay.vue'
+import ContextCommentScreenshotEditor from './context-comment/ContextCommentScreenshotEditor.vue'
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
 import MarkdownDocumentOverlays from './canvas/MarkdownDocumentOverlays.vue'
 import MermaidSvgOverlays from './canvas/MermaidSvgOverlays.vue'
@@ -155,7 +156,7 @@ const {
 )
 
 useTextEdit(canvasRef, store)
-const { isDraggingOver } = useFileIntakeDrop(canvasRef, store)
+const { isDraggingOver } = useFileIntakeDrop(canvasAreaRef, store)
 const {
   isDraggingAssetVariant,
   onDragEnter: onAssetVariantDragEnter,
@@ -189,6 +190,13 @@ function onCanvasDragOver(event: DragEvent) {
 function onCanvasDrop(event: DragEvent) {
   void onAssetVariantDrop(event)
   onAgentConversationDrop(event)
+}
+
+function keepCanvasAreaPinned(event: Event) {
+  const area = event.currentTarget
+  if (!(area instanceof HTMLElement) || (!area.scrollLeft && !area.scrollTop)) return
+  area.scrollLeft = 0
+  area.scrollTop = 0
 }
 
 const paddingSideIcons = {
@@ -240,6 +248,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         @dragleave="onCanvasDragLeave"
         @dragover="onCanvasDragOver"
         @drop="onCanvasDrop"
+        @scroll.passive="keepCanvasAreaPinned"
       >
         <canvas
           ref="sceneCanvasRef"
@@ -265,6 +274,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         <SpatialMediaOverlays />
         <NarratedTraceAnnotationOverlay />
         <ContextCommentCropOverlay />
+        <ContextCommentScreenshotEditor />
         <ContextCommentComposer />
         <Transition
           enter-active-class="transition-opacity duration-150"

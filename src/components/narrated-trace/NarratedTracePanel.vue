@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { useClipboard } from '@vueuse/core'
+import {
+  DropdownMenuContent,
+  DropdownMenuPortal,
+  DropdownMenuRoot,
+  DropdownMenuTrigger
+} from 'reka-ui'
 import { computed, ref, shallowRef, watch } from 'vue'
 
 import {
@@ -8,7 +14,11 @@ import {
 } from '@/app/automation/bridge/request-receipts'
 import { useEditorStore } from '@/app/editor/active-store'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
-import { currentLocalWorkspaceAuthorityStatus } from '@/app/workspace-document/local-authority/client'
+import {
+  currentLocalWorkspaceAuthorityStatus,
+  readLocalWorkspaceTraceEvidenceOverview,
+  type LocalWorkspaceTraceEvidenceOverview
+} from '@/app/workspace-document/local-authority/client'
 import {
   DURABLE_HISTORY_LABEL,
   latestAppliedBoardTransaction
@@ -16,7 +26,7 @@ import {
 import {
   buildNarratedTraceActivityFeed,
   clearNarratedTraceMicTurns,
-  loadNarratedTraceActivityFeed,
+  loadNarratedTraceActivityPage,
   narratedTraceActivityMetadata,
   narratedTraceEvidenceAnnotationPath,
   narratedTraceHistory,
@@ -32,6 +42,7 @@ import {
   summarizeNarratedTraceRetrieval
 } from '@/app/narrated-trace'
 import type {
+  NarratedTraceActivityPage,
   NarratedTraceActivityItem,
   NarratedTraceRetrievalEventSummary
 } from '@/app/narrated-trace'
@@ -39,15 +50,26 @@ import Tip from '@/components/ui/Tip.vue'
 
 const FEED_ITEM_LIMIT = 80
 const AGENT_RECEIPT_LIMIT = 8
+const EAGER_EVIDENCE_PREVIEW_LIMIT = 12
 
 const store = useEditorStore()
 const { copy } = useClipboard()
-const historicalItems = shallowRef<NarratedTraceActivityItem[]>([])
+const historicalPage = shallowRef<NarratedTraceActivityPage>({
+  hasMore: false,
+  items: [],
+  nextCursor: null
+})
 const retainedItems = shallowRef<NarratedTraceActivityItem[]>([])
 const evidenceImages = shallowRef<Record<string, string>>({})
+const evidenceOverview = shallowRef<LocalWorkspaceTraceEvidenceOverview | null>(null)
 const expandedEventIds = ref(new Set<string>())
 const historyEpoch = ref(0)
+const activityCursor = ref<string | null>(null)
+const newerActivityCursors = ref<Array<string | null>>([])
+const activityLoading = ref(false)
+const activityLoadError = ref<string | null>(null)
 let refreshEpoch = 0
+let evidenceRefreshEpoch = 0
 
 function activityTitle(session: NonNullable<typeof narratedTraceSession.value>) {
   return (
@@ -132,12 +154,13 @@ function compactRepeatedSelections(items: NarratedTraceActivityItem[]) {
 }
 
 const activityItems = computed(() => {
+  if (activityCursor.value !== null) return historicalPage.value.items
   const byId = new Map<string, NarratedTraceActivityItem>()
   for (const item of [
     ...currentItems.value,
     ...retainedItems.value,
     ...micItems.value,
-    ...historicalItems.value
+    ...historicalPage.value.items
   ]) {
     const key = `${item.sessionId}:${item.event.id}`
     if (!byId.has(key)) byId.set(key, item)
@@ -210,27 +233,133 @@ function undoAgentReceipt(receipt: MutationRequestReceipt) {
 
 async function refreshHistory() {
   const epoch = ++refreshEpoch
-  const loaded = await loadNarratedTraceActivityFeed({ itemLimit: FEED_ITEM_LIMIT })
-  if (epoch === refreshEpoch) historicalItems.value = loaded
+  activityLoading.value = true
+  try {
+    const loaded = await loadNarratedTraceActivityPage({
+      ...(activityCursor.value ? { before: activityCursor.value } : {}),
+      itemLimit: FEED_ITEM_LIMIT
+    })
+    if (epoch !== refreshEpoch) return false
+    historicalPage.value = loaded
+    activityLoadError.value = null
+    return true
+  } catch (error) {
+    if (epoch === refreshEpoch) {
+      activityLoadError.value = error instanceof Error ? error.message : 'Activity history failed'
+    }
+    return false
+  } finally {
+    if (epoch === refreshEpoch) activityLoading.value = false
+  }
 }
 
-watch(narratedTraceHistory, () => void refreshHistory(), { immediate: true })
-
 watch(
-  activityItems,
-  async (items) => {
-    const evidence = items.flatMap((item) => (item.event.evidence ? [item.event.evidence] : []))
-    const loaded = await Promise.all(
-      evidence.map(
-        async (item) => [item.evidenceId, await readNarratedTraceEvidenceImage(item)] as const
-      )
-    )
-    evidenceImages.value = Object.fromEntries(
-      loaded.filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string')
-    )
+  narratedTraceHistory,
+  () => {
+    if (activityCursor.value === null) void refreshHistory()
   },
   { immediate: true }
 )
+
+async function showOlderActivity() {
+  const cursor = historicalPage.value.nextCursor
+  if (!cursor || activityLoading.value) return
+  const previousCursor = activityCursor.value
+  activityCursor.value = cursor
+  if (await refreshHistory()) {
+    newerActivityCursors.value = [...newerActivityCursors.value, previousCursor]
+  } else {
+    activityCursor.value = previousCursor
+  }
+}
+
+async function showNewerActivity() {
+  if (newerActivityCursors.value.length === 0 || activityLoading.value) return
+  const cursors = [...newerActivityCursors.value]
+  const cursor = cursors.pop() ?? null
+  const previousCursor = activityCursor.value
+  activityCursor.value = cursor
+  if (await refreshHistory()) newerActivityCursors.value = cursors
+  else activityCursor.value = previousCursor
+}
+
+async function showLatestActivity() {
+  if (activityCursor.value === null || activityLoading.value) return
+  const previousCursor = activityCursor.value
+  const previousNewerCursors = newerActivityCursors.value
+  activityCursor.value = null
+  if (await refreshHistory()) newerActivityCursors.value = []
+  else {
+    activityCursor.value = previousCursor
+    newerActivityCursors.value = previousNewerCursors
+  }
+}
+
+const activityPageLabel = computed(() =>
+  activityCursor.value === null
+    ? 'Latest'
+    : `Earlier · page ${String(newerActivityCursors.value.length + 1)}`
+)
+
+function activityEvidence(items = activityItems.value) {
+  const byId = new Map<string, NonNullable<NarratedTraceActivityItem['event']['evidence']>>()
+  for (const item of items) {
+    if (item.event.evidence && !byId.has(item.event.evidence.evidenceId)) {
+      byId.set(item.event.evidence.evidenceId, item.event.evidence)
+    }
+  }
+  return [...byId.values()]
+}
+
+async function refreshEvidenceOverview(items = activityItems.value) {
+  const epoch = ++evidenceRefreshEpoch
+  const evidence = activityEvidence(items)
+  let overview: LocalWorkspaceTraceEvidenceOverview | null = null
+  try {
+    overview = await readLocalWorkspaceTraceEvidenceOverview(
+      evidence.map((item) => item.evidenceId)
+    )
+  } catch {
+    overview = null
+  }
+  if (epoch !== evidenceRefreshEpoch) return
+  evidenceOverview.value = overview
+  const visibleEvidenceIds = new Set(evidence.map((item) => item.evidenceId))
+  evidenceImages.value = Object.fromEntries(
+    Object.entries(evidenceImages.value).filter(
+      ([evidenceId]) =>
+        visibleEvidenceIds.has(evidenceId) &&
+        overview?.evidence[evidenceId]?.status !== 'evicted' &&
+        overview?.evidence[evidenceId]?.status !== 'missing'
+    )
+  )
+  for (const item of evidence.slice(0, EAGER_EVIDENCE_PREVIEW_LIMIT)) {
+    void loadEvidenceImage(item.evidenceId)
+  }
+}
+
+watch(activityItems, (items) => void refreshEvidenceOverview(items), {
+  immediate: true
+})
+
+const loadingEvidenceIds = new Set<string>()
+
+async function loadEvidenceImage(evidenceId: string) {
+  if (evidenceImages.value[evidenceId] || loadingEvidenceIds.has(evidenceId)) return
+  const status = evidenceOverview.value?.evidence[evidenceId]?.status
+  if (status === 'evicted' || status === 'missing') return
+  const evidence = activityEvidence().find((item) => item.evidenceId === evidenceId)
+  if (!evidence) return
+  loadingEvidenceIds.add(evidenceId)
+  try {
+    const image = await readNarratedTraceEvidenceImage(evidence)
+    if (image && activityEvidence().some((item) => item.evidenceId === evidenceId)) {
+      evidenceImages.value = { ...evidenceImages.value, [evidenceId]: image }
+    }
+  } finally {
+    loadingEvidenceIds.delete(evidenceId)
+  }
+}
 
 const isCapturing = computed(() => narratedTraceStatus.value === 'recording')
 const retrievalSummary = computed(() => {
@@ -259,6 +388,62 @@ function rowAction(item: NarratedTraceActivityItem) {
   return null
 }
 
+function rowEvidenceStatus(item: NarratedTraceActivityItem) {
+  const evidenceId = item.event.evidence?.evidenceId
+  if (evidenceId) {
+    return (
+      evidenceOverview.value?.evidence[evidenceId]?.status ??
+      item.event.evidenceStatus ??
+      (evidenceImages.value[evidenceId] ? 'ready' : 'pending')
+    )
+  }
+  return item.event.evidenceStatus ?? null
+}
+
+function rowEvidencePinned(item: NarratedTraceActivityItem) {
+  const evidenceId = item.event.evidence?.evidenceId
+  return evidenceId ? evidenceOverview.value?.evidence[evidenceId]?.pinned === true : false
+}
+
+function rowEvidenceLabel(item: NarratedTraceActivityItem) {
+  if (rowEvidencePinned(item)) return 'Pinned to active task'
+  const status = rowEvidenceStatus(item)
+  if (status === 'evicted') return 'Image removed · event kept'
+  if (status === 'missing') return 'Image missing'
+  if (status === 'failed') return 'Screenshot unavailable'
+  if (status === 'pending') return 'Capturing screenshot'
+  return null
+}
+
+function rowEvidenceTone(item: NarratedTraceActivityItem) {
+  if (rowEvidencePinned(item)) return 'text-violet-200/85 bg-violet-300/[0.08]'
+  const status = rowEvidenceStatus(item)
+  if (status === 'failed' || status === 'missing') {
+    return 'text-[var(--color-warning-text)] bg-[var(--color-warning-text)]/[0.06]'
+  }
+  return 'text-muted/65 bg-white/[0.035]'
+}
+
+const evidenceLimitCount = computed(() => evidenceOverview.value?.limits.count ?? 100)
+const evidenceLimitBytes = computed(() => evidenceOverview.value?.limits.bytes ?? 250 * 1024 * 1024)
+const evidenceCapacityPercent = computed(() => {
+  const overview = evidenceOverview.value
+  if (!overview) return 0
+  const countRatio = overview.usage.count / Math.max(overview.limits.count, 1)
+  const byteRatio = overview.usage.bytes / Math.max(overview.limits.bytes, 1)
+  return Math.min(100, Math.max(countRatio, byteRatio) * 100)
+})
+
+function formatEvidenceBytes(value: number | undefined) {
+  if (value === undefined) return '—'
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`
+  return `${(value / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })} MB`
+}
+
+function evidenceMenuOpenChanged(open: boolean) {
+  if (open) void refreshEvidenceOverview()
+}
+
 function isMicTranscript(item: NarratedTraceActivityItem) {
   return item.event.kind === 'transcript' && micTurnIds.value.has(item.event.id)
 }
@@ -271,7 +456,8 @@ function deleteMicTranscript(item: NarratedTraceActivityItem) {
 function rowTime(item: NarratedTraceActivityItem) {
   return new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
+    ...(activityCursor.value !== null ? { day: 'numeric', month: 'short' } : {})
   }).format(new Date(item.occurredAtMs))
 }
 
@@ -317,7 +503,12 @@ function isExpanded(eventId: string) {
 function toggleExpanded(eventId: string) {
   const next = new Set(expandedEventIds.value)
   if (next.has(eventId)) next.delete(eventId)
-  else next.add(eventId)
+  else {
+    next.add(eventId)
+    const evidenceId = activityItems.value.find((item) => item.event.id === eventId)?.event.evidence
+      ?.evidenceId
+    if (evidenceId) void loadEvidenceImage(evidenceId)
+  }
   expandedEventIds.value = next
 }
 
@@ -358,6 +549,109 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
         </p>
       </div>
       <div class="ml-2 flex shrink-0 items-center gap-1">
+        <DropdownMenuRoot :modal="false" @update:open="evidenceMenuOpenChanged">
+          <DropdownMenuTrigger as-child>
+            <button
+              type="button"
+              data-test-id="narrated-trace-evidence-overview-trigger"
+              aria-label="Trace evidence storage"
+              class="flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[9px] font-medium text-muted/70 outline-none transition-colors hover:bg-hover hover:text-surface focus-visible:ring-2 focus-visible:ring-component/30 data-[state=open]:bg-hover data-[state=open]:text-surface"
+            >
+              <icon-lucide-database class="size-3.5" />
+              <span v-if="evidenceOverview" class="tabular-nums">
+                {{ evidenceOverview.usage.count }}
+              </span>
+              <icon-lucide-chevron-down class="size-2.5 text-muted/60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuContent
+              data-test-id="narrated-trace-evidence-overview"
+              :side-offset="5"
+              align="end"
+              class="z-[130] w-[264px] rounded-[12px] border border-chrome-border bg-chrome-raised p-3.5 text-surface shadow-chrome-menu backdrop-blur-2xl outline-none"
+            >
+              <div class="flex items-start gap-2.5">
+                <div
+                  class="flex size-8 shrink-0 items-center justify-center rounded-[8px] border border-chrome-control-border bg-chrome-control text-component shadow-sm"
+                >
+                  <icon-lucide-hard-drive class="size-3.5" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10.5px] font-semibold text-surface">Evidence buffer</span>
+                    <span
+                      class="flex items-center gap-1 rounded-full bg-[var(--color-success)]/10 px-1.5 py-0.5 text-[8px] font-medium text-[var(--color-success)] ring-1 ring-inset ring-[var(--color-success)]/20"
+                    >
+                      <icon-lucide-check class="size-2.5" /> Automatic
+                    </span>
+                  </div>
+                  <p class="mt-1 text-[8.5px] leading-3.5 text-muted/75">
+                    Oldest unpinned images are removed first. Trace events stay searchable.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                class="mt-3 h-1.5 overflow-hidden rounded-full bg-chrome-control ring-1 ring-inset ring-chrome-control-border"
+              >
+                <div
+                  data-test-id="narrated-trace-evidence-capacity"
+                  class="h-full rounded-full bg-component transition-[width]"
+                  :style="{ width: `${String(evidenceCapacityPercent)}%` }"
+                />
+              </div>
+
+              <div class="mt-3 grid grid-cols-2 gap-1.5">
+                <div
+                  class="rounded-[7px] bg-chrome-detail px-2 py-1.5 ring-1 ring-inset ring-chrome-control-border"
+                >
+                  <div class="text-[8px] font-medium text-muted/70">Captures</div>
+                  <div class="mt-0.5 text-[10px] font-medium tabular-nums text-surface">
+                    {{ evidenceOverview?.usage.count ?? '—' }} /
+                    {{ evidenceLimitCount }}
+                  </div>
+                </div>
+                <div
+                  class="rounded-[7px] bg-chrome-detail px-2 py-1.5 ring-1 ring-inset ring-chrome-control-border"
+                >
+                  <div class="text-[8px] font-medium text-muted/70">Storage</div>
+                  <div class="mt-0.5 text-[10px] font-medium tabular-nums text-surface">
+                    {{ formatEvidenceBytes(evidenceOverview?.usage.bytes) }} /
+                    {{ formatEvidenceBytes(evidenceLimitBytes) }}
+                  </div>
+                </div>
+                <div
+                  class="rounded-[7px] bg-chrome-detail px-2 py-1.5 ring-1 ring-inset ring-chrome-control-border"
+                >
+                  <div class="text-[8px] font-medium text-muted/70">Pinned</div>
+                  <div class="mt-0.5 text-[10px] font-medium tabular-nums text-surface">
+                    {{ evidenceOverview?.usage.pinnedCount ?? '—' }}
+                    {{ evidenceOverview?.usage.pinnedCount === 1 ? 'capture' : 'captures' }}
+                  </div>
+                </div>
+                <div
+                  class="rounded-[7px] bg-chrome-detail px-2 py-1.5 ring-1 ring-inset ring-chrome-control-border"
+                >
+                  <div class="text-[8px] font-medium text-muted/70">Evicted</div>
+                  <div class="mt-0.5 text-[10px] font-medium tabular-nums text-surface">
+                    {{ evidenceOverview?.usage.evictedCount ?? '—' }} events kept
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="evidenceOverview && evidenceOverview.usage.deduplicatedCount > 0"
+                class="mt-2.5 flex items-center gap-1.5 border-t border-chrome-border pt-2.5 text-[8.5px] text-muted/70"
+              >
+                <icon-lucide-copy-check class="size-3 text-component/80" />
+                {{ evidenceOverview.usage.deduplicatedCount }} duplicate
+                {{ evidenceOverview.usage.deduplicatedCount === 1 ? 'capture' : 'captures' }}
+                reused
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenuPortal>
+        </DropdownMenuRoot>
         <IconButton
           v-if="narratedTraceMicTurns.length > 0"
           data-test-id="narrated-trace-mic-clear"
@@ -455,7 +749,8 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
           >
             <li v-for="event in retrievalSummary.eventSummaries" :key="event.id" class="min-w-0">
               <div class="truncate text-[9px] leading-3.5 text-surface/85">
-                <span class="text-muted/65">{{ event.kind }}</span> · {{ event.label }}
+                <span class="text-muted/65">{{ event.kind }}</span> ·
+                {{ event.label }}
               </div>
               <div
                 v-if="event.target || retrievalEventCoordinates(event)"
@@ -573,7 +868,19 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
         </article>
       </section>
 
-      <div v-if="activityItems.length === 0 && agentReceipts.length === 0" class="px-1 pt-3 pb-4">
+      <div
+        v-if="activityLoading && activityItems.length === 0 && agentReceipts.length === 0"
+        data-test-id="narrated-trace-activity-loading"
+        class="flex items-center gap-2 px-1 pt-3 pb-4 text-[9.5px] text-muted/65"
+      >
+        <icon-lucide-loader-circle class="size-3.5 animate-spin" />
+        Loading Board activity…
+      </div>
+
+      <div
+        v-else-if="activityItems.length === 0 && agentReceipts.length === 0"
+        class="px-1 pt-3 pb-4"
+      >
         <div class="flex items-start gap-2.5">
           <icon-lucide-history class="mt-0.5 size-4 shrink-0 text-muted/75" />
           <div class="min-w-0 flex-1 pt-0.5">
@@ -587,19 +894,35 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
         </div>
       </div>
 
-      <div v-if="activityItems.length > 0" data-test-id="narrated-trace-activity-feed" class="pt-1">
+      <section
+        v-if="activityItems.length > 0"
+        data-test-id="narrated-trace-activity-feed"
+        class="relative mt-2 pl-3 before:absolute before:top-10 before:bottom-4 before:left-[17px] before:w-px before:bg-violet-400/50"
+      >
+        <div
+          class="flex h-8 items-center gap-2 px-2.5 text-[8.5px] font-semibold tracking-[0.045em] text-muted/65 uppercase"
+        >
+          <icon-lucide-activity class="size-3.5 text-violet-200/75" />
+          <span>Trace activity</span>
+          <span class="ml-auto text-[8px] font-medium tracking-normal text-muted/45 normal-case">
+            {{ activityPageLabel }}
+          </span>
+          <span class="tabular-nums text-muted/45">{{ activityItems.length }}</span>
+        </div>
+
         <article
           v-for="item in activityItems"
           :key="`${item.sessionId}:${item.event.id}`"
           :data-test-id="'narrated-trace-row-' + item.event.kind"
           :aria-label="rowMetadata(item) || undefined"
-          class="group grid grid-cols-[3.75rem_1.25rem_minmax(0,1fr)] gap-x-1.5 rounded-[7px] px-1.5 py-2.5 transition-colors hover:bg-white/[0.055]"
+          class="group relative mb-2 ml-3 flex min-w-0 gap-2 rounded-[7px] border border-white/[0.055] bg-white/[0.015] px-2 py-2 hover:bg-white/[0.035]"
         >
-          <time class="pt-0.5 text-[8.5px] leading-4 tabular-nums text-muted/55">
-            {{ rowTime(item) }}
-          </time>
+          <span
+            aria-hidden="true"
+            class="border-chrome-detail absolute top-4 -left-[19px] size-3 rounded-full border-2 bg-violet-400 shadow-[0_0_0_1px_rgb(167_139_250_/_0.7)]"
+          />
           <div
-            class="flex size-5 items-center justify-center text-muted"
+            class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-white/[0.035] text-muted/80"
             :aria-label="item.event.kind"
           >
             <icon-lucide-mic
@@ -622,21 +945,17 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
             <icon-lucide-message-square v-else class="size-3.5" />
           </div>
 
-          <div class="min-w-0">
-            <div class="flex min-w-0 items-start gap-1.5">
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-center gap-1.5">
               <div
                 data-test-id="narrated-trace-row-title"
-                class="min-w-0 flex-1 truncate pt-0.5 text-[11px] leading-4 font-medium text-surface"
+                class="min-w-0 flex-1 truncate text-[10.5px] leading-4 font-medium text-surface"
               >
                 {{ rowTitle(item) }}
               </div>
-              <span
-                v-if="rowAction(item)"
-                data-test-id="narrated-trace-row-action"
-                class="shrink-0 pt-0.5 text-[9px] leading-4 text-muted/65"
-              >
-                {{ rowAction(item) }}
-              </span>
+              <time class="shrink-0 text-[8px] tabular-nums text-muted/45">
+                {{ rowTime(item) }}
+              </time>
               <Tip v-if="isMicTranscript(item)" label="Delete spoken turn">
                 <button
                   type="button"
@@ -648,73 +967,76 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                   <icon-lucide-trash-2 class="size-3" />
                 </button>
               </Tip>
-              <button
-                v-if="item.event.evidence"
-                type="button"
-                data-test-id="narrated-trace-evidence-toggle"
-                class="relative size-11 shrink-0 overflow-hidden rounded-[6px] border border-border/70 bg-black/15 transition-colors hover:border-white/20"
-                :aria-label="isExpanded(item.event.id) ? 'Collapse evidence' : 'Expand evidence'"
-                @click="toggleExpanded(item.event.id)"
+            </div>
+
+            <div class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+              <span
+                v-if="rowAction(item)"
+                data-test-id="narrated-trace-row-action"
+                class="shrink-0 text-[8.5px] text-muted/55"
               >
-                <img
-                  v-if="evidenceImages[item.event.evidence.evidenceId]"
-                  data-test-id="narrated-trace-evidence-image"
-                  :data-evidence-source="item.event.evidence.source"
-                  :src="evidenceImages[item.event.evidence.evidenceId]"
-                  :alt="`Context snapshot for ${rowTitle(item)}`"
-                  class="size-full object-cover"
-                />
-                <span
-                  v-else
-                  class="flex size-full items-center justify-center text-[8px] text-muted"
-                >
-                  …
-                </span>
-              </button>
-            </div>
-
-            <div
-              v-if="rowCoordinates(item)"
-              data-test-id="narrated-trace-row-coordinates"
-              class="mt-0.5 font-mono text-[9.5px] leading-3.5 tabular-nums text-violet-200/75"
-            >
-              {{ rowCoordinates(item) }}
-            </div>
-
-            <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[9.5px] leading-3.5">
+                {{ rowAction(item) }}
+              </span>
+              <span
+                v-if="rowCoordinates(item)"
+                data-test-id="narrated-trace-row-coordinates"
+                class="font-mono text-[8.5px] tabular-nums text-violet-200/70"
+              >
+                {{ rowCoordinates(item) }}
+              </span>
               <span
                 v-if="rowDetail(item)"
                 data-test-id="narrated-trace-row-meta"
-                class="min-w-0 truncate font-mono text-muted/60"
+                class="min-w-0 max-w-full truncate font-mono text-[8.5px] text-muted/55"
               >
                 {{ rowDetail(item) }}
               </span>
+              <span
+                v-if="rowEvidenceLabel(item)"
+                data-test-id="narrated-trace-evidence-status"
+                class="flex h-4 items-center gap-1 rounded px-1.5 text-[8px]"
+                :class="rowEvidenceTone(item)"
+              >
+                <icon-lucide-pin v-if="rowEvidencePinned(item)" class="size-2.5" />
+                <icon-lucide-image-off
+                  v-else-if="rowEvidenceStatus(item) === 'evicted'"
+                  class="size-2.5"
+                />
+                <icon-lucide-loader-circle
+                  v-else-if="rowEvidenceStatus(item) === 'pending'"
+                  class="size-2.5 animate-spin"
+                />
+                <icon-lucide-triangle-alert v-else class="size-2.5" />
+                {{ rowEvidenceLabel(item) }}
+              </span>
               <button
-                v-if="rowMetadata(item) || item.event.changes?.length"
+                v-if="item.event.evidence || rowMetadata(item) || item.event.changes?.length"
                 type="button"
                 data-test-id="narrated-trace-row-details-toggle"
-                class="flex shrink-0 items-center gap-0.5 text-muted/65 hover:text-surface"
+                class="pointer-events-none ml-auto flex size-4 shrink-0 items-center justify-center rounded text-muted/55 opacity-0 transition-[opacity,background-color,color] hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 data-[expanded=true]:pointer-events-auto data-[expanded=true]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                :aria-expanded="isExpanded(item.event.id)"
                 :aria-label="
                   isExpanded(item.event.id) ? 'Hide Trace details' : 'Show Trace details'
                 "
-                @click="toggleExpanded(item.event.id)"
+                :data-expanded="isExpanded(item.event.id)"
+                @click.stop="toggleExpanded(item.event.id)"
               >
                 <icon-lucide-chevron-right
-                  class="size-2.5 transition-transform"
+                  class="size-3 transition-transform duration-150"
                   :class="isExpanded(item.event.id) ? 'rotate-90' : ''"
                 />
-                <span v-if="(item.event.changes?.length ?? 0) > 1">
-                  {{ item.event.changes?.length }} changes
-                </span>
               </button>
             </div>
 
             <div
-              v-if="item.event.evidence && isExpanded(item.event.id)"
+              v-if="
+                item.event.evidence &&
+                evidenceImages[item.event.evidence.evidenceId] &&
+                isExpanded(item.event.id)
+              "
               class="relative mt-2 overflow-hidden rounded-md border border-border/70 bg-black/20"
             >
               <img
-                v-if="evidenceImages[item.event.evidence.evidenceId]"
                 :src="evidenceImages[item.event.evidence.evidenceId]"
                 :alt="`Expanded context snapshot for ${rowTitle(item)}`"
                 class="block w-full"
@@ -743,24 +1065,11 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                 />
               </svg>
             </div>
-            <div
-              v-else-if="!item.event.evidence && item.event.evidenceStatus"
-              data-test-id="narrated-trace-evidence-status"
-              class="mt-2 flex h-16 items-center justify-center rounded-md border border-border/70 bg-black/10 px-3 text-center text-[9px]"
-              :class="
-                item.event.evidenceStatus === 'failed'
-                  ? 'text-[var(--color-warning-text)]'
-                  : 'text-muted'
-              "
-            >
-              {{
-                item.event.evidenceStatus === 'failed'
-                  ? 'Screenshot unavailable. Try Focus again.'
-                  : 'Capturing the highlighted screen…'
-              }}
-            </div>
 
-            <div v-if="isExpanded(item.event.id)" class="mt-2 rounded-md bg-hover/60 p-2">
+            <div
+              v-if="isExpanded(item.event.id) && (rowMetadata(item) || item.event.changes?.length)"
+              class="mt-2 rounded-md bg-hover/60 p-2"
+            >
               <div v-if="rowMetadata(item)" class="mb-2 break-words text-[8.5px] text-muted/65">
                 {{ rowMetadata(item) }}
               </div>
@@ -771,13 +1080,102 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                   class="break-words font-mono text-[9px] leading-3.5 text-muted"
                 >
                   <span class="text-surface">{{ change.property }}</span
-                  >: {{ change.before ?? 'unknown' }} → {{ change.after ?? 'removed' }}
+                  >: {{ change.before ?? 'unknown' }} →
+                  {{ change.after ?? 'removed' }}
                 </div>
               </div>
             </div>
           </div>
+
+          <button
+            v-if="item.event.evidence && evidenceImages[item.event.evidence.evidenceId]"
+            type="button"
+            data-test-id="narrated-trace-evidence-toggle"
+            class="relative size-9 shrink-0 overflow-hidden rounded-[6px] border border-border/65 bg-black/15 transition-colors hover:border-white/20"
+            :aria-label="isExpanded(item.event.id) ? 'Collapse evidence' : 'Expand evidence'"
+            @click="toggleExpanded(item.event.id)"
+          >
+            <img
+              data-test-id="narrated-trace-evidence-image"
+              :data-evidence-source="item.event.evidence.source"
+              :src="evidenceImages[item.event.evidence.evidenceId]"
+              :alt="`Context snapshot for ${rowTitle(item)}`"
+              class="size-full object-cover"
+            />
+          </button>
+          <button
+            v-else-if="item.event.evidence && rowEvidenceStatus(item) === 'ready'"
+            type="button"
+            data-test-id="narrated-trace-evidence-load"
+            class="flex size-9 shrink-0 items-center justify-center rounded-[6px] border border-border/55 bg-black/10 text-muted/50 transition-colors hover:border-white/20 hover:text-surface"
+            :aria-label="`Load context snapshot for ${rowTitle(item)}`"
+            @click="toggleExpanded(item.event.id)"
+          >
+            <icon-lucide-image class="size-3.5" />
+          </button>
+          <div
+            v-else-if="item.event.evidence && rowEvidenceStatus(item) !== 'pending'"
+            class="flex size-9 shrink-0 items-center justify-center rounded-[6px] border border-border/55 bg-black/10 text-muted/40"
+            aria-hidden="true"
+          >
+            <icon-lucide-image-off class="size-3.5" />
+          </div>
         </article>
-      </div>
+
+        <div
+          v-if="
+            historicalPage.nextCursor ||
+            newerActivityCursors.length > 0 ||
+            activityLoadError ||
+            activityLoading
+          "
+          data-test-id="narrated-trace-activity-pagination"
+          class="flex min-h-9 items-center gap-1.5 border-t border-white/[0.055] px-2 py-1.5"
+        >
+          <button
+            v-if="newerActivityCursors.length > 0"
+            type="button"
+            data-test-id="narrated-trace-activity-newer"
+            :disabled="activityLoading"
+            class="flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[8.5px] font-medium text-muted/70 hover:bg-white/[0.055] hover:text-surface disabled:opacity-40"
+            @click="showNewerActivity"
+          >
+            <icon-lucide-chevron-up class="size-3" /> Newer
+          </button>
+          <button
+            v-if="activityCursor !== null"
+            type="button"
+            data-test-id="narrated-trace-activity-latest"
+            :disabled="activityLoading"
+            class="h-6 rounded-[5px] px-1.5 text-[8.5px] font-medium text-muted/55 hover:bg-white/[0.055] hover:text-surface disabled:opacity-40"
+            @click="showLatestActivity"
+          >
+            Latest
+          </button>
+          <span
+            v-if="activityLoadError"
+            data-test-id="narrated-trace-activity-error"
+            class="min-w-0 flex-1 truncate text-[8px] text-[var(--color-warning-text)]"
+          >
+            {{ activityLoadError }}
+          </span>
+          <span v-else class="flex-1" />
+          <icon-lucide-loader-circle
+            v-if="activityLoading"
+            class="size-3 animate-spin text-muted/50"
+          />
+          <button
+            v-if="historicalPage.nextCursor"
+            type="button"
+            data-test-id="narrated-trace-activity-older"
+            :disabled="activityLoading"
+            class="flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[8.5px] font-medium text-violet-200/75 hover:bg-violet-300/10 hover:text-violet-100 disabled:opacity-40"
+            @click="showOlderActivity"
+          >
+            Earlier <icon-lucide-chevron-down class="size-3" />
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>

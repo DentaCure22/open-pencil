@@ -13,7 +13,7 @@ import {
 const LISTED = `
 provider      model                          context  max-out  thinking  images
 cursor        composer-2.5-fast              200K     64K      yes       no
-cursor        cursor-grok-4.6                200K     64K      yes       no
+cursor        cursor-grok-4.6-fast           200K     64K      yes       no
 cursor        claude-opus-5                  200K     64K      yes       no
 antigravity   gemini-3-1-pro                 1.0M     65.5K    yes       no
 antigravity   gemini-3-7-flash               1.0M     65.5K    yes       no
@@ -46,29 +46,58 @@ describe('Pi model catalog', () => {
     const models = parsePiListModels(LISTED, {
       defaultProvider: 'xai-auth',
       defaultThinkingLevel: 'high',
-      enabledModels: ['openai-codex/*', 'cursor/*', 'xai/*', 'xai-auth/*', 'antigravity/*']
+      enabledModels: [
+        'openai-codex/gpt-5.6-luna:high',
+        'openai-codex/gpt-5.6-sol:high',
+        'openai-codex/gpt-5.6-terra:high',
+        'cursor/composer-2.5-fast',
+        'cursor/cursor-grok-4.6-fast:high',
+        'xai-auth/grok-4.6:high',
+        'xai-auth/grok-composer-2.5-fast',
+        'antigravity/gemini-3-1-pro:high',
+        'antigravity/gemini-3-7-flash:high'
+      ]
     })
     expect(models.map((model) => model.id)).toEqual([
       'cursor/composer-2.5-fast',
-      'cursor/cursor-grok-4.6',
+      'cursor/cursor-grok-4.6-fast',
       'antigravity/gemini-3-1-pro',
       'antigravity/gemini-3-7-flash',
-      'antigravity/claude-sonnet-4-6',
       'openai-codex/gpt-5.6-luna',
       'openai-codex/gpt-5.6-sol',
       'openai-codex/gpt-5.6-terra',
-      'openai-codex/gpt-5.3-codex-spark',
-      'xai/grok-4.6',
       'xai-auth/grok-4.6',
       'xai-auth/grok-composer-2.5-fast'
     ])
     expect(models.find((model) => model.id === 'xai-auth/grok-composer-2.5-fast')?.efforts).toEqual(
       ['medium']
     )
+    expect(models.find((model) => model.id === 'cursor/composer-2.5-fast')).toMatchObject({
+      defaultEffort: 'medium',
+      efforts: ['medium']
+    })
+    expect(models.find((model) => model.id === 'cursor/cursor-grok-4.6-fast')?.efforts).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh'
+    ])
     expect(models.find((model) => model.id === 'antigravity/gemini-3-7-flash')).toMatchObject({
       defaultEffort: 'high',
+      efforts: ['low', 'medium', 'high'],
       group: 'Antigravity'
     })
+    expect(models.find((model) => model.id === 'antigravity/gemini-3-1-pro')?.efforts).toEqual([
+      'low',
+      'high'
+    ])
+    expect(models.find((model) => model.id === 'openai-codex/gpt-5.6-sol')?.efforts).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max'
+    ])
   })
 
   test('prefers the Pi settings default over the store-only API slug', async () => {
@@ -96,7 +125,17 @@ describe('Pi model catalog', () => {
         defaultModel: 'grok-4.6',
         defaultProvider: 'xai-auth',
         defaultThinkingLevel: 'high',
-        enabledModels: ['openai-codex/*', 'cursor/*', 'xai/*', 'xai-auth/*', 'antigravity/*']
+        enabledModels: [
+          'openai-codex/gpt-5.6-luna:high',
+          'openai-codex/gpt-5.6-sol:high',
+          'openai-codex/gpt-5.6-terra:high',
+          'cursor/composer-2.5-fast',
+          'cursor/cursor-grok-4.6-fast:high',
+          'xai-auth/grok-4.6:high',
+          'xai-auth/grok-composer-2.5-fast',
+          'antigravity/gemini-3-1-pro:high',
+          'antigravity/gemini-3-7-flash:high'
+        ]
       })
     )
 
@@ -109,7 +148,7 @@ describe('Pi model catalog', () => {
     expect(models[0]?.id).toBe('xai-auth/grok-4.6')
     expect(models.map((model) => model.id)).not.toContain('xai/grok-4.6')
     expect(models.map((model) => model.id)).toContain('cursor/composer-2.5-fast')
-    expect(validatePiSelection(models, 'cursor/composer-2.5-fast', 'medium')).toEqual({
+    expect(validatePiSelection(models, 'cursor/composer-2.5-fast')).toEqual({
       effort: 'medium',
       model: 'cursor/composer-2.5-fast'
     })

@@ -10,6 +10,7 @@ import {
 } from './client'
 import { agentHistorySignature } from './history-signature'
 import {
+  mapAgentConversationHistory,
   reconcileAgentConversationHistory,
   reconcileRetainedConversationMessages,
   retainedTranscriptNeedsHydrate
@@ -35,21 +36,15 @@ function restoreHydratedMessages(
   previous: AgentConversationHistory | null,
   next: AgentConversationHistory
 ): AgentConversationHistory {
-  if (!previous) return next
-  const previousById = new Map(previous.threads.map((thread) => [thread.id, thread]))
-  return {
-    ...next,
-    threads: next.threads.map((thread) => {
-      const current = previousById.get(thread.id)
-      if (current && transcriptRetainers.has(thread.id)) {
-        return {
-          ...thread,
-          messages: reconcileRetainedConversationMessages(current.messages, thread.messages)
-        }
+  return mapAgentConversationHistory(previous, next, (current, thread) => {
+    if (current && transcriptRetainers.has(thread.id)) {
+      return {
+        ...thread,
+        messages: reconcileRetainedConversationMessages(current.messages, thread.messages)
       }
-      return thread
-    })
-  }
+    }
+    return thread
+  })
 }
 
 async function hydrateRetainedTranscripts(): Promise<void> {
@@ -76,6 +71,7 @@ async function hydrateRetainedTranscripts(): Promise<void> {
         ...thread,
         ...(full.contextUsage ? { contextUsage: full.contextUsage } : {}),
         messages,
+        pendingUiRequests: full.pendingUiRequests?.map((request) => ({ ...request })) ?? [],
         recentUpdate: full.recentUpdate,
         state: full.state,
         updatedAt: full.updatedAt

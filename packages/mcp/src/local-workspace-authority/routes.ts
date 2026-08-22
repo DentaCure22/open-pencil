@@ -39,6 +39,7 @@ type AuthorityRequestBody = {
   expectedRevision?: unknown
   evidenceBase64?: unknown
   evidenceId?: unknown
+  evidenceIds?: unknown
   gesture?: unknown
   gestures?: unknown
   intentId?: unknown
@@ -64,7 +65,12 @@ type HeadChange = {
 
 type HeadChangeWaitResult =
   | HeadChange
-  | { changed: false; navigationSequence?: number; revision: number; themeSequence?: number }
+  | {
+      changed: false
+      navigationSequence?: number
+      revision: number
+      themeSequence?: number
+    }
 
 function integerQuery(c: Context, name: string, fallback: number, maximum: number): number {
   const raw = c.req.query(name)
@@ -508,7 +514,10 @@ export function registerLocalWorkspaceAuthorityRoutes(
       const head = await options.store.head()
       if (!head) {
         return c.json(
-          { code: 'workspace_not_initialized', error: 'Local workspace has no saved head yet' },
+          {
+            code: 'workspace_not_initialized',
+            error: 'Local workspace has no saved head yet'
+          },
           404
         )
       }
@@ -621,7 +630,9 @@ export function registerLocalWorkspaceAuthorityRoutes(
 
   app.post(`${AUTHORITY_ROUTE}/theme`, async (c) => {
     try {
-      return c.json({ theme: await options.store.recordTheme(themeRequest(await parseBody(c))) })
+      return c.json({
+        theme: await options.store.recordTheme(themeRequest(await parseBody(c)))
+      })
     } catch (error) {
       return requestErrorResponse(c, error)
     }
@@ -642,6 +653,22 @@ export function registerLocalWorkspaceAuthorityRoutes(
       return c.json({ summaries: await options.store.traceSessionSummaries() })
     } catch (error) {
       return errorResponse(c, error)
+    }
+  })
+
+  app.get(`${AUTHORITY_ROUTE}/trace/activity`, async (c) => {
+    try {
+      const limit = integerQuery(c, 'limit', 80, 80)
+      if (limit < 1) throw new TypeError('limit must be an integer between 1 and 80')
+      const before = c.req.query('before')
+      return c.json(
+        await options.store.traceActivityPage({
+          ...(before ? { before } : {}),
+          limit
+        })
+      )
+    } catch (error) {
+      return requestErrorResponse(c, error)
     }
   })
 
@@ -683,7 +710,11 @@ export function registerLocalWorkspaceAuthorityRoutes(
   app.post(`${AUTHORITY_ROUTE}/trace/spoken-turns`, async (c) => {
     try {
       const body = await parseBody(c)
-      return c.json(await options.store.recordTraceSpokenTurns({ spokenTurns: body.spokenTurns }))
+      return c.json(
+        await options.store.recordTraceSpokenTurns({
+          spokenTurns: body.spokenTurns
+        })
+      )
     } catch (error) {
       return requestErrorResponse(c, error)
     }
@@ -691,7 +722,9 @@ export function registerLocalWorkspaceAuthorityRoutes(
 
   app.delete(`${AUTHORITY_ROUTE}/trace/sessions/:sessionId`, async (c) => {
     try {
-      return c.json({ deleted: await options.store.deleteTraceSession(c.req.param('sessionId')) })
+      return c.json({
+        deleted: await options.store.deleteTraceSession(c.req.param('sessionId'))
+      })
     } catch (error) {
       return errorResponse(c, error)
     }
@@ -713,11 +746,37 @@ export function registerLocalWorkspaceAuthorityRoutes(
     }
   })
 
+  app.post(`${AUTHORITY_ROUTE}/trace/evidence-overview`, async (c) => {
+    try {
+      const body = await parseBody(c)
+      if (
+        !Array.isArray(body.evidenceIds) ||
+        body.evidenceIds.length > 100 ||
+        !body.evidenceIds.every((evidenceId) => typeof evidenceId === 'string' && evidenceId.trim())
+      ) {
+        throw new TypeError('Trace evidence overview requires up to 100 evidence IDs.')
+      }
+      return c.json(
+        await options.store.traceEvidenceOverview(
+          body.evidenceIds.map((evidenceId) => evidenceId.trim())
+        )
+      )
+    } catch (error) {
+      return requestErrorResponse(c, error)
+    }
+  })
+
   app.get(`${AUTHORITY_ROUTE}/trace/evidence/:evidenceId`, async (c) => {
     try {
       const evidence = await options.store.traceEvidence(c.req.param('evidenceId'))
       if (!evidence) {
-        return c.json({ code: 'trace_evidence_not_found', error: 'Trace evidence not found' }, 404)
+        return c.json(
+          {
+            code: 'trace_evidence_not_found',
+            error: 'Trace evidence not found'
+          },
+          404
+        )
       }
       return c.json({
         evidenceBase64: Buffer.from(evidence.bytes).toString('base64'),

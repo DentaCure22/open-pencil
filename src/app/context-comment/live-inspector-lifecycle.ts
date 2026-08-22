@@ -13,7 +13,7 @@ export function reconcileLiveInspectorContextComment(input: LiveInspectorContext
     return false
   }
   if (
-    current?.target.kind === 'live-container' &&
+    current?.target?.kind === 'live-container' &&
     current.target.stableIds[0] === input.selectedId
   ) {
     return true
@@ -22,7 +22,7 @@ export function reconcileLiveInspectorContextComment(input: LiveInspectorContext
 }
 
 export function closeLiveInspectorContextComment() {
-  if (contextCommentState.draft?.target.kind !== 'live-container') return false
+  if (contextCommentState.draft?.target?.kind !== 'live-container') return false
   closeContextComment()
   return true
 }

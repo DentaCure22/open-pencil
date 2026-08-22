@@ -13,6 +13,7 @@ const localAuthorityDisabled = process.env.OPENPENCIL_DISABLE_LOCAL_WORKSPACE_AU
 export type LocalWorkspaceAuthorityPluginOptions = {
   localWorkspaceId?: string
   localWorkspaceRoot?: string
+  smylrAppRoot?: string
 }
 
 export function resolveBunExecutable(env: NodeJS.ProcessEnv = process.env): string {
@@ -84,7 +85,8 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
               : {}),
             ...(options.localWorkspaceRoot
               ? { OPENPENCIL_LOCAL_WORKSPACE_ROOT: options.localWorkspaceRoot }
-              : {})
+              : {}),
+            ...(options.smylrAppRoot ? { OPENPENCIL_SMYLR_APP_ROOT: options.smylrAppRoot } : {})
           },
           stdio: ['ignore', 'inherit', 'pipe']
         }

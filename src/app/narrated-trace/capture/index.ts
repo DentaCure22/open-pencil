@@ -23,11 +23,46 @@ export type NarratedTraceCaptureOmissionProvider = (
 
 export type NarratedTraceCaptureInput = {
   annotation: NarratedTraceEvidenceAnnotation
+  annotationBaked?: boolean
   area: HTMLElement
   capturedAtMs: number
   cropBounds: Rect
+  maxEdge?: number
   sessionId: string
   target?: NarratedTraceTarget
+}
+
+export type NarratedTraceDisplayCaptureInput = {
+  annotation: NarratedTraceEvidenceAnnotation
+  annotationBaked?: boolean
+  capturedAtMs: number
+  cropBounds: Rect
+  imageUrl: string
+  maxEdge?: number
+  preserveTransparency?: boolean
+  sessionId: string
+  source?: NarratedTraceEvidence['source']
+  sourceCropBounds: Rect
+  target?: NarratedTraceTarget
+}
+
+export type NarratedTraceSnapshotInput = Pick<
+  NarratedTraceCaptureInput,
+  'area' | 'cropBounds' | 'maxEdge' | 'target'
+>
+
+export type NarratedTraceSnapshot = {
+  blob: Blob
+  height: number
+  omissions: NarratedTraceEvidenceOmission[]
+  source: NarratedTraceEvidence['source']
+  width: number
+}
+
+type PreparedNarratedTraceCapture = Omit<NarratedTraceSnapshot, 'blob'> & {
+  canvas: HTMLCanvasElement
+  context: CanvasRenderingContext2D
+  scale: number
 }
 
 let captureOmissionProvider: NarratedTraceCaptureOmissionProvider | null = null
@@ -52,6 +87,21 @@ function blobImageUrl(blob: Blob) {
   return URL.createObjectURL(blob)
 }
 
+function loadImage(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.addEventListener('load', () => resolve(image), { once: true })
+    image.addEventListener(
+      'error',
+      () => reject(new Error('The shared screen image is unavailable.')),
+      {
+        once: true
+      }
+    )
+    image.src = url
+  })
+}
+
 function regionForElement(element: Element, areaRect: DOMRect): Rect {
   const rect = element.getBoundingClientRect()
   return {
@@ -62,8 +112,10 @@ function regionForElement(element: Element, areaRect: DOMRect): Rect {
   }
 }
 
+type RasterCaptureSource = HTMLCanvasElement | HTMLImageElement | HTMLVideoElement
+
 function sourceMatchesTarget(
-  source: HTMLCanvasElement | HTMLImageElement,
+  source: RasterCaptureSource,
   sourceRegion: Rect,
   target?: NarratedTraceTarget
 ) {
@@ -72,6 +124,22 @@ function sourceMatchesTarget(
   if (ownerFrameId === target.frameId) return true
   if (!(source instanceof HTMLImageElement) || !target.bounds) return false
   return rectIntersectionRatio(sourceRegion, target.bounds) >= 0.8
+}
+
+function rasterSourceIsReady(source: RasterCaptureSource) {
+  if (source instanceof HTMLImageElement) return source.complete && source.naturalWidth > 0
+  if (source instanceof HTMLVideoElement) {
+    return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+  }
+  return true
+}
+
+function rasterSourceSize(source: RasterCaptureSource) {
+  if (source instanceof HTMLCanvasElement) return { height: source.height, width: source.width }
+  if (source instanceof HTMLImageElement) {
+    return { height: source.naturalHeight, width: source.naturalWidth }
+  }
+  return { height: source.videoHeight, width: source.videoWidth }
 }
 
 function defaultOmissions(area: HTMLElement, areaRect: DOMRect) {
@@ -129,7 +197,7 @@ function drawRasterSources(
   let drewSource = false
   let drewTargetSource = false
   let targetSourceMeaningful = false
-  const sources = area.querySelectorAll<HTMLCanvasElement | HTMLImageElement>('canvas, img')
+  const sources = area.querySelectorAll<RasterCaptureSource>('canvas, img, video')
   for (const source of sources) {
     if (
       source.closest('[data-narrated-trace-overlay="true"]') ||
@@ -137,9 +205,7 @@ function drawRasterSources(
     ) {
       continue
     }
-    if (source instanceof HTMLImageElement && (!source.complete || source.naturalWidth === 0)) {
-      continue
-    }
+    if (!rasterSourceIsReady(source)) continue
     const sourceRegion = regionForElement(source, areaRect)
     if (!rectsIntersect(sourceRegion, cropBounds)) continue
     const intersection: Rect = {
@@ -157,9 +223,7 @@ function drawRasterSources(
       y: Math.max(cropBounds.y, sourceRegion.y)
     }
     if (intersection.width === 0 || intersection.height === 0) continue
-    const intrinsicWidth = source instanceof HTMLCanvasElement ? source.width : source.naturalWidth
-    const intrinsicHeight =
-      source instanceof HTMLCanvasElement ? source.height : source.naturalHeight
+    const { height: intrinsicHeight, width: intrinsicWidth } = rasterSourceSize(source)
     try {
       const layer = createCaptureLayer(context.canvas.width, context.canvas.height)
       if (!layer.context) continue
@@ -193,7 +257,7 @@ function drawRasterSources(
 
 async function drawDomSurface(
   context: CanvasRenderingContext2D,
-  input: NarratedTraceCaptureInput,
+  input: NarratedTraceSnapshotInput,
   width: number,
   height: number
 ) {
@@ -269,9 +333,30 @@ function fillTransparentPixels(context: CanvasRenderingContext2D, width: number,
   context.restore()
 }
 
+function canvasHasTransparentPixels(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number
+) {
+  const pixels = context.getImageData(0, 0, width, height).data
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] < 255) return true
+  }
+  return false
+}
+
+function roundedRect(bounds: Rect): Rect {
+  return {
+    height: Math.round(bounds.height),
+    width: Math.round(bounds.width),
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y)
+  }
+}
+
 async function drawDomSurfaceSafely(
   context: CanvasRenderingContext2D,
-  input: NarratedTraceCaptureInput,
+  input: NarratedTraceSnapshotInput,
   width: number,
   height: number,
   behindPixels = false
@@ -317,7 +402,7 @@ async function persistEvidenceBlob(evidenceId: string, sessionId: string, blob: 
 
 async function composeCaptureSources(
   context: CanvasRenderingContext2D,
-  input: NarratedTraceCaptureInput,
+  input: NarratedTraceSnapshotInput,
   areaRect: DOMRect,
   width: number,
   height: number,
@@ -367,7 +452,7 @@ function canvasBackdropColor(area: HTMLElement) {
 
 function drawCanvasLocationFallback(
   context: CanvasRenderingContext2D,
-  input: NarratedTraceCaptureInput,
+  input: NarratedTraceSnapshotInput,
   width: number,
   height: number
 ) {
@@ -381,18 +466,19 @@ function drawCanvasLocationFallback(
   return true
 }
 
-export async function captureNarratedTraceEvidence(
-  input: NarratedTraceCaptureInput
-): Promise<NarratedTraceEvidence | null> {
+async function prepareNarratedTraceCapture(
+  input: NarratedTraceSnapshotInput
+): Promise<PreparedNarratedTraceCapture | null> {
   await nextPaint()
   const edge = Math.max(input.cropBounds.width, input.cropBounds.height, 1)
-  const scale = Math.min(1, MAX_CAPTURE_EDGE / edge)
+  const maxEdge = Math.min(2_048, Math.max(1, input.maxEdge ?? MAX_CAPTURE_EDGE))
+  const scale = Math.min(1, maxEdge / edge)
   const width = Math.max(1, Math.round(input.cropBounds.width * scale))
   const height = Math.max(1, Math.round(input.cropBounds.height * scale))
-  const output = document.createElement('canvas')
-  output.width = width
-  output.height = height
-  const context = output.getContext('2d')
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
   if (!context) return null
 
   const areaRect = input.area.getBoundingClientRect()
@@ -406,13 +492,45 @@ export async function captureNarratedTraceEvidence(
   if (!source && drawCanvasLocationFallback(context, input, width, height)) source = 'canvas'
   if (!source) return null
 
-  const annotationBaked = drawEvidenceAnnotation(context, input.annotation, input.cropBounds, scale)
+  return { canvas, context, height, omissions, scale, source, width }
+}
 
-  if (!drawOmissionsSafely(context, omissions, input.cropBounds, scale)) return null
-  fillTransparentPixels(context, width, height)
+export async function captureNarratedTraceSnapshot(
+  input: NarratedTraceSnapshotInput
+): Promise<NarratedTraceSnapshot | null> {
+  const capture = await prepareNarratedTraceCapture(input)
+  if (!capture) return null
+  if (!drawOmissionsSafely(capture.context, capture.omissions, input.cropBounds, capture.scale)) {
+    return null
+  }
+  fillTransparentPixels(capture.context, capture.width, capture.height)
+  const blob = await canvasBlob(capture.canvas)
+  if (!blob) return null
+  return {
+    blob,
+    height: capture.height,
+    omissions: capture.omissions,
+    source: capture.source,
+    width: capture.width
+  }
+}
+
+export async function captureNarratedTraceEvidence(
+  input: NarratedTraceCaptureInput
+): Promise<NarratedTraceEvidence | null> {
+  const capture = await prepareNarratedTraceCapture(input)
+  if (!capture) return null
+  const annotationBaked =
+    input.annotationBaked === true ||
+    drawEvidenceAnnotation(capture.context, input.annotation, input.cropBounds, capture.scale)
+
+  if (!drawOmissionsSafely(capture.context, capture.omissions, input.cropBounds, capture.scale)) {
+    return null
+  }
+  fillTransparentPixels(capture.context, capture.width, capture.height)
 
   const evidenceId = createEvidenceId()
-  const blob = await canvasBlob(output)
+  const blob = await canvasBlob(capture.canvas)
   if (!blob) return null
   await persistEvidenceBlob(evidenceId, input.sessionId, blob)
 
@@ -420,17 +538,65 @@ export async function captureNarratedTraceEvidence(
     annotation: input.annotation,
     annotationBaked,
     capturedAtMs: input.capturedAtMs,
-    cropBounds: {
-      height: Math.round(input.cropBounds.height),
-      width: Math.round(input.cropBounds.width),
-      x: Math.round(input.cropBounds.x),
-      y: Math.round(input.cropBounds.y)
-    },
+    cropBounds: roundedRect(input.cropBounds),
+    evidenceId,
+    height: capture.height,
+    mimeType: 'image/png',
+    omissions: capture.omissions,
+    source: capture.source,
+    targetPath: input.target?.path,
+    targetStableId: input.target?.stableId,
+    width: capture.width
+  }
+}
+
+export async function captureNarratedTraceDisplayEvidence(
+  input: NarratedTraceDisplayCaptureInput
+): Promise<NarratedTraceEvidence | null> {
+  const image = await loadImage(input.imageUrl)
+  const sourceLeft = Math.min(image.naturalWidth, Math.max(0, input.sourceCropBounds.x))
+  const sourceTop = Math.min(image.naturalHeight, Math.max(0, input.sourceCropBounds.y))
+  const sourceRight = Math.min(
+    image.naturalWidth,
+    Math.max(sourceLeft, input.sourceCropBounds.x + input.sourceCropBounds.width)
+  )
+  const sourceBottom = Math.min(
+    image.naturalHeight,
+    Math.max(sourceTop, input.sourceCropBounds.y + input.sourceCropBounds.height)
+  )
+  const sourceWidth = sourceRight - sourceLeft
+  const sourceHeight = sourceBottom - sourceTop
+  if (sourceWidth < 1 || sourceHeight < 1) return null
+
+  const edge = Math.max(sourceWidth, sourceHeight, 1)
+  const maxEdge = Math.min(2_048, Math.max(1, input.maxEdge ?? MAX_CAPTURE_EDGE))
+  const scale = Math.min(1, maxEdge / edge)
+  const width = Math.max(1, Math.round(sourceWidth * scale))
+  const height = Math.max(1, Math.round(sourceHeight * scale))
+  const output = document.createElement('canvas')
+  output.width = width
+  output.height = height
+  const context = output.getContext('2d')
+  if (!context) return null
+  context.drawImage(image, sourceLeft, sourceTop, sourceWidth, sourceHeight, 0, 0, width, height)
+  const sourceHasTransparency = canvasHasTransparentPixels(context, width, height)
+  if (!input.preserveTransparency) fillTransparentPixels(context, width, height)
+
+  const evidenceId = createEvidenceId()
+  const blob = await canvasBlob(output)
+  if (!blob) return null
+  await persistEvidenceBlob(evidenceId, input.sessionId, blob)
+  return {
+    annotation: input.annotation,
+    annotationBaked: input.annotationBaked ?? false,
+    capturedAtMs: input.capturedAtMs,
+    cropBounds: roundedRect(input.cropBounds),
     evidenceId,
     height,
     mimeType: 'image/png',
-    omissions,
-    source,
+    omissions: [],
+    source: input.source ?? 'display-capture',
+    sourceHasTransparency,
     targetPath: input.target?.path,
     targetStableId: input.target?.stableId,
     width

@@ -39,6 +39,7 @@ import {
 } from '@/app/code-object/interaction'
 import { codeObjectFramesForOverlay } from '@/app/code-object/overlays'
 import { notifyCodeObjectInspectorChanged } from '@/app/code-object/inspector'
+import { preserveCodeObjectRuntimeDuringHotUpdate } from '@/app/code-object/hmr-residency'
 import {
   isSmylrComponentCodeObject,
   smylrComponentRuntimeHeight
@@ -116,6 +117,7 @@ function pinnedRuntimeFrameIds() {
 const runtimeResidency = useCodeObjectRuntimeResidency({
   frames: shapes,
   pinnedFrameIds: pinnedRuntimeFrameIds,
+  preserveRuntimesOnUnmount: preserveCodeObjectRuntimeDuringHotUpdate,
   store
 })
 const runtimeActiveFrameIds = runtimeResidency.activeFrameIds
@@ -300,10 +302,6 @@ function disposeCodeObject(frameId: string) {
   return loadedCodeObjectRuntime()?.disposeCodeObject(frameId) ?? false
 }
 
-function disposeAllCodeObjects() {
-  loadedCodeObjectRuntime()?.disposeAllCodeObjects()
-}
-
 function focusCodeObject(frameId: string) {
   return loadedCodeObjectRuntime()?.focusCodeObject(frameId) ?? false
 }
@@ -323,6 +321,9 @@ async function renderFrameWithRuntime(runtime: CodeObjectRuntimeModule, frame: S
     runtime.disposeCodeObject(frame.id)
     return
   }
+  const host = boundRuntimeHosts.get(currentFrame.id)
+  if (!host) return
+  runtime.attachCodeObject(currentFrame.id, host)
   const contentSource = readContentSource(currentFrame)
   const assetHash = contentSource ? assetHashFromReference(contentSource.source) : null
   const dispatchBoardAction = async (action: Parameters<typeof dispatchCodeObjectBoardAction>[2]) =>
@@ -429,7 +430,7 @@ function bindHost(frameId: string, value: TemplateRefValue) {
   if (previous === host) return
   if (!host) {
     boundRuntimeHosts.delete(frameId)
-    disposeCodeObject(frameId)
+    if (!preserveCodeObjectRuntimeDuringHotUpdate()) disposeCodeObject(frameId)
     return
   }
   boundRuntimeHosts.set(frameId, host)
@@ -689,9 +690,22 @@ function handleCodeObjectKeydown(event: KeyboardEvent) {
 useEventListener(window, 'keydown', handleCodeObjectKeydown, { capture: true })
 useEventListener(window, 'dblclick', handleRecentSurfaceDoubleClick, { capture: true })
 
-watch(runtimeActiveFrameIds, () => reconcileSmylrRuntimes(), {
-  immediate: true
-})
+watch(
+  runtimeActiveFrameIds,
+  () => {
+    reconcileSmylrRuntimes()
+    renderActiveFrames()
+  },
+  {
+    flush: 'post',
+    immediate: true
+  }
+)
+watch(
+  () => shapes.value.map((frame) => frame.id).join('\0'),
+  () => renderActiveFrames(),
+  { flush: 'post' }
+)
 watch(resolvedTheme, renderActiveFrames)
 watch(fullFrameCodeObjectId, (frameId, previousFrameId) => {
   if (previousFrameId && previousFrameId !== frameId) exitInteraction(previousFrameId)
@@ -710,7 +724,6 @@ onMounted(() => {
   mounted = true
   unsubscribe = [
     store.onEditorEvent('graph:replaced', () => {
-      disposeAllCodeObjects()
       sync()
       reconcileCurrentBoardRuntimes()
       const runtime = loadedCodeObjectRuntime()
@@ -803,7 +816,9 @@ onUnmounted(() => {
   boundRuntimeHosts.clear()
   runtimeHostRefs.clear()
   surfaceHostRefs.clear()
-  disposeAllCodeObjects()
+  const runtime = loadedCodeObjectRuntime()
+  if (preserveCodeObjectRuntimeDuringHotUpdate()) runtime?.parkAllCodeObjects()
+  else runtime?.disposeAllCodeObjects()
 })
 </script>
 
@@ -818,7 +833,7 @@ onUnmounted(() => {
         isSelected(frame.id) &&
         modeFor(frame.id) === 'interact' &&
         fullFrameCodeObjectId !== frame.id
-          ? 'outline outline-2 outline-offset-2 outline-component/70'
+          ? 'outline outline-2 outline-offset-0 outline-component/70'
           : '',
         fullFrameCodeObjectId === frame.id
           ? 'z-[18]'

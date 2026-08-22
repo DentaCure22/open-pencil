@@ -35,13 +35,16 @@ export async function placeFilesWithFallbackMessage(
   return result
 }
 
-export function useFileIntakeDrop(canvasRef: Ref<HTMLCanvasElement | null>, editor: Editor) {
-  const { isOverDropZone } = useDropZone(canvasRef, {
+export function useFileIntakeDrop<T extends HTMLElement>(
+  surfaceRef: Ref<T | null>,
+  editor: Editor
+) {
+  const { isOverDropZone } = useDropZone(surfaceRef, {
     checkValidity: (items) => [...items].some((item) => item.kind === 'file'),
     onDrop: (files, event) => {
-      const canvas = canvasRef.value
-      if (!canvas || !files || files.length === 0) return
-      const bounds = canvas.getBoundingClientRect()
+      const surface = surfaceRef.value
+      if (!surface || !files || files.length === 0) return
+      const bounds = surface.getBoundingClientRect()
       const point = editor.screenToCanvas(event.clientX - bounds.left, event.clientY - bounds.top)
       void placeFilesWithFallbackMessage(editor, files, point.x, point.y)
     },

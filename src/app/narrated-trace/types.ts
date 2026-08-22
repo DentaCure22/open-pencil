@@ -24,7 +24,8 @@ export const NARRATED_TRACE_ACTIVITY_KINDS = [
   'selection',
   'tool',
   'shape',
-  'edit'
+  'edit',
+  'note'
 ] as const
 
 export type NarratedTraceActivityKind = (typeof NARRATED_TRACE_ACTIVITY_KINDS)[number]
@@ -144,7 +145,8 @@ export type NarratedTraceEvidence = {
   height: number
   mimeType: 'image/png'
   omissions: NarratedTraceEvidenceOmission[]
-  source: 'canvas' | 'frame-snapshot'
+  source: 'canvas' | 'display-capture' | 'frame-snapshot'
+  sourceHasTransparency?: boolean
   targetPath?: string[]
   targetStableId?: string
   width: number
@@ -156,7 +158,7 @@ export type NarratedTraceEvent = {
   changes?: NarratedTraceChange[]
   durationMs?: number
   evidence?: NarratedTraceEvidence
-  evidenceStatus?: 'failed' | 'pending' | 'ready'
+  evidenceStatus?: 'evicted' | 'failed' | 'pending' | 'ready'
   groupedEventCount?: number
   groupedTargetCount?: number
   gesture?: NarratedTraceGesture

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 import {
+  applyMeasuredAntigravityThroughput,
   applyPiEventTelemetry,
   applyPiSessionStats,
   applyPiStateTelemetry,
@@ -29,7 +30,8 @@ function timing() {
   return {
     firstTokenAt: null as number | null,
     generatedCharacters: 0,
-    generationBaseTokens: null as number | null
+    generationBaseTokens: null as number | null,
+    generationElapsedMs: 0
   }
 }
 
@@ -179,13 +181,28 @@ describe('Pi conversation telemetry', () => {
       },
       2_000
     )
+    applyPiEventTelemetry(
+      conversation,
+      generation,
+      {
+        assistantMessageEvent: {
+          contentIndex: 0,
+          delta: ' The response is ready.',
+          type: 'text_delta'
+        },
+        type: 'message_update'
+      },
+      3_000
+    )
 
     expect(conversation.contextUsage).toMatchObject({
       contextWindow: 1_000_000,
-      tokensEstimated: true
+      tokensEstimated: true,
+      tokensPerSecondBasis: 'streamed-output',
+      tokensPerSecondEstimated: true
     })
     expect(conversation.contextUsage?.tokens).toBeGreaterThan(0)
-    expect(conversation.contextUsage?.tokensPerSecond).toBeUndefined()
+    expect(conversation.contextUsage?.tokensPerSecond).toBeGreaterThan(0)
 
     applyPiEventTelemetry(
       conversation,
@@ -202,15 +219,24 @@ describe('Pi conversation telemetry', () => {
         },
         type: 'message_end'
       },
-      3_000
+      4_000
     )
 
     expect(conversation.contextUsage).toMatchObject({
       contextWindow: 1_000_000,
-      tokensEstimated: true
+      tokensEstimated: true,
+      tokensPerSecondBasis: 'streamed-output',
+      tokensPerSecondEstimated: true
     })
     expect(conversation.contextUsage?.tokens).toBeGreaterThan(0)
-    expect(conversation.contextUsage?.tokensPerSecond).toBeUndefined()
+    expect(conversation.contextUsage?.tokensPerSecond).toBeGreaterThan(0)
+
+    expect(applyMeasuredAntigravityThroughput(conversation, 319, 3_000)).toBe(true)
+    expect(conversation.contextUsage).toMatchObject({
+      tokensPerSecond: 106.3,
+      tokensPerSecondBasis: 'streamed-output'
+    })
+    expect(conversation.contextUsage?.tokensPerSecondEstimated).toBeUndefined()
   })
 
   test('hydrates persisted Antigravity threads that were saved with a frozen zero meter', () => {
@@ -221,7 +247,9 @@ describe('Pi conversation telemetry', () => {
       compacting: false,
       contextWindow: 1_000_000,
       percent: 0,
-      tokens: 0
+      tokens: 0,
+      tokensPerSecond: 106.3,
+      tokensPerSecondBasis: 'streamed-output'
     }
     conversation.messages.push(
       {
@@ -240,8 +268,11 @@ describe('Pi conversation telemetry', () => {
     )
 
     expect(hydrateEstimatedAntigravityTelemetry(conversation)).toBe(true)
-    expect(conversation.contextUsage).toMatchObject({ tokensEstimated: true })
+    expect(conversation.contextUsage).toMatchObject({
+      tokensEstimated: true,
+      tokensPerSecond: 106.3,
+      tokensPerSecondBasis: 'streamed-output'
+    })
     expect(conversation.contextUsage.tokens).toBeGreaterThan(0)
-    expect(conversation.contextUsage.tokensPerSecond).toBeUndefined()
   })
 })

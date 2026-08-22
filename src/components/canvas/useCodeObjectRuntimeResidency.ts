@@ -24,12 +24,14 @@ const CODE_OBJECT_RUNTIME_OVERSCAN_PX = 256
 interface CodeObjectRuntimeResidencyOptions {
   frames: ComputedRef<SceneNode[]>
   pinnedFrameIds: () => ReadonlySet<string>
+  preserveRuntimesOnUnmount: () => boolean
   store: EditorStore
 }
 
 export function useCodeObjectRuntimeResidency({
   frames,
   pinnedFrameIds,
+  preserveRuntimesOnUnmount,
   store
 }: CodeObjectRuntimeResidencyOptions) {
   const documentVisible = ref(!document.hidden)
@@ -111,6 +113,7 @@ export function useCodeObjectRuntimeResidency({
     activeFrameIds,
     (frameIds) => {
       publishCodeObjectRuntimeActivity(store, frameIds)
+      if (preserveRuntimesOnUnmount()) return
       const reactRuntimeFrameIds = new Set(
         [...frameIds].filter((frameId) => {
           const frame = store.graph.getNode(frameId)

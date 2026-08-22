@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue'
+import { shallowRef, type ComponentPublicInstance } from 'vue'
 import { useStickToBottom } from 'vue-stick-to-bottom'
 
 const { contentRef, isAtBottom, scrollRef, scrollToBottom } = useStickToBottom({
@@ -9,9 +9,12 @@ const { contentRef, isAtBottom, scrollRef, scrollToBottom } = useStickToBottom({
   resize: { damping: 0.7, stiffness: 0.05, mass: 1.25 },
   stiffness: 0.05
 })
+const scrollElement = shallowRef<HTMLElement | null>(null)
 
 function bindScrollRef(element: Element | ComponentPublicInstance | null) {
-  scrollRef.value = element instanceof HTMLElement ? element : null
+  const next = element instanceof HTMLElement ? element : null
+  scrollRef.value = next
+  scrollElement.value = next
 }
 
 function bindContentRef(element: Element | ComponentPublicInstance | null) {
@@ -36,6 +39,7 @@ function bindContentRef(element: Element | ComponentPublicInstance | null) {
         <slot />
       </div>
     </div>
+    <slot name="overlay" :scroll-element="scrollElement" />
     <button
       v-if="!isAtBottom"
       type="button"

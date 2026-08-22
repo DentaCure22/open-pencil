@@ -3,6 +3,7 @@ import { toast } from '@/app/shell/ui'
 import { promptWithAnnotations } from './annotations'
 import {
   dispatchAgentPrompt,
+  attachmentImagePaths,
   followUpAgentConversation,
   promptWithAttachments,
   steerAgentConversation,
@@ -49,6 +50,7 @@ async function monitorAcceptedAgentJob(input: {
 }
 
 export async function submitAgentConversation(input: {
+  contextPrompt?: string
   nativeThreadId: string | null
   onAccepted?: (receipt: { jobId: string; threadId: string }) => void
   prompt: string
@@ -58,14 +60,24 @@ export async function submitAgentConversation(input: {
   threadId: string
 }): Promise<{ jobId: string; threadId: string }> {
   const annotatedPrompt = promptWithAnnotations(input.prompt, input.selection.annotations)
-  const requestId = beginOptimisticConversation(input.threadId, annotatedPrompt)
+  const requestId = beginOptimisticConversation(
+    input.threadId,
+    annotatedPrompt,
+    input.selection.attachments
+  )
   try {
-    const prompt = promptWithAttachments(
-      annotatedPrompt,
-      await uploadAgentAttachments(input.selection.attachments)
-    )
+    const attachments = await uploadAgentAttachments(input.selection.attachments)
+    const contextualPrompt = [input.contextPrompt?.trim(), annotatedPrompt]
+      .filter((part): part is string => Boolean(part))
+      .join('\n\n')
+    const prompt = promptWithAttachments(contextualPrompt, attachments)
+    const media = {
+      attachments,
+      displayPrompt: annotatedPrompt,
+      imagePaths: attachmentImagePaths(attachments)
+    }
     if (!input.nativeThreadId) {
-      const receipt = await dispatchAgentPrompt(prompt, input.selection)
+      const receipt = await dispatchAgentPrompt(prompt, input.selection, media)
       input.onAccepted?.(receipt)
       toast.info('Task started')
       acceptOptimisticConversation(input.threadId, requestId)
@@ -76,7 +88,8 @@ export async function submitAgentConversation(input: {
     const receipt = await (input.steer ? steerAgentConversation : followUpAgentConversation)(
       input.nativeThreadId,
       prompt,
-      input.selection
+      input.selection,
+      media
     )
     if (!input.steer) toast.info('Follow-up sent')
     acceptOptimisticConversation(input.threadId, requestId)

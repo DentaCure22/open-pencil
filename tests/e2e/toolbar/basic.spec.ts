@@ -30,7 +30,8 @@ test('collaboration controls live in the top toolbar', async () => {
 })
 
 test('shapes flyout opens', async () => {
-  await editor.page.getByTestId(toolbarFlyoutTestId('RECTANGLE')).click()
+  await editor.page.getByTestId(toolbarFlyoutTestId('FRAME')).click()
+  await expect(editor.page.getByTestId(toolbarFlyoutItemTestId('RECTANGLE'))).toBeVisible()
   await expect(editor.page.getByTestId(toolbarFlyoutItemTestId('POLYGON'))).toBeVisible()
   editor.canvas.assertNoErrors()
 })
@@ -46,7 +47,7 @@ test('Polygon tool creates POLYGON node', async () => {
 })
 
 test('Star tool creates STAR node', async () => {
-  await editor.page.getByTestId(toolbarFlyoutTestId('RECTANGLE')).click()
+  await editor.page.getByTestId(toolbarFlyoutTestId('FRAME')).click()
   await editor.page.getByTestId(toolbarFlyoutItemTestId('STAR')).click()
   await editor.canvas.drag(150, 150, 250, 250)
   await editor.canvas.waitForRender()
@@ -114,9 +115,15 @@ test('Pen close path creates VECTOR with closed region', async () => {
   editor.canvas.assertNoErrors()
 })
 
-test('Frame flyout shows Frame and Section items', async () => {
+test('creation flyout combines frames, sections, and shapes', async () => {
   await editor.page.getByTestId(toolbarFlyoutTestId('FRAME')).click()
   await expect(editor.page.getByTestId(toolbarFlyoutItemTestId('FRAME'))).toBeVisible()
   await expect(editor.page.getByTestId(toolbarFlyoutItemTestId('SECTION'))).toBeVisible()
+  await editor.page.getByTestId(toolbarFlyoutItemTestId('RECTANGLE')).click()
+  await expect
+    .poll(() =>
+      editor.page.evaluate(() => window.openPencil?.getStore?.().state.activeTool ?? null)
+    )
+    .toBe('RECTANGLE')
   editor.canvas.assertNoErrors()
 })

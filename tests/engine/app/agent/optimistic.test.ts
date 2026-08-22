@@ -30,6 +30,66 @@ describe('agent chat optimistic lifecycle', () => {
     expect(mergeOptimisticMessages(threadId, authoritative)).toHaveLength(1)
   })
 
+  test('moves files into the optimistic user turn until authoritative parts arrive', () => {
+    const threadId = crypto.randomUUID()
+    beginOptimisticConversation(threadId, 'Review these.', [
+      new File(['png'], 'reference.png', { type: 'image/png' }),
+      new File(['mov'], 'walkthrough.mov', { type: 'video/quicktime' })
+    ])
+
+    const optimistic = mergeOptimisticMessages(threadId, [])
+    expect(optimistic[0]).toMatchObject({ role: 'user', text: 'Review these.' })
+    expect(optimistic[0]?.parts).toHaveLength(2)
+    expect(optimistic[0]?.parts?.[0]).toMatchObject({
+      alt: 'reference.png',
+      type: 'image',
+      url: expect.stringMatching(/^blob:/)
+    })
+    expect(optimistic[0]?.parts?.[1]).toMatchObject({
+      mediaType: 'video/quicktime',
+      name: 'walkthrough.mov',
+      size: 3,
+      type: 'attachment'
+    })
+
+    const startedAt = optimisticConversation(threadId)?.startedAt ?? new Date().toISOString()
+    const preview = mergeOptimisticMessages(threadId, [
+      {
+        createdAt: startedAt,
+        id: 'server-user-preview',
+        role: 'user',
+        text: 'Review these.'
+      }
+    ])
+    expect(preview[0]?.parts).toHaveLength(2)
+
+    const authoritative = mergeOptimisticMessages(threadId, [
+      {
+        createdAt: startedAt,
+        id: 'server-user-full',
+        parts: [
+          {
+            alt: 'reference.png',
+            type: 'image',
+            url: 'data:image/png;base64,cG5n'
+          },
+          {
+            mediaType: 'video/quicktime',
+            name: 'walkthrough.mov',
+            size: 3,
+            type: 'attachment'
+          }
+        ],
+        role: 'user',
+        text: 'Review these.'
+      }
+    ])
+    expect(authoritative[0]?.parts?.[0]).toMatchObject({
+      type: 'image',
+      url: 'data:image/png;base64,cG5n'
+    })
+  })
+
   test('keeps a failed request retryable instead of leaving a busy loader', () => {
     const threadId = crypto.randomUUID()
     const id = beginOptimisticConversation(threadId, 'Try once')

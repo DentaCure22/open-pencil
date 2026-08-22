@@ -2,7 +2,9 @@
 import { defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
+import { agentChatsPanelOpenEpoch } from '@/app/agent-chat/panel'
 import { tracePanelOpenEpoch } from '@/app/narrated-trace'
+import BrowserInspectorSelection from './browser-inspector/BrowserInspectorSelection.vue'
 import LayerTree from './LayerTree/LayerTree.vue'
 import Tip from './ui/Tip.vue'
 import './layers-panel.css'
@@ -20,7 +22,7 @@ const openUtility = ref<UtilityKind>('layers')
 const variablesOpen = ref(false)
 
 const utilityContentClass =
-  'col-span-4 row-start-2 flex min-h-0 flex-1 flex-col overflow-hidden outline-none'
+  'col-span-4 row-start-3 flex min-h-0 flex-1 flex-col overflow-hidden outline-none'
 const utilityTabClass =
   'flex min-w-0 items-center justify-center rounded-[9px] border border-transparent px-0.5 text-[9px] leading-none font-semibold tracking-[0.025em] outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border'
 
@@ -37,6 +39,10 @@ watch(openUtility, () => {
 
 watch(tracePanelOpenEpoch, () => {
   openUtility.value = 'trace'
+})
+
+watch(agentChatsPanelOpenEpoch, () => {
+  openUtility.value = 'chats'
 })
 
 function utilityTabStateClass(kind: UtilityKind) {
@@ -61,7 +67,7 @@ async function revealInsertedAsset(nodeId: string) {
     <TabsRoot
       v-model="openUtility"
       data-test-id="left-panel-utility-area"
-      class="relative grid min-h-0 grow basis-0 grid-cols-4 grid-rows-[3.25rem_minmax(0,1fr)] overflow-hidden pb-1"
+      class="relative grid min-h-0 grow basis-0 grid-cols-4 grid-rows-[3.25rem_auto_minmax(0,1fr)] overflow-hidden pb-1"
     >
       <TabsList
         aria-label="Sidebar utilities"
@@ -96,6 +102,10 @@ async function revealInsertedAsset(nodeId: string) {
           <span>ACTIVITY</span>
         </TabsTrigger>
       </TabsList>
+
+      <div class="col-span-4 row-start-2 min-w-0">
+        <BrowserInspectorSelection />
+      </div>
 
       <TabsContent
         value="layers"

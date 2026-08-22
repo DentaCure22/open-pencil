@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, watch } from 'vue'
 import DesktopToolbar from '@/components/Toolbar/DesktopToolbar.vue'
 import { useToolbarActions } from '@/components/Toolbar/actions'
 import { useActionToast } from '@/app/shell/toast/action'
+import { showAgentChatsPanel } from '@/app/agent-chat/panel'
 import { useEditorStore } from '@/app/editor/active-store'
 import { toolIcons } from '@/app/editor/icons'
 import { narratedTraceAnnotationTool, setNarratedTraceAnnotationTool } from '@/app/narrated-trace'
@@ -84,6 +85,11 @@ function onActionTap(item: ToolbarActionItem) {
   item.action()
   showActionToast(item.label)
 }
+
+function openChats() {
+  showAgentChatsPanel()
+  emit('openSidebar')
+}
 </script>
 
 <template>
@@ -102,6 +108,7 @@ function onActionTap(item: ToolbarActionItem) {
       @set-tool="actions.setTool"
       @close-sidebar="emit('closeSidebar')"
       @open-sidebar="emit('openSidebar')"
+      @open-chats="openChats"
     />
 
     <MobileToolbar

@@ -13,6 +13,8 @@ import {
   liveInspectorSelectedRect
 } from '@/app/smylr-live-inspector/session'
 
+import { contextCommentNodePath } from './scene-path'
+import { prepareContextCommentScreenCapture } from './screen-capture'
 import { liveSelectionFromNode } from './selection-brief'
 import { openContextComment } from './state'
 import type { ContextCommentTarget } from './types'
@@ -27,18 +29,6 @@ function findLiveInspectorParent(
     if (match) return match
   }
   return null
-}
-
-function nodePath(store: EditorStore, node: SceneNode) {
-  const path: string[] = []
-  let current: SceneNode | undefined = node
-  const visited = new Set<string>()
-  while (current && path.length < 32 && !visited.has(current.id)) {
-    visited.add(current.id)
-    path.unshift(current.name || current.type)
-    current = current.parentId ? store.graph.getNode(current.parentId) : undefined
-  }
-  return path
 }
 
 function routeForNode(node: SceneNode) {
@@ -70,13 +60,13 @@ export function contextCommentTargetForSelection(store: EditorStore): ContextCom
     }
   }
   const first = nodes[0]
+  const route = routeForNode(first)
   return {
     bounds: unionBounds(nodes.map((node) => store.graph.getAbsoluteBounds(node.id))),
     kind: 'selection',
-    label:
-      nodes.length === 1 ? first?.name || first?.type || 'Selection' : `${nodes.length} selected`,
-    path: first ? nodePath(store, first) : [page?.name || 'Board'],
-    ...(first && routeForNode(first) ? { route: routeForNode(first) } : {}),
+    label: nodes.length === 1 ? first.name || first.type : `${nodes.length} selected`,
+    path: contextCommentNodePath(store, first),
+    ...(route ? { route } : {}),
     scope: narratedTraceScopeForStore(store),
     stableIds: nodes.map((node) => node.id)
   }
@@ -95,7 +85,7 @@ export function contextCommentTargetForLiveInspector(
     document,
     frameBounds: store.graph.getAbsoluteBounds(frameId),
     frameId,
-    framePath: nodePath(store, frame),
+    framePath: contextCommentNodePath(store, frame),
     selectedId,
     selectedRect
   })
@@ -121,6 +111,13 @@ export function contextCommentTargetForLiveInspector(
 
 export function openContextCommentForSelection(store: EditorStore) {
   openContextComment(contextCommentTargetForSelection(store))
+}
+
+export function startContextCommentScreenshot(store: EditorStore) {
+  const target =
+    contextCommentTargetForLiveInspector(store) ?? contextCommentTargetForSelection(store)
+  openContextComment(target, 'screenshot')
+  void prepareContextCommentScreenCapture(store)
 }
 
 export function openContextCommentForLiveInspector(store: EditorStore) {

@@ -735,9 +735,23 @@ describe('local workspace authority', () => {
         body: JSON.stringify({
           gestures: [gesture],
           session: {
-            contextDraft: [],
-            durationMs: 0,
-            events: [],
+            contextDraft: [
+              {
+                editedText: 'Review this exact card',
+                included: true,
+                removed: false,
+                sourceEventId: 'event:http'
+              }
+            ],
+            durationMs: 200,
+            events: [
+              {
+                atMs: 200,
+                id: 'event:http',
+                kind: 'selection',
+                label: 'Selected first card'
+              }
+            ],
             id: gesture.sessionId,
             startedAt: gesture.capturedAt
           },
@@ -752,6 +766,24 @@ describe('local workspace authority', () => {
         method: 'POST'
       })
       expect(traceResponse.status).toBe(200)
+
+      const activityResponse = await server.app.request(
+        '/local-workspace/v1/trace/activity?limit=1',
+        { headers }
+      )
+      expect(activityResponse.status).toBe(200)
+      expect(await activityResponse.json()).toMatchObject({
+        contract: 'trace-activity-page/v1',
+        hasMore: false,
+        items: [
+          {
+            context: { editedText: 'Review this exact card' },
+            event: { id: 'event:http' },
+            sessionId: 'session:http'
+          }
+        ],
+        nextCursor: null
+      })
 
       const readResponse = await server.app.request('/rpc', {
         body: JSON.stringify({ command: 'trace_get_gesture', args: { latest: true } }),

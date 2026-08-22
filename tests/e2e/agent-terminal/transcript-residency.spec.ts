@@ -50,6 +50,7 @@ async function settledScrollTop(viewport: Locator): Promise<number> {
 test('keeps a retained Board chat mounted while preview polling advances', async ({ page }) => {
   let advanced = false
   let fullRequests = 0
+  const steers: string[] = []
   let releaseUpdatedTranscript = () => {
     throw new Error('Updated transcript release was not initialized')
   }
@@ -71,6 +72,17 @@ test('keeps a retained Board chat mounted while preview polling advances', async
       if (fullRequests > 1) await updatedTranscriptBlocked
       const full = conversation(advanced ? 25 : 24, advanced ? NEXT_UPDATED_AT : FIRST_UPDATED_AT)
       await route.fulfill({ body: JSON.stringify(full), contentType: 'application/json' })
+    }
+  )
+  await page.route(
+    'http://127.0.0.1:7602/agent-router/v1/pi/conversations/task-1/steer',
+    async (route) => {
+      steers.push((route.request().postDataJSON() as { message: string }).message)
+      await route.fulfill({
+        body: '{"dispatchedAt":"2026-08-19T10:00:08.000Z","jobId":"job-steer","state":"running","threadId":"task-1"}',
+        contentType: 'application/json',
+        status: 202
+      })
     }
   )
 
@@ -165,4 +177,14 @@ test('keeps a retained Board chat mounted while preview polling advances', async
   await expect(oldestMessage).toHaveAttribute('data-residency-probe', 'message')
   await expect(composer).toHaveValue('Unsent draft must survive polling')
   await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(retainedScrollTop)
+
+  await workerSurface.getByRole('button', { name: 'Steer task' }).click()
+  await expect.poll(() => steers).toEqual(['Unsent draft must survive polling'])
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight
+      )
+    )
+    .toBeLessThanOrEqual(1)
 })

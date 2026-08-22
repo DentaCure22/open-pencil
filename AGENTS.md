@@ -46,13 +46,16 @@ this repo for Board names, or load the whole Board into model context.
 
 ## Projects
 
-Known homes for Board workers. Add a line when a new project joins. Pi starts in
-this Open Pencil workspace; the other entries are exact absolute paths a worker
-may select when the brief requires repo work. They are not automatically
-attached roots. Board names are not a reason to search these repos. Search the
-Board first, then pick from this list only for actual repo work and read that
-repo's `AGENTS.md`. Use the listed path as written. Do not rebuild an Archives
-or MacBook Pro path.
+Keep this directory shortcut list available to every agent. An agent may work in
+any listed project with its ordinary file tools; its initial Open Pencil working
+directory is only a starting point, not an access boundary. When a request names
+a shortcut, use its exact path as the working directory before searching, then
+read that project's `AGENTS.md`. Keep using the selected project for follow-ups
+until the request names another one. Add one line here when a new project joins.
+
+Board names alone are not a reason to search these repos. Search the Board first
+when Board context is needed, then use a project shortcut only for actual repo
+work. Do not rebuild an Archives or MacBook Pro path.
 
 Board agents run through resident Pi RPC sessions. Sidebar CHATS and Board cards
 share the same local-authority threads. Dispatched Board workers get normal Pi
@@ -61,16 +64,23 @@ controls remain unavailable.
 General Pi chats may still use connected apps. Do not `require` or `import` from
 a Node workshop.
 
-- Open Pencil — `/Users/omar/Documents/Open Pencil` — this repo and native Board work
-- Smylr — `/Users/omar/Documents/Smylr-Elite` — live iframe / dental app
+- `openpencil` — `/Users/omar/Documents/Open Pencil` — this repo and native Board work
+- `smylr` — `/Users/omar/Documents/Smylr-Elite` — live iframe / dental app
 
-The Codex plugin MCP exposes `dispatch_work`, `board_where`, `board_screenshot`,
-`board_go`, and `set_theme`. `board_where` and `board_screenshot` are shared
-read-only context. Dispatch, camera hops, and light/dark remain parent-only.
-`dispatch_work` starts a worker directly or continues the exact prior worker.
-Workers edit files and never receive the parent controls. The full MCP catalog
-in `packages/mcp` remains for CLI and tests;
-`board_context` is off the plugin, not deleted from that catalog.
+The Codex plugin MCP exposes `list_agent_chats`, `get_agent_chat_context`,
+`dispatch_work`, `board_where`, `board_screenshot`, `board_go`, and `set_theme`. `board_where` and
+`board_screenshot` are shared read-only context. Chat discovery, dispatch, camera
+hops, and light/dark remain parent-only. `list_agent_chats` returns at most six
+structured Pi conversation candidates without transcripts or tool output;
+its lifecycle state is separate from resumability, and it does not report which
+chat cards are visibly placed on the current Board. Inventory/status questions
+use one unfiltered call; routing searches use concrete subject terms.
+`get_agent_chat_context` reads one bounded human-facing preview only when two
+candidates remain plausible. Neither tool is a second registry.
+`dispatch_work` starts a worker directly, continues the exact prior worker, or
+forks its native context into a new worker. Workers edit files and never receive
+the parent controls. The full MCP catalog in `packages/mcp` remains for CLI and
+tests; `board_context` is off the plugin, not deleted from that catalog.
 
 ## Monorepo boundaries
 

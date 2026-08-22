@@ -19,6 +19,21 @@ export type AgentConversationContextUsage = {
   tokensPerSecondEstimated?: boolean
 }
 
+export type AgentExtensionUiRequest = {
+  id: string
+  message?: string
+  method: 'confirm' | 'select'
+  options?: string[]
+  requestedAt: string
+  title: string
+}
+
+export type AgentExtensionUiResponse = {
+  cancelled?: boolean
+  confirmed?: boolean
+  value?: string
+}
+
 export type AgentConversationThread = {
   canFollowUp: boolean
   contextUsage?: AgentConversationContextUsage
@@ -28,6 +43,7 @@ export type AgentConversationThread = {
   messages: AiMessage[]
   model: string
   nativeThreadId: string
+  pendingUiRequests: AgentExtensionUiRequest[]
   recentUpdate: string
   state: AgentConversationState
   task: string
@@ -46,6 +62,7 @@ export type RemoteAgentConversation = {
   id: string
   messages: AiMessage[]
   model: string
+  pendingUiRequests?: AgentExtensionUiRequest[]
   recentUpdate: string
   state: 'completed' | 'needs_attention' | 'running' | 'stopped'
   task: string
@@ -64,10 +81,14 @@ type AgentJob = {
 
 export async function dispatchAgentPrompt(
   message: string,
-  selection: AgentModelSelection
+  selection: AgentModelSelection,
+  media: AgentPromptMedia = {}
 ): Promise<AgentDispatchReceipt> {
   const response = await localWorkspaceAuthorityFetch('/agent-router/v1/pi/dispatch', {
     body: JSON.stringify({
+      attachmentImagePaths: media.imagePaths,
+      attachments: media.attachments,
+      displayPrompt: media.displayPrompt,
       effort: selection.effort,
       model: selection.model,
       prompt: message
@@ -116,16 +137,43 @@ export async function stopAgentThread(threadId: string): Promise<void> {
   if (!response.ok) throw new Error('The active Pi task could not be stopped')
 }
 
+export async function respondToAgentUiRequest(
+  threadId: string,
+  requestId: string,
+  decision: AgentExtensionUiResponse
+): Promise<void> {
+  const response = await localWorkspaceAuthorityFetch(
+    `/agent-router/v1/pi/conversations/${encodeURIComponent(threadId)}/ui/${encodeURIComponent(requestId)}/respond`,
+    {
+      body: JSON.stringify(decision),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    }
+  )
+  if (!response.ok) {
+    throw await agentRouterResponseError(response, 'The approval response was rejected')
+  }
+}
+
+async function agentRouterResponseError(response: Response, fallback: string): Promise<Error> {
+  const payload = (await response.json().catch(() => null)) as { error?: unknown } | null
+  return new Error(typeof payload?.error === 'string' ? payload.error : fallback)
+}
+
 async function sendAgentConversationMessage(
   threadId: string,
   message: string,
   selection: AgentModelSelection,
-  action: 'follow-up' | 'steer'
+  action: 'follow-up' | 'steer',
+  media: AgentPromptMedia = {}
 ): Promise<AgentDispatchReceipt> {
   const response = await localWorkspaceAuthorityFetch(
     `/agent-router/v1/pi/conversations/${encodeURIComponent(threadId)}/${action}`,
     {
       body: JSON.stringify({
+        attachmentImagePaths: media.imagePaths,
+        attachments: media.attachments,
+        displayPrompt: media.displayPrompt,
         effort: selection.effort,
         message,
         model: selection.model
@@ -135,9 +183,8 @@ async function sendAgentConversationMessage(
     }
   )
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: unknown } | null
     const fallback = action === 'steer' ? 'Pi steering was rejected' : 'Pi follow-up was rejected'
-    throw new Error(typeof payload?.error === 'string' ? payload.error : fallback)
+    throw await agentRouterResponseError(response, fallback)
   }
   return (await response.json()) as AgentDispatchReceipt
 }
@@ -145,22 +192,40 @@ async function sendAgentConversationMessage(
 export function followUpAgentConversation(
   threadId: string,
   message: string,
-  selection: AgentModelSelection
+  selection: AgentModelSelection,
+  media: AgentPromptMedia = {}
 ): Promise<AgentDispatchReceipt> {
-  return sendAgentConversationMessage(threadId, message, selection, 'follow-up')
+  return sendAgentConversationMessage(threadId, message, selection, 'follow-up', media)
 }
 
 export function steerAgentConversation(
   threadId: string,
   message: string,
-  selection: AgentModelSelection
+  selection: AgentModelSelection,
+  media: AgentPromptMedia = {}
 ): Promise<AgentDispatchReceipt> {
-  return sendAgentConversationMessage(threadId, message, selection, 'steer')
+  return sendAgentConversationMessage(threadId, message, selection, 'steer', media)
 }
 
-type AgentPromptAttachment = {
+type AgentPromptMedia = {
+  attachments?: AgentPromptAttachment[]
+  displayPrompt?: string
+  imagePaths?: string[]
+}
+
+export type AgentPromptAttachment = {
   name: string
   path: string
+  size?: number
+  type?: string
+  visual?: {
+    durationSeconds?: number
+    frameCount?: number
+    imagePaths: string[]
+    intervalSeconds?: number
+    kind: 'image' | 'video-frames'
+    summary: string
+  }
 }
 
 export async function uploadAgentAttachments(files: File[]): Promise<AgentPromptAttachment[]> {
@@ -183,7 +248,23 @@ export async function uploadAgentAttachments(files: File[]): Promise<AgentPrompt
 
 export function promptWithAttachments(message: string, attachments: AgentPromptAttachment[]) {
   if (!attachments.length) return message
-  return `${message}\n\nAttached files:\n${attachments.map((file) => `- ${file.name}: ${file.path}`).join('\n')}`
+  const prefix = message.trim() ? `${message}\n\n` : ''
+  const files = `${prefix}Attached files:\n${attachments
+    .map((file) => `- ${JSON.stringify(file.name)}: ${file.path}`)
+    .join('\n')}`
+  const visualNotes = attachments
+    .filter((file) => file.visual)
+    .map((file) => `- ${JSON.stringify(file.name)}: ${file.visual?.summary ?? ''}`)
+  if (!visualNotes.length) return files
+  const hasVideo = attachments.some((file) => file.visual?.kind === 'video-frames')
+  const videoCaveat = hasVideo
+    ? '\nVideo filmstrips are an overview, not frame-exact proof. Use the original video for denser or timestamp-specific inspection; audio is not represented in the filmstrip.'
+    : ''
+  return `${files}\n\nVisual review inputs:\n${visualNotes.join('\n')}${videoCaveat}`
+}
+
+export function attachmentImagePaths(attachments: AgentPromptAttachment[]): string[] {
+  return [...new Set(attachments.flatMap((attachment) => attachment.visual?.imagePaths ?? []))]
 }
 
 export function agentConversationMessages(thread: RemoteAgentConversation): AiMessage[] {
@@ -208,6 +289,7 @@ export function agentConversationHistory(
     messages: agentConversationMessages(thread),
     model: thread.model,
     nativeThreadId: thread.id,
+    pendingUiRequests: thread.pendingUiRequests?.map((request) => ({ ...request })) ?? [],
     recentUpdate: thread.recentUpdate,
     state: thread.state,
     task: thread.task,

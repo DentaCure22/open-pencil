@@ -115,6 +115,10 @@ export function parkCodeObject(frameId: string) {
   acknowledgeCodeObjectRuntimeMount(frameId, false)
 }
 
+export function parkAllCodeObjects() {
+  for (const frameId of runtimes.keys()) parkCodeObject(frameId)
+}
+
 export function disposeCodeObject(frameId: string) {
   const runtime = runtimes.get(frameId)
   if (!runtime) return false

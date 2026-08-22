@@ -26,6 +26,13 @@ function pointerEvent(x: number, y: number, pointerId = 1): PointerEvent {
   } as PointerEvent
 }
 
+test('Code Object interaction highlight hugs the frame without an outline gap', async () => {
+  const overlays = await Bun.file('src/components/canvas/CodeObjectOverlays.vue').text()
+
+  expect(overlays).toContain('outline outline-2 outline-offset-0 outline-component/70')
+  expect(overlays).not.toContain('outline outline-2 outline-offset-2 outline-component/70')
+})
+
 test('Code Object surface and selection chrome share the frame corner radius', () => {
   const frame = {
     cornerRadius: 16,

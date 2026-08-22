@@ -3,6 +3,7 @@ import { usePreferredReducedMotion } from '@vueuse/core'
 import { AnimatePresence, motion } from 'motion-v'
 import { ToolbarRoot as RekaToolbarRoot } from 'reka-ui'
 import { computed } from 'vue'
+import IconMessagesSquare from '~icons/lucide/messages-square'
 
 import Tip from '@/components/ui/Tip.vue'
 import CollabPanel from '@/components/CollabPanel/CollabPanel.vue'
@@ -11,6 +12,7 @@ import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import ToolFlyout from '@/components/Toolbar/ToolFlyout.vue'
 import SelectionToolControls from '@/components/Toolbar/SelectionToolControls.vue'
 import WorkspaceButton from '@/components/Toolbar/WorkspaceButton.vue'
+import BrowserInspectorToolbarControl from '@/components/browser-inspector/BrowserInspectorToolbarControl.vue'
 import ContextCommentToolbarControl from '@/components/context-comment/ContextCommentToolbarControl.vue'
 import TraceAnnotationControls from '@/components/narrated-trace/TraceAnnotationControls.vue'
 import { narratedTraceAnnotationTool, setNarratedTraceAnnotationTool } from '@/app/narrated-trace'
@@ -44,6 +46,7 @@ const {
 
 const emit = defineEmits<{
   closeSidebar: []
+  openChats: []
   openSidebar: []
   setTool: [tool: Tool]
 }>()
@@ -214,6 +217,16 @@ function toggleSidebar() {
           </template>
           <TraceAnnotationControls />
           <ContextCommentToolbarControl />
+          <BrowserInspectorToolbarControl />
+          <Tip label="Chats" side="right">
+            <ToolButton
+              :icon="IconMessagesSquare"
+              label="Chats"
+              variant="utility"
+              data-test-id="toolbar-chats"
+              @click="emit('openChats')"
+            />
+          </Tip>
         </div>
         <SelectionToolControls v-if="!sidebarTabOnly" />
         <span

@@ -8,7 +8,7 @@ import {
 
 describe('Code Object UI block registry', () => {
   test('owns the portable financial dashboard contract', () => {
-    expect(CODE_OBJECT_UI_BLOCK_DEFINITIONS).toHaveLength(2)
+    expect(CODE_OBJECT_UI_BLOCK_DEFINITIONS).toHaveLength(3)
     expect(CODE_OBJECT_UI_BLOCK_DEFINITIONS[0]).toMatchObject({
       capabilities: ['actions', 'charts', 'tables'],
       configSchema: {
@@ -42,6 +42,24 @@ describe('Code Object UI block registry', () => {
       id: 'estimates-list',
       label: 'Estimates list',
       surface: { background: 'transparent', overflow: 'scroll' }
+    })
+    expect(CODE_OBJECT_UI_BLOCK_DEFINITIONS[2]).toMatchObject({
+      capabilities: ['media'],
+      configSchema: {
+        additionalProperties: false,
+        properties: {
+          fit: { enum: ['contain', 'cover'] },
+          src: { maxLength: 4096, minLength: 1, type: 'string' }
+        },
+        required: ['src'],
+        type: 'object'
+      },
+      defaultSize: { height: 360, width: 640 },
+      defaultState: {},
+      id: 'video-player',
+      label: 'Video player',
+      sizing: 'viewport',
+      surface: { background: 'surface', overflow: 'clip' }
     })
   })
 
@@ -83,6 +101,20 @@ describe('Code Object UI block registry', () => {
       height: 720,
       surface: { background: 'transparent', overflow: 'scroll' },
       width: 1040
+    })
+
+    expect(
+      resolveCodeObjectUiBlock({
+        block: 'video-player',
+        config: { controls: true, fit: 'cover', src: 'https://example.com/clip.mp4' }
+      })
+    ).toMatchObject({
+      block: 'video-player',
+      config: { controls: true, fit: 'cover', src: 'https://example.com/clip.mp4' },
+      height: 360,
+      initialState: {},
+      surface: { background: 'surface', overflow: 'clip' },
+      width: 640
     })
   })
 

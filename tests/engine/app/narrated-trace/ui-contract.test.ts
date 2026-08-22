@@ -7,11 +7,13 @@ describe('Narrated Trace editor surface contract', () => {
       panel,
       desktopToolbar,
       annotationControls,
+      annotationOverlay,
       mic,
       bindings,
       types,
       keyboard,
       history,
+      authorityClient,
       headerExists,
       traceDockExists
     ] = await Promise.all([
@@ -19,11 +21,13 @@ describe('Narrated Trace editor surface contract', () => {
       Bun.file('src/components/narrated-trace/NarratedTracePanel.vue').text(),
       Bun.file('src/components/Toolbar/DesktopToolbar.vue').text(),
       Bun.file('src/components/narrated-trace/TraceAnnotationControls.vue').text(),
+      Bun.file('src/components/narrated-trace/NarratedTraceAnnotationOverlay.vue').text(),
       Bun.file('src/app/narrated-trace/mic.ts').text(),
       Bun.file('src/app/narrated-trace/bindings.ts').text(),
       Bun.file('src/app/narrated-trace/types.ts').text(),
       Bun.file('src/app/shell/keyboard/registry.ts').text(),
       Bun.file('src/app/narrated-trace/history.ts').text(),
+      Bun.file('src/app/workspace-document/local-authority/client.ts').text(),
       Bun.file('src/components/narrated-trace/NarratedTraceHeader.vue').exists(),
       Bun.file('src/components/narrated-trace/TraceDockButton.vue').exists()
     ])
@@ -51,6 +55,8 @@ describe('Narrated Trace editor surface contract', () => {
     expect(desktopToolbar).toContain('<TraceAnnotationControls')
     expect(annotationControls).toContain('narrated-trace-mic-toggle')
     expect(annotationControls).toContain('toggleNarratedTraceMicPinned(store)')
+    expect(annotationOverlay).toContain('captureNarratedTraceEvidence')
+    expect(annotationOverlay).not.toContain('getDisplayMedia')
     expect(mic).toContain('MIC_TURN_RETENTION_MS = 15 * 60_000')
     expect(mic).toContain('MIC_RESTART_DELAY_MS = 250')
     expect(mic).toContain('next.continuous = true')
@@ -79,12 +85,35 @@ describe('Narrated Trace editor surface contract', () => {
     expect(panel).not.toContain('retrievalSummary.eventCount }} events')
     expect(panel).toContain('Human and agent changes, anchored to this Board')
     expect(panel).toContain('narrated-trace-row-details-toggle')
+    expect(panel).toContain('item.event.evidence || rowMetadata(item)')
+    expect(panel).toContain('group-hover:pointer-events-auto')
+    expect(panel).toContain(':aria-expanded="isExpanded(item.event.id)"')
+    expect(panel).not.toContain('<span v-else>Details</span>')
     expect(panel).not.toContain('narrated-trace-timeline')
     expect(panel).not.toContain('narrated-trace-history-toggle')
     expect(panel).not.toContain('narrated-trace-history-record')
     expect(panel).toContain('narrated-trace-evidence-image')
+    expect(panel).toContain('narrated-trace-evidence-overview-trigger')
+    expect(panel).toContain('narrated-trace-evidence-overview')
+    expect(panel).toContain('narrated-trace-evidence-capacity')
+    expect(panel).toContain('Oldest unpinned images are removed first')
+    expect(panel).toContain('border-chrome-border bg-chrome-raised')
+    expect(panel).toContain('bg-chrome-detail')
+    expect(panel).toContain('bg-component transition-[width]')
+    expect(panel).toContain('text-[var(--color-success)]')
+    expect(panel).not.toContain('bg-[#202126]')
+    expect(panel).toContain("status === 'evicted'")
+    expect(panel).toContain('Pinned to active task')
+    expect(panel).toContain('narrated-trace-activity-pagination')
+    expect(panel).toContain('narrated-trace-activity-older')
+    expect(panel).toContain('narrated-trace-activity-newer')
+    expect(panel).toContain('narrated-trace-activity-latest')
+    expect(panel).toContain('narrated-trace-evidence-load')
+    expect(panel).toContain('EAGER_EVIDENCE_PREVIEW_LIMIT = 12')
     expect(history).toContain('readLocalWorkspaceTraceSessionSummaries')
+    expect(history).toContain('loadNarratedTraceActivityPage')
     expect(history).toContain('DEFAULT_ACTIVITY_ITEM_LIMIT = 80')
+    expect(authorityClient).toContain('/trace/activity${serializedQuery')
     expect(bindings).toContain("editor.onEditorEvent('selection:changed'")
     expect(bindings).toContain("editor.onEditorEvent('tool:changed'")
     expect(bindings).toContain("editor.onEditorEvent('node:created'")

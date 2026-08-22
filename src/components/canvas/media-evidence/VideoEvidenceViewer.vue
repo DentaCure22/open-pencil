@@ -8,6 +8,7 @@ import { useEditorStore } from '@/app/editor/active-store'
 import { placeExtractedVideoFrame } from '@/app/media-evidence/extraction'
 import type { MediaEvidenceSource } from '@/app/media-evidence/source'
 import { captureVideoFrame } from '@/app/media-evidence/video'
+import VideoPlayer from '@/components/ui/VideoPlayer.vue'
 
 const { node, selected, source, sourceUrl } = defineProps<{
   node: SceneNode
@@ -23,7 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const video = useTemplateRef<HTMLVideoElement>('video')
+const player = useTemplateRef<{ mediaElement: () => HTMLVideoElement | null }>('player')
 const isReady = ref(false)
 const isCapturing = ref(false)
 const captureError = refAutoReset(false, 2400)
@@ -31,7 +32,7 @@ const captureError = refAutoReset(false, 2400)
 watch(
   () => selected,
   (interactive) => {
-    if (!interactive) video.value?.pause()
+    if (!interactive) player.value?.mediaElement()?.pause()
   }
 )
 
@@ -46,7 +47,7 @@ function handleError() {
 }
 
 async function captureFrame() {
-  const media = video.value
+  const media = player.value?.mediaElement()
   if (!media || !isReady.value || isCapturing.value) return
   isCapturing.value = true
   captureError.value = false
@@ -64,19 +65,15 @@ async function captureFrame() {
 </script>
 
 <template>
-  <div class="relative size-full bg-black">
-    <video
-      ref="video"
-      :src="sourceUrl"
-      :aria-label="`Video preview: ${source.fileName}`"
-      class="size-full object-contain"
+  <div class="relative size-full bg-black" @dblclick.stop.prevent="emit('focusSurface')">
+    <VideoPlayer
+      ref="player"
       :controls="selected"
       data-test-id="media-evidence-video-viewer"
-      playsinline
-      preload="metadata"
-      @dblclick.stop.prevent="emit('focusSurface')"
+      :label="`Video preview: ${source.fileName}`"
+      :src="sourceUrl"
       @error="handleError"
-      @loadeddata="handleReady"
+      @loaded="handleReady"
     />
     <button
       v-if="selected"

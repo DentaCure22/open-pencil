@@ -6,9 +6,28 @@ import type { AgentJobRecord } from '#mcp/agent-router/jobs'
 type AgentConversationState = 'completed' | 'needs_attention' | 'running' | 'stopped'
 type AgentToolState = 'approval' | 'error' | 'pending' | 'running' | 'success'
 
-type AgentConversationPart =
-  | { state?: 'complete' | 'streaming'; text: string; type: 'reasoning' }
+export type AgentExtensionUiRequest = {
+  id: string
+  message?: string
+  method: 'confirm' | 'select'
+  options?: string[]
+  requestedAt: string
+  title: string
+}
+
+export type AgentExtensionUiResponse = {
+  cancelled?: boolean
+  confirmed?: boolean
+  value?: string
+}
+
+export type AgentConversationAttachmentPart =
+  | { mediaType?: string; name: string; size?: number; type: 'attachment' }
   | { alt?: string; type: 'image'; url: string }
+
+type AgentConversationPart =
+  | AgentConversationAttachmentPart
+  | { state?: 'complete' | 'streaming'; text: string; type: 'reasoning' }
   | {
       error?: string
       images?: Array<{ alt?: string; url: string }>
@@ -17,6 +36,7 @@ type AgentConversationPart =
       output?: string
       state: AgentToolState
       type: 'tool'
+      videos?: Array<{ mimeType?: string; name?: string; url: string }>
     }
 
 export type AgentConversationMessage = {
@@ -50,8 +70,11 @@ export type AgentConversationThread = {
   createdAt: string
   effort: string
   id: string
+  lastPiEntryId?: string
   messages: AgentConversationMessage[]
   model: string
+  pendingUiRequests?: AgentExtensionUiRequest[]
+  piHistoryInitialized?: boolean
   recentUpdate: string
   sessionId: string | null
   state: AgentConversationState
@@ -61,9 +84,11 @@ export type AgentConversationThread = {
 }
 
 export type AgentDispatchRequest = {
+  attachments?: AgentConversationAttachmentPart[]
   displayPrompt?: string
   effort?: string
   evidencePath?: string
+  imagePaths?: string[]
   model?: string
   prompt: string
 }
@@ -95,9 +120,11 @@ export interface AgentConversationRouter {
     threadId: string,
     prompt: string,
     selection?: {
+      attachments?: AgentConversationAttachmentPart[]
       displayPrompt?: string
       effort?: string
       evidencePath?: string
+      imagePaths?: string[]
       model?: string
     }
   ): Promise<AgentDispatchReceipt>
@@ -106,14 +133,21 @@ export interface AgentConversationRouter {
   models(): AgentModelDefinition[]
   providerUsage(provider: string): Promise<AgentProviderUsage | null>
   resetWorkers(): { deleted: number }
+  respondToUiRequest(
+    threadId: string,
+    requestId: string,
+    response: AgentExtensionUiResponse
+  ): boolean
   status(): Promise<{ active: number; available: boolean; workspaceRoot: string }>
   steer(
     threadId: string,
     prompt: string,
     selection?: {
+      attachments?: AgentConversationAttachmentPart[]
       displayPrompt?: string
       effort?: string
       evidencePath?: string
+      imagePaths?: string[]
       model?: string
     }
   ): Promise<AgentDispatchReceipt>
@@ -152,6 +186,7 @@ function isConversationThread(value: unknown): value is AgentConversationThread 
     typeof value.createdAt === 'string' &&
     typeof value.effort === 'string' &&
     typeof value.id === 'string' &&
+    (value.lastPiEntryId === undefined || typeof value.lastPiEntryId === 'string') &&
     Array.isArray(value.messages) &&
     value.messages.every(isConversationMessage) &&
     typeof value.model === 'string' &&
@@ -160,11 +195,15 @@ function isConversationThread(value: unknown): value is AgentConversationThread 
     isConversationState(value.state) &&
     typeof value.task === 'string' &&
     typeof value.updatedAt === 'string' &&
-    typeof value.workerId === 'string'
+    typeof value.workerId === 'string' &&
+    (value.piHistoryInitialized === undefined || typeof value.piHistoryInitialized === 'boolean')
   )
 }
 
-export function previewAgentConversation(thread: AgentConversationThread): AgentConversationThread {
+export function previewAgentConversation(
+  thread: AgentConversationThread,
+  messageLimit = AGENT_CONVERSATION_PREVIEW_LIMIT
+): AgentConversationThread {
   return {
     canFollowUp: thread.canFollowUp,
     ...(thread.contextUsage ? { contextUsage: thread.contextUsage } : {}),
@@ -173,7 +212,7 @@ export function previewAgentConversation(thread: AgentConversationThread): Agent
     id: thread.id,
     messages: thread.messages
       .filter((message) => message.text.trim())
-      .slice(-AGENT_CONVERSATION_PREVIEW_LIMIT)
+      .slice(-Math.max(1, Math.trunc(messageLimit)))
       .map((message) => ({
         ...(message.completedAt ? { completedAt: message.completedAt } : {}),
         createdAt: message.createdAt,
@@ -182,6 +221,9 @@ export function previewAgentConversation(thread: AgentConversationThread): Agent
         text: message.text
       })),
     model: thread.model,
+    ...(thread.pendingUiRequests?.length
+      ? { pendingUiRequests: thread.pendingUiRequests.map((request) => ({ ...request })) }
+      : {}),
     recentUpdate: thread.recentUpdate,
     sessionId: thread.sessionId,
     state: thread.state,

@@ -9,12 +9,11 @@ export interface EditorToolDef {
 
 export const EDITOR_TOOLS: EditorToolDef[] = [
   { key: 'SELECT', label: 'Move', shortcut: 'V' },
-  { key: 'FRAME', label: 'Frame', shortcut: 'F', flyout: ['FRAME', 'SECTION'] },
   {
-    key: 'RECTANGLE',
-    label: 'Rectangle',
-    shortcut: 'R',
-    flyout: ['RECTANGLE', 'LINE', 'ELLIPSE', 'POLYGON', 'STAR']
+    key: 'FRAME',
+    label: 'Frame',
+    shortcut: 'F',
+    flyout: ['FRAME', 'SECTION', 'RECTANGLE', 'LINE', 'ELLIPSE', 'POLYGON', 'STAR']
   },
   { key: 'PEN', label: 'Pen', shortcut: 'P' },
   { key: 'TEXT', label: 'Text', shortcut: 'T' },

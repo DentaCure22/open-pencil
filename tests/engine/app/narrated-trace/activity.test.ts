@@ -17,7 +17,8 @@ describe('Narrated Trace semantic activity', () => {
       'selection',
       'tool',
       'shape',
-      'edit'
+      'edit',
+      'note'
     ])
   })
 

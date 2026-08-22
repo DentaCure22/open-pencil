@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { resolve } from 'node:path'
 
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 import { applyPiJsonEvent } from '#mcp/pi/events'
@@ -45,9 +46,10 @@ describe('Pi JSON events', () => {
       'turn-1'
     )
     expect(next.messages.at(-1)).toMatchObject({
-      parts: [{ state: 'streaming', text: 'Continuing on Worker 1.', type: 'reasoning' }],
-      text: ''
+      role: 'assistant',
+      text: 'Continuing on Worker 1.'
     })
+    expect(next.messages.at(-1)?.parts).toBeUndefined()
     applyPiJsonEvent(
       next,
       JSON.stringify({
@@ -400,6 +402,11 @@ describe('Pi JSON events', () => {
       }),
       'turn-1'
     )
+    expect(next.messages.at(-1)?.parts?.[0]).toMatchObject({
+      name: 'edit',
+      state: 'running',
+      type: 'tool'
+    })
     applyPiJsonEvent(
       next,
       JSON.stringify({
@@ -460,6 +467,78 @@ describe('Pi JSON events', () => {
     expect(next.messages.at(-1)?.text).toBe('Finished.')
     expect(JSON.stringify(next.messages)).not.toContain('private reasoning')
     expect(JSON.stringify(next.messages)).not.toContain('dont-store-this')
+  })
+
+  test('attaches completed Antigravity image tool output to the generated-image part', () => {
+    const next = thread()
+    const imagePath = resolve('packages/demos/videos/toolbar.png')
+    const activityInput = [
+      '[agy tool: call_mcp_tool]',
+      '[agy input]',
+      '{"Arguments":{"prompt":"A clean toolbar"},"ToolName":"ima2-media_generate_image"}',
+      '[/agy input]'
+    ]
+    const runningActivity = [
+      ...activityInput,
+      '[agy output]',
+      'Step is still running',
+      '[/agy output]',
+      ''
+    ].join('\n')
+    const completedActivity = [
+      ...activityInput,
+      '[agy output]',
+      JSON.stringify({ result: { images: [{ path: imagePath }] }, status: 'completed' }),
+      '[/agy output]',
+      ''
+    ].join('\n')
+
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        assistantMessageEvent: { contentIndex: 0, type: 'thinking_start' },
+        type: 'message_update'
+      }),
+      'turn-image'
+    )
+    for (const delta of [runningActivity, completedActivity]) {
+      applyPiJsonEvent(
+        next,
+        JSON.stringify({
+          assistantMessageEvent: { contentIndex: 0, delta, type: 'thinking_delta' },
+          type: 'message_update'
+        }),
+        'turn-image'
+      )
+    }
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        assistantMessageEvent: {
+          content: `${runningActivity}${completedActivity}`,
+          contentIndex: 0,
+          type: 'thinking_end'
+        },
+        type: 'message_update'
+      }),
+      'turn-image'
+    )
+
+    const imagePart = next.messages
+      .flatMap((message) => message.parts ?? [])
+      .find((part) => part.type === 'tool')
+    expect(
+      next.messages.flatMap((message) => message.parts ?? []).filter((part) => part.type === 'tool')
+    ).toHaveLength(1)
+    expect(imagePart).toMatchObject({
+      input: '{"Arguments":{"prompt":"A clean toolbar"},"ToolName":"ima2-media_generate_image"}',
+      name: 'ima2-media_generate_image',
+      state: 'success',
+      type: 'tool'
+    })
+    expect(imagePart?.type === 'tool' ? imagePart.images?.[0]?.url : '').toStartWith(
+      'data:image/png;base64,'
+    )
   })
 
   test('shows a safe thinking lifecycle without exposing private thinking text', () => {

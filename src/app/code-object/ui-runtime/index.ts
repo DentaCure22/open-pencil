@@ -6,6 +6,12 @@ export { Button } from './components/button'
 export { Card, CardContent, CardHeader, CardTitle } from './components/card'
 export { DataTable } from './components/data-table'
 export { Sparkline } from './components/sparkline'
+export {
+  normalizeVideoPlayerModel,
+  VideoPlayer,
+  type VideoPlayerModel,
+  type VideoPlayerProps
+} from './components/video-player'
 
 export type { CodeObjectUiBlockName } from './blocks/configured-block'
 export type {

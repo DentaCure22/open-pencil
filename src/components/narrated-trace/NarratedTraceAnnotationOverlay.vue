@@ -29,8 +29,10 @@ import { useEditorStore } from '@/app/editor/active-store'
 import { useEditorPresentationViewport } from '@/app/editor/presentation'
 import { liveInspectorInteractionMode } from '@/app/smylr-live-inspector/session'
 import type {
-  NarratedTraceInk,
+  NarratedTraceEvidence,
+  NarratedTraceEvidenceAnnotation,
   NarratedTraceFocusTrailPoint,
+  NarratedTraceInk,
   NarratedTracePoint,
   NarratedTraceTarget
 } from '@/app/narrated-trace'
@@ -219,6 +221,18 @@ function beginGestureTrace() {
   return true
 }
 
+async function captureGestureEvidence(input: {
+  annotation: NarratedTraceEvidenceAnnotation
+  annotationBaked?: boolean
+  area: HTMLElement
+  capturedAtMs: number
+  cropBounds: Rect
+  sessionId: string
+  target: NarratedTraceTarget
+}): Promise<NarratedTraceEvidence | null> {
+  return captureNarratedTraceEvidence(input)
+}
+
 async function finishStroke() {
   const stroke = currentStroke.value
   const area = root.value?.parentElement
@@ -257,8 +271,9 @@ async function finishStroke() {
   const sessionId = narratedTraceSession.value?.id
   try {
     if (!eventId || !sessionId) return
-    const evidence = await captureNarratedTraceEvidence({
+    const evidence = await captureGestureEvidence({
       annotation: { ...stroke, kind: 'ink' },
+      annotationBaked: true,
       area,
       capturedAtMs: atMs,
       cropBounds,
@@ -323,7 +338,7 @@ async function finishFocus() {
 
   const evidencePromise =
     eventId && sessionId
-      ? captureNarratedTraceEvidence({
+      ? captureGestureEvidence({
           annotation: {
             bounds,
             color: FOCUS_COLOR,

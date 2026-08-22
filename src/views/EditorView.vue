@@ -852,6 +852,8 @@ const compactSidebarTabActive = computed(
   () => Boolean(fullFrameCodeObjectId.value) && !showLayersPanel.value
 )
 const compactSidebarTabY = ref(0)
+const closingSidebarWidth = ref<number | null>(null)
+let sidebarTransitionEpoch = 0
 let compactSidebarTabPointerOffsetY = 0
 const { isDragging: compactSidebarTabDragging } = useDraggable(layersShellMotionRef, {
   axis: 'y',
@@ -880,18 +882,19 @@ const { isDragging: compactSidebarTabDragging } = useDraggable(layersShellMotion
     storedCompactSidebarTabY.value = compactSidebarTabY.value
   }
 })
-const compactSidebarTabStyle = computed<CSSProperties | undefined>(() =>
-  compactSidebarTabActive.value
-    ? {
-        cursor: compactSidebarTabDragging.value ? 'grabbing' : undefined,
-        left: '12px',
-        position: 'absolute',
-        top: `${compactSidebarTabY.value}px`,
-        transform: 'none',
-        translate: 'none'
-      }
-    : undefined
-)
+const layersShellMotionStyle = computed<CSSProperties | undefined>(() => {
+  const style: CSSProperties = {}
+  if (compactSidebarTabActive.value) {
+    style.cursor = compactSidebarTabDragging.value ? 'grabbing' : undefined
+    style.left = '12px'
+    style.position = 'absolute'
+    style.top = `${compactSidebarTabY.value}px`
+    style.transform = 'none'
+    style.translate = 'none'
+  }
+  if (closingSidebarWidth.value !== null) style.width = `${closingSidebarWidth.value}px`
+  return Object.keys(style).length > 0 ? style : undefined
+})
 const lastOpenSidebarInsets = ref<ReturnType<typeof editorViewportInsets>>({})
 const sidebarFocusAdjustment = ref<{
   adjusted: EditorViewport
@@ -958,8 +961,20 @@ function protectSidebarFocus(nodeId: string, insets: ReturnType<typeof editorVie
 function closeLayersPanel() {
   lastOpenSidebarInsets.value = editorViewportInsets()
   const adjustment = sidebarFocusAdjustment.value
+  const expandedWidth = layersShellMotionRef.value?.getBoundingClientRect().width ?? null
+  const transitionEpoch = ++sidebarTransitionEpoch
+  closingSidebarWidth.value = expandedWidth
   showLayersPanel.value = false
   layersSplitterPanelRef.value?.collapse()
+  if (expandedWidth !== null) {
+    void nextTick(() => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (transitionEpoch === sidebarTransitionEpoch) closingSidebarWidth.value = null
+        })
+      })
+    })
+  }
   if (fullFrameCodeObjectId.value) void placeCompactSidebarTab()
   if (
     adjustment &&
@@ -975,6 +990,9 @@ function closeLayersPanel() {
 }
 
 function openLayersPanel() {
+  if (showLayersPanel.value) return
+  sidebarTransitionEpoch += 1
+  closingSidebarWidth.value = null
   const selectedId =
     store.state.selectedIds.size === 1 ? store.state.selectedIds.values().next().value : null
   showLayersPanel.value = true
@@ -1030,6 +1048,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  sidebarTransitionEpoch += 1
   window.clearTimeout(workspaceLoadingLimit)
   stopSmylrPagePersistence?.()
   stopSmylrSelectionPersistence?.()
@@ -1116,9 +1135,9 @@ onUnmounted(() => {
           :collapsed-size="0"
           :default-size="initialEditorLayout[0]"
           :min-size="14"
-          :max-size="25"
+          :max-size="30"
           data-test-id="layers-splitter-panel"
-          class="pointer-events-none relative flex min-h-0 flex-col !overflow-visible bg-transparent"
+          class="pointer-events-none relative flex min-h-0 flex-col !overflow-visible bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
           @collapse="showLayersPanel = false"
           @expand="showLayersPanel = true"
         >
@@ -1128,8 +1147,8 @@ onUnmounted(() => {
             :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
             :data-full-frame="fullFrameCodeObjectId ? 'true' : 'false'"
             :data-compact-tab-dragging="compactSidebarTabDragging ? 'true' : 'false'"
-            :style="compactSidebarTabStyle"
-            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-0 -translate-y-1/2 overflow-hidden border border-chrome-border bg-chrome shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
+            :style="layersShellMotionStyle"
+            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-11 -translate-y-1/2 overflow-hidden border border-chrome-border bg-sidebar shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
             :class="
               showLayersPanel
                 ? 'h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] rounded-[14px] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'

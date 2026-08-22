@@ -6,6 +6,7 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 import {
   deleteLocalWorkspaceTraceSession,
   persistLocalWorkspaceTraceSession,
+  readLocalWorkspaceTraceActivityPage,
   readLocalWorkspaceTraceSession,
   readLocalWorkspaceTraceSessionSummaries
 } from '@/app/workspace-document/local-authority/client'
@@ -52,6 +53,12 @@ export type NarratedTraceActivityItem = {
 export type NarratedTraceActivityFeedOptions = {
   itemLimit?: number
   sessionLimit?: number
+}
+
+export type NarratedTraceActivityPage = {
+  hasMore: boolean
+  items: NarratedTraceActivityItem[]
+  nextCursor: string | null
 }
 
 export const narratedTraceHistory = shallowRef<NarratedTraceRecordSummary[]>([])
@@ -120,16 +127,52 @@ function summaryBounds(session: NarratedTraceSession): Rect | undefined {
   return { height: maxY - minY, width: maxX - minX, x: minX, y: minY }
 }
 
-function isSession(value: unknown): value is NarratedTraceSession {
-  if (!value || typeof value !== 'object') return false
+function parseSession(value: unknown): NarratedTraceSession | null {
+  if (!value || typeof value !== 'object') return null
   const session = value as Partial<NarratedTraceSession>
-  return (
-    typeof session.id === 'string' &&
-    typeof session.startedAt === 'string' &&
-    typeof session.durationMs === 'number' &&
-    Array.isArray(session.contextDraft) &&
-    Array.isArray(session.events)
-  )
+  if (
+    typeof session.id !== 'string' ||
+    typeof session.startedAt !== 'string' ||
+    typeof session.durationMs !== 'number' ||
+    !Array.isArray(session.events)
+  ) {
+    return null
+  }
+  const contextDraft = Array.isArray(session.contextDraft)
+    ? session.contextDraft
+    : session.events.map((event) => ({
+        included: true,
+        removed: false,
+        sourceEventId: event.id
+      }))
+  return { ...session, contextDraft } as NarratedTraceSession
+}
+
+function activityItem(value: unknown): NarratedTraceActivityItem {
+  if (!value || typeof value !== 'object') {
+    throw new TypeError('Local workspace authority returned an invalid Trace activity item')
+  }
+  const candidate = value as Partial<NarratedTraceActivityItem>
+  const context = candidate.context
+  const event = candidate.event
+  if (
+    !context ||
+    typeof context.sourceEventId !== 'string' ||
+    typeof context.included !== 'boolean' ||
+    typeof context.removed !== 'boolean' ||
+    !event ||
+    typeof event.atMs !== 'number' ||
+    typeof event.id !== 'string' ||
+    typeof event.kind !== 'string' ||
+    typeof event.label !== 'string' ||
+    typeof candidate.occurredAtMs !== 'number' ||
+    typeof candidate.sessionId !== 'string' ||
+    typeof candidate.sessionStartedAt !== 'string' ||
+    typeof candidate.title !== 'string'
+  ) {
+    throw new TypeError('Local workspace authority returned an invalid Trace activity item')
+  }
+  return structuredClone(candidate) as NarratedTraceActivityItem
 }
 
 export function sortNarratedTraceRecords(
@@ -167,7 +210,9 @@ export function summarizeNarratedTraceSession(
     ...(gestureEvents.length > 0 ? { gestureIds: gestureEvents.map((event) => event.id) } : {}),
     id: session.id,
     ...(latestGesture && !Number.isNaN(startedAtMs)
-      ? { latestGestureAt: new Date(startedAtMs + latestGesture.atMs).toISOString() }
+      ? {
+          latestGestureAt: new Date(startedAtMs + latestGesture.atMs).toISOString()
+        }
       : {}),
     ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
     searchTerms: summarySearchTerms(session, title),
@@ -229,7 +274,7 @@ export async function saveNarratedTraceRecord(
 
 export async function readNarratedTraceRecord(sessionId: string) {
   const persisted = await readLocalWorkspaceTraceSession(sessionId)
-  return isSession(persisted) ? persisted : null
+  return parseSession(persisted)
 }
 
 export function buildNarratedTraceActivityFeed(
@@ -287,6 +332,20 @@ export async function loadNarratedTraceActivityFeed(
     ),
     Math.min(options.itemLimit ?? DEFAULT_ACTIVITY_ITEM_LIMIT, DEFAULT_ACTIVITY_ITEM_LIMIT)
   )
+}
+
+export async function loadNarratedTraceActivityPage(
+  input: { before?: string; itemLimit?: number } = {}
+): Promise<NarratedTraceActivityPage> {
+  const page = await readLocalWorkspaceTraceActivityPage({
+    ...(input.before ? { before: input.before } : {}),
+    limit: Math.min(input.itemLimit ?? DEFAULT_ACTIVITY_ITEM_LIMIT, DEFAULT_ACTIVITY_ITEM_LIMIT)
+  })
+  return {
+    hasMore: page.hasMore,
+    items: page.items.map(activityItem),
+    nextCursor: page.nextCursor
+  }
 }
 
 export async function renameNarratedTraceRecord(sessionId: string, title: string) {

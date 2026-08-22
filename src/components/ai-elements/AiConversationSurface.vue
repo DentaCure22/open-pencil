@@ -13,14 +13,19 @@ import {
 import AiActivityDisclosure from './AiActivityDisclosure.vue'
 import AiConversation from './AiConversation.vue'
 import AiConversationEmpty from './AiConversationEmpty.vue'
+import AiConversationNavigationRail from './AiConversationNavigationRail.vue'
+import AiImageGeneration from './AiImageGeneration.vue'
 import AiMessageItem from './AiMessage.vue'
 import AiPromptInput from './AiPromptInput.vue'
 import AiStatusIndicator from './AiStatusIndicator.vue'
+import AiVideoGeneration from './AiVideoGeneration.vue'
+import { conversationNavigationItems } from './conversation-navigation'
 import { latestMessageCreatedAt } from './model'
 import type { AiConversationStatus, AiMessage } from './types'
 
 const {
   annotations,
+  approvalVisible = false,
   canRetry = false,
   canStop = false,
   contextUsage,
@@ -38,6 +43,7 @@ const {
   workingLabel
 } = defineProps<{
   annotations: AgentPromptAnnotation[]
+  approvalVisible?: boolean
   canRetry?: boolean
   canStop?: boolean
   contextUsage?: AgentConversationContextUsage
@@ -54,6 +60,7 @@ const {
   statusMessage?: string
   workingLabel?: string
 }>()
+const attachments = defineModel<File[]>('attachments', { default: () => [] })
 
 type ConversationRun = {
   activity: AiMessage[]
@@ -126,7 +133,22 @@ const runs = computed<ConversationRun[]>(() => {
   })
 })
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
+const navigationItems = computed(() => conversationNavigationItems(messages))
+const conversationThreadId = computed(() =>
+  scope?.startsWith('task:') ? scope.slice('task:'.length) : undefined
+)
 const lastRunHasActivity = computed(() => Boolean(runs.value.at(-1)?.activity.length))
+
+function runSharesLatestTurn(run: ConversationRun): boolean {
+  const latest = runs.value.at(-1)
+  if (!run.prompt || !latest?.prompt) return false
+  return run.prompt.completedAt === latest.prompt.completedAt
+}
+
+function generationStatus(run: ConversationRun, runIndex: number): AiConversationStatus {
+  return runIndex === runs.value.length - 1 || runSharesLatestTurn(run) ? status : 'ready'
+}
+
 const surface = ref<HTMLElement | null>(null)
 const copiedSelection = refAutoReset(false, 1_500)
 const selectedText = ref('')
@@ -172,6 +194,26 @@ const emit = defineEmits<{
 function containWheel(event: WheelEvent) {
   event.stopPropagation()
   if (event.ctrlKey || event.metaKey) event.preventDefault()
+}
+
+async function scrollTranscriptToLatest() {
+  await nextTick()
+  requestAnimationFrame(() => {
+    const viewport = surface.value?.querySelector<HTMLElement>(
+      '[data-test-id="ai-conversation-viewport"]'
+    )
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+  })
+}
+
+function submitPrompt(submission: AgentPromptSubmission) {
+  emit('send', submission)
+  void scrollTranscriptToLatest()
+}
+
+function retryPrompt() {
+  emit('retry')
+  void scrollTranscriptToLatest()
 }
 
 function selectionNodeInsideTranscript(node: Node | null): boolean {
@@ -332,6 +374,10 @@ function refreshAnnotationGeometry() {
 
   const active = annotations.find((annotation) => annotation.id === editingAnnotationId.value)
   if (!active) {
+    if (editingAnnotationId.value) {
+      stopSpeechDictation(annotationDictationOwner)
+      editingAnnotationId.value = null
+    }
     activeHighlightRects.value = []
     return
   }
@@ -456,6 +502,16 @@ function closeAnnotationEditor() {
   window.getSelection()?.removeAllRanges()
 }
 
+function removeEditingAnnotation() {
+  const annotationId = editingAnnotationId.value
+  if (!annotationId) return
+  emit(
+    'update:annotations',
+    annotations.filter((annotation) => annotation.id !== annotationId)
+  )
+  closeAnnotationEditor()
+}
+
 function annotationEditorKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' || (event.key === 'Enter' && !event.isComposing)) {
     event.preventDefault()
@@ -512,7 +568,7 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
   <section
     ref="surface"
     data-test-id="ai-conversation-surface"
-    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain select-text"
+    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain select-text [container-type:inline-size]"
     @keydown.stop
     @keyup="syncSelectionActions"
     @scroll.capture="handleSurfaceScroll"
@@ -520,47 +576,89 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
     @touchmove.stop
     @wheel="containWheel"
   >
-    <slot name="header" />
+    <div v-if="$slots.header" class="relative z-20 shrink-0 bg-agent-surface">
+      <slot name="header" />
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-x-0 top-full h-7 bg-gradient-to-b from-agent-surface via-agent-surface/80 to-transparent"
+        data-test-id="ai-conversation-header-fade"
+      />
+    </div>
     <AiConversation>
-      <div v-if="messages.length" class="mt-auto flex flex-col gap-5 px-3 py-3">
-        <div v-for="(run, runIndex) in runs" :key="run.id" class="flex flex-col gap-2.5">
+      <template #overlay="{ scrollElement }">
+        <AiConversationNavigationRail :items="navigationItems" :scroll-element="scrollElement" />
+      </template>
+      <div
+        v-if="messages.length"
+        class="agent-conversation-column mt-auto flex flex-col gap-5 py-4"
+      >
+        <div
+          v-for="(run, runIndex) in runs"
+          :key="run.id"
+          class="flex scroll-mt-4 flex-col gap-2.5"
+          :data-conversation-chapter-id="run.prompt?.id"
+        >
           <AiMessageItem v-if="run.prompt" :message="run.prompt" />
           <AiActivityDisclosure
             v-if="run.activity.length || (runIndex === runs.length - 1 && busy)"
             :ended-at="run.endedAt"
             :messages="run.activity"
             :started-at="run.startedAt"
-            :status="runIndex === runs.length - 1 ? status : 'ready'"
+            :status="runIndex === runs.length - 1 && !approvalVisible ? status : 'ready'"
             :working-label="workingLabel"
           />
           <AiMessageItem v-for="message in run.visible" :key="message.id" :message="message" />
+          <AiImageGeneration
+            v-if="run.activity.length"
+            :conversation-thread-id="conversationThreadId"
+            :messages="run.activity"
+            :model-scope="scope"
+            :steer="busy"
+            :status="generationStatus(run, runIndex)"
+          />
+          <AiVideoGeneration
+            v-if="run.activity.length"
+            :messages="run.activity"
+            :status="generationStatus(run, runIndex)"
+          />
           <AiStatusIndicator
             v-if="
-              run.missingResponse && (runIndex < runs.length - 1 || (!busy && status === 'ready'))
+              !approvalVisible &&
+              run.missingResponse &&
+              runIndex === runs.length - 1 &&
+              !busy &&
+              status === 'ready'
             "
             message="No final response"
             status="needs_attention"
           />
         </div>
         <AiStatusIndicator
-          v-if="!busy && status !== 'ready' && (statusMessage || !lastRunHasActivity)"
+          v-if="
+            !approvalVisible &&
+            !busy &&
+            status !== 'ready' &&
+            (statusMessage || !lastRunHasActivity)
+          "
           :message="statusMessage"
           :status="status"
         />
       </div>
-      <div v-else-if="busy" class="mt-auto flex flex-col gap-4 px-4 py-4">
+      <div v-else-if="busy" class="agent-conversation-column mt-auto flex flex-col gap-4 py-4">
         <AiActivityDisclosure :messages="[]" :status="status" :working-label="workingLabel" />
       </div>
       <AiConversationEmpty
-        v-else-if="status === 'ready'"
+        v-else-if="status === 'ready' && !approvalVisible"
         :description="emptyDescription"
         :heading="emptyTitle"
       />
-      <div v-else class="mt-auto px-3 py-3">
+      <div v-else-if="!approvalVisible" class="agent-conversation-column mt-auto py-4">
         <AiStatusIndicator :message="statusMessage" :status="status" />
       </div>
+      <slot name="approval" />
     </AiConversation>
     <AiPromptInput
+      v-model:attachments="attachments"
       :annotations="annotations"
       :can-retry="canRetry"
       :can-stop="canStop"
@@ -573,9 +671,10 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
       :scope="scope"
       :status="status"
       @open-annotation="openAnnotation"
-      @retry="emit('retry')"
-      @send="emit('send', $event)"
+      @retry="retryPrompt"
+      @send="submitPrompt"
       @stop="emit('stop')"
+      @update:annotations="emit('update:annotations', $event)"
       @update:model-value="emit('update:modelValue', $event)"
     />
     <Teleport to="body">
@@ -626,6 +725,15 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
           placeholder="Add an optional comment…"
           @input="annotationCommentInput"
         />
+        <button
+          type="button"
+          data-test-id="ai-annotation-remove"
+          aria-label="Remove annotation"
+          class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-400/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/35"
+          @click="removeEditingAnnotation"
+        >
+          <icon-lucide-trash-2 class="size-4" />
+        </button>
         <button
           v-if="speechDictationAvailable"
           type="button"

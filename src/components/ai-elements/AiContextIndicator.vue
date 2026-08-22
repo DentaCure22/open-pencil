@@ -30,19 +30,22 @@ function formatEstimatedPercent(value: number): string {
 
 const usedPercent = computed(() => boundedPercent(contextUsage.percent))
 const remainingPercent = computed(() => Math.max(0, 100 - usedPercent.value))
-const progressStyle = computed(() => {
-  const degrees = usedPercent.value * 3.6
-  return {
-    backgroundImage: `conic-gradient(currentColor 0deg ${String(degrees)}deg, transparent ${String(degrees)}deg 360deg)`,
-    maskImage: 'radial-gradient(circle, transparent calc(50% - 3px), black calc(50% - 2px))',
-    WebkitMaskImage: 'radial-gradient(circle, transparent calc(50% - 3px), black calc(50% - 2px))'
-  }
-})
+const ringCircumference = 2 * Math.PI * 5
+const progressDasharray = computed(
+  () => `${String((usedPercent.value / 100) * ringCircumference)} ${String(ringCircumference)}`
+)
+const hasThroughput = computed(
+  () =>
+    contextUsage.tokensPerSecondBasis === 'streamed-output' &&
+    contextUsage.tokensPerSecond !== undefined &&
+    contextUsage.tokensPerSecond > 0
+)
 const speedLabel = computed(() => {
-  if (contextUsage.tokensPerSecondBasis !== 'streamed-output') return ''
+  if (!hasThroughput.value) return '— t/s'
   const speed = contextUsage.tokensPerSecond
-  if (speed === undefined || speed <= 0) return ''
-  return `${speed < 10 ? speed.toFixed(1) : String(Math.round(speed))} t/s`
+  if (speed === undefined) return '— t/s'
+  const prefix = contextUsage.tokensPerSecondEstimated ? '~' : ''
+  return `${prefix}${speed < 10 ? speed.toFixed(1) : String(Math.round(speed))} t/s`
 })
 const tooltip = computed(() => {
   if (contextUsage.compacting) return 'Compacting context…'
@@ -60,7 +63,11 @@ const tooltip = computed(() => {
   if (contextUsage.cacheHitPercent !== undefined) {
     details.push(`${formatPercent(contextUsage.cacheHitPercent)} cached`)
   }
-  if (speedLabel.value) details.push(`${speedLabel.value} measured stream average`)
+  details.push(
+    hasThroughput.value
+      ? `${speedLabel.value} ${contextUsage.tokensPerSecondEstimated ? 'estimated from streamed text' : 'measured stream average'}`
+      : 'Throughput unavailable'
+  )
   if (contextUsage.lastCompactedAt) details.push('Compacted this session')
   return details.join(' · ')
 })
@@ -70,27 +77,44 @@ const tooltip = computed(() => {
   <Tip :label="tooltip">
     <span
       :aria-label="tooltip"
-      class="flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-1.5 text-muted outline-none hover:bg-hover hover:text-surface focus-visible:ring-2 focus-visible:ring-component/30"
+      class="flex h-7 shrink-0 items-center gap-1 rounded-[7px] px-1 text-muted outline-none hover:bg-hover hover:text-surface focus-visible:ring-2 focus-visible:ring-component/30"
       data-test-id="ai-context-indicator"
       role="status"
       tabindex="0"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="relative size-5 shrink-0 rounded-full bg-transparent text-component"
+        class="relative size-3 shrink-0 overflow-hidden rounded-full bg-transparent text-component"
         :class="contextUsage.compacting ? 'animate-pulse' : ''"
         data-test-id="ai-context-ring"
+        viewBox="0 0 12 12"
       >
-        <span class="absolute inset-0 rounded-full border-[3px] border-border/80" />
-        <span
-          class="absolute inset-0 rounded-full"
-          data-test-id="ai-context-progress"
-          :style="progressStyle"
+        <circle
+          class="stroke-border"
+          cx="6"
+          cy="6"
+          fill="none"
+          opacity="0.8"
+          r="5"
+          stroke-width="1"
         />
-      </span>
+        <circle
+          :class="contextUsage.compacting ? 'opacity-45' : ''"
+          cx="6"
+          cy="6"
+          data-test-id="ai-context-progress"
+          fill="none"
+          r="5"
+          stroke="currentColor"
+          :stroke-dasharray="progressDasharray"
+          stroke-linecap="round"
+          stroke-width="1.1"
+          transform="rotate(-90 6 6)"
+        />
+      </svg>
       <span
-        v-if="speedLabel"
-        class="whitespace-nowrap font-mono text-[10px] leading-none tabular-nums"
+        class="whitespace-nowrap font-mono text-[9.5px] font-medium leading-none tracking-[-0.02em] tabular-nums"
+        :class="hasThroughput ? '' : 'text-muted/55'"
         data-test-id="ai-context-throughput"
       >
         {{ speedLabel }}

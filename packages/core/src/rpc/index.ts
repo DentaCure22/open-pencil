@@ -129,6 +129,8 @@ export type {
   TraceSearchTurnHit
 } from './trace-search'
 export type {
+  TraceEvidenceStatus,
+  TraceHistoryContextEntry,
   TraceHistoryEvent,
   TraceHistorySession,
   TraceQueryDependencies,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useEventListener } from '@vueuse/core'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import {
   forwardEmbeddedSurfaceWheel,
@@ -8,12 +8,15 @@ import {
   isEmbeddedSurfaceWheelMessage
 } from '@/app/editor/canvas/embedded-surface-wheel'
 import { flushLiveIframeSurfaceHost } from '@/app/code-object/transform'
+import { preserveCodeObjectRuntimeDuringHotUpdate } from '@/app/code-object/hmr-residency'
+import {
+  attachTrustedWebAppDomRuntime,
+  disposeTrustedWebAppDomRuntime,
+  parkTrustedWebAppDomRuntime,
+  trustedWebAppDomRuntimeFor
+} from '@/app/code-object/trusted-web-app-dom-runtime'
 import { useEditorStore } from '@/app/editor/active-store'
 import { canvasSurfaceCanReceivePointer } from '@/app/editor/canvas/surface/interaction'
-import {
-  acquireSmylrDevServerWatch,
-  releaseSmylrDevServerWatch
-} from '@/app/smylr-live-inspector/dev-server-watchdog'
 import {
   smylrFrameBaseUrlFor,
   smylrOpenPencilFrameUrlFor
@@ -23,7 +26,7 @@ import {
   isSmylrOpenPencilInspectorMessage,
   liveInspectorActiveFrameId,
   liveInspectorInteractionMode,
-  liveInspectorReloadTick,
+  liveInspectorReloadTickFor,
   liveInspectorStatus,
   markLiveInspectorFrameLoading,
   markLiveInspectorFrameUnavailable,
@@ -52,10 +55,13 @@ const emit = defineEmits<{
 }>()
 
 const store = useEditorStore()
-const iframeRef = ref<HTMLIFrameElement | null>(null)
+const iframeHostRef = ref<HTMLDivElement | null>(null)
+const domRuntime = IS_BROWSER ? trustedWebAppDomRuntimeFor(frameId) : null
+const iframeRef = ref<HTMLIFrameElement | null>(domRuntime?.iframe ?? null)
 const RETRY_DELAY_MS = 750
 const UNAVAILABLE_DELAY_MS = 15_000
-const runtimeInstanceId = IS_BROWSER ? globalThis.crypto.randomUUID() : 'server'
+const runtimeInstanceId = domRuntime?.runtimeInstanceId ?? 'server'
+const reloadTick = computed(() => liveInspectorReloadTickFor(frameId))
 let retryTimer = 0
 let unavailableTimer = 0
 let hoverFrame = 0
@@ -68,7 +74,7 @@ const iframeSrc = computed(() => {
     openPencilHref: window.location.href,
     params: {
       'smylr-openpencil-frame-key': runtimeKey,
-      'smylr-openpencil-reload-tick': String(liveInspectorReloadTick.value),
+      'smylr-openpencil-reload-tick': String(reloadTick.value),
       'smylr-openpencil-runtime-instance-id': runtimeInstanceId
     },
     route
@@ -78,7 +84,7 @@ const iframeOrigin = computed(() => {
   if (!IS_BROWSER) return ''
   return new URL(iframeSrc.value, window.location.href).origin
 })
-const iframeKey = computed(() => `${iframeSrc.value}:${liveInspectorReloadTick.value}`)
+const iframeKey = computed(() => `${iframeSrc.value}:${String(reloadTick.value)}`)
 const ownsInspector = computed(
   () => !componentSurface && liveInspectorActiveFrameId.value === frameId
 )
@@ -97,6 +103,17 @@ function dispatchInspectorCommand(command: Omit<SmylrOpenPencilInspectorCommand,
   if (!target || !origin) return false
   target.postMessage({ ...command, kind: SMYLR_OPENPENCIL_INSPECTOR_MESSAGE }, origin)
   return true
+}
+
+function syncIframeElement() {
+  const iframe = iframeRef.value
+  if (!iframe) return
+  iframe.className = `block size-full min-h-0 min-w-0 border-0 ${
+    componentSurface ? 'bg-transparent' : 'bg-white'
+  } ${iframeCanReceivePointer.value ? 'pointer-events-auto' : 'pointer-events-none'}`
+  iframe.tabIndex = iframeCanReceivePointer.value ? 0 : -1
+  const src = iframeSrc.value
+  if (iframe.getAttribute('src') !== src) iframe.setAttribute('src', src)
 }
 
 function currentInspectorMode() {
@@ -303,28 +320,41 @@ watch(
   }
 )
 watch(surfaceCanReceivePointer, () => void syncFrameFocus())
+watch(iframeCanReceivePointer, syncIframeElement)
 watch(ownsInspector, () => {
   postRuntimeActivity()
   if (ownsInspector.value) requestInspectorTree()
 })
 watch(iframeKey, () => {
+  syncIframeElement()
   if (ownsInspector.value) markLiveInspectorFrameLoading(iframeSrc.value)
 })
 
 useEventListener(window, 'message', handleInspectorMessage)
 
 onMounted(() => {
-  acquireSmylrDevServerWatch(iframeOrigin.value)
+  const host = iframeHostRef.value
+  const runtime = host ? attachTrustedWebAppDomRuntime(frameId, host) : null
+  if (runtime) {
+    iframeRef.value = runtime.iframe
+    runtime.iframe.addEventListener('load', handleFrameLoad)
+    syncIframeElement()
+  }
   if (componentSurface) return
   if (!liveInspectorActiveFrameId.value) setLiveInspectorActiveFrame(frameId)
 })
 
+onBeforeUnmount(() => {
+  iframeRef.value?.removeEventListener('load', handleFrameLoad)
+  if (preserveCodeObjectRuntimeDuringHotUpdate()) parkTrustedWebAppDomRuntime(frameId)
+  else disposeTrustedWebAppDomRuntime(frameId)
+})
+
 onUnmounted(() => {
-  releaseSmylrDevServerWatch()
   window.clearTimeout(retryTimer)
   window.clearTimeout(unavailableTimer)
   if (hoverFrame) cancelAnimationFrame(hoverFrame)
-  if (ownsInspector.value) {
+  if (ownsInspector.value && !preserveCodeObjectRuntimeDuringHotUpdate()) {
     setLiveInspectorCommandTarget(null)
     setLiveInspectorActiveFrame(null)
   }
@@ -338,23 +368,7 @@ onUnmounted(() => {
     data-runtime-boundary="trusted-web-app"
     data-test-id="smylr-trusted-web-app"
   >
-    <iframe
-      ref="iframeRef"
-      :key="iframeKey"
-      :data-live-frame-id="frameId"
-      :data-runtime-instance-id="runtimeInstanceId"
-      data-test-id="smylr-trusted-web-app-frame"
-      :src="iframeSrc"
-      title="Smylr production app"
-      class="block size-full min-h-0 min-w-0 border-0"
-      :class="[
-        componentSurface ? 'bg-transparent' : 'bg-white',
-        iframeCanReceivePointer ? 'pointer-events-auto' : 'pointer-events-none'
-      ]"
-      :tabindex="iframeCanReceivePointer ? 0 : -1"
-      loading="lazy"
-      @load="handleFrameLoad"
-    />
+    <div ref="iframeHostRef" class="size-full" />
 
     <div
       v-if="selectMode && surfaceCanReceivePointer"

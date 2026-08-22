@@ -2,6 +2,12 @@ import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 
 const editor = useEditorSetupWithClear('/?test')
 
+const TINY_PNG_BYTES = [
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
+  0, 31, 21, 196, 137, 0, 0, 0, 12, 73, 68, 65, 84, 120, 218, 99, 100, 248, 207, 0, 0, 3, 1, 1, 0,
+  24, 221, 141, 178, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+]
+
 async function transferFile(
   eventName: 'drop' | 'paste',
   name: string,
@@ -47,6 +53,58 @@ async function expectRetainedSource(fileName: string, mimeType: string) {
     editor.page.getByRole('link', { name: `Download source file: ${fileName}` })
   ).toBeVisible()
 }
+
+test('drop on the Board surface places photos and videos as native objects', async () => {
+  await editor.page.getByTestId('canvas-area').evaluate((surface, pngBytes) => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([new Uint8Array(pngBytes)], 'reference.png', { type: 'image/png' }))
+    transfer.items.add(
+      new File([new Uint8Array([0, 0, 0, 24])], 'walkthrough.mp4', { type: 'video/mp4' })
+    )
+    const rect = surface.getBoundingClientRect()
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      dataTransfer: transfer
+    }
+    surface.dispatchEvent(new DragEvent('dragenter', eventInit))
+    surface.dispatchEvent(new DragEvent('dragover', eventInit))
+    surface.dispatchEvent(new DragEvent('drop', eventInit))
+  }, TINY_PNG_BYTES)
+
+  await expect(editor.page.getByTestId('media-evidence-video')).toBeVisible()
+  await expect
+    .poll(() =>
+      editor.page.evaluate(() => {
+        const store = window.openPencil?.getStore?.()
+        if (!store) throw new Error('OpenPencil store not initialized')
+        return [...store.state.selectedIds]
+          .map((id) => store.graph.getNode(id))
+          .filter((node) => node !== undefined)
+          .map((node) => ({
+            fileName: node.pluginData.find((entry) => entry.key === 'content-source/file-name')
+              ?.value,
+            mimeType: node.pluginData.find((entry) => entry.key === 'content-source/mime-type')
+              ?.value,
+            name: node.name,
+            type: node.type
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name))
+      })
+    )
+    .toEqual([
+      { fileName: 'reference.png', mimeType: 'image/png', name: 'reference', type: 'RECTANGLE' },
+      {
+        fileName: 'walkthrough.mp4',
+        mimeType: 'video/mp4',
+        name: 'walkthrough',
+        type: 'FRAME'
+      }
+    ])
+  editor.canvas.assertNoErrors()
+})
 
 test('drop preserves an unsupported XLSX as an openable and downloadable source object', async () => {
   await transferFile('drop', 'forecast.xlsx', '', [80, 75, 3, 4, 9, 8, 7])

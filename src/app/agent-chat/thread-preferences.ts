@@ -1,0 +1,117 @@
+import { useLocalStorage } from '@vueuse/core'
+
+import type { AgentConversationThread } from './client'
+import { agentConversationTitle } from './presentation'
+import type { AiMessage, AiMessagePart } from './types'
+
+export type AgentConversationPreference = {
+  archived?: boolean
+  pinned?: boolean
+  title?: string
+  unread?: boolean
+}
+
+const preferences = useLocalStorage<Record<string, AgentConversationPreference>>(
+  'open-pencil:agent-thread-preferences-v1',
+  {}
+)
+
+function updatePreference(threadId: string, patch: AgentConversationPreference): void {
+  const next = { ...preferences.value[threadId], ...patch }
+  if (!next.archived) delete next.archived
+  if (!next.pinned) delete next.pinned
+  if (!next.title) delete next.title
+  if (!next.unread) delete next.unread
+
+  const record = { ...preferences.value }
+  if (Object.keys(next).length) record[threadId] = next
+  else delete record[threadId]
+  preferences.value = record
+}
+
+export function agentConversationPreference(threadId: string): AgentConversationPreference {
+  return preferences.value[threadId] ?? {}
+}
+
+export function agentConversationDisplayTitle(thread: AgentConversationThread): string {
+  return agentConversationPreference(thread.nativeThreadId).title ?? agentConversationTitle(thread)
+}
+
+export function isAgentConversationArchived(thread: AgentConversationThread): boolean {
+  return agentConversationPreference(thread.nativeThreadId).archived === true
+}
+
+export function isAgentConversationPinned(thread: AgentConversationThread): boolean {
+  return agentConversationPreference(thread.nativeThreadId).pinned === true
+}
+
+export function isAgentConversationUnread(thread: AgentConversationThread): boolean {
+  return agentConversationPreference(thread.nativeThreadId).unread === true
+}
+
+export function setAgentConversationArchived(
+  thread: AgentConversationThread,
+  archived: boolean
+): void {
+  updatePreference(thread.nativeThreadId, { archived })
+}
+
+export function setAgentConversationPinned(thread: AgentConversationThread, pinned: boolean): void {
+  updatePreference(thread.nativeThreadId, { pinned })
+}
+
+export function setAgentConversationTitle(thread: AgentConversationThread, title: string): void {
+  updatePreference(thread.nativeThreadId, { title: title.trim() || undefined })
+}
+
+export function setAgentConversationUnread(thread: AgentConversationThread, unread: boolean): void {
+  updatePreference(thread.nativeThreadId, { unread })
+}
+
+export function sortAgentConversationThreads(
+  threads: readonly AgentConversationThread[]
+): AgentConversationThread[] {
+  return [...threads].sort((left, right) => {
+    const pinDifference =
+      Number(isAgentConversationPinned(right)) - Number(isAgentConversationPinned(left))
+    return pinDifference || right.updatedAt.localeCompare(left.updatedAt)
+  })
+}
+
+function partCopyText(part: AiMessagePart): string {
+  if (part.type === 'attachment') return `[Attachment: ${part.name}]`
+  if (part.type === 'image') return part.url ? `![${part.alt || 'Image'}](${part.url})` : '[Image]'
+  if (part.type === 'source') return `[${part.title}](${part.url})`
+  if (part.type === 'code') {
+    return `\`\`\`${part.language ?? ''}\n${part.code}\n\`\`\``
+  }
+  if (part.type === 'text') return part.text.trim()
+  return ''
+}
+
+function messageCopyText(message: AiMessage): string {
+  const text = message.text.trim()
+  if (text) return text
+  return (message.parts ?? []).map(partCopyText).filter(Boolean).join('\n\n')
+}
+
+function messageRoleLabel(message: AiMessage): string {
+  if (message.role === 'assistant') return 'Agent'
+  if (message.role === 'user') return 'You'
+  return 'System'
+}
+
+export function agentConversationCopyText(thread: AgentConversationThread): string {
+  const transcript = thread.messages.flatMap((message) => {
+    const text = messageCopyText(message)
+    return text ? [`**${messageRoleLabel(message)}**\n\n${text}`] : []
+  })
+  return [`# ${agentConversationDisplayTitle(thread)}`, ...transcript].join('\n\n')
+}
+
+export function agentConversationLastResponseText(thread: AgentConversationThread): string {
+  const response = [...thread.messages]
+    .reverse()
+    .find((message) => message.role === 'assistant' && messageCopyText(message))
+  return response ? messageCopyText(response) : ''
+}
