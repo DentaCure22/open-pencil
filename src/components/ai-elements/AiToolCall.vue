@@ -18,7 +18,7 @@ const { error, images, input, name, output, state } = defineProps<{
 
 const expanded = ref(false)
 const detailInput = computed(() => shortToolInput(input))
-const hasOutput = computed(() => Boolean(output || error || images?.length))
+const hasDetail = computed(() => Boolean(input || output || error || images?.length))
 const detail = computed(() => error ?? output)
 const imageParts = computed(() =>
   (images ?? []).map(
@@ -86,12 +86,12 @@ const statusLabel = computed(() => {
       >
       <span v-else class="min-w-0 flex-1" />
       <button
-        v-if="hasOutput"
+        v-if="hasDetail"
         type="button"
         data-test-id="ai-tool-disclosure"
         class="flex size-6 shrink-0 items-center justify-center rounded-[5px] text-muted opacity-0 transition-[background-color,color] duration-150 group-hover/tool:opacity-100 hover:bg-hover hover:text-surface focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 group-focus-within/tool:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
         :aria-expanded="expanded"
-        :aria-label="expanded ? 'Hide tool output' : 'Show tool output'"
+        :aria-label="expanded ? 'Hide tool details' : 'Show tool details'"
         @click="expanded = !expanded"
       >
         <icon-lucide-chevron-down
@@ -118,6 +118,18 @@ const statusLabel = computed(() => {
     >
       <div v-if="expanded" data-test-id="ai-tool-detail-panel">
         <div class="min-h-0 overflow-hidden">
+          <p v-if="input" class="mt-1 text-[10px] font-medium tracking-wide text-muted uppercase">
+            Input
+          </p>
+          <pre
+            v-if="input"
+            data-test-id="ai-tool-detail-input"
+            class="mt-1 max-h-40 overflow-auto rounded-[7px] border border-border/70 bg-input px-2.5 py-2 font-mono text-[11px] leading-[1.55] whitespace-pre-wrap text-surface overscroll-contain"
+            >{{ input }}</pre
+          >
+          <p v-if="detail" class="mt-1 text-[10px] font-medium tracking-wide text-muted uppercase">
+            {{ error ? 'Error' : 'Result' }}
+          </p>
           <pre
             v-if="detail"
             data-test-id="ai-tool-output"

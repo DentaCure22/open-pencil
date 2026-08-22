@@ -13,7 +13,7 @@ const trace = computed(() => {
   if (value && !['thinking', 'thought'].includes(value.toLowerCase())) return value
   if (state === 'streaming') return 'Reasoning is still in progress.'
   if (state === 'stopped') return 'Reasoning stopped before a summary was available.'
-  return 'Reasoning completed.'
+  return 'Private reasoning is hidden. Safe tool activity is shown below.'
 })
 </script>
 

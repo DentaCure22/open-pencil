@@ -50,8 +50,10 @@
   selecting one focuses its existing card, while its remove action deletes only
   the undoable Board card and leaves the task in chat history.
 - Surface Antigravity's safe tool markers, bounded command inputs and edit diffs, and generic
-  thought lifecycle in the shared activity disclosure. Because its bridge reports zero usage,
-  estimate and label context consumption instead of leaving the meter frozen at zero.
+  thought lifecycle in the shared activity disclosure. Connected-app bridge calls retain their
+  concrete tool identity, and tool inputs remain expandable even when no result is returned.
+  Because its bridge reports zero usage, estimate and label context consumption instead of leaving
+  the meter frozen at zero.
 - Board agents run on Pi. Sidebar CHATS and Board cards share one conversation
   history and the original Vue chat chrome, so a send in either place is the
   same thread. Each conversation now owns one resident `pi --mode rpc` session,

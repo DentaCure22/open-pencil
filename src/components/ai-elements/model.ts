@@ -47,8 +47,11 @@ export function formatAttachmentSize(value?: number): string {
 }
 
 type ToolInputRecord = {
+  AbsolutePath?: unknown
+  Arguments?: unknown
   CommandLine?: unknown
   TargetFile?: unknown
+  ToolName?: unknown
   action?: unknown
   changes?: unknown
   cmd?: unknown
@@ -67,6 +70,8 @@ type ToolInputRecord = {
   server?: unknown
   target_file?: unknown
   tool?: unknown
+  toolAction?: unknown
+  toolSummary?: unknown
   uri?: unknown
   url?: unknown
 }
@@ -85,9 +90,12 @@ export type AiToolKind =
   | 'web'
 
 const SHORT_TOOL_INPUT_KEYS = [
+  'toolSummary',
+  'toolAction',
   'command',
   'cmd',
   'CommandLine',
+  'AbsolutePath',
   'TargetFile',
   'target_file',
   'file_path',
@@ -197,7 +205,9 @@ export function toolCallKind(name: string, input?: string): AiToolKind {
     return 'command'
   }
   if (includesToolTerm(normalized, ['read', 'view'])) return 'read'
-  if (includesToolTerm(normalized, ['file change', 'edit', 'write', 'str replace', 'apply patch'])) {
+  if (
+    includesToolTerm(normalized, ['file change', 'edit', 'write', 'str replace', 'apply patch'])
+  ) {
     return 'edit'
   }
   if (normalized.includes('list') || normalized === 'ls') return 'list'

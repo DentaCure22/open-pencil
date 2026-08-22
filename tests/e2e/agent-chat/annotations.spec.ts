@@ -121,6 +121,7 @@ test('creates, reopens, and submits a compact transcript annotation', async ({ p
   const editor = page.getByTestId('ai-annotation-editor')
   const comment = editor.getByRole('textbox', { name: 'Annotation comment' })
   await expect(comment).toHaveAttribute('placeholder', 'Add an optional comment…')
+  await expect(page).toHaveScreenshot('agent-annotation-editor.png')
   await comment.fill('Make this sentence more concrete.')
   await comment.press('Enter')
   await expect(editor).toHaveCount(0)

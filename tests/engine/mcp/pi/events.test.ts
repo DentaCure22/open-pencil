@@ -336,7 +336,14 @@ describe('Pi JSON events', () => {
       '[/agy output]',
       ''
     ].join('\n')
-    const thinking = `[agy tool: view_file]\n${commandActivity}${editActivity}private reasoning`
+    const connectedAppActivity = [
+      '[agy tool: call_mcp_tool]',
+      '[agy input]',
+      '{"Arguments":{"args":{},"tool":"codex_apps_gmail_get_profile"},"ServerName":"pi-antigravity-bridge","ToolName":"mcp","toolAction":"Getting Gmail profile","toolSummary":"Check Gmail connection and profile"}',
+      '[/agy input]',
+      ''
+    ].join('\n')
+    const thinking = `[agy tool: view_file]\n${commandActivity}${connectedAppActivity}${editActivity}private reasoning`
     applyPiJsonEvent(
       next,
       JSON.stringify({
@@ -363,6 +370,18 @@ describe('Pi JSON events', () => {
         assistantMessageEvent: {
           contentIndex: 0,
           delta: commandActivity,
+          type: 'thinking_delta'
+        },
+        type: 'message_update'
+      }),
+      'turn-1'
+    )
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        assistantMessageEvent: {
+          contentIndex: 0,
+          delta: connectedAppActivity,
           type: 'thinking_delta'
         },
         type: 'message_update'
@@ -420,6 +439,13 @@ describe('Pi JSON events', () => {
         input:
           '{"CommandLine":"bun test tests/engine/mcp/pi/events.test.ts","password":"[redacted]"}',
         name: 'run_command',
+        state: 'success',
+        type: 'tool'
+      },
+      {
+        input:
+          '{"Arguments":{"args":{},"tool":"codex_apps_gmail_get_profile"},"ServerName":"pi-antigravity-bridge","ToolName":"mcp","toolAction":"Getting Gmail profile","toolSummary":"Check Gmail connection and profile"}',
+        name: 'codex_apps_gmail_get_profile',
         state: 'success',
         type: 'tool'
       },

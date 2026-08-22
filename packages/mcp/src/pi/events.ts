@@ -142,6 +142,27 @@ type AntigravityActivity =
   | ({ description: string; type: 'edit' } & AntigravityActivityDetail)
   | ({ name: string; type: 'tool' } & AntigravityActivityDetail)
 
+function parsedAntigravityInput(value: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function antigravityToolName(label: string, input: string): string {
+  const parsed = parsedAntigravityInput(input)
+  const bridgedName = parsed && typeof parsed.ToolName === 'string' ? parsed.ToolName.trim() : ''
+  if (!bridgedName) return label
+  if (bridgedName !== 'mcp') return bridgedName
+
+  const args = isRecord(parsed?.Arguments) ? parsed.Arguments : null
+  if (typeof args?.tool === 'string' && args.tool.trim()) return args.tool.trim()
+  if (typeof args?.search === 'string' && args.search.trim()) return 'connected_app_search'
+  return bridgedName
+}
+
 function antigravityActivities(value: unknown): AntigravityActivity[] {
   if (typeof value !== 'string') return []
   const activities: AntigravityActivity[] = []
@@ -162,7 +183,7 @@ function antigravityActivities(value: unknown): AntigravityActivity[] {
           }
         : {
             ...(input ? { input } : {}),
-            name: label,
+            name: antigravityToolName(label, input),
             ...(output ? { output } : {}),
             type: 'tool'
           }

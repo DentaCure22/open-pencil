@@ -87,6 +87,11 @@ describe('AI Elements Vue chat model', () => {
     )
     expect(shortToolInput('[{"path":"src/a.ts"},{"path":"src/b.ts"}]')).toBe('src/a.ts, src/b.ts')
     expect(shortToolInput('{"search":"gmail"}')).toBe('gmail')
+    expect(
+      shortToolInput(
+        '{"Arguments":{"tool":"codex_apps_gmail_get_profile"},"ToolName":"mcp","toolAction":"Getting Gmail profile","toolSummary":"Check Gmail connection and profile"}'
+      )
+    ).toBe('Check Gmail connection and profile')
     expect(toolCallLabel('Run command')).toBe('Ran command')
     expect(toolCallLabel('Shell')).toBe('Ran command')
     expect(toolCallLabel('bash')).toBe('Ran command')
