@@ -179,9 +179,27 @@ export function shortToolInput(input?: string): string {
   return truncateToolInput(firstLine)
 }
 
+function bridgedToolName(value: ToolInputRecord): string {
+  const name = stringField(value.ToolName)
+  if (!name) return ''
+  if (name !== 'mcp') return name
+  if (!isToolInputRecord(value.Arguments)) return name
+  const tool = stringField(value.Arguments.tool)
+  if (tool) return tool
+  if (typeof value.Arguments.search === 'string' && value.Arguments.search.trim()) {
+    return 'connected_app_search'
+  }
+  return name
+}
+
 function displayToolName(name: string, input?: string): string {
-  if (name.trim().toLowerCase() !== 'mcp') return name
+  const normalizedName = name.trim().replaceAll(' ', '_').toLowerCase()
   const parsed = input?.trim() ? parseJsonInput(input.trim()) : undefined
+  if (isToolInputRecord(parsed) && normalizedName === 'call_mcp_tool') {
+    const bridged = bridgedToolName(parsed)
+    if (bridged) return bridged
+  }
+  if (normalizedName !== 'mcp') return name
   if (!isToolInputRecord(parsed)) return 'connected app'
   const tool = stringField(parsed.tool)
   if (tool) return tool

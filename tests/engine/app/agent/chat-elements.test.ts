@@ -101,6 +101,18 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallLabel('mcp', '{"search":"today"}')).toBe('Searched')
     expect(toolCallLabel('mcp', '{"action":"connect"}')).toBe('Connected app')
     expect(toolCallLabel('mcp', '{"server":"codex_apps"}')).toBe('Connected app')
+    expect(
+      toolCallLabel(
+        'call_mcp_tool',
+        '{"Arguments":{"provider":"oauth"},"ToolName":"ima2-media_generate_image","toolSummary":"Generate through Codex OAuth"}'
+      )
+    ).toBe('ima2-media generate image')
+    expect(
+      toolCallLabel(
+        'call_mcp_tool',
+        '{"Arguments":{"tool":"codex_apps_gmail_get_profile"},"ToolName":"mcp","toolSummary":"Check Gmail profile"}'
+      )
+    ).toBe('codex apps gmail get profile')
     expect(toolCallKind('read_file')).toBe('read')
     expect(toolCallKind('bash')).toBe('command')
     expect(toolCallKind('connected_app_search')).toBe('search')

@@ -88,6 +88,7 @@ async function mockAnnotationThread(page: Page) {
 
 test('creates, reopens, and submits a compact transcript annotation', async ({ page }) => {
   const steers: string[] = []
+  await page.clock.setFixedTime(new Date('2026-08-21T20:01:00.000Z'))
   await mockAnnotationThread(page)
   await page.route(/\/agent-router\/v1\/pi\/conversations\/[^/]+\/steer$/, async (route) => {
     steers.push((route.request().postDataJSON() as { message: string }).message)
@@ -126,6 +127,13 @@ test('creates, reopens, and submits a compact transcript annotation', async ({ p
   await comment.press('Enter')
   await expect(editor).toHaveCount(0)
 
+  await dragSelectText(page, message.locator('[data-stream-markdown="paragraph"]'))
+  await actions.getByRole('button', { name: 'Add to chat' }).click()
+  await expect(conversation.getByTestId('ai-prompt-annotation-summary')).toHaveText('2 annotations')
+  await expect(page.getByTestId('ai-annotation-marker')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Open annotation 2' })).toBeVisible()
+  await comment.press('Enter')
+
   const marker = page.getByRole('button', { name: 'Open annotation 1' })
   await marker.click()
   await expect(page.getByTestId('ai-annotation-highlight').first()).toBeVisible()
@@ -142,7 +150,10 @@ test('creates, reopens, and submits a compact transcript annotation', async ({ p
         '',
         'Annotation 1:',
         `> ${THREAD.messages[0].text}`,
-        'Comment: Use a specific example.'
+        'Comment: Use a specific example.',
+        '',
+        'Annotation 2:',
+        `> ${THREAD.messages[0].text}`
       ].join('\n')
     ])
   await expect(conversation.getByTestId('ai-prompt-annotation-summary')).toHaveCount(0)
