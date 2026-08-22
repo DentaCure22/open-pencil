@@ -35,6 +35,8 @@
   annotations, and bounded motion recording. Sessions stay in a side-by-side,
   horizontally scrollable basket at the top of every sidebar tab, record into
   Trace, and can be dragged into sidebar or Board agent chats without sending.
+  One armed session now persists across tabs the user visits, keeps globally
+  ordered selection numbers, and never changes the active Chrome tab itself.
 - Make photo and video drag-and-drop reliable across the full Board surface,
   including over native media and other overlay-backed objects. Dropped photos
   become native image rectangles, while videos become movable, source-backed

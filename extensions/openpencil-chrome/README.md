@@ -13,22 +13,25 @@ It does not create Board objects or inspect Electron, CEF, or native apps.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select this directory.
 4. Keep OpenPencil open at `http://localhost:1420` or `http://127.0.0.1:1420`.
-5. To inspect OpenPencil itself, press **Inspect Chrome** in the vertical Editor
-   tools rail. No extension-toolbar click is needed.
-6. Point at an element and click to add it. Selected elements keep numbered
+5. Press **Inspect Chrome** in the vertical Editor tools rail. This arms one
+   browser-wide capture session without switching tabs.
+6. Switch to any ordinary web tab yourself. Point at an element and click to add
+   it. Selected elements keep numbered
    boundaries. Use Up/Down to move through DOM depth, **Record motion** (or `R`)
-   for an optional 30-second WebM clip, and **Done** or Escape to finish.
-7. To inspect another Chrome tab, visit it, then return to OpenPencil and press
-   **Inspect Chrome**. The extension follows the last active ordinary web page.
+   for an optional 30-second WebM clip.
+7. Switch to more web tabs and keep selecting. Every tab shares the same capture
+   session and global selection numbering. **Done** or Escape in any participating
+   tab finishes the session everywhere.
 
-The extension ignores Chrome internal pages and remembers the last ordinary web
-page you actively visited. This prevents a stale tab ID from reopening an unrelated
-page while keeping the full flow on OpenPencil's Editor tools rail.
+The extension ignores Chrome internal pages and never activates a tab on the
+user's behalf. An armed session follows only tabs the user explicitly visits, and
+each participating tab retains its own visible selection boundaries when revisited.
 
 The manifest requests page access because Chrome allows a rail-initiated
 `captureVisibleTab()` only with `<all_urls>` access; `activeTab` works only after
-clicking the browser-extension icon. The background listener remembers only the
-active tab ID. It injects and reads the page only when you invoke the picker.
+clicking the browser-extension icon. The background worker keeps the active session
+identity, participating tab IDs, and global sequence in session storage. It injects
+and reads a page only while that user-started session is active.
 
 ## Current boundary
 

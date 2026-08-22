@@ -98,10 +98,7 @@ describe('Chrome capture sessions', () => {
 
     const [session] = browserInspectorState.sessions
     expect(browserInspectorState.sessions).toHaveLength(1)
-    expect(session?.pages?.map((candidate) => candidate.url)).toEqual([
-      page.url,
-      secondPage.url
-    ])
+    expect(session?.pages?.map((candidate) => candidate.url)).toEqual([page.url, secondPage.url])
     expect(session?.title).toContain('2 tabs')
     expect(session?.selections.map((candidate) => candidate.session.tabId)).toEqual([12, 27])
   })

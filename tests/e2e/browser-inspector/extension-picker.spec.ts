@@ -2,10 +2,18 @@ import { readFile } from 'node:fs/promises'
 
 import { expect, test } from '@playwright/test'
 
+import { expectDefined } from '#tests/helpers/assert'
+
 const pickerPath = new URL('../../../extensions/openpencil-chrome/picker.js', import.meta.url)
 
 type PickerHarnessWindow = typeof window & {
   __openPencilMessages?: Array<{ kind?: string }>
+  __openpencilPickerSessionConfig?: {
+    captureSessionId: string
+    captureStartedAt: string
+    selectedCount: number
+  }
+  __reserveOpenPencilSequence?: () => Promise<number>
 }
 
 test('shows animated feedback while moving across Chrome elements', async ({ page }) => {
@@ -147,4 +155,106 @@ test('keeps one numbered session active across multiple selections', async ({ pa
     )
   ).toBe(true)
   expect(ended?.captureSessionId).toBe(started?.captureSessionId)
+})
+
+test('continues one globally numbered session after the user switches tabs', async ({
+  context
+}) => {
+  const pickerSource = await readFile(pickerPath, 'utf8')
+  const captureSessionId = 'cross-tab-session'
+  const captureStartedAt = '2026-08-22T12:00:00.000Z'
+  let globalSequence = 0
+
+  async function prepareTab(label: string) {
+    const page = await context.newPage()
+    await page.setViewportSize({ width: 720, height: 440 })
+    await page.setContent(
+      `<main style="padding:100px"><button aria-label="${label}" style="width:240px;height:120px">${label}</button></main>`
+    )
+    await page.exposeFunction('__reserveOpenPencilSequence', () => ++globalSequence)
+    await page.evaluate(
+      ({ id, label, selectedCount, startedAt }) => {
+        const target = window as PickerHarnessWindow
+        target.__openpencilPickerSessionConfig = {
+          captureSessionId: id,
+          captureStartedAt: startedAt,
+          selectedCount
+        }
+        Object.defineProperty(window, 'chrome', {
+          configurable: true,
+          value: {
+            runtime: {
+              onMessage: { addListener: () => undefined, removeListener: () => undefined },
+              sendMessage: async (message: { kind?: string }) => {
+                target.__openPencilMessages ??= []
+                target.__openPencilMessages.push(structuredClone(message))
+                if (message.kind === 'reserve-browser-element-sequence') {
+                  return { ok: true, sequence: await target.__reserveOpenPencilSequence?.() }
+                }
+                if (message.kind === 'capture-visible-browser-element') {
+                  const canvas = document.createElement('canvas')
+                  canvas.width = window.innerWidth
+                  canvas.height = window.innerHeight
+                  return { dataUrl: canvas.toDataURL('image/png'), ok: true }
+                }
+                return { ok: true }
+              }
+            }
+          }
+        })
+        document.title = label
+      },
+      { id: captureSessionId, label, selectedCount: globalSequence, startedAt: captureStartedAt }
+    )
+    await page.addScriptTag({ content: pickerSource })
+    return page
+  }
+
+  const firstTab = await prepareTab('First tab target')
+  await firstTab.getByRole('button', { name: 'First tab target' }).click()
+  await expect.poll(() => globalSequence).toBe(1)
+
+  const secondTab = await prepareTab('Second tab target')
+  await secondTab.getByRole('button', { name: 'Second tab target' }).click()
+  await expect.poll(() => globalSequence).toBe(2)
+
+  await Promise.all(
+    [firstTab, secondTab].map((page) =>
+      expect
+        .poll(() =>
+          page.evaluate(() =>
+            Boolean(
+              ((window as PickerHarnessWindow).__openPencilMessages ?? []).some(
+                (message) => message.kind === 'browser-element-selection'
+              )
+            )
+          )
+        )
+        .toBe(true)
+    )
+  )
+
+  const selectionEvents = await Promise.all(
+    [firstTab, secondTab].map((page) =>
+      page.evaluate(
+        () =>
+          ((window as PickerHarnessWindow).__openPencilMessages ?? []).find(
+            (message) => message.kind === 'browser-element-selection'
+          ) as {
+            selection?: { session?: { captureSessionId?: string; sequence?: number } }
+          }
+      )
+    )
+  )
+  const selections = selectionEvents.map((event, index) =>
+    expectDefined(event, `selection event ${String(index + 1)}`)
+  )
+  expect(selections.map((event) => event.selection?.session?.captureSessionId)).toEqual([
+    captureSessionId,
+    captureSessionId
+  ])
+  expect(selections.map((event) => event.selection?.session?.sequence)).toEqual([1, 2])
+  await expect(secondTab).toHaveScreenshot('extension-picker-cross-tab.png', {
+    animations: 'disabled'
+  })
 })

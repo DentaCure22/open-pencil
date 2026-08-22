@@ -12,6 +12,9 @@ const pickerActive = computed(() => browserInspectorState.pickerStatus === 'acti
 async function inspectChrome() {
   const started = await requestBrowserElementPicker()
   if (!started && browserInspectorState.error) toast.error(browserInspectorState.error)
+  else if (started) {
+    toast.info('Chrome capture armed. Switch tabs and keep selecting until Done.')
+  }
 }
 </script>
 

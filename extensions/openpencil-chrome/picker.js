@@ -516,7 +516,7 @@
       .then(async () => {
         const itemSequence = await reserveSelectionSequence()
         addCommitted(chosen, itemSequence, selectionId)
-        await publish(chosen, itemSequence, selectionId)
+        return publish(chosen, itemSequence, selectionId)
       })
       .catch(() => finish('selection-failed'))
   }
