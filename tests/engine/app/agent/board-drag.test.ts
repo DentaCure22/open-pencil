@@ -7,7 +7,11 @@ import {
   isAgentConversationDraftId,
   markAgentConversationDraftAccepted
 } from '@/app/agent-terminal/board-object'
-import { placeAgentConversationBoardThread } from '@/app/agent-terminal/drag'
+import {
+  placeAgentConversationBoardThread,
+  resolveAgentConversationDrag,
+  writeAgentConversationDrag
+} from '@/app/agent-terminal/drag'
 import { createEditorStore } from '@/app/editor/session'
 
 describe('agent conversation Board drag', () => {
@@ -81,5 +85,67 @@ describe('agent conversation Board drag', () => {
 
     store.undoAction()
     expect(store.graph.getNode(draft.id)).toBeUndefined()
+  })
+
+  test('makes the open conversation header title pill draggable to place onto the board and double-clickable to rename', async () => {
+    const sidebar = await Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text()
+    expect(sidebar).toContain('data-test-id="agent-selected-header"')
+    expect(sidebar).toContain('data-test-id="agent-selected-header-title"')
+    expect(sidebar).toContain('rounded-[8px]')
+    expect(sidebar).toContain('hover:bg-hover')
+    expect(sidebar).toContain('@dragstart="beginSelectedThreadDrag"')
+    expect(sidebar).toContain('@pointerdown="armSelectedThreadPointerDrag"')
+    expect(sidebar).toContain('cursor-grab')
+    expect(sidebar).toContain('active:cursor-grabbing')
+    expect(sidebar).toContain('@dblclick="beginTitleRename"')
+    expect(sidebar).toContain('data-test-id="agent-selected-header-rename-input"')
+    expect(sidebar).toContain('function beginTitleRename')
+    expect(sidebar).toContain('function commitTitleRename')
+    expect(sidebar).toContain('setAgentConversationTitle')
+  })
+
+  test('lets the Board drop overlay accept a live chat drag', async () => {
+    const [drag, canvas, sidebar] = await Promise.all([
+      Bun.file('src/app/agent-terminal/drag.ts').text(),
+      Bun.file('src/components/EditorCanvas.vue').text(),
+      Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text()
+    ])
+    expect(drag).toContain('pendingAgentConversationDrag')
+    expect(drag).toContain('armAgentConversationPointerDrag')
+    expect(drag).toContain('finishIfOverBoard')
+    expect(drag).toContain('removeLivePreview')
+    expect(drag).toContain('isAgentConversationDragActive')
+    expect(drag).toContain("area.style.pointerEvents = active ? 'none' : ''")
+    expect(drag).toContain('pointerup')
+    expect(canvas).not.toContain('isDraggingAgentConversation')
+    expect(sidebar).toContain('@pointerdown="armNewThreadPointerDrag"')
+    expect(sidebar).toContain('@pointerdown="armThreadPointerDrag($event, thread)"')
+    expect(sidebar).toContain('@pointerdown="armSelectedThreadPointerDrag"')
+  })
+
+  test('remembers the dragged chat when DataTransfer is empty', () => {
+    const payload = {
+      conversationId: 'conversation-memory',
+      threadId: 'thread-memory',
+      title: 'Remembered chat'
+    }
+    const dataTransfer = {
+      dropEffect: 'none',
+      effectAllowed: 'none',
+      getData: () => '',
+      setData() {},
+      setDragImage() {},
+      types: []
+    }
+    writeAgentConversationDrag(
+      { dataTransfer } as unknown as DragEvent,
+      payload
+    )
+    expect(
+      resolveAgentConversationDrag({
+        getData: () => '',
+        types: []
+      } as unknown as DataTransfer)
+    ).toEqual(payload)
   })
 })

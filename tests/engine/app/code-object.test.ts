@@ -26,6 +26,7 @@ describe('Code Objects', () => {
   test('keeps saved component renderers as compatibility adapters only', () => {
     expect(registeredCodeObjectAdapters()).toEqual([
       { component: 'code-starter', displayName: 'Legacy Code Starter' },
+      { component: 'external-live-surface', displayName: 'External live surface' },
       { component: 'earth-signals', displayName: 'Earth signals' },
       { component: 'orbit-lab', displayName: 'Orbit lab' },
       { component: 'signal-bloom', displayName: 'Signal bloom' },

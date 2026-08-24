@@ -14,6 +14,15 @@ function actionItems(entries: readonly AppMenuEntry[]): AppMenuEntry[] {
 }
 
 describe('APP_MENU_SCHEMA', () => {
+  test('offers Model meter from Settings', () => {
+    const settings = APP_MENU_SCHEMA.find((group) => group.label === 'Settings')
+
+    expect(settings?.items).toContainEqual({
+      id: 'model-meter',
+      label: 'Cache'
+    })
+  })
+
   test('offers Mermaid as a first-class insert action', () => {
     const insert = APP_MENU_SCHEMA.find((group) => group.label === 'Insert')
 

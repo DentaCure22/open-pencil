@@ -20,7 +20,14 @@ import {
 import { computed, nextTick, ref, watch } from 'vue'
 
 import type { AgentConversationThread } from '@/app/agent-chat/client'
-import { agentConversationMessages, getAgentConversation } from '@/app/agent-chat/client'
+import {
+  agentConversationMessages,
+  forkAgentConversation,
+  getAgentConversation
+} from '@/app/agent-chat/client'
+import { refreshAgentConversationHistory } from '@/app/agent-chat/history-store'
+import type { AgentReasoningEffort } from '@/app/agent-chat/models'
+import { agentChatsPanelSelectedId, agentChatsPanelView } from '@/app/agent-chat/panel'
 import {
   agentConversationCopyText,
   agentConversationDisplayTitle,
@@ -102,6 +109,31 @@ function toggleArchived() {
   if (!thread) return
   setAgentConversationArchived(thread, !archived.value)
   toast.info(archived.value ? 'Task archived' : 'Task restored')
+}
+
+async function startFork(historyScope: 'effectiveContext' | 'full') {
+  if (!thread || busy.value) return
+  busy.value = true
+  try {
+    const receipt = await forkAgentConversation(
+      thread.nativeThreadId,
+      '',
+      {
+        effort: thread.effort as AgentReasoningEffort,
+        model: thread.model
+      },
+      {},
+      historyScope
+    )
+    await refreshAgentConversationHistory(true)
+    agentChatsPanelSelectedId.value = `agent:${receipt.threadId}`
+    agentChatsPanelView.value = 'conversation'
+    toast.info(historyScope === 'full' ? 'Forked' : 'Compact-forked')
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : String(cause))
+  } finally {
+    busy.value = false
+  }
 }
 
 async function fullThread(): Promise<AgentConversationThread> {
@@ -216,6 +248,24 @@ async function shareConversation() {
             <icon-lucide-archive-restore v-if="archived" :class="menu.icon" />
             <icon-lucide-archive v-else :class="menu.icon" />
             <span>{{ archived ? 'Unarchive' : 'Archive' }}</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            data-test-id="agent-conversation-compact-fork"
+            :class="menu.item"
+            :disabled="busy"
+            @select="startFork('effectiveContext')"
+          >
+            <icon-lucide-git-fork :class="menu.icon" />
+            <span>Compact-fork</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            data-test-id="agent-conversation-fork"
+            :class="menu.item"
+            :disabled="busy"
+            @select="startFork('full')"
+          >
+            <icon-lucide-git-branch :class="menu.icon" />
+            <span>Fork</span>
           </ContextMenuItem>
 
           <ContextMenuSeparator :class="menu.separator" />

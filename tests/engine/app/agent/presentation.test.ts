@@ -39,4 +39,41 @@ describe('agent conversation presentation', () => {
     ).toBe('Done ID Name 0:7655 Live Board')
     expect(plainConversationPreview('a'.repeat(100))).toBe(`${'a'.repeat(87)}…`)
   })
+
+  test('titles chrome-selection capture filenames as Screenshot', () => {
+    expect(
+      agentConversationTitle(
+        thread({ task: 'chrome-selection-0a5853f5-686b-4990-bea8-f722f2f46b36.png' })
+      )
+    ).toBe('Screenshot')
+  })
+
+  test('titles macOS Screenshot dated filenames as Screenshot', () => {
+    expect(
+      agentConversationTitle(thread({ task: 'Screenshot 2026-08-23 at 9.02.25 AM.png' }))
+    ).toBe('Screenshot')
+  })
+
+  test('titles a generic image filename such as notes.png as Image', () => {
+    expect(agentConversationTitle(thread({ task: 'hello.png' }))).toBe('Image')
+    expect(agentConversationTitle(thread({ task: 'notes.png' }))).toBe('Image')
+  })
+
+  test('keeps real prompt text such as Move this card', () => {
+    expect(agentConversationTitle(thread({ task: 'Move this card' }))).toBe('Move this card')
+  })
+
+  test('titles comma-joined capture filenames as Screenshot', () => {
+    expect(
+      agentConversationTitle(
+        thread({
+          task: 'chrome-selection-0a5853f5-686b-4990-bea8-f722f2f46b36.png, Screenshot 2026-08-23 at 9.02.25 AM.png'
+        })
+      )
+    ).toBe('Screenshot')
+  })
+
+  test('titles multiple generic image filenames as N images', () => {
+    expect(agentConversationTitle(thread({ task: 'hello.png, notes.webp' }))).toBe('2 images')
+  })
 })

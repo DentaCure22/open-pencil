@@ -35,6 +35,31 @@ describe('board conversation live status', () => {
     ).toBe('Run command… · 60s')
   })
 
+  test('does not reset the timer when updatedAt churns on a prose update', () => {
+    expect(
+      liveWorkingLabel({
+        lastMessageAt: '2026-08-16T00:00:48.000Z',
+        now: NOW,
+        recentUpdate: 'The selected chat header now has a New task button.',
+        state: 'running',
+        updatedAt: '2026-08-16T00:01:00.000Z'
+      })
+    ).toBe('The selected chat header now has a New task button. · 12s')
+  })
+
+  test('does not put a long streaming answer into the working line', () => {
+    expect(
+      liveWorkingLabel({
+        lastMessageAt: '2026-08-16T00:00:48.000Z',
+        now: NOW,
+        recentUpdate:
+          'The selected chat header now has a New task button, and the same treatment is on Board chat cards.',
+        state: 'running',
+        updatedAt: '2026-08-16T00:00:48.000Z'
+      })
+    ).toBe('Working · 12s')
+  })
+
   test('appends elapsed seconds when a running update has no suffix', () => {
     expect(
       liveWorkingLabel({

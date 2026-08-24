@@ -16,6 +16,18 @@ export function browserElementLabel(selection: BrowserElementSelection) {
   )
 }
 
+export function compactBrowserElementTitle(label: string) {
+  const normalized = label.replaceAll(/\s+/g, ' ').trim()
+  if (normalized.length <= 38) return normalized
+
+  const fourWordPrefix = normalized.split(' ').slice(0, 4).join(' ')
+  if (fourWordPrefix.length <= 38) return `${fourWordPrefix}…`
+
+  const bounded = fourWordPrefix.slice(0, 38)
+  const lastWordBoundary = bounded.lastIndexOf(' ')
+  return `${(lastWordBoundary >= 16 ? bounded.slice(0, lastWordBoundary) : bounded).trimEnd()}…`
+}
+
 export function browserElementTraceTarget(selection: BrowserElementSelection): NarratedTraceTarget {
   const { element, page } = selection
   const captureSessionId = selection.session.captureSessionId ?? 'legacy'

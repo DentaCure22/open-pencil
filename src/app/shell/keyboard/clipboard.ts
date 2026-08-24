@@ -6,7 +6,7 @@ import {
   pasteFromTauriClipboard
 } from '@/app/editor/clipboard/system'
 import { extractFilesFromClipboard, placeFilesWithFallbackMessage } from '@/app/file-intake/drop'
-import { isEditing } from '@/app/shell/keyboard/focus'
+import { hasNativeTextSelection, isEditing } from '@/app/shell/keyboard/focus'
 import {
   handleLiveContainerCopyCommand,
   isLiveContainerCopyContext
@@ -21,7 +21,7 @@ function cursorPosition(store: EditorStore) {
 export function bindEditorClipboard(store: EditorStore, enabled: () => boolean = () => true) {
   useEventListener(window, 'copy', (e: ClipboardEvent) => {
     if (!enabled()) return
-    if (isEditing(e)) return
+    if (isEditing(e) || hasNativeTextSelection()) return
     e.preventDefault()
     if (isLiveContainerCopyContext(store)) {
       void handleLiveContainerCopyCommand(store)
@@ -36,7 +36,7 @@ export function bindEditorClipboard(store: EditorStore, enabled: () => boolean =
 
   useEventListener(window, 'cut', (e: ClipboardEvent) => {
     if (!enabled()) return
-    if (isEditing(e)) return
+    if (isEditing(e) || hasNativeTextSelection()) return
     e.preventDefault()
     if (isTauri()) {
       void copySelectionToTauriClipboard(store).then((copied) => {

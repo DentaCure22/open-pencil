@@ -35,16 +35,28 @@ describe('position presentation scene cache', () => {
 
       graph.setNodePositionPresentation(node.id, { x: 110, y: 120 })
       renderer.render(graph, new Set(), {}, 1)
-      expect(renderer.profiler.stats.scenePictureMode).toBe('volatile')
+      expect(renderer.profiler.stats.scenePictureMode).toBe('preview')
       expect(renderer.profiler.stats.scenePictureMissReason).toBe('position-preview')
+
+      graph.setNodePositionPresentation(node.id, { x: 140, y: 160 })
+      renderer.render(graph, new Set(), {}, 1)
+      expect(renderer.profiler.stats.scenePictureMode).toBe('preview')
 
       graph.clearNodePositionPresentation(node.id)
       renderer.render(graph, new Set(), {}, 1)
-      expect(renderer.profiler.stats.scenePictureMode).toBe('record')
-      expect(renderer.profiler.stats.scenePictureMissReason).toBe('position-preview-version')
-
-      renderer.render(graph, new Set(), {}, 1)
       expect(renderer.profiler.stats.scenePictureMode).toBe('hit')
+
+      const nested = graph.createNode('RECTANGLE', node.id, {
+        height: 20,
+        width: 20,
+        x: 8,
+        y: 8
+      })
+      renderer.render(graph, new Set(), {}, 2)
+      graph.setNodePositionPresentation(nested.id, { x: 16, y: 16 })
+      renderer.render(graph, new Set(), {}, 2)
+      expect(renderer.profiler.stats.scenePictureMode).toBe('preview')
+      expect(renderer.profiler.stats.scenePictureMissReason).toBe('position-preview')
     } finally {
       surface.delete()
     }

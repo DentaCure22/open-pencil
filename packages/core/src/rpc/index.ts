@@ -1,12 +1,5 @@
 export { executeRpcCommand, ALL_RPC_COMMANDS } from './commands'
 export {
-  boardBuildPlanCompositionCurrentBounds,
-  boardBuildPlanCompositionGap,
-  boardBuildPlanCompositionMembers,
-  compileBoardBuildPlanComposition
-} from './board-build-composition'
-export type { BoardBuildPlanCompositionCompilation } from './board-build-composition'
-export {
   classifyRpcExecutionSurface,
   normalizePersistedExecutionError,
   persistedAuthorityUnavailableError,
@@ -21,90 +14,6 @@ export type {
   WorkspaceSearchHit,
   WorkspaceSearchResult
 } from './workspace-search'
-export {
-  BOARD_BUILD_INTENT_COMPILATION_CONTRACT,
-  BOARD_BUILD_INTENT_REGISTRY_VERSION,
-  BOARD_BUILD_INTENT_REQUEST_CONTRACT,
-  compileBoardBuildIntentRequest
-} from './board-build-intent'
-export type {
-  BoardBuildIntentCapability,
-  BoardBuildIntentCapabilityRequest,
-  BoardBuildIntentCapabilityResult,
-  BoardBuildIntentCompilation,
-  BoardBuildIntentCompilerMetadata,
-  BoardBuildIntentEffect,
-  BoardBuildIntentItem,
-  BoardBuildIntentOutcome,
-  BoardBuildIntentRepresentation,
-  BoardBuildIntentRepresentationPlan,
-  BoardBuildIntentRequest,
-  BoardBuildIntentRequestedOutcome,
-  BoardBuildIntentRoutingSource
-} from './board-build-intent'
-export {
-  BOARD_BUILD_PLAN_CONTRACT,
-  BOARD_BUILD_PLAN_MAX_ARTIFACTS,
-  BOARD_BUILD_PLAN_MAX_OPERATIONS,
-  boardBuildPlanDigestInput,
-  boardBuildPlanLayoutMembers,
-  boardBuildPlanReferenceKey,
-  compileBoardBuildPlanFlowLayout,
-  compileBoardBuildPlanGridLayout,
-  compileBoardBuildPlanLayout,
-  parseBoardBuildPlan,
-  resolveBoardBuildPlanOperations
-} from './board-build-plan'
-export {
-  BOARD_BUILD_TRACE_OBJECT_ID,
-  BOARD_BUILD_TRACE_REGION_KIND,
-  boardBuildTraceContext,
-  materializeBoardBuildTrace
-} from './board-build-trace'
-export type { BoardBuildTraceContext, BoardBuildTraceMaterialization } from './board-build-trace'
-export type {
-  BoardBuildPlan,
-  BoardBuildPlanAbsoluteMoveOperation,
-  BoardBuildPlanArtifact,
-  BoardBuildPlanArtifactRecipe,
-  BoardBuildPlanBounds,
-  BoardBuildPlanCanonicalObjectOperation,
-  BoardBuildPlanCodeObjectRecipe,
-  BoardBuildPlanComposition,
-  BoardBuildPlanCompositionDensity,
-  BoardBuildPlanCompositionDirection,
-  BoardBuildPlanCompositionGeography,
-  BoardBuildPlanCompositionPreferences,
-  BoardBuildPlanDigestMetadata,
-  BoardBuildPlanFlowDirection,
-  BoardBuildPlanFlowLayout,
-  BoardBuildPlanGridAlign,
-  BoardBuildPlanGridCompilation,
-  BoardBuildPlanGridLayout,
-  BoardBuildPlanGridPlacement,
-  BoardBuildPlanLayout,
-  BoardBuildPlanLayoutAnchor,
-  BoardBuildPlanLayoutCompilation,
-  BoardBuildPlanNearRegionTarget,
-  BoardBuildPlanNativeDiagramRecipe,
-  BoardBuildPlanObjectPatch,
-  BoardBuildPlanOperation,
-  BoardBuildPlanReference,
-  BoardBuildPlanRegionTarget,
-  BoardBuildPlanRelativeOffset,
-  BoardBuildPlanRelativeMove,
-  BoardBuildPlanRelativeMoveOperation,
-  BoardBuildPlanResolvedOperation,
-  BoardBuildPlanTargetIdentity,
-  BoardBuildPlanTrustedWebAppRecipe,
-  BoardBuildPlanUiBlockRecipe
-} from './board-build-plan'
-export {
-  applyBoardTransactionChanges,
-  captureBoardTransactionState,
-  diffBoardTransactionStates,
-  inspectBoardTransactionChanges
-} from './board-transaction'
 export {
   buildTraceEmptyResult,
   buildTraceQueryMatch,
@@ -147,26 +56,6 @@ export type {
   TraceSpokenTurnSelector,
   TraceWindowEntry
 } from './trace-query'
-export type {
-  BoardTransactionChange,
-  BoardTransactionDirection,
-  BoardTransactionInspection,
-  BoardTransactionNodeSnapshot,
-  BoardTransactionState
-} from './board-transaction'
-export {
-  BOARD_BUILD_RECIPE_REGISTRY_VERSION,
-  BOARD_BUILD_RECIPE_REQUEST_CONTRACT,
-  compileBoardBuildRecipeRequest
-} from './board-build-recipe'
-export type {
-  BoardBuildRecipeCompilation,
-  BoardBuildRecipeCompilerMetadata,
-  BoardBuildRecipeRequest,
-  BriefGridRecipeCard,
-  StructuredCardsRecipeParams,
-  StructuredCardsRecipeRequest
-} from './board-build-recipe'
 export type {
   InfoResult,
   PageItem,

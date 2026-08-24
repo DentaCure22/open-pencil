@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 import {
   applyMeasuredAntigravityThroughput,
+  applyMeasuredAntigravityUsage,
   applyPiEventTelemetry,
   applyPiSessionStats,
   applyPiStateTelemetry,
@@ -145,6 +146,25 @@ describe('Pi conversation telemetry', () => {
       percent: null,
       tokens: null
     })
+    expect(conversation.contextUsage?.compactionStalled).toBeUndefined()
+  })
+
+  test('stalls when compact leaves the window still full', () => {
+    const conversation = thread()
+    applyPiStateTelemetry(conversation, {
+      autoCompactionEnabled: true,
+      model: { contextWindow: 500_000 }
+    })
+    applyPiEventTelemetry(conversation, timing(), { type: 'compaction_start' }, 4_000)
+    applyPiEventTelemetry(
+      conversation,
+      timing(),
+      { aborted: false, result: { estimatedTokensAfter: 400_000 }, type: 'compaction_end' },
+      5_000
+    )
+
+    expect(conversation.contextUsage?.compactionStalled).toBe(true)
+    expect(conversation.contextUsage?.lastCompactedAt).toBe('1970-01-01T00:00:05.000Z')
   })
 
   test('estimates live and completed Antigravity telemetry when the bridge reports zero usage', () => {
@@ -237,6 +257,40 @@ describe('Pi conversation telemetry', () => {
       tokensPerSecondBasis: 'streamed-output'
     })
     expect(conversation.contextUsage?.tokensPerSecondEstimated).toBeUndefined()
+
+    expect(
+      applyMeasuredAntigravityUsage(
+        conversation,
+        { cacheRead: 20_331, input: 4_207, output: 319, reasoning: 40 },
+        3_000
+      )
+    ).toBe(true)
+    expect(conversation.contextUsage).toMatchObject({
+      cacheHitPercent: 82.9,
+      tokens: 24_857,
+      tokensPerSecond: 106.3,
+      tokensPerSecondBasis: 'streamed-output'
+    })
+    expect(conversation.contextUsage?.tokensEstimated).toBeUndefined()
+    expect(conversation.contextUsage?.tokensPerSecondEstimated).toBeUndefined()
+  })
+
+  test('writes measured Antigravity cache when the thread has no prior meter', () => {
+    const conversation = thread()
+    conversation.model = 'antigravity/gemini-3-7-flash'
+    delete conversation.contextUsage
+    expect(
+      applyMeasuredAntigravityUsage(
+        conversation,
+        { cacheRead: 20_331, input: 4_207, output: 80, reasoning: 20 },
+        2_000
+      )
+    ).toBe(true)
+    expect(conversation.contextUsage).toMatchObject({
+      cacheHitPercent: 82.9,
+      contextWindow: 1_000_000,
+      tokens: 24_618
+    })
   })
 
   test('hydrates persisted Antigravity threads that were saved with a frozen zero meter', () => {

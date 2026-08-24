@@ -95,7 +95,7 @@ function messagesApprovalThread(index: number) {
           JSON.stringify({
             chat_guid: 'iMessage;-;test-recipient',
             recipient_label: 'Test Recipient',
-            text: 'Be there in 10 minutes.'
+            texts: ['Be there in 10 minutes.', 'I’ll text when I arrive.']
           })
       }
     ],
@@ -143,7 +143,9 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   await expect(selector.getByText('Human task title 0')).toBeVisible()
   await expect(selector.getByTestId(/^agent-chat-thread-agent:/)).toHaveCount(12)
   await panel.getByTestId('agent-thread-new').click()
-  const newTaskComposer = conversation.getByRole('textbox', { name: 'New task' })
+  const newTaskComposer = conversation.getByRole('textbox', {
+    name: 'New task'
+  })
   await newTaskComposer.fill('Start a clean task')
   await newTaskComposer.press('Enter')
   await expect.poll(() => newTasks).toEqual(['Start a clean task'])
@@ -170,7 +172,9 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   await expect(conversation.getByText('Task 11 conversation message 24')).toBeVisible()
   const composer = conversation.getByRole('textbox', { name: 'Follow up' })
   const viewport = conversation.getByTestId('ai-conversation-viewport')
-  const chapterRail = conversation.getByRole('navigation', { name: 'User messages' })
+  const chapterRail = conversation.getByRole('navigation', {
+    name: 'User messages'
+  })
   const chapterMarkers = chapterRail.getByTestId('ai-conversation-chapter-marker')
   await expect(chapterRail).toBeVisible()
   await expect(chapterMarkers).toHaveCount(12)
@@ -205,7 +209,13 @@ test('keeps one clean task list and preserves a conversation while navigating ba
 
   const cameraBefore = await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
-    return store ? { panX: store.state.panX, panY: store.state.panY, zoom: store.state.zoom } : null
+    return store
+      ? {
+          panX: store.state.panX,
+          panY: store.state.panY,
+          zoom: store.state.zoom
+        }
+      : null
   })
   await viewport.evaluate((element) => {
     element.scrollTop = 0
@@ -224,7 +234,11 @@ test('keeps one clean task list and preserves a conversation while navigating ba
     await page.evaluate(() => {
       const store = window.openPencil?.getStore?.()
       return store
-        ? { panX: store.state.panX, panY: store.state.panY, zoom: store.state.zoom }
+        ? {
+            panX: store.state.panX,
+            panY: store.state.panY,
+            zoom: store.state.zoom
+          }
         : null
     })
   ).toEqual(cameraBefore)
@@ -259,9 +273,74 @@ test('keeps one clean task list and preserves a conversation while navigating ba
     ])
 })
 
+test('starts a new task without the previous prompt or attachment', async ({ page }) => {
+  const newTasks: string[] = []
+  await mockThreads(page, [worker(1)])
+  await page.route(/\/agent-router\/v1\/pi\/dispatch$/, async (route) => {
+    newTasks.push((route.request().postDataJSON() as { prompt: string }).prompt)
+    await route.fulfill({
+      body: '{"dispatchedAt":"2026-08-16T00:02:00.000Z","jobId":"job-new","state":"queued","threadId":"thread-new"}',
+      contentType: 'application/json',
+      status: 202
+    })
+  })
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+
+  const panel = page.getByTestId('agent-chats-panel')
+  const conversation = page.getByTestId('agent-selected-conversation')
+  await panel.getByTestId('agent-thread-new').click()
+  const composer = conversation.getByRole('textbox', { name: 'New task' })
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64'
+  )
+  await conversation.getByTestId('ai-prompt-file-input').setInputFiles({
+    buffer: png,
+    mimeType: 'image/png',
+    name: 'reference.png'
+  })
+  await composer.fill('Unsent previous draft')
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toHaveCount(1)
+
+  await conversation.getByRole('button', { name: 'Back to tasks' }).click()
+  await panel.getByTestId('agent-thread-new').click()
+  await expect(conversation.getByTestId('agent-selected-header')).toContainText('New task')
+  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue('')
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toHaveCount(0)
+
+  await conversation.getByRole('textbox', { name: 'New task' }).fill('Previous attached prompt')
+  await conversation.getByRole('textbox', { name: 'New task' }).press('Enter')
+  await expect.poll(() => newTasks).toEqual(['Previous attached prompt'])
+  await expect(conversation.getByText('Previous attached prompt')).toBeVisible()
+
+  await conversation.getByRole('button', { name: 'Back to tasks' }).click()
+  await panel.getByTestId('agent-thread-new').click()
+  await expect(conversation.getByTestId('agent-selected-header')).toContainText('New task')
+  await expect(conversation.getByText('Previous attached prompt')).toHaveCount(0)
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toHaveCount(0)
+  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue('')
+})
+
 test('shows the exact Messages send and waits for the in-chat Send button', async ({ page }) => {
   const approvalThread = messagesApprovalThread(20)
   const responses: Array<{ requestId: string; value?: string }> = []
+  const sendToolPart = {
+    input: JSON.stringify({
+      Arguments: {
+        chat_guid: 'iMessage;-;test-recipient',
+        recipient_label: 'Test Recipient',
+        texts: ['Be there in 10 minutes.', 'I’ll text when I arrive.']
+      },
+      ServerName: 'pi-antigravity-bridge',
+      ToolName: 'messages__send_send_message'
+    }),
+    name: 'messages__send_send_message',
+    output: '',
+    state: 'running' as 'running' | 'success',
+    type: 'tool' as const
+  }
   await mockThreads(page, [approvalThread])
   await page.route(
     /\/agent-router\/v1\/pi\/conversations\/[^/]+\/ui\/[^/]+\/respond$/,
@@ -276,23 +355,14 @@ test('shows the exact Messages send and waits for the in-chat Send button', asyn
         completedAt: '2026-08-22T14:30:02.000Z',
         createdAt: '2026-08-22T14:30:01.000Z',
         id: 'message-send-tool',
-        parts: [
-          {
-            input: JSON.stringify({
-              chat_guid: 'iMessage;-;test-recipient',
-              recipient_label: 'Test Recipient',
-              text: 'Be there in 10 minutes.'
-            }),
-            name: 'messages__send',
-            output: 'Message sent.',
-            state: 'success',
-            type: 'tool'
-          }
-        ],
+        parts: [sendToolPart],
         role: 'assistant',
         text: ''
       })
-      await route.fulfill({ body: '{"accepted":true}', contentType: 'application/json' })
+      await route.fulfill({
+        body: '{"accepted":true}',
+        contentType: 'application/json'
+      })
     }
   )
 
@@ -300,42 +370,151 @@ test('shows the exact Messages send and waits for the in-chat Send button', asyn
   await new CanvasHelper(page).waitForInit()
   await page.getByTestId('left-panel-chats-tab').click()
   await page.getByTestId('agent-thread-selector').getByText('Human task title 20').click()
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
 
+  const conversation = page.getByTestId('agent-selected-conversation')
   const approval = page.getByTestId('agent-ui-approval')
-  await expect(approval).toContainText('Message Test Recipient')
-  await expect(approval).toContainText('Test Recipient')
-  await expect(approval.getByTestId('agent-message-approval-text')).toHaveText(
-    'Be there in 10 minutes.'
-  )
-  await expect(page.getByTestId('ai-conversation-status')).toHaveCount(0)
-  await expect(page.getByText(/Needs attention/)).toHaveCount(0)
+  await expect(approval.getByTestId('agent-message-recipient')).toHaveText('Test Recipient')
+  await expect(approval.getByTestId('agent-message-approval-text')).toHaveText([
+    'Be there in 10 minutes.',
+    'I’ll text when I arrive.'
+  ])
+  await expect(conversation.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await expect(conversation.getByText(/Needs attention/)).toHaveCount(0)
   await expect
     .poll(() =>
       approval.evaluate((element) => ({
-        boxShadow: getComputedStyle(element).boxShadow,
-        height: element.getBoundingClientRect().height
+        backgroundColor: getComputedStyle(element).backgroundColor,
+        borderTopWidth: getComputedStyle(element).borderTopWidth,
+        boxShadow: getComputedStyle(element).boxShadow
       }))
     )
-    .toEqual({ boxShadow: 'none', height: 50 })
+    .toEqual({
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      borderTopWidth: '0px',
+      boxShadow: 'none'
+    })
+  expect(await approval.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(
+    160
+  )
   await expect
     .poll(() =>
       approval
         .getByRole('button', { name: 'Send', exact: true })
-        .evaluate((element) => element.getBoundingClientRect().width)
+        .evaluate((element) => getComputedStyle(element).color)
     )
-    .toBe(32)
+    .toBe('rgb(0, 122, 255)')
+  const bubbleRightEdges = await approval
+    .getByTestId('agent-message-approval-text')
+    .evaluateAll((elements) =>
+      elements.map((element) => Math.round(element.getBoundingClientRect().right))
+    )
+  expect(new Set(bubbleRightEdges).size).toBe(1)
+  const sendButtonBox = await approval
+    .getByRole('button', { name: 'Send', exact: true })
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { right: Math.round(rect.right), top: Math.round(rect.top) }
+    })
+  const lastBubbleBox = await approval
+    .getByTestId('agent-message-approval-text')
+    .last()
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { bottom: Math.round(rect.bottom), right: Math.round(rect.right) }
+    })
+  expect(sendButtonBox.top).toBeGreaterThanOrEqual(lastBubbleBox.bottom + 3)
+  expect(sendButtonBox.right).toBe(lastBubbleBox.right)
+  const cancel = approval.getByRole('button', { name: 'Cancel', exact: true })
+  await expect(cancel).toBeVisible()
+  await expect(approval).toHaveScreenshot('agent-message-approval-pending-light.png')
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'dark'
+  })
+  await expect(approval).toHaveScreenshot('agent-message-approval-pending-dark.png')
   expect(responses).toEqual([])
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
 
   await approval.getByRole('button', { name: 'Send', exact: true }).click()
   await expect
     .poll(() => responses)
     .toEqual([{ requestId: 'message-approval-20', value: 'Allow once' }])
+  await expect(approval).toHaveAttribute('data-state', 'sending')
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Sending')
+  await expect(approval).toHaveScreenshot('agent-message-approval-sending-light.png', {
+    maxDiffPixelRatio: 0.055
+  })
+
+  sendToolPart.output = 'Message sent.'
+  sendToolPart.state = 'success'
+  approvalThread.updatedAt = '2026-08-22T14:30:03.000Z'
   await expect(approval).toHaveAttribute('data-state', 'sent')
   await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Sent')
-  await expect(page.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await expect(conversation.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
+  await expect(approval).toHaveScreenshot('agent-message-approval-sent-light.png', {
+    maxDiffPixelRatio: 0.055
+  })
   await expect
     .poll(() => approval.evaluate((element) => getComputedStyle(element).boxShadow))
     .toBe('none')
+})
+
+test('supersedes an untouched Messages approval and keeps it with its original turn', async ({
+  page
+}) => {
+  const approvalThread = messagesApprovalThread(24)
+  const followUps: string[] = []
+  await mockThreads(page, [approvalThread])
+  await page.route(/\/agent-router\/v1\/pi\/conversations\/[^/]+\/follow-up/, async (route) => {
+    followUps.push((route.request().postDataJSON() as { message: string }).message)
+    await route.fulfill({
+      body: '{"dispatchedAt":"2026-08-22T14:31:00.000Z","jobId":"job-1","state":"running","threadId":"thread-24"}',
+      contentType: 'application/json',
+      status: 202
+    })
+  })
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 24').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  const approval = conversation.getByTestId('agent-ui-approval')
+  await expect(approval).toHaveAttribute('data-state', 'pending')
+
+  const composer = conversation.getByRole('textbox', { name: 'Follow up' })
+  await composer.fill('Use the newer wording instead.')
+  await conversation.getByRole('button', { name: 'Send message' }).click()
+
+  await expect.poll(() => followUps).toEqual(['Use the newer wording instead.'])
+  await expect(approval).toHaveAttribute('data-state', 'cancelled')
+  await expect(approval.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+  await expect(approval.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0)
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Cancelled')
+  await expect(
+    conversation.getByText('Use the newer wording instead.', { exact: true })
+  ).toBeVisible()
+  await expect(conversation.getByTestId('agent-approval-column')).toHaveAttribute(
+    'data-run-id',
+    'agent:thread-24:message-24-22'
+  )
+
+  const approvalBox = await approval.boundingBox()
+  const newerPromptBox = await conversation
+    .getByText('Use the newer wording instead.', { exact: true })
+    .boundingBox()
+  expect(approvalBox?.y).toBeLessThan(newerPromptBox?.y ?? Number.NEGATIVE_INFINITY)
+  await expect(conversation.getByRole('log', { name: 'Conversation transcript' })).toHaveScreenshot(
+    'agent-message-approval-superseded-in-transcript.png'
+  )
 })
 
 test('settles a declined Messages approval into the cancelled state', async ({ page }) => {
@@ -351,7 +530,10 @@ test('settles a declined Messages approval into the cancelled state', async ({ p
         ...(route.request().postDataJSON() as { value?: string })
       })
       approvalThread.pendingUiRequests = []
-      await route.fulfill({ body: '{"accepted":true}', contentType: 'application/json' })
+      await route.fulfill({
+        body: '{"accepted":true}',
+        contentType: 'application/json'
+      })
     }
   )
 
@@ -361,10 +543,71 @@ test('settles a declined Messages approval into the cancelled state', async ({ p
   await page.getByTestId('agent-thread-selector').getByText('Human task title 21').click()
 
   const approval = page.getByTestId('agent-ui-approval')
+  await approval.hover()
   await approval.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.poll(() => responses).toEqual([{ requestId: 'message-approval-21', value: 'Deny' }])
   await expect(approval).toHaveAttribute('data-state', 'cancelled')
   await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Cancelled')
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
+  await expect(approval).toHaveScreenshot('agent-message-approval-cancelled-light.png', {
+    maxDiffPixelRatio: 0.055
+  })
+})
+
+test('settles a failed Messages send into the inline Not sent state', async ({ page }) => {
+  const approvalThread = messagesApprovalThread(22)
+  await mockThreads(page, [approvalThread])
+  await page.route(
+    /\/agent-router\/v1\/pi\/conversations\/[^/]+\/ui\/[^/]+\/respond$/,
+    async (route) => {
+      approvalThread.pendingUiRequests = []
+      approvalThread.messages.push({
+        completedAt: '2026-08-22T14:30:02.000Z',
+        createdAt: '2026-08-22T14:30:01.000Z',
+        id: 'message-send-error',
+        parts: [
+          {
+            input: JSON.stringify({
+              chat_guid: 'iMessage;-;test-recipient',
+              recipient_label: 'Test Recipient',
+              texts: ['Be there in 10 minutes.', 'I’ll text when I arrive.']
+            }),
+            name: 'messages__send_send_message',
+            output: 'Messages unavailable.',
+            state: 'error',
+            type: 'tool'
+          }
+        ],
+        role: 'assistant',
+        text: ''
+      })
+      approvalThread.updatedAt = '2026-08-22T14:30:03.000Z'
+      await route.fulfill({
+        body: '{"accepted":true}',
+        contentType: 'application/json'
+      })
+    }
+  )
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 22').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  const approval = conversation.getByTestId('agent-ui-approval')
+  await approval.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(approval).toHaveAttribute('data-state', 'failed')
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Not sent')
+  await expect(conversation.getByTestId('ai-conversation-status')).toHaveCount(0)
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
+  await expect(approval).toHaveScreenshot('agent-message-approval-not-sent-light.png', {
+    maxDiffPixelRatio: 0.055
+  })
 })
 
 test('steers a running task from the live composer instead of queueing a follow-up', async ({
@@ -501,7 +744,9 @@ test('copies user prompts and assistant responses', async ({ page }) => {
     .toBe('User prompt to copy.')
 
   const assistantMessage = panel.locator('[data-test-id="ai-message"][data-role="assistant"]')
-  const assistantCopy = assistantMessage.getByRole('button', { name: 'Copy message' })
+  const assistantCopy = assistantMessage.getByRole('button', {
+    name: 'Copy message'
+  })
   const assistantActions = assistantMessage.getByTestId('ai-message-actions')
   await expect(assistantMessage.getByTestId('ai-message-time')).toHaveAttribute(
     'datetime',
@@ -624,8 +869,11 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   let followUpAttempts = 0
   let stopAttempts = 0
   let imageEvidenceBase64 = ''
-  const imageEditHandoffs: Array<{ displayPrompt: string; evidenceId: string; message: string }> =
-    []
+  const imageEditHandoffs: Array<{
+    displayPrompt: string
+    evidenceId: string
+    message: string
+  }> = []
   const sentMessages: string[] = []
   const messages = [
     ...Array.from({ length: 18 }, (_, index) => ({
@@ -642,9 +890,23 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
       text: '',
       parts: [
         { text: '**Structured response**', type: 'text' },
-        { state: 'complete', text: 'Checked the scoped files.', type: 'reasoning' },
-        { input: '{"path":"README.md"}', name: 'read_file', state: 'pending', type: 'tool' },
-        { input: '{"query":"chat"}', name: 'search', state: 'running', type: 'tool' },
+        {
+          state: 'complete',
+          text: 'Checked the scoped files.',
+          type: 'commentary'
+        },
+        {
+          input: '{"path":"README.md"}',
+          name: 'read_file',
+          state: 'pending',
+          type: 'tool'
+        },
+        {
+          input: '{"query":"chat"}',
+          name: 'search',
+          state: 'running',
+          type: 'tool'
+        },
         {
           images: [
             {
@@ -669,7 +931,12 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
           state: 'running',
           type: 'tool'
         },
-        { error: 'Permission denied', name: 'write_file', state: 'error', type: 'tool' },
+        {
+          error: 'Permission denied',
+          name: 'write_file',
+          state: 'error',
+          type: 'tool'
+        },
         { name: 'publish', state: 'approval', type: 'tool' },
         {
           code: 'const status = "ready"',
@@ -757,13 +1024,19 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
     async (route) => {
       stopAttempts += 1
       lifecycle = 'complete'
-      await route.fulfill({ body: '{"stopped":true}', contentType: 'application/json' })
+      await route.fulfill({
+        body: '{"stopped":true}',
+        contentType: 'application/json'
+      })
     }
   )
   await page.route('http://127.0.0.1:7602/local-workspace/v1/trace/evidence', async (route) => {
     imageEvidenceBase64 =
       (route.request().postDataJSON() as { evidenceBase64?: string }).evidenceBase64 ?? ''
-    await route.fulfill({ body: '{"persisted":true}', contentType: 'application/json' })
+    await route.fulfill({
+      body: '{"persisted":true}',
+      contentType: 'application/json'
+    })
   })
 
   await page.goto('/?test&no-rulers')
@@ -775,25 +1048,15 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   const viewport = panel.getByTestId('ai-conversation-viewport')
   await expect(panel.getByTestId('ai-activity-disclosure')).toBeVisible()
   const durationDivider = panel.getByTestId('ai-turn-duration')
-  await expect(durationDivider).toContainText('Working for')
-  await expect(panel.getByTestId('ai-reasoning')).toBeVisible()
-  const reasoning = panel.getByTestId('ai-reasoning')
-  const reasoningToggle = reasoning.getByTestId('ai-reasoning-toggle')
-  await expect(reasoningToggle.getByTestId('ai-disclosure-chevron')).toHaveAttribute(
-    'data-direction',
-    'right'
-  )
-  await reasoningToggle.click()
-  await expect(reasoning.getByTestId('ai-reasoning-content')).toContainText(
-    'Checked the scoped files.'
-  )
-  await expect(reasoningToggle.getByTestId('ai-disclosure-chevron')).toHaveAttribute(
-    'data-direction',
-    'down'
-  )
-  const toolGroup = panel.getByTestId('ai-tool-group')
-  await expect(toolGroup).toContainText('Read files, searched, used tools, edited files')
-  await expect(panel.getByTestId('ai-tool-call')).toHaveCount(0)
+  await expect(durationDivider).toContainText('Thought for')
+  await expect(panel.getByTestId('ai-commentary')).toBeVisible()
+  const commentary = panel.getByTestId('ai-commentary')
+  await expect(commentary).toHaveText('Checked the scoped files.')
+  await expect(commentary.locator('svg, button')).toHaveCount(0)
+  const toolGroup = panel.getByTestId('ai-tool-group').filter({ hasText: 'Read files' })
+  await expect(toolGroup).toBeVisible()
+  await expect(panel.getByTestId('ai-tool-group').filter({ hasText: 'Searched' })).toBeVisible()
+  await expect(panel.getByTestId('ai-tool-call')).toHaveCount(5)
   const imageGeneration = panel.getByTestId('ai-image-generation')
   await expect(imageGeneration).toBeVisible()
   await expect(imageGeneration).toHaveAttribute('data-provider', 'codex')
@@ -804,8 +1067,6 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   const imageBox = await imageGeneration.boundingBox()
   expect(imageBox?.y).toBeGreaterThan(replyBox?.y ?? Number.POSITIVE_INFINITY)
   await expect(imageGeneration).toHaveScreenshot('agent-image-generation-loading.png')
-  await toolGroup.getByTestId('ai-tool-group-toggle').click()
-  await expect(panel.getByTestId('ai-tool-call')).toHaveCount(5)
   await expect(panel.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Reject' })).toHaveCount(0)
   await expect(panel.getByTestId('ai-tool-call').filter({ hasText: 'Read' })).toBeVisible()
@@ -822,7 +1083,10 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   expect(
     await timeline.evaluate((element) => {
       const style = getComputedStyle(element)
-      return { borderLeftWidth: style.borderLeftWidth, paddingLeft: style.paddingLeft }
+      return {
+        borderLeftWidth: style.borderLeftWidth,
+        paddingLeft: style.paddingLeft
+      }
     })
   ).toEqual({ borderLeftWidth: '0px', paddingLeft: '0px' })
   const screenshotTool = panel.getByTestId('ai-tool-call').filter({ hasText: 'verify' })
@@ -853,7 +1117,7 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await panel.getByRole('button', { name: 'Stop response' }).click()
   await expect.poll(() => stopAttempts).toBe(1)
   await expect(panel.getByTestId('ai-conversation-status')).toHaveCount(0)
-  await expect(durationDivider).toContainText('Worked for 2m 0s')
+  await expect(durationDivider).toContainText('Thought for 2m 0s')
   await expect(imageGeneration).toHaveAttribute('data-state', 'success')
   await expect(imageGeneration.getByAltText('Generated enamel illustration')).toBeVisible()
   await expect(imageGeneration).not.toContainText('Image created')
@@ -915,16 +1179,15 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await expect(imageEditor).toHaveCount(0)
   await expect.poll(() => imageEditHandoffs).toHaveLength(1)
   expect(imageEditHandoffs[0]?.displayPrompt).toContain('Make this edge softer')
-  expect(imageEditHandoffs[0]?.message).toContain('Edit the attached generated image')
+  expect(imageEditHandoffs[0]?.message).toContain('Edit the attached image')
   expect(imageEditHandoffs[0]?.message).toContain(
     'Preserve its alpha channel and keep the background transparent.'
   )
   expect(imageEditHandoffs[0]?.message).toContain('Do not flatten it onto white, black')
   expect(imageEditHandoffs[0]?.message).toContain('Keep alpha.')
-  await expect(panel.getByTestId('ai-reasoning')).toHaveCount(0)
   await durationDivider.click()
-  await expect(panel.getByTestId('ai-reasoning')).toHaveAttribute('data-state', 'complete')
-  await panel.getByTestId('ai-tool-group').getByTestId('ai-tool-group-toggle').click()
+  await expect(panel.getByTestId('ai-commentary')).toHaveText('Checked the scoped files.')
+  await panel.getByTestId('ai-tool-group').first().getByTestId('ai-tool-group-toggle').click()
   await expect(
     panel.getByTestId('ai-tool-call').and(page.locator('[data-state="success"]'))
   ).toHaveCount(3)
@@ -947,7 +1210,9 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
     )
     .toBeLessThan(3)
 
-  await expect(panel.getByTestId('ai-conversation-status')).toHaveCount(0, { timeout: 4_000 })
+  await expect(panel.getByTestId('ai-conversation-status')).toHaveCount(0, {
+    timeout: 4_000
+  })
 
   const composer = panel.getByRole('textbox', { name: 'Follow up' })
   await composer.fill('First line')
@@ -1102,4 +1367,69 @@ test('shows one video generation card and opens the completed clip in a viewer',
   await expect(viewer.locator('video')).toHaveAttribute('controls', '')
   await viewer.getByRole('button', { name: 'Close video viewer' }).click()
   await expect(viewer).toHaveCount(0)
+})
+
+test('does not jump the sidebar chat when menus open or a new chat starts', async ({ page }) => {
+  await mockThreads(page, [worker(11)])
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 11').click()
+  await expect(conversation.getByTestId('agent-selected-header')).toContainText(
+    'Human task title 11'
+  )
+
+  async function chromeGeometry() {
+    return conversation.evaluate((root) => {
+      const header = root.querySelector('[data-test-id="agent-selected-header"]')
+      const composer = root.querySelector('[data-test-id="ai-prompt-input"]')
+      const viewport = root.querySelector('[data-test-id="ai-conversation-viewport"]')
+      if (
+        !(header instanceof HTMLElement) ||
+        !(composer instanceof HTMLElement) ||
+        !(viewport instanceof HTMLElement)
+      ) {
+        throw new Error('missing chat chrome')
+      }
+      const scrolled: Array<{ id: string | null; scrollTop: number }> = []
+      for (
+        let node: HTMLElement | null = root;
+        node instanceof HTMLElement;
+        node = node.parentElement
+      ) {
+        if (node.scrollTop !== 0) {
+          scrolled.push({ id: node.getAttribute('data-test-id'), scrollTop: node.scrollTop })
+        }
+      }
+      return {
+        composerY: Math.round(composer.getBoundingClientRect().top),
+        headerY: Math.round(header.getBoundingClientRect().top),
+        scrolled,
+        viewportY: Math.round(viewport.getBoundingClientRect().top)
+      }
+    })
+  }
+
+  const before = await chromeGeometry()
+  expect(before.scrolled).toEqual([])
+
+  await conversation.getByTestId('agent-model-trigger').click()
+  await expect(page.getByTestId('agent-model-menu')).toBeVisible()
+  expect(await chromeGeometry()).toEqual(before)
+  await page.keyboard.press('Escape')
+
+  await conversation.getByTestId('ai-prompt-attach').click()
+  await expect(page.getByTestId('ai-prompt-attach-menu')).toBeVisible()
+  expect(await chromeGeometry()).toEqual(before)
+  await page.keyboard.press('Escape')
+
+  await conversation.getByTestId('agent-selected-new').click()
+  await expect(conversation.getByRole('textbox', { name: 'New task' })).toBeVisible()
+  const afterNew = await chromeGeometry()
+  expect(afterNew.headerY).toBe(before.headerY)
+  expect(afterNew.composerY).toBe(before.composerY)
+  expect(afterNew.viewportY).toBe(before.viewportY)
+  expect(afterNew.scrolled).toEqual([])
 })

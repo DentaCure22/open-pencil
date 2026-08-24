@@ -65,25 +65,20 @@ openpencil eval design.fig -c "figma.currentPage.name = 'Updated'" -o updated.fi
 cat transform.js | openpencil eval design.fig --stdin --write
 ```
 
-## Live and persisted Board automation
+## Live Board controls
 
-Live-app `eval` is disabled. Use the guarded Board namespace for exact-target automation:
+Live-app `eval` is disabled. The Board CLI only reads live presence, moves the camera, or changes
+appearance:
 
 ```sh
-openpencil board list --limit 10 --json
-openpencil board context --workspace-id <workspace> --page-id <page> --json
-openpencil board search "prior pricing work" --limit 10 --json
-openpencil board get 0:35 --json
-openpencil board ls --json
-openpencil board nearby 0:35 --json
-openpencil board create --name "Agent Sandbox" --request-id <stable-id> --json
+openpencil board where --json
+openpencil board go "Agent Sandbox" --json
+openpencil board theme dark --json
 ```
 
-Persisted local authority supports list, context, page creation, and exact saved-target resolution
-without an open editor. `board create` automatically uses the sole persisted workspace/document;
-optional target flags pin and validate it, and ambiguity fails before mutation. An authority-pinned
-`board open` queues a short-lived exact page switch for
-the next matching editor; it does not require or imply pixel proof.
+Persisted Board scripting uses ordinary file tools. Resolve IDs from `workspace.index.jsonl`, edit
+the exact records in `workspace.json`, then re-read the saved result. No Board-specific build,
+change, create, or mutation-handshake command is provided.
 
 ## Output
 

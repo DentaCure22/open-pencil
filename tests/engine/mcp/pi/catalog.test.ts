@@ -153,4 +153,11 @@ describe('Pi model catalog', () => {
       model: 'cursor/composer-2.5-fast'
     })
   })
+
+  test('never lists the built-in xAI API slot', () => {
+    const models = parsePiListModels(LISTED, {
+      enabledModels: ['xai/grok-4.6:high', 'xai-auth/grok-4.6:high']
+    })
+    expect(models.map((model) => model.id)).toEqual(['xai-auth/grok-4.6'])
+  })
 })

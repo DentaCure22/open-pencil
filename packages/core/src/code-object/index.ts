@@ -6,6 +6,7 @@ export {
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument,
   DEFAULT_CODE_OBJECT_SURFACE,
+  isCodeObjectKind,
   isKnownCodeObjectComponent,
   KNOWN_CODE_OBJECT_COMPONENTS,
   normalizeCodeObjectSurface,

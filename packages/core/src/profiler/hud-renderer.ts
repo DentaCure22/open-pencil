@@ -153,7 +153,12 @@ export class HudRenderer {
     canvas.drawText(`Cache: ${cacheStatus}`, col2, y, this.textPaint, this.hudFont)
     y += LINE_HEIGHT
 
-    const pictureLabel = stats.scenePictureMode === 'record' ? 'record' : 'picture'
+    const pictureLabel =
+      stats.scenePictureMode === 'record'
+        ? 'record'
+        : stats.scenePictureMode === 'preview'
+          ? 'preview'
+          : 'picture'
     const pictureTime =
       stats.scenePictureMode === 'record'
         ? stats.scenePictureRecordTime

@@ -124,8 +124,9 @@ async function createStdioClient(wsPort: number) {
     args: ['packages/mcp/src/stdio.ts'],
     env: {
       ...process.env,
-      WS_PORT: String(wsPort),
-      PATH: process.env.PATH ?? ''
+      OPENPENCIL_MCP_TOOL_SEARCH: '0',
+      PATH: process.env.PATH ?? '',
+      WS_PORT: String(wsPort)
     },
     stderr: 'pipe'
   })

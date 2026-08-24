@@ -6,7 +6,6 @@ import path from 'node:path'
 import { LocalWorkspaceAuthorityStore } from '@open-pencil/mcp/local-workspace-authority'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
-import { createBoardPage } from '#cli/commands/boards'
 import {
   createLocalAuthorityRpcClient,
   isLocalAuthorityRpc,
@@ -36,14 +35,16 @@ afterEach(async () => {
 })
 
 describe('direct local Board authority client', () => {
-  test('routes persisted Board work directly but keeps live presentation on the service', () => {
-    expect(isLocalAuthorityRpc('board_build', {})).toBe(true)
+  test('routes persisted Board reads directly but keeps live presentation on the service', () => {
+    expect(isLocalAuthorityRpc('board_context', {})).toBe(true)
+    expect(isLocalAuthorityRpc('board_read', {})).toBe(true)
     expect(isLocalAuthorityRpc('trace_get_gesture', { latest: true })).toBe(true)
-    expect(isLocalAuthorityRpc('board_present', {})).toBe(false)
     expect(isLocalAuthorityRpc('trace_query', {})).toBe(true)
+    expect(isLocalAuthorityRpc('board_present', {})).toBe(false)
     expect(isLocalAuthorityRpc('board_context', { target: 'current_visible' })).toBe(false)
-    expect(isLocalAuthorityRpc('board_build', {})).toBe(true)
-    expect(isLocalAuthorityRpc('board_build', { runtime_instance_id: 'runtime:live' })).toBe(true)
+    expect(() => isLocalAuthorityRpc('board_build', {})).toThrow(
+      'rpc_execution_surface_unclassified'
+    )
   })
 
   test('fails closed when persisted authority is unavailable', async () => {
@@ -51,51 +52,12 @@ describe('direct local Board authority client', () => {
     roots.push(root)
     const client = createLocalAuthorityRpcClient({ root })
 
-    await expect(sendLocalAuthorityRpcEnvelope(client, 'board_build')).rejects.toThrow(
+    await expect(sendLocalAuthorityRpcEnvelope(client, 'board_context')).rejects.toThrow(
       'persisted_authority_unavailable:'
     )
   })
 
-  test('creates a durable Board through the sole persisted authority without target flags', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'openpencil-cli-create-authority-'))
-    roots.push(root)
-    const workspaceId = 'workspace-create-cli'
-    const graph = new SceneGraph()
-    const sourcePage = graph.getPages()[0]
-    const store = new LocalWorkspaceAuthorityStore({ preferredWorkspaceId: workspaceId, root })
-    await store.initialize({
-      document: savedDocument(graph),
-      requestId: 'seed-create-cli',
-      sourceWorkspaceId: workspaceId
-    })
-    const client = createLocalAuthorityRpcClient({ preferredWorkspaceId: workspaceId, root })
-
-    const result = await createBoardPage(
-      { name: 'One Command Board', 'request-id': 'request:one-command-create' },
-      (command, args) =>
-        sendLocalAuthorityRpcEnvelope<Record<string, unknown>>(client, command, args)
-    )
-
-    expect(result).toMatchObject({
-      source_page_id: sourcePage.id,
-      status: 'created',
-      target: { pageName: 'One Command Board', workspaceId }
-    })
-    const reopened = createLocalAuthorityRpcClient({ preferredWorkspaceId: workspaceId, root })
-    await expect(reopened.send<Record<string, unknown>>('list_documents')).resolves.toMatchObject({
-      result: {
-        documents: [
-          {
-            pages: expect.arrayContaining([expect.objectContaining({ name: 'One Command Board' })]),
-            workspace_id: workspaceId
-          }
-        ]
-      }
-    })
-    expect((await store.head())?.revision).toBe(2)
-  })
-
-  test('reads the latest persisted Trace without an HTTP or browser runtime', async () => {
+  test('reads persisted Board and Trace state without an HTTP or browser runtime', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'openpencil-cli-authority-'))
     roots.push(root)
     const workspaceId = 'workspace-direct-cli'
@@ -110,26 +72,28 @@ describe('direct local Board authority client', () => {
     })
     const head = await store.head()
     if (!head) throw new Error('Expected initialized authority head')
-    const gesture = {
-      boardOrigin: {
-        contentDocumentId: head.identity.documentId,
-        pageId: page.id,
-        workspaceId
-      },
-      candidates: {
-        count: 1,
-        items: [{ stableId: card.id }],
-        primaryTargetId: card.id,
-        truncated: false
-      },
-      capturedAt: '2026-08-02T12:00:00.000Z',
-      contract: 'trace-gesture-agent/v1',
-      geometry: { kind: 'focus', pageRegion: { height: 100, width: 100, x: 0, y: 0 } },
-      gestureId: 'gesture:direct-cli',
-      sessionId: 'session:direct-cli'
-    }
+    const capturedAt = '2026-08-02T12:00:00.000Z'
     await store.recordTraceSession({
-      gestures: [gesture],
+      gestures: [
+        {
+          boardOrigin: {
+            contentDocumentId: head.identity.documentId,
+            pageId: page.id,
+            workspaceId
+          },
+          candidates: {
+            count: 1,
+            items: [{ stableId: card.id }],
+            primaryTargetId: card.id,
+            truncated: false
+          },
+          capturedAt,
+          contract: 'trace-gesture-agent/v1',
+          geometry: { kind: 'focus', pageRegion: { height: 100, width: 100, x: 0, y: 0 } },
+          gestureId: 'gesture:direct-cli',
+          sessionId: 'session:direct-cli'
+        }
+      ],
       session: {
         contextDraft: [],
         durationMs: 1_000,
@@ -142,105 +106,37 @@ describe('direct local Board authority client', () => {
             text: 'Direct CLI Trace'
           }
         ],
-        id: gesture.sessionId,
-        scope: {
-          documentId: head.identity.documentId,
-          pageId: page.id,
-          workspaceId
-        },
-        startedAt: gesture.capturedAt
+        id: 'session:direct-cli',
+        scope: { documentId: head.identity.documentId, pageId: page.id, workspaceId },
+        startedAt: capturedAt
       },
       summary: {
         durationMs: 1_000,
         eventCount: 1,
         evidenceCount: 0,
-        id: gesture.sessionId,
-        scope: {
-          documentId: head.identity.documentId,
-          pageId: page.id,
-          workspaceId
-        },
+        id: 'session:direct-cli',
+        scope: { documentId: head.identity.documentId, pageId: page.id, workspaceId },
         searchTerms: ['direct', 'cli', 'trace'],
-        startedAt: gesture.capturedAt,
+        startedAt: capturedAt,
         title: 'Direct CLI Trace',
-        updatedAt: gesture.capturedAt
+        updatedAt: capturedAt
       }
     })
 
     const client = createLocalAuthorityRpcClient({ preferredWorkspaceId: workspaceId, root })
-    expect(client.isReady()).toBe(true)
-    const response = await client.send<Record<string, unknown>>('trace_get_gesture', {
-      latest: true
+    const context = await client.send<Record<string, unknown>>('board_context', {
+      page_id: page.id,
+      workspace_id: workspaceId
     })
-
-    expect(response.result).toMatchObject({
-      gesture: {
-        boardOrigin: { runtimeInstanceId: `local-authority:${head.authorityId}` },
-        candidates: { primaryTargetId: card.id },
-        gestureId: 'gesture:direct-cli'
-      },
-      status: 'matched'
-    })
+    expect(context.result).not.toHaveProperty('board_build_base')
+    expect(context.result).not.toHaveProperty('connect_objects_base')
 
     await expect(
       sendLocalAuthorityRpcEnvelope(client, 'trace_query', { query: 'Direct CLI Trace' })
     ).resolves.toMatchObject({
       result: {
-        matches: [{ sessionId: gesture.sessionId }],
+        matches: [{ sessionId: 'session:direct-cli' }],
         status: 'matched'
-      }
-    })
-
-    const context = await sendLocalAuthorityRpcEnvelope<Record<string, unknown>>(
-      client,
-      'board_context',
-      {
-        content_document_id: head.identity.documentId,
-        document_id: head.identity.documentId,
-        page_id: page.id,
-        runtime_instance_id: `local-authority:${head.authorityId}`,
-        workspace_id: workspaceId
-      }
-    )
-    const base = context.result.board_build_base as Record<string, unknown>
-    let refusal: unknown
-    try {
-      await sendLocalAuthorityRpcEnvelope(client, 'board_build', {
-        ...base,
-        intent: 'Reject before mutation',
-        plan: { contract: 'unsupported-board-plan' },
-        request_id: 'request:direct-cli-refusal',
-        trace_id: gesture.gestureId
-      })
-    } catch (error) {
-      refusal = error
-    }
-
-    expect(refusal).toBeInstanceOf(Error)
-    expect(refusal).toMatchObject({
-      name: 'LocalWorkspaceBoardRpcError',
-      result: {
-        current_revision: head.revision,
-        failure_scope: 'pre_mutation',
-        status: { command: 'refused', mutation: 'not_applied' },
-        target: {
-          content_document_id: head.identity.documentId,
-          document_id: head.identity.documentId,
-          page_id: page.id,
-          page_name: page.name,
-          runtime_instance_id: `local-authority:${head.authorityId}`,
-          workspace_id: workspaceId
-        },
-        trace: { gesture_id: gesture.gestureId }
-      },
-      target: {
-        boardRevision: head.revision,
-        contentDocumentId: head.identity.documentId,
-        documentId: head.identity.documentId,
-        pageId: page.id,
-        pageName: page.name,
-        runtimeInstanceId: `local-authority:${head.authorityId}`,
-        workspaceId
       }
     })
     expect((await store.head())?.revision).toBe(head.revision)

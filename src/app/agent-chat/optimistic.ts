@@ -91,6 +91,13 @@ export function stopOptimisticConversation(threadId: string) {
   if (pending) pending.state = 'stopped'
 }
 
+export function clearOptimisticConversation(threadId: string) {
+  const pending = conversations[threadId]
+  if (!pending) return
+  releasePreviewUrls(pending)
+  Reflect.deleteProperty(conversations, threadId)
+}
+
 export function optimisticConversation(threadId: string): OptimisticConversation | undefined {
   return conversations[threadId]
 }

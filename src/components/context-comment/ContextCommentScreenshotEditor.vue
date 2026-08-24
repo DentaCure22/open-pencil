@@ -38,9 +38,12 @@ const viewportInsets = ref(editorViewportInsets())
 const hostWidth = ref(window.innerWidth)
 
 const draft = computed(() => contextCommentState.draft)
-const isAgentImage = computed(() => draft.value?.destination?.kind === 'agent-conversation')
+const isAgentImage = computed(
+  () => draft.value?.imageEdit || draft.value?.destination?.kind === 'agent-conversation'
+)
 const modelScope = computed(
-  () => draft.value?.destination?.modelScope ?? CONTEXT_COMMENT_MODEL_SCOPE
+  () =>
+    draft.value?.modelScope ?? draft.value?.destination?.modelScope ?? CONTEXT_COMMENT_MODEL_SCOPE
 )
 const completedAnnotations = computed(
   () => draft.value?.annotations.filter((annotation) => annotation.comment.trim()) ?? []
@@ -204,7 +207,9 @@ function removeCapture() {
 async function submit() {
   const current = draft.value
   if (!current || !canSend.value) return
-  const agentImage = current.destination?.kind === 'agent-conversation'
+  const agentImage = Boolean(
+    current.imageEdit || current.destination?.kind === 'agent-conversation'
+  )
   finishEditingAnnotation()
   if (
     !current.text.trim() &&

@@ -3,6 +3,9 @@ import type {
   AgentConversationThread
 } from '#mcp/agent-router/contracts'
 
+import { applyCompactionStall } from './compaction-stall'
+import { compactAgentThreadMemory } from './thread-memory'
+
 type MutableGenerationTiming = {
   firstTokenAt: number | null
   generatedCharacters: number
@@ -125,6 +128,39 @@ export function applyMeasuredAntigravityThroughput(
   return true
 }
 
+const DEFAULT_ANTIGRAVITY_CONTEXT_WINDOW = 1_000_000
+
+export function applyMeasuredAntigravityUsage(
+  thread: AgentConversationThread,
+  usage: { cacheRead: number; input: number; output: number; reasoning?: number },
+  generationElapsedMs: number
+): boolean {
+  if (!isAntigravityThread(thread)) return false
+  const input = Math.max(0, usage.input)
+  const cacheRead = Math.max(0, usage.cacheRead)
+  const output = Math.max(0, usage.output)
+  const prompt = input + cacheRead
+  const tokens = prompt + output
+  if (tokens <= 0) return false
+  const contextWindow = thread.contextUsage?.contextWindow ?? DEFAULT_ANTIGRAVITY_CONTEXT_WINDOW
+  const tokensPerSecond =
+    Number.isFinite(generationElapsedMs) && generationElapsedMs > 0 && output > 0
+      ? percentage((output * 1_000) / generationElapsedMs)
+      : undefined
+  thread.contextUsage = {
+    ...baseContextUsage(thread, contextWindow),
+    ...(prompt > 0 ? { cacheHitPercent: percentage((cacheRead / prompt) * 100) } : {}),
+    percent: percentage((tokens / contextWindow) * 100),
+    tokens,
+    ...(tokensPerSecond !== undefined
+      ? { tokensPerSecond, tokensPerSecondBasis: 'streamed-output' as const }
+      : {})
+  }
+  delete thread.contextUsage.tokensEstimated
+  delete thread.contextUsage.tokensPerSecondEstimated
+  return true
+}
+
 function usageContext(
   usage: Record<string, unknown>,
   contextWindow: number
@@ -160,6 +196,7 @@ function retainedContextUsage(
   if (!usage) return {}
   const retained: Partial<AgentConversationContextUsage> = {}
   if (usage.cacheHitPercent !== undefined) retained.cacheHitPercent = usage.cacheHitPercent
+  if (usage.compactionStalled) retained.compactionStalled = true
   if (usage.lastCompactedAt) retained.lastCompactedAt = usage.lastCompactedAt
   if (usage.tokensEstimated !== undefined) retained.tokensEstimated = usage.tokensEstimated
   if (usage.tokensPerSecond !== undefined) retained.tokensPerSecond = usage.tokensPerSecond
@@ -228,6 +265,7 @@ export function applyPiSessionStats(thread: AgentConversationThread, value: unkn
   if (isAntigravityThread(thread) && (tokens ?? 0) === 0) {
     hydrateEstimatedAntigravityTelemetry(thread)
   }
+  applyCompactionStall(thread)
   return true
 }
 
@@ -253,6 +291,14 @@ function applyCompactionTelemetry(
       percent: completed ? null : thread.contextUsage.percent,
       tokens: completed ? null : thread.contextUsage.tokens,
       ...(completed ? { lastCompactedAt: new Date(now).toISOString() } : {})
+    }
+    if (completed) compactAgentThreadMemory(thread)
+    if (completed) {
+      applyCompactionStall(thread, {
+        estimatedTokensAfter: isRecord(event.result)
+          ? finiteNumber(event.result.estimatedTokensAfter)
+          : undefined
+      })
     }
     return true
   }
@@ -401,7 +447,9 @@ export function applyPiEventTelemetry(
     return applyMessageUpdateTelemetry(thread, timing, event, now)
   }
   if (event.type === 'message_end') {
-    return applyAssistantEndTelemetry(thread, timing, event, now)
+    const applied = applyAssistantEndTelemetry(thread, timing, event, now)
+    if (applied) applyCompactionStall(thread)
+    return applied
   }
   return applyCompactionTelemetry(thread, timing, event, now)
 }

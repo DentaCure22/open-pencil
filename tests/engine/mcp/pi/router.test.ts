@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import { FALLBACK_PI_MODELS } from '#mcp/pi/catalog'
 import { PiAgentRouter } from '#mcp/pi/router'
+import { readUsageTurns } from '#mcp/pi/usage-ledger'
 
 type PiStub = {
   commandLog: string
@@ -40,6 +41,7 @@ async function createPiStub(input: {
   events?: Array<Record<string, unknown>>
   exitAfterPrompt?: boolean
   holdUntilSteer?: boolean
+  omitPromptAck?: boolean
   reportStreamingAfterPrompt?: boolean
   streamBeforeSteer?: string
 }): Promise<PiStub> {
@@ -54,6 +56,7 @@ const events = ${JSON.stringify(input.events ?? [])}
 const dynamicReplies = ${JSON.stringify(input.dynamicReplies === true)}
 const exitAfterPrompt = ${JSON.stringify(input.exitAfterPrompt === true)}
 const holdUntilSteer = ${JSON.stringify(input.holdUntilSteer === true)}
+const omitPromptAck = ${JSON.stringify(input.omitPromptAck === true)}
 const reportStreamingAfterPrompt = ${JSON.stringify(input.reportStreamingAfterPrompt === true)}
 const streamBeforeSteer = ${JSON.stringify(input.streamBeforeSteer ?? '')}
 const commandLog = ${JSON.stringify(commandLog)}
@@ -93,7 +96,7 @@ lines.on('line', (line) => {
   if (command.type === 'get_entries') {
     response.data = { entries: [], leafId: null }
   }
-  send(response)
+  if (!(command.type === 'prompt' && omitPromptAck)) send(response)
   if (command.type === 'steer' && holdUntilSteer) {
     send({
       assistantMessageEvent: { contentIndex: 0, delta: 'Taking the correction. ', type: 'text_delta' },
@@ -181,6 +184,53 @@ async function waitForCondition(condition: () => boolean): Promise<void> {
 }
 
 describe('PiAgentRouter completion', () => {
+  test('activates the OpenPencil skill for a newly launched Board worker', async () => {
+    const stub = await createPiStub({ dynamicReplies: true })
+    const userMcpConfig = path.join(stub.root, 'user-mcp.json')
+    await writeFile(
+      userMcpConfig,
+      JSON.stringify({
+        mcpServers: {
+          openpencil: { command: '/opt/openpencil/dispatch' }
+        }
+      })
+    )
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      mcpConfigPath: userMcpConfig,
+      models: FALLBACK_PI_MODELS,
+      sessionDir: stub.root,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      const receipt = await router.dispatch({
+        displayPrompt: 'Make a cool object on the Board.',
+        effort: 'high',
+        model: 'xai-auth/grok-4.6',
+        prompt: 'Make a cool object on the Board.',
+        toolScope: 'board-worker'
+      })
+      await router.waitForJob(receipt.jobId, 3_000)
+      const commands = (await readFile(stub.commandLog, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as LoggedPiPrompt)
+      const thread = router.conversation(receipt.threadId)
+
+      expect(commands.find((command) => command.type === 'prompt')?.message).toBe(
+        '/skill:openpencil Make a cool object on the Board.'
+      )
+      expect(thread?.toolScope).toBe('board-worker')
+      expect(thread?.messages.find((message) => message.role === 'user')?.text).toBe(
+        'Make a cool object on the Board.'
+      )
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
   test('holds a Messages tool call until the visible approval response arrives', async () => {
     const stub = await createPiStub({ approvalRequest: messageApprovalRequest() })
     const router = new PiAgentRouter({
@@ -274,6 +324,61 @@ describe('PiAgentRouter completion', () => {
     }
   })
 
+  test('supersedes a pending approval before steering with a newer user message', async () => {
+    const stub = await createPiStub({ approvalRequest: messageApprovalRequest('message-steer') })
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      const receipt = await dispatch(router)
+      await waitForCondition(
+        () => router.conversation(receipt.threadId)?.pendingUiRequests?.length === 1
+      )
+
+      await router.steer(receipt.threadId, 'Use the newer wording instead.')
+
+      const commands = (await readFile(stub.commandLog, 'utf8'))
+        .trim()
+        .split('\n')
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              cancelled?: boolean
+              message?: string
+              type: string
+              value?: string
+            }
+        )
+      const cancelledIndex = commands.findIndex(
+        (command) => command.type === 'extension_ui_response' && command.cancelled === true
+      )
+      const steerIndex = commands.findIndex(
+        (command) =>
+          command.type === 'steer' && command.message === 'Use the newer wording instead.'
+      )
+
+      expect(cancelledIndex).toBeGreaterThanOrEqual(0)
+      expect(steerIndex).toBeGreaterThan(cancelledIndex)
+      expect(commands.some((command) => command.value === 'Allow once')).toBe(false)
+      expect(router.conversation(receipt.threadId)?.pendingUiRequests).toBeUndefined()
+      expect(
+        router
+          .conversation(receipt.threadId)
+          ?.messages.filter((message) => message.role === 'user')
+          .at(-1)
+      ).toMatchObject({
+        role: 'user',
+        text: 'Use the newer wording instead.'
+      })
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
   test('reads bounded provider usage through the installed Pi command', async () => {
     const stub = await createPiStub({ events: [] })
     const router = new PiAgentRouter({
@@ -325,6 +430,47 @@ describe('PiAgentRouter completion', () => {
         'worker-6'
       ])
       expect(new Set(workerIds)).toHaveLength(6)
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('keeps the turn running when Pi is slow to acknowledge prompt', async () => {
+    const stub = await createPiStub({
+      events: [
+        {
+          message: {
+            content: [{ text: 'Hello. What do you want to work on?', type: 'text' }],
+            role: 'assistant',
+            stopReason: 'stop'
+          },
+          type: 'message_end'
+        },
+        { type: 'agent_settled' }
+      ],
+      omitPromptAck: true
+    })
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      const receipt = await dispatch(router)
+      const job = await router.waitForJob(receipt.jobId, 3_000)
+      const thread = router.conversation(receipt.threadId)
+
+      expect(receipt.state).toBe('running')
+      expect(job).toMatchObject({
+        response: 'Hello. What do you want to work on?',
+        state: 'completed'
+      })
+      expect(thread).toMatchObject({
+        recentUpdate: 'Hello. What do you want to work on?',
+        state: 'completed'
+      })
     } finally {
       router.close()
       await rm(stub.root, { force: true, recursive: true })
@@ -647,6 +793,208 @@ describe('PiAgentRouter completion', () => {
       expect(commands.some((command) => command.type === 'get_state')).toBe(true)
       expect(commands.some((command) => command.type === 'abort')).toBe(true)
     } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('starts a new session from a warm Pi process without empty-session handshake', async () => {
+    const stub = await createPiStub({
+      events: [
+        {
+          message: {
+            content: [{ text: 'Warm session is ready.', type: 'text' }],
+            role: 'assistant',
+            stopReason: 'stop'
+          },
+          type: 'message_end'
+        },
+        { type: 'agent_settled' }
+      ]
+    })
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      warmPoolSize: 1,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      expect(await router.waitForWarmProcess()).toBe(true)
+      const receipt = await dispatch(router)
+      const job = await router.waitForJob(receipt.jobId, 3_000)
+      const commands = (await readFile(stub.commandLog, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string })
+      const thread = router.conversation(receipt.threadId)
+
+      const promptIndex = commands.findIndex((command) => command.type === 'prompt')
+      const entriesIndex = commands.findIndex((command) => command.type === 'get_entries')
+
+      expect(job).toMatchObject({ state: 'completed' })
+      expect(thread?.sessionId).toMatch(/^stub-session$/)
+      expect(promptIndex).toBeGreaterThanOrEqual(0)
+      expect(commands.some((command) => command.type === 'get_session_stats')).toBe(false)
+      expect(commands.some((command) => command.type === 'set_model')).toBe(false)
+      expect(commands.some((command) => command.type === 'set_thinking_level')).toBe(false)
+      expect(entriesIndex).toBeGreaterThan(promptIndex)
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('keeps a second new session on a freshly warmed process', async () => {
+    const stub = await createPiStub({ dynamicReplies: true })
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      warmPoolSize: 1,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      expect(await router.waitForWarmProcess()).toBe(true)
+      const first = await dispatch(router)
+      const firstJob = await router.waitForJob(first.jobId, 3_000)
+      expect(await router.waitForWarmProcess()).toBe(true)
+      const second = await router.dispatch({
+        effort: 'high',
+        model: 'xai-auth/grok-4.6',
+        prompt: 'Start another bounded task.'
+      })
+      const secondJob = await router.waitForJob(second.jobId, 3_000)
+      const firstPid = firstJob?.response.split(':')[0]
+      const secondPid = secondJob?.response.split(':')[0]
+
+      expect(firstJob).toMatchObject({ state: 'completed' })
+      expect(secondJob).toMatchObject({ state: 'completed' })
+      expect(first.threadId).not.toBe(second.threadId)
+      expect(firstPid).toBeTruthy()
+      expect(secondPid).toBeTruthy()
+      expect(secondPid).not.toBe(firstPid)
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('appends measured cache and usage after a settled turn', async () => {
+    const stub = await createPiStub({
+      events: [
+        {
+          message: {
+            content: [{ text: 'Cached follow-up.', type: 'text' }],
+            role: 'assistant',
+            stopReason: 'stop',
+            usage: {
+              cacheRead: 28_800,
+              cacheWrite: 0,
+              input: 145,
+              output: 12,
+              reasoning: 4,
+              totalTokens: 28_957
+            }
+          },
+          type: 'message_end'
+        },
+        { type: 'agent_settled' }
+      ]
+    })
+    const ledgerPath = path.join(stub.root, 'turns.jsonl')
+    const previous = process.env.OPENPENCIL_MODEL_METER_LOG
+    process.env.OPENPENCIL_MODEL_METER_LOG = ledgerPath
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      workspaceRoot: stub.root
+    })
+
+    try {
+      const receipt = await dispatch(router)
+      await router.waitForJob(receipt.jobId, 3_000)
+      const turns = await readUsageTurns(ledgerPath)
+      expect(turns).toHaveLength(1)
+      expect(turns[0]).toMatchObject({
+        cacheHitPercent: 99.5,
+        cacheRead: 28_800,
+        input: 145,
+        model: 'grok-4.6',
+        provider: 'xai-auth',
+        source: 'live',
+        turnIndex: 1,
+        usageSource: 'pi-event'
+      })
+    } finally {
+      if (previous === undefined) delete process.env.OPENPENCIL_MODEL_METER_LOG
+      else process.env.OPENPENCIL_MODEL_METER_LOG = previous
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('writes measured Antigravity cacheRead from the sqlite reader', async () => {
+    const stub = await createPiStub({
+      events: [
+        {
+          message: {
+            content: [{ text: 'Measured Antigravity turn.', type: 'text' }],
+            role: 'assistant',
+            stopReason: 'stop',
+            usage: { cacheRead: 0, cacheWrite: 0, input: 0, output: 0, totalTokens: 0 }
+          },
+          type: 'message_end'
+        },
+        { type: 'agent_settled' }
+      ]
+    })
+    const ledgerPath = path.join(stub.root, 'turns.jsonl')
+    const previous = process.env.OPENPENCIL_MODEL_METER_LOG
+    process.env.OPENPENCIL_MODEL_METER_LOG = ledgerPath
+    const router = new PiAgentRouter({
+      captureAntigravityUsageCursor: async () => ({
+        conversationId: 'agy-conversation',
+        maxGenerationIndex: 0
+      }),
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      readAntigravityTurnUsage: async () => ({
+        cacheRead: 20_331,
+        generation: 80,
+        input: 4_207,
+        output: 80,
+        reasoning: 20
+      }),
+      workspaceRoot: stub.root
+    })
+
+    try {
+      const receipt = await router.dispatch({
+        effort: 'high',
+        model: 'antigravity/gemini-3-7-flash',
+        prompt: 'Finish the bounded task.'
+      })
+      await router.waitForJob(receipt.jobId, 3_000)
+      const conversation = router.conversation(receipt.threadId)
+      expect(conversation?.contextUsage).toMatchObject({
+        cacheHitPercent: 82.9,
+        tokens: 24_618
+      })
+      const turns = await readUsageTurns(ledgerPath)
+      expect(turns).toHaveLength(1)
+      expect(turns[0]).toMatchObject({
+        cacheHitPercent: 82.9,
+        cacheRead: 20_331,
+        input: 4_207,
+        model: 'gemini-3-7-flash',
+        provider: 'antigravity',
+        source: 'live',
+        usageSource: 'agy-sqlite'
+      })
+    } finally {
+      if (previous === undefined) delete process.env.OPENPENCIL_MODEL_METER_LOG
+      else process.env.OPENPENCIL_MODEL_METER_LOG = previous
       router.close()
       await rm(stub.root, { force: true, recursive: true })
     }

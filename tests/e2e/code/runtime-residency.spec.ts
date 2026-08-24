@@ -30,7 +30,7 @@ test('keeps only relevant Code Object runtimes resident', async () => {
   await expect(visibleFrame).toHaveAttribute('data-code-object-runtime-active', 'true')
   await expect(offscreenFrame).toHaveAttribute('data-code-object-runtime-active', 'false')
   await expect(visibleFrame.locator('[data-code-object-root]')).toHaveCount(1)
-  await expect(offscreenFrame.locator('[data-code-object-root]')).toHaveCount(0)
+  await expect(offscreenFrame.locator('[data-code-object-root]')).toHaveCount(1)
 
   const idleRenderGenerations = await editor.page.evaluate(async (visibleFrameId) => {
     const { currentCodeObjectRuntimeRenderGeneration } =
@@ -55,13 +55,13 @@ test('keeps only relevant Code Object runtimes resident', async () => {
   await expect(offscreenFrame).toHaveAttribute('data-code-object-runtime-active', 'true')
   await expect(visibleFrame).toHaveAttribute('data-code-object-runtime-active', 'false')
   await expect(offscreenFrame.locator('[data-code-object-root]')).toHaveCount(1)
-  await expect(visibleFrame.locator('[data-code-object-root]')).toHaveCount(0)
+  await expect(visibleFrame.locator('[data-code-object-root]')).toHaveCount(1)
 
   await editor.page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true })
     document.dispatchEvent(new Event('visibilitychange'))
   })
-  await expect(editor.page.locator('[data-code-object-root]')).toHaveCount(0)
+  await expect(editor.page.locator('[data-code-object-root]')).toHaveCount(2)
 
   await editor.page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: false })

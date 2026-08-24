@@ -498,7 +498,7 @@ describe('OpenPencil browser RPC runtime routing', () => {
     await expect(
       bridge.sendRpc({
         args: { runtime_instance_id: 'runtime:missing' },
-        command: 'board_change'
+        command: 'board_present'
       })
     ).rejects.toThrow('runtime:missing')
     expect(first.sent.some((message) => message.type === 'request')).toBe(false)

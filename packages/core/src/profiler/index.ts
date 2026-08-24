@@ -1,5 +1,5 @@
 export { RenderProfiler } from './render-profiler'
-export { FrameStats } from './frame/stats'
+export { FrameStats, MAX_COUNTED_FRAME_GAP_MS } from './frame/stats'
 export { GPUTimer } from './gpu-timer'
 export { DrawCallCounter } from './draw-call-counter'
 export { PhaseTimer } from './phase-timer'

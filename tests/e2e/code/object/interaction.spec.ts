@@ -202,3 +202,24 @@ test('uses Space+Arrow for Board navigation when selected or interacting', async
     .poll(() => editor.page.evaluate(() => window.openPencil?.getStore?.().state.zoom))
     .toBe(target.zoom)
 })
+
+test('shows instant hover chrome on an unselected Code Object', async () => {
+  await editor.page.getByTestId('code-object-start').click()
+  const host = editor.page.locator('[data-code-object-mode="design"]').first()
+  const target = editor.page.getByTestId('code-object-design-hit-target')
+  await expect(host).toBeVisible()
+  await expect(target).toBeVisible()
+  await editor.page.evaluate(() => window.openPencil?.getStore?.().select([]))
+  await target.hover()
+  await expect(target).toHaveCSS('outline-style', 'solid')
+  await expect(editor.page.locator('[data-code-object-id]')).toHaveCount(1)
+})
+
+test('clicking a design Code Object still opens it for interaction', async () => {
+  await editor.page.getByTestId('code-object-start').click()
+  const host = editor.page.locator('[data-code-object-mode]').first()
+  await expect(host).toHaveAttribute('data-code-object-mode', 'design')
+  await editor.page.evaluate(() => window.openPencil?.getStore?.().select([]))
+  await editor.page.getByTestId('code-object-design-hit-target').click()
+  await expect(host).toHaveAttribute('data-code-object-mode', 'interact')
+})

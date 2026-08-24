@@ -66,6 +66,7 @@ export const APP_MENU_SCHEMA = [
       },
       { id: 'language', label: 'Language', target: 'browser' },
       { type: 'separator' },
+      { id: 'model-meter', label: 'Cache' },
       { id: 'profiler', label: 'Profiler', checkbox: true, target: 'browser' },
       { id: 'check-updates', label: 'Check for Updates…', target: 'native' },
       {

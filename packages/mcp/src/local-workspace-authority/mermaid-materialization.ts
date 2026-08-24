@@ -2,6 +2,7 @@ import { createMermaidDiagramInGraph, replaceMermaidDiagramInGraph } from '@open
 
 import { readAuthorityBoardDocument, writeAuthorityBoardDocument } from './document'
 import { compileHeadlessMermaidScenes, MermaidSourceValidationError } from './mermaid-compiler'
+import { nodePairs, pluginValue } from './mermaid-presence'
 
 type JsonRecord = Record<string, unknown>
 
@@ -19,34 +20,6 @@ export type MaterializedAuthorityDocument = {
   document: unknown
   invalidOwnerIds: string[]
   ownerIds: string[]
-}
-
-function record(value: unknown): JsonRecord | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : null
-}
-
-function nodePairs(value: unknown): Array<[string, JsonRecord]> | null {
-  const document = record(value)
-  if (!Array.isArray(document?.nodes)) return null
-  const pairs: Array<[string, JsonRecord]> = []
-  for (const entry of document.nodes) {
-    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') return null
-    const node = record(entry[1])
-    if (!node) return null
-    pairs.push([entry[0], node])
-  }
-  return pairs
-}
-
-function pluginValue(node: JsonRecord, key: string): string | null {
-  if (!Array.isArray(node.pluginData)) return null
-  for (const value of node.pluginData) {
-    const entry = record(value)
-    if (entry?.pluginId === 'open-pencil' && entry.key === key && typeof entry.value === 'string') {
-      return entry.value
-    }
-  }
-  return null
 }
 
 function finitePosition(node: JsonRecord, field: 'x' | 'y', ownerId: string): number {

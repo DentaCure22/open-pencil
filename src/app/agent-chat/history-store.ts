@@ -2,19 +2,29 @@ import { useIntervalFn } from '@vueuse/core'
 import { onMounted, onUnmounted, readonly, ref, shallowReadonly, shallowRef } from 'vue'
 
 import {
-  agentConversationMessages,
-  getAgentConversation,
+  getAgentConversationPage,
   listAgentConversations,
+  mapRemoteAgentConversation,
+  nativeAgentConversationMessageId,
   type AgentConversationHistory,
   type AgentConversationThread
 } from './client'
 import { agentHistorySignature } from './history-signature'
 import {
+  applyConversationPage,
+  applyConversationPreviewMetadata,
   mapAgentConversationHistory,
   reconcileAgentConversationHistory,
-  reconcileRetainedConversationMessages,
-  retainedTranscriptNeedsHydrate
+  retainMissingOpenTranscripts,
+  sameAgentConversationHistory
 } from './reconcile'
+import {
+  LIVE_TRANSCRIPT_INTERVAL_MS,
+  liveStreamingThreadIds,
+  nextTranscriptHydrationBatch,
+  resolvePreviewTranscriptSource,
+  scheduleTranscriptHydration
+} from './transcript-hydration'
 
 const POLL_INTERVAL_MS = 2_500
 
@@ -24,67 +34,270 @@ let subscribers = import.meta.hot?.data.agentHistorySubscribers ?? 0
 let inFlight: Promise<void> | null = null
 let historySignature = ''
 const transcriptRetainers = new Map<string, number>()
+const hydratedTranscripts = new Map<string, AgentConversationThread>()
 const hydratedUpdatedAt = new Map<string, string>()
-const hydratedMessageCount = new Map<string, number>()
+const TRANSCRIPT_CACHE_LIMIT = 12
+const olderLoads = new Map<string, Promise<boolean>>()
+let hydrateInFlight: Promise<void> | null = null
+let hydrateAgain = false
+let hydrateIdleHandle: number | null = null
 const { pause: pausePolling, resume: resumePolling } = useIntervalFn(
   () => void refreshAgentConversationHistory(),
   POLL_INTERVAL_MS,
   { immediate: false }
 )
+let liveInFlight: Promise<void> | null = null
+const { pause: pauseLiveStream, resume: resumeLiveStream } = useIntervalFn(
+  () => void refreshLiveTranscripts(),
+  LIVE_TRANSCRIPT_INTERVAL_MS,
+  { immediate: false }
+)
+
+function historyPollingAllowed() {
+  return document?.visibilityState !== 'hidden'
+}
+
+function syncHistoryPolling() {
+  if (subscribers > 0 && historyPollingAllowed()) resumePolling()
+  else pausePolling()
+  syncLiveStreaming()
+}
+
+function retainedRunningThreadIds(): string[] {
+  return liveStreamingThreadIds(history.value?.threads ?? [], transcriptRetainers.keys())
+}
+
+function syncLiveStreaming() {
+  if (subscribers > 0 && historyPollingAllowed() && retainedRunningThreadIds().length) {
+    resumeLiveStream()
+    return
+  }
+  pauseLiveStream()
+}
+
+function rememberHydratedThread(thread: AgentConversationThread): void {
+  hydratedTranscripts.set(thread.id, thread)
+  if (hydratedTranscripts.size <= TRANSCRIPT_CACHE_LIMIT) return
+  for (const id of hydratedTranscripts.keys()) {
+    if (transcriptRetainers.has(id) || id === thread.id) continue
+    hydratedTranscripts.delete(id)
+    hydratedUpdatedAt.delete(id)
+    if (hydratedTranscripts.size <= TRANSCRIPT_CACHE_LIMIT) return
+  }
+}
+
+function rememberAppliedPage(
+  current: AgentConversationThread,
+  page: AgentConversationThread,
+  mode: 'delta' | 'older' | 'tail'
+): AgentConversationThread {
+  const next = applyConversationPage(current, page, mode)
+  rememberHydratedThread(next)
+  return next
+}
 
 function restoreHydratedMessages(
   previous: AgentConversationHistory | null,
   next: AgentConversationHistory
 ): AgentConversationHistory {
-  return mapAgentConversationHistory(previous, next, (current, thread) => {
-    if (current && transcriptRetainers.has(thread.id)) {
-      return {
-        ...thread,
-        messages: reconcileRetainedConversationMessages(current.messages, thread.messages)
-      }
-    }
-    return thread
+  return retainMissingOpenTranscripts(
+    previous,
+    mapAgentConversationHistory(previous, next, (current, thread) => {
+      const source = resolvePreviewTranscriptSource({
+        cached: hydratedTranscripts.get(thread.id),
+        current,
+        retained: transcriptRetainers.has(thread.id)
+      })
+      if (!source) return thread
+      const restored = applyConversationPreviewMetadata(source, thread)
+      rememberHydratedThread(restored)
+      return restored
+    }),
+    new Set([...transcriptRetainers.keys(), ...hydratedTranscripts.keys()])
+  )
+}
+
+function applyPageToHistory(
+  current: AgentConversationHistory,
+  threadId: string,
+  page: AgentConversationThread,
+  mode: 'delta' | 'older' | 'tail'
+): void {
+  const nextThread = applyConversationPage(
+    current.threads.find((thread) => thread.id === threadId) ?? page,
+    page,
+    mode
+  )
+  rememberHydratedThread(nextThread)
+  history.value = reconcileAgentConversationHistory(current, {
+    ...current,
+    threads: current.threads.map((thread) => (thread.id === threadId ? nextThread : thread))
   })
 }
 
-async function hydrateRetainedTranscripts(): Promise<void> {
+function mappedPage(
+  nativeThreadId: string,
+  page: Awaited<ReturnType<typeof getAgentConversationPage>>
+): AgentConversationThread {
+  return {
+    ...mapRemoteAgentConversation(page),
+    id: `agent:${nativeThreadId}`,
+    nativeThreadId
+  }
+}
+
+function olderNativeCursor(thread: AgentConversationThread): string | undefined {
+  const cursor = thread.olderBefore
+  if (!cursor)
+    return thread.messages[0]
+      ? nativeAgentConversationMessageId(thread.nativeThreadId, thread.messages[0].id)
+      : undefined
+  return nativeAgentConversationMessageId(thread.nativeThreadId, cursor)
+}
+
+function cancelScheduledHydration() {
+  if (hydrateIdleHandle === null) return
+  if (typeof cancelIdleCallback === 'function') cancelIdleCallback(hydrateIdleHandle)
+  else clearTimeout(hydrateIdleHandle)
+  hydrateIdleHandle = null
+}
+
+function scheduleRemainingHydration() {
+  if (hydrateIdleHandle !== null) return
+  hydrateIdleHandle = scheduleTranscriptHydration(() => {
+    hydrateIdleHandle = null
+    void hydrateRetainedTranscripts()
+  })
+}
+
+async function hydrateRetainedTranscriptBatch(): Promise<boolean> {
   const current = history.value
-  if (!current || transcriptRetainers.size === 0) return
-  const updates = new Map<string, AgentConversationThread>()
+  if (!current || transcriptRetainers.size === 0) return false
+  const batch = nextTranscriptHydrationBatch([...transcriptRetainers.keys()], {
+    hydratedUpdatedAt,
+    updatedAtByThreadId: new Map(
+      current.threads.map((thread) => [thread.id, thread.updatedAt] as const)
+    )
+  })
+  if (batch.length === 0) return false
+  const updates: Array<{
+    mode: 'delta' | 'tail'
+    page: AgentConversationThread
+    threadId: string
+  }> = []
   await Promise.all(
-    [...transcriptRetainers.keys()].map(async (threadId) => {
+    batch.map(async (threadId) => {
       const thread = current.threads.find((candidate) => candidate.id === threadId)
       if (!thread) return
-      if (
-        !retainedTranscriptNeedsHydrate({
-          hydratedMessageCount: hydratedMessageCount.get(threadId),
-          hydratedUpdatedAt: hydratedUpdatedAt.get(threadId),
-          retainedMessageCount: thread.messages.length,
-          updatedAt: thread.updatedAt
-        })
-      ) {
-        return
-      }
-      const full = await getAgentConversation(thread.nativeThreadId)
-      const messages = agentConversationMessages(full)
-      updates.set(threadId, {
-        ...thread,
-        ...(full.contextUsage ? { contextUsage: full.contextUsage } : {}),
-        messages,
-        pendingUiRequests: full.pendingUiRequests?.map((request) => ({ ...request })) ?? [],
-        recentUpdate: full.recentUpdate,
-        state: full.state,
-        updatedAt: full.updatedAt
+      const alreadyHydrated = hydratedUpdatedAt.has(threadId)
+      const remote = await getAgentConversationPage(thread.nativeThreadId)
+      const page = mappedPage(thread.nativeThreadId, remote)
+      updates.push({
+        mode: alreadyHydrated ? 'delta' : 'tail',
+        page,
+        threadId
       })
-      hydratedUpdatedAt.set(threadId, full.updatedAt)
-      hydratedMessageCount.set(threadId, messages.length)
+      hydratedUpdatedAt.set(threadId, remote.updatedAt)
     })
   )
-  if (updates.size === 0 || history.value !== current) return
-  history.value = reconcileAgentConversationHistory(current, {
-    ...current,
-    threads: current.threads.map((thread) => updates.get(thread.id) ?? thread)
+  if (updates.length === 0 || history.value !== current) {
+    return (
+      nextTranscriptHydrationBatch([...transcriptRetainers.keys()], {
+        hydratedUpdatedAt,
+        updatedAtByThreadId: new Map(
+          current.threads.map((thread) => [thread.id, thread.updatedAt] as const)
+        )
+      }).length > 0
+    )
+  }
+  let next = current
+  for (const update of updates) {
+    const live = next.threads.find((thread) => thread.id === update.threadId)
+    if (!live) continue
+    next = {
+      ...next,
+      threads: next.threads.map((thread) =>
+        thread.id === update.threadId
+          ? rememberAppliedPage(thread, update.page, update.mode)
+          : thread
+      )
+    }
+  }
+  const reconciled = reconcileAgentConversationHistory(current, next)
+  if (!sameAgentConversationHistory(current, reconciled)) history.value = reconciled
+  const committed = history.value ?? current
+  return (
+    nextTranscriptHydrationBatch([...transcriptRetainers.keys()], {
+      hydratedUpdatedAt,
+      updatedAtByThreadId: new Map(
+        committed.threads.map((thread) => [thread.id, thread.updatedAt] as const)
+      )
+    }).length > 0
+  )
+}
+
+async function hydrateRetainedTranscripts(): Promise<void> {
+  if (hydrateInFlight) {
+    hydrateAgain = true
+    return hydrateInFlight
+  }
+  hydrateInFlight = (async () => {
+    do {
+      hydrateAgain = false
+      const more = await hydrateRetainedTranscriptBatch()
+      if (more) scheduleRemainingHydration()
+    } while (hydrateAgain)
+  })().finally(() => {
+    hydrateInFlight = null
   })
+  return hydrateInFlight
+}
+
+async function refreshLiveTranscripts(): Promise<void> {
+  if (liveInFlight) return
+  const threadIds = retainedRunningThreadIds()
+  if (!threadIds.length) {
+    pauseLiveStream()
+    return
+  }
+  const current = history.value
+  if (!current) return
+  liveInFlight = (async () => {
+    const updates: Array<{ page: AgentConversationThread; threadId: string }> = []
+    await Promise.all(
+      threadIds.map(async (threadId) => {
+        const thread = current.threads.find((candidate) => candidate.id === threadId)
+        if (!thread) return
+        const remote = await getAgentConversationPage(thread.nativeThreadId)
+        updates.push({
+          page: mappedPage(thread.nativeThreadId, remote),
+          threadId
+        })
+        hydratedUpdatedAt.set(threadId, remote.updatedAt)
+      })
+    )
+    if (!updates.length || history.value !== current) return
+    let next = current
+    for (const update of updates) {
+      if (!next.threads.some((thread) => thread.id === update.threadId)) continue
+      next = {
+        ...next,
+        threads: next.threads.map((thread) =>
+          thread.id === update.threadId
+            ? rememberAppliedPage(thread, update.page, 'delta')
+            : thread
+        )
+      }
+    }
+    const reconciled = reconcileAgentConversationHistory(current, next)
+    if (sameAgentConversationHistory(current, reconciled)) return
+    history.value = reconciled
+    historySignature = agentHistorySignature(history.value)
+  })().finally(() => {
+    liveInFlight = null
+    syncLiveStreaming()
+  })
+  return liveInFlight
 }
 
 async function requestHistory(): Promise<void> {
@@ -100,6 +313,7 @@ async function requestHistory(): Promise<void> {
     }
     if (transcriptRetainers.size > 0) await hydrateRetainedTranscripts()
     error.value = ''
+    syncLiveStreaming()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   }
@@ -119,7 +333,19 @@ async function refreshAgentConversationHistory(fresh = false): Promise<void> {
 export function retainAgentConversationTranscript(threadId: string): void {
   if (!threadId) return
   transcriptRetainers.set(threadId, (transcriptRetainers.get(threadId) ?? 0) + 1)
+  const current = history.value
+  const cached = hydratedTranscripts.get(threadId)
+  const thread = current?.threads.find((candidate) => candidate.id === threadId)
+  if (current && thread && cached) {
+    applyPageToHistory(
+      current,
+      threadId,
+      applyConversationPreviewMetadata(cached, thread),
+      'delta'
+    )
+  }
   void hydrateRetainedTranscripts()
+  syncLiveStreaming()
 }
 
 export function releaseAgentConversationTranscript(threadId: string): void {
@@ -127,24 +353,87 @@ export function releaseAgentConversationTranscript(threadId: string): void {
   const current = transcriptRetainers.get(threadId) ?? 0
   if (current <= 1) {
     transcriptRetainers.delete(threadId)
-    hydratedUpdatedAt.delete(threadId)
-    hydratedMessageCount.delete(threadId)
+    olderLoads.delete(threadId)
+    if (transcriptRetainers.size === 0) cancelScheduledHydration()
+    syncLiveStreaming()
     return
   }
   transcriptRetainers.set(threadId, current - 1)
+}
+
+export async function loadOlderAgentConversationTranscript(threadId: string): Promise<boolean> {
+  const pending = olderLoads.get(threadId)
+  if (pending) return pending
+  const work = (async () => {
+    const current = history.value
+    const thread = current?.threads.find((candidate) => candidate.id === threadId)
+    if (!current || !thread || thread.hasOlder === false) return false
+    const before = olderNativeCursor(thread)
+    if (!before) return false
+    const remote = await getAgentConversationPage(thread.nativeThreadId, { before })
+    if (history.value !== current) return false
+    const page = mappedPage(thread.nativeThreadId, remote)
+    if (page.messages.length === 0) {
+      applyPageToHistory(current, threadId, { ...thread, ...page, hasOlder: false }, 'older')
+      return false
+    }
+    applyPageToHistory(current, threadId, page, 'older')
+    return true
+  })().finally(() => {
+    if (olderLoads.get(threadId) === work) olderLoads.delete(threadId)
+  })
+  olderLoads.set(threadId, work)
+  return work
+}
+
+export async function revealAgentConversationChapter(
+  threadId: string,
+  chapterId: string
+): Promise<boolean> {
+  const nativeId = (() => {
+    const thread = history.value?.threads.find((candidate) => candidate.id === threadId)
+    return thread ? nativeAgentConversationMessageId(thread.nativeThreadId, chapterId) : chapterId
+  })()
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const thread = history.value?.threads.find((candidate) => candidate.id === threadId)
+    if (!thread) return false
+    if (
+      thread.messages.some(
+        (message) =>
+          message.id === chapterId ||
+          nativeAgentConversationMessageId(thread.nativeThreadId, message.id) === nativeId
+      )
+    ) {
+      return true
+    }
+    if (thread.hasOlder === false) return false
+    const loaded = await loadOlderAgentConversationTranscript(threadId)
+    if (!loaded) return false
+  }
+  return false
 }
 
 function retainHistoryFeed() {
   subscribers += 1
   if (subscribers !== 1) return
   void refreshAgentConversationHistory()
-  resumePolling()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', syncHistoryPolling)
+  }
+  syncHistoryPolling()
 }
 
 function releaseHistoryFeed() {
   subscribers = Math.max(0, subscribers - 1)
-  if (subscribers === 0) pausePolling()
+  if (subscribers !== 0) return
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', syncHistoryPolling)
+  }
+  pausePolling()
+  pauseLiveStream()
 }
+
+export { refreshAgentConversationHistory }
 
 export function useAgentConversationHistory() {
   onMounted(retainHistoryFeed)
@@ -159,10 +448,11 @@ export function useAgentConversationHistory() {
 if (import.meta.hot) {
   import.meta.hot.dispose((data) => {
     pausePolling()
+    pauseLiveStream()
     data.agentHistorySubscribers = subscribers
   })
   if (subscribers > 0) {
     void refreshAgentConversationHistory()
-    resumePolling()
+    syncHistoryPolling()
   }
 }

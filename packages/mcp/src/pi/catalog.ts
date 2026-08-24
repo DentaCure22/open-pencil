@@ -139,9 +139,7 @@ function parseEnabledModelPattern(value: string): EnabledModelPattern {
   }
 }
 
-function enabledModelPatterns(
-  settings: Record<string, unknown> | null
-): EnabledModelPattern[] {
+function enabledModelPatterns(settings: Record<string, unknown> | null): EnabledModelPattern[] {
   if (!settings || !Array.isArray(settings.enabledModels)) return []
   return settings.enabledModels
     .filter((value): value is string => typeof value === 'string')
@@ -194,7 +192,7 @@ function isCuratedBoardModel(provider: string, modelId: string): boolean {
   if (provider === 'cursor') {
     return /(?:^|[-/])grok(?:-|$)/.test(modelId) || /composer-2\.5/.test(modelId)
   }
-  if (provider === 'xai' || provider === 'xai-auth') {
+  if (provider === 'xai-auth') {
     return /grok-4\.6/.test(modelId) || /composer-2\.5/.test(modelId)
   }
   if (provider === 'openai-codex') {
@@ -205,7 +203,7 @@ function isCuratedBoardModel(provider: string, modelId: string): boolean {
 }
 
 function providerGroup(provider: string): string {
-  if (provider === 'xai' || provider === 'xai-auth') return 'xAI'
+  if (provider === 'xai-auth') return 'xAI'
   if (provider === 'openai-codex' || provider === 'openai') return 'OpenAI'
   if (provider === 'cursor') return 'Cursor'
   if (provider === 'antigravity') return 'Antigravity'
@@ -325,17 +323,8 @@ function readListedText(executable: string): string {
   }
 }
 
-function preferAuthedXai(models: AgentModelDefinition[]): AgentModelDefinition[] {
-  const authed = new Set(
-    models
-      .filter((model) => model.id.startsWith('xai-auth/'))
-      .map((model) => model.id.slice('xai-auth/'.length))
-  )
-  if (authed.size === 0) return models
-  return models.filter((model) => {
-    if (!model.id.startsWith('xai/')) return true
-    return !authed.has(model.id.slice('xai/'.length))
-  })
+function withoutXaiApiSlot(models: AgentModelDefinition[]): AgentModelDefinition[] {
+  return models.filter((model) => !model.id.startsWith('xai/'))
 }
 
 function sortModels(models: AgentModelDefinition[], preferredId: string): AgentModelDefinition[] {
@@ -361,7 +350,7 @@ export function loadPiAgentModels(options: PiCatalogPaths = {}): AgentModelDefin
     settingsRecord,
     options.authPath ?? DEFAULT_PI_AUTH_PATH
   )
-  const models = preferAuthedXai(fromCli.length > 0 ? fromCli : fromStore)
+  const models = withoutXaiApiSlot(fromCli.length > 0 ? fromCli : fromStore)
   if (models.length === 0) return FALLBACK_PI_MODELS
   return sortModels(models, preferred)
 }

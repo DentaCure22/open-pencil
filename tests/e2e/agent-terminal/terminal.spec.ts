@@ -56,7 +56,7 @@ function taskThread() {
         createdAt: '2026-08-16T00:00:28.000Z',
         id: 'task-result',
         parts: [
-          { state: 'complete', text: 'Read only the scoped project metadata.', type: 'reasoning' },
+          { state: 'complete', text: 'Read only the scoped project metadata.', type: 'commentary' },
           {
             input: '{"path":"package.json"}',
             name: 'Read file',
@@ -179,7 +179,8 @@ test('keeps one normal mounted chat through design and interaction modes', async
   await expect(surface.getByTestId('ai-message')).toHaveCount(29)
   const activity = surface.getByTestId('ai-activity-disclosure').last()
   await expect(activity).toBeVisible()
-  await expect(activity.getByTestId('ai-activity-timeline')).toHaveCount(0)
+  await expect(activity.getByTestId('ai-activity-timeline')).toBeVisible()
+  await expect(activity.getByTestId('ai-tool-call')).toHaveCount(0)
   await surface.evaluate((element) => element.setAttribute('data-residency-probe', 'surface'))
 
   const bounds = await hitTarget.boundingBox()
@@ -205,12 +206,9 @@ test('keeps one normal mounted chat through design and interaction modes', async
   await page.keyboard.press('x')
   await expect(composer).toHaveValue('x')
   await composer.fill('')
-  await activity.getByTestId('ai-turn-duration').click()
-  const reasoning = activity.getByTestId('ai-reasoning')
-  await reasoning.getByTestId('ai-reasoning-toggle').click()
-  await expect(reasoning.getByTestId('ai-reasoning-content')).toContainText(
-    'Read only the scoped project metadata.'
-  )
+  const commentary = activity.getByTestId('ai-commentary')
+  await expect(commentary).toHaveText('Read only the scoped project metadata.')
+  await expect(commentary.locator('svg, button')).toHaveCount(0)
   await activity.getByTestId('ai-tool-group-toggle').click()
   await expect(activity.getByTestId('ai-tool-call')).toContainText('Read')
   expect(
@@ -242,4 +240,56 @@ test('keeps one normal mounted chat through design and interaction modes', async
   await composer.fill('Follow up from the Board')
   await composer.press('Enter')
   await expect.poll(() => followUps).toEqual(['Follow up from the Board'])
+})
+
+test('does not leave a grey ghost when a Board chat is dragged', async ({ page }) => {
+  await page.goto('/?test&no-rulers')
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await canvas.clearCanvas()
+  await page.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const { createAgentConversationTerminalDocument, createCodeObject } =
+      await import('/src/app/code-object/model.ts')
+    const card = createCodeObject(store, {
+      document: createAgentConversationTerminalDocument({
+        name: 'Drag ghost conversation',
+        workerConversationId: 'drag-ghost-thread'
+      }),
+      height: 360,
+      name: 'Drag ghost conversation',
+      parentId: store.state.currentPageId,
+      width: 420,
+      x: 80,
+      y: 80
+    })
+    store.zoomToNode(card.id)
+    store.requestRender()
+  })
+
+  const host = page.locator('[data-code-object-id]').filter({
+    has: page.locator('[data-conversation-id="drag-ghost-thread"]')
+  })
+  await expect(host).toBeVisible()
+  await expect(host).toHaveCSS('contain', 'layout')
+  await expect(host).toHaveCSS('will-change', 'auto')
+
+  const objectId = await host.getAttribute('data-code-object-id')
+  if (!objectId) throw new Error('Board chat identity unavailable')
+  const hitTarget = page
+    .getByTestId(`code-object-overlay-${objectId}`)
+    .getByTestId('code-object-design-hit-target')
+  const start = await hitTarget.boundingBox()
+  if (!start) throw new Error('Board chat hit target unavailable')
+
+  await page.mouse.move(start.x + 24, start.y + 24)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 220, start.y + 24, { steps: 8 })
+  const moved = await host.boundingBox()
+  if (!moved) throw new Error('Moved Board chat bounds unavailable')
+  expect(moved.x).toBeGreaterThan(start.x + 120)
+  await expect(host).toHaveCSS('will-change', 'auto')
+  await expect(host).toHaveCSS('contain', 'layout')
+  await page.mouse.up()
 })

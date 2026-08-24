@@ -63,6 +63,7 @@ const statusLabel = computed(() => {
         data-test-id="ai-tool-kind-icon"
       >
         <icon-lucide-search v-if="kind === 'search'" class="size-3.5 stroke-[1.6]" />
+        <icon-lucide-mail v-else-if="kind === 'mail'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-terminal v-else-if="kind === 'command'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-file-text v-else-if="kind === 'read'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-pencil-line v-else-if="kind === 'edit'" class="size-3.5 stroke-[1.6]" />

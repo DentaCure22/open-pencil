@@ -2,28 +2,56 @@ import type { SceneGraph, SceneNode } from './index'
 import Matrix, { type Mat3 } from './matrix'
 import type { Vector } from './primitives'
 
-function worldMatrix(node: SceneNode, graph: SceneGraph, presented: boolean): Mat3 {
-  const chain: SceneNode[] = []
-  let current: SceneNode | undefined = node
+const presentedWorldMatrixCache = new WeakMap<SceneGraph, Map<string, Mat3>>()
+const presentedInverseWorldMatrixCache = new WeakMap<SceneGraph, Map<string, Mat3 | null>>()
 
-  while (current) {
-    chain.unshift(current)
-    if (!current.parentId) break
-    current = graph.getNode(current.parentId)
+export function clearWorldMatrixCache(graph: SceneGraph): void {
+  presentedWorldMatrixCache.delete(graph)
+  presentedInverseWorldMatrixCache.delete(graph)
+}
+
+function cachedPresentedWorldMatrix(graph: SceneGraph, nodeId: string): Mat3 | undefined {
+  return presentedWorldMatrixCache.get(graph)?.get(nodeId)
+}
+
+function rememberPresentedWorldMatrix(graph: SceneGraph, nodeId: string, matrix: Mat3): Mat3 {
+  let cache = presentedWorldMatrixCache.get(graph)
+  if (!cache) {
+    cache = new Map()
+    presentedWorldMatrixCache.set(graph, cache)
   }
-
-  let matrix = Matrix.identity()
-
-  for (const n of chain) {
-    const local = getNodeLocalMatrix(n, presented ? graph.getPresentedNodePosition(n.id) : n)
-    matrix = Matrix.multiply(matrix, local)
-  }
-
+  cache.set(nodeId, matrix)
   return matrix
+}
+
+function worldMatrix(node: SceneNode, graph: SceneGraph, presented: boolean): Mat3 {
+  if (presented) {
+    const cached = cachedPresentedWorldMatrix(graph, node.id)
+    if (cached) return cached
+  }
+
+  const parent = node.parentId ? graph.getNode(node.parentId) : undefined
+  const parentMatrix = parent ? worldMatrix(parent, graph, presented) : Matrix.identity()
+  const local = getNodeLocalMatrix(node, presented ? graph.getPresentedNodePosition(node.id) : node)
+  const matrix = Matrix.multiply(parentMatrix, local)
+  return presented ? rememberPresentedWorldMatrix(graph, node.id, matrix) : matrix
 }
 
 export function getWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {
   return worldMatrix(node, graph, true)
+}
+
+export function getInverseWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 | null {
+  const cached = presentedInverseWorldMatrixCache.get(graph)?.get(node.id)
+  if (cached !== undefined) return cached
+  const inverse = Matrix.invert(getWorldMatrix(node, graph))
+  let cache = presentedInverseWorldMatrixCache.get(graph)
+  if (!cache) {
+    cache = new Map()
+    presentedInverseWorldMatrixCache.set(graph, cache)
+  }
+  cache.set(node.id, inverse)
+  return inverse
 }
 
 export function getAuthoritativeWorldMatrix(node: SceneNode, graph: SceneGraph): Mat3 {

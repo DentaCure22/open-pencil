@@ -1,9 +1,15 @@
+import { invalidateParagraphCache } from '#core/canvas/paragraph-cache'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 
 export function invalidateScenePicture(r: SkiaRenderer): void {
   r.scenePicture?.delete()
   r.scenePicture = null
   r.scenePictureVersion = -1
+  r.scenePreviewBasePicture?.delete()
+  r.scenePreviewBasePicture = null
+  r.scenePreviewBaseVersion = -1
+  r.scenePreviewBasePageId = null
+  r.scenePreviewBaseIds = ''
   r.sceneBacking?.image.delete()
   r.sceneBacking = null
   r.sceneBackingBuild?.surface.delete()
@@ -24,6 +30,7 @@ export function invalidateAllPictures(r: SkiaRenderer): void {
   for (const pic of r.nodePictureCache.values()) pic?.delete()
   r.nodePictureCache.clear()
   clearSubtreePictureCache(r)
+  invalidateParagraphCache(r)
 }
 
 export function invalidateNodePicture(r: SkiaRenderer, nodeId: string): void {

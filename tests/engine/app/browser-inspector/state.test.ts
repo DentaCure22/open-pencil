@@ -5,6 +5,7 @@ import {
   acceptBrowserElementSelection,
   browserInspectorState,
   removeBrowserCaptureSession,
+  setBrowserCaptureSessionExpanded,
   selectBrowserCaptureSession,
   startBrowserCaptureSession,
   updateBrowserElementAnnotations
@@ -66,6 +67,9 @@ describe('Chrome capture sessions', () => {
       'selection-1',
       'selection-2'
     ])
+    expect(browserInspectorState.expandedSessionId).toBeNull()
+    selectBrowserCaptureSession('capture-session-1')
+    expect(browserInspectorState.expandedSessionId).toBe('capture-session-1')
     selectBrowserCaptureSession('capture-session-1')
     expect(browserInspectorState.expandedSessionId).toBeNull()
   })
@@ -101,5 +105,21 @@ describe('Chrome capture sessions', () => {
     expect(session?.pages?.map((candidate) => candidate.url)).toEqual([page.url, secondPage.url])
     expect(session?.title).toContain('2 tabs')
     expect(session?.selections.map((candidate) => candidate.session.tabId)).toEqual([12, 27])
+  })
+
+  test('keeps new capture sessions collapsed until the parent is opened', () => {
+    startBrowserCaptureSession({
+      captureSessionId: 'capture-session-collapsed',
+      page,
+      startedAt: '2026-08-22T12:00:00.000Z'
+    })
+
+    expect(browserInspectorState.expandedSessionId).toBeNull()
+
+    setBrowserCaptureSessionExpanded('capture-session-collapsed')
+    expect(browserInspectorState.expandedSessionId).toBe('capture-session-collapsed')
+
+    setBrowserCaptureSessionExpanded(null)
+    expect(browserInspectorState.expandedSessionId).toBeNull()
   })
 })

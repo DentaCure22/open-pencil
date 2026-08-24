@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import { open } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { canonicalMemoryObjectId, canonicalMemorySourceNodeId } from '@open-pencil/core/tools'
@@ -7,6 +7,7 @@ import type { Rect, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { readAuthorityBoardDocument } from './document'
 import { writeBinaryFile } from './json-file'
+import { nodePairs } from './mermaid-presence'
 import type { LocalWorkspaceAuthorityHead } from './types'
 
 export const WORKSPACE_JSONL_INDEX_CONTRACT = 'workspace-jsonl-index/v1'
@@ -59,11 +60,13 @@ export type WorkspaceJsonlIndex = {
 }
 
 function utf8Bytes(value: string): number {
-  return UTF8_ENCODER.encode(value).length
+  return Buffer.byteLength(value)
 }
 
 function boundedUtf8(value: string, byteLimit: number): string {
-  const scanWindow = value.slice(0, MAX_STRING_SCAN_CODE_UNITS)
+  const scanWindow =
+    value.length > MAX_STRING_SCAN_CODE_UNITS ? value.slice(0, MAX_STRING_SCAN_CODE_UNITS) : value
+  if (Buffer.byteLength(scanWindow) <= byteLimit) return scanWindow
   const result: string[] = []
   let bytes = 0
   for (const scalar of scanWindow) {
@@ -201,8 +204,235 @@ function canonicalPageRecords(graph: SceneGraph): {
   return { pageCount: pages.length, records }
 }
 
+export type WorkspaceJsonlIndexPrevious = {
+  document: unknown
+  index: WorkspaceJsonlIndex
+}
+
+type IndexableNode = {
+  childIds?: unknown
+  flipX?: unknown
+  flipY?: unknown
+  height?: unknown
+  mermaidSource?: unknown
+  name?: unknown
+  parentId?: unknown
+  pluginData?: unknown
+  rotation?: unknown
+  text?: unknown
+  type?: unknown
+  width?: unknown
+  x?: unknown
+  y?: unknown
+}
+
+function nodeMap(document: unknown): Map<string, IndexableNode> | null {
+  const pairs = nodePairs(document)
+  if (!pairs) return null
+  return new Map(pairs)
+}
+
+function sameIdList(left: unknown, right: unknown): boolean {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+  return left.every((id, index) => id === right[index])
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function localDelta(previous: IndexableNode, next: IndexableNode): { dx: number; dy: number } {
+  return {
+    dx: (finiteNumber(next.x) ?? 0) - (finiteNumber(previous.x) ?? 0),
+    dy: (finiteNumber(next.y) ?? 0) - (finiteNumber(previous.y) ?? 0)
+  }
+}
+
+function hasNonTranslationTransform(node: IndexableNode): boolean {
+  const rotation = finiteNumber(node.rotation)
+  return (rotation !== null && rotation !== 0) || node.flipX === true || node.flipY === true
+}
+
+function structureEquals(previous: IndexableNode, next: IndexableNode): boolean {
+  return (
+    previous.parentId === next.parentId &&
+    previous.type === next.type &&
+    previous.rotation === next.rotation &&
+    previous.flipX === next.flipX &&
+    previous.flipY === next.flipY &&
+    sameIdList(previous.childIds, next.childIds)
+  )
+}
+
+function indexNode(id: string, node: IndexableNode): SceneNode {
+  return {
+    id,
+    mermaidSource: typeof node.mermaidSource === 'string' ? node.mermaidSource : undefined,
+    name: typeof node.name === 'string' ? node.name : id,
+    pluginData: Array.isArray(node.pluginData) ? node.pluginData : [],
+    text: typeof node.text === 'string' ? node.text : '',
+    type: typeof node.type === 'string' ? node.type : 'FRAME'
+  } as SceneNode
+}
+
+function patchedRecord(
+  record: WorkspaceJsonlIndexRecord,
+  node: IndexableNode,
+  dx: number,
+  dy: number
+): WorkspaceJsonlIndexRecord {
+  const next = indexNode(record.id, node)
+  const text = nodeText(next)
+  const sourceNodeId = canonicalMemorySourceNodeId(next)
+  const width = finiteNumber(node.width)
+  const height = finiteNumber(node.height)
+  const patched: WorkspaceJsonlIndexRecord = {
+    ...record,
+    bounds: {
+      height: height ?? record.bounds.height,
+      width: width ?? record.bounds.width,
+      x: record.bounds.x + dx,
+      y: record.bounds.y + dy
+    },
+    canonicalObjectId: canonicalMemoryObjectId(next),
+    name: next.name || record.id,
+    parentId:
+      typeof node.parentId === 'string' || node.parentId === null ? node.parentId : record.parentId,
+    searchable: searchableText(next, text),
+    type: next.type
+  }
+  if (sourceNodeId) patched.sourceNodeId = sourceNodeId
+  else delete patched.sourceNodeId
+  if (text) patched.text = text
+  else delete patched.text
+  return patched
+}
+
+export function patchWorkspaceJsonlIndex(
+  source: WorkspaceJsonlIndexSource,
+  previous: WorkspaceJsonlIndexPrevious | null | undefined
+): WorkspaceJsonlIndex | null {
+  if (!previous) return null
+  const previousMetadata = previous.index.metadata
+  if (
+    previousMetadata.contract !== WORKSPACE_JSONL_INDEX_CONTRACT ||
+    previousMetadata.projectionVersion !== WORKSPACE_JSONL_INDEX_PROJECTION_VERSION ||
+    previousMetadata.documentId !== source.identity.documentId ||
+    previousMetadata.workspaceId !== source.identity.workspaceId ||
+    previous.index.records.length !== previousMetadata.recordCount
+  ) {
+    return null
+  }
+
+  const previousNodes = nodeMap(previous.document)
+  const nextNodes = nodeMap(source.document)
+  const nextRootId =
+    source.document && typeof source.document === 'object' && !Array.isArray(source.document)
+      ? (source.document as { rootId?: unknown }).rootId
+      : null
+  if (
+    !previousNodes ||
+    !nextNodes ||
+    typeof nextRootId !== 'string' ||
+    nextRootId !== previousMetadata.rootId
+  ) {
+    return null
+  }
+
+  const records = previous.index.records
+  const parentById = new Map(records.map((record) => [record.id, record.parentId] as const))
+  for (const record of records) {
+    const previousNode = previousNodes.get(record.id)
+    const nextNode = nextNodes.get(record.id)
+    if (!previousNode || !nextNode || !structureEquals(previousNode, nextNode)) return null
+  }
+
+  const ancestorDelta = new Map<string, { dx: number; dy: number }>()
+  const deltaFor = (id: string): { dx: number; dy: number } => {
+    const cached = ancestorDelta.get(id)
+    if (cached) return cached
+    const previousNode = previousNodes.get(id)
+    const nextNode = nextNodes.get(id)
+    if (!previousNode || !nextNode) {
+      const empty = { dx: 0, dy: 0 }
+      ancestorDelta.set(id, empty)
+      return empty
+    }
+    if (
+      (finiteNumber(nextNode.x) !== finiteNumber(previousNode.x) ||
+        finiteNumber(nextNode.y) !== finiteNumber(previousNode.y) ||
+        finiteNumber(nextNode.width) !== finiteNumber(previousNode.width) ||
+        finiteNumber(nextNode.height) !== finiteNumber(previousNode.height)) &&
+      (hasNonTranslationTransform(previousNode) || hasNonTranslationTransform(nextNode))
+    ) {
+      ancestorDelta.set(id, { dx: Number.NaN, dy: Number.NaN })
+      return { dx: Number.NaN, dy: Number.NaN }
+    }
+    const local = localDelta(previousNode, nextNode)
+    const parentId = parentById.get(id)
+    const parent = parentId ? deltaFor(parentId) : { dx: 0, dy: 0 }
+    const next = { dx: local.dx + parent.dx, dy: local.dy + parent.dy }
+    ancestorDelta.set(id, next)
+    return next
+  }
+
+  const nextRecords: WorkspaceJsonlIndexRecord[] = []
+  const dirtyPageIds = new Set<string>()
+  for (const record of records) {
+    const nextNode = nextNodes.get(record.id)
+    if (!nextNode) return null
+    const delta = deltaFor(record.id)
+    if (!Number.isFinite(delta.dx) || !Number.isFinite(delta.dy)) return null
+    const patched = patchedRecord(record, nextNode, delta.dx, delta.dy)
+    if (record.kind === 'page') patched.pageName = patched.name
+    nextRecords.push(patched)
+    if (
+      patched.bounds.x !== record.bounds.x ||
+      patched.bounds.y !== record.bounds.y ||
+      patched.bounds.width !== record.bounds.width ||
+      patched.bounds.height !== record.bounds.height ||
+      patched.name !== record.name ||
+      patched.searchable !== record.searchable
+    ) {
+      dirtyPageIds.add(record.pageId)
+    }
+  }
+
+  for (const record of nextRecords) {
+    if (record.kind === 'page' && dirtyPageIds.has(record.id)) {
+      const contentBounds = unionBounds(
+        nextRecords
+          .filter((entry) => entry.pageId === record.id && entry.kind === 'node')
+          .map((entry) => entry.bounds)
+      )
+      if (contentBounds) record.bounds = contentBounds
+    }
+    if (record.kind === 'node') {
+      const page = nextRecords.find((entry) => entry.id === record.pageId)
+      if (page) record.pageName = page.pageName
+    }
+  }
+
+  return {
+    metadata: {
+      ...previousMetadata,
+      contentHash: source.contentHash,
+      recordCount: nextRecords.length,
+      revision: source.revision
+    },
+    records: nextRecords
+  }
+}
+
+export function prepareWorkspaceJsonlIndex(
+  source: WorkspaceJsonlIndexSource,
+  previous?: WorkspaceJsonlIndexPrevious | null
+): WorkspaceJsonlIndex {
+  return patchWorkspaceJsonlIndex(source, previous) ?? buildWorkspaceJsonlIndex(source)
+}
+
 export function buildWorkspaceJsonlIndex(source: WorkspaceJsonlIndexSource): WorkspaceJsonlIndex {
-  const { graph } = readAuthorityBoardDocument(source.document)
+  const { graph } = readAuthorityBoardDocument(source.document, { hydrate: false })
   const { pageCount, records } = canonicalPageRecords(graph)
   return {
     metadata: {
@@ -277,10 +507,54 @@ export function workspaceJsonlIndexIsCurrent(
   )
 }
 
+function isWorkspaceJsonlIndexRecord(value: unknown): value is WorkspaceJsonlIndexRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<WorkspaceJsonlIndexRecord>
+  return Boolean(
+    (record.kind === 'node' || record.kind === 'page') &&
+    typeof record.id === 'string' &&
+    typeof record.name === 'string' &&
+    typeof record.type === 'string' &&
+    typeof record.pageId === 'string' &&
+    typeof record.pageName === 'string' &&
+    typeof record.ownerId === 'string' &&
+    typeof record.canonicalObjectId === 'string' &&
+    typeof record.searchable === 'string'
+  )
+}
+
+export function parseWorkspaceJsonlIndex(value: string): WorkspaceJsonlIndex | null {
+  const lines = value.split('\n').filter(Boolean)
+  const metadata = parseWorkspaceJsonlIndexMetadata(lines[0] ?? '')
+  if (!metadata) return null
+  const records = lines.slice(1).flatMap((line) => {
+    try {
+      const parsed = JSON.parse(line) as unknown
+      return isWorkspaceJsonlIndexRecord(parsed) ? [parsed] : []
+    } catch {
+      return []
+    }
+  })
+  return records.length === metadata.recordCount ? { metadata, records } : null
+}
+
+export async function readWorkspaceJsonlIndex(
+  rootPath: string
+): Promise<WorkspaceJsonlIndex | null> {
+  const filePath = path.join(rootPath, WORKSPACE_JSONL_INDEX_FILE)
+  try {
+    return parseWorkspaceJsonlIndex(await readFile(filePath, 'utf8'))
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : null
+    if (code === 'ENOENT') return null
+    throw error
+  }
+}
+
 export async function writeWorkspaceJsonlIndex(
   rootPath: string,
   source: WorkspaceJsonlIndexSource,
-  prepared = buildWorkspaceJsonlIndex(source)
+  prepared = prepareWorkspaceJsonlIndex(source)
 ): Promise<WorkspaceJsonlIndexMetadata> {
   await writeBinaryFile(
     path.join(rootPath, WORKSPACE_JSONL_INDEX_FILE),
@@ -291,8 +565,9 @@ export async function writeWorkspaceJsonlIndex(
 
 export async function ensureWorkspaceJsonlIndex(
   rootPath: string,
-  source: WorkspaceJsonlIndexSource
-): Promise<WorkspaceJsonlIndexMetadata> {
+  source: WorkspaceJsonlIndexSource,
+  previous?: WorkspaceJsonlIndexPrevious | null
+): Promise<{ index?: WorkspaceJsonlIndex; metadata: WorkspaceJsonlIndexMetadata }> {
   const filePath = path.join(rootPath, WORKSPACE_JSONL_INDEX_FILE)
   try {
     const handle = await open(filePath, 'r')
@@ -300,7 +575,16 @@ export async function ensureWorkspaceJsonlIndex(
       const buffer = Buffer.alloc(4_096)
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
       const metadata = parseWorkspaceJsonlIndexMetadata(buffer.subarray(0, bytesRead).toString())
-      if (metadata && workspaceJsonlIndexIsCurrent(metadata, source)) return metadata
+      if (metadata && workspaceJsonlIndexIsCurrent(metadata, source)) {
+        if (previous?.index && workspaceJsonlIndexIsCurrent(previous.index.metadata, source)) {
+          return { metadata, index: previous.index }
+        }
+        const loaded = await readWorkspaceJsonlIndex(rootPath)
+        if (loaded && workspaceJsonlIndexIsCurrent(loaded.metadata, source)) {
+          return { metadata, index: loaded }
+        }
+        return { metadata }
+      }
     } finally {
       await handle.close()
     }
@@ -308,5 +592,9 @@ export async function ensureWorkspaceJsonlIndex(
     const code = error && typeof error === 'object' && 'code' in error ? error.code : null
     if (code !== 'ENOENT') throw error
   }
-  return writeWorkspaceJsonlIndex(rootPath, source)
+  const index = prepareWorkspaceJsonlIndex(source, previous)
+  return {
+    index,
+    metadata: await writeWorkspaceJsonlIndex(rootPath, source, index)
+  }
 }

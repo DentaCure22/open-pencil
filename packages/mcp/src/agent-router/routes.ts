@@ -12,8 +12,14 @@ import { AgentAttachmentStore } from '#mcp/agent-attachments/store'
 import { bearerToken, isAuthorized } from '#mcp/auth'
 import { localWorkspaceTraceEvidencePath } from '#mcp/local-workspace-authority/agent-context'
 import type { LocalWorkspaceAuthorityStore } from '#mcp/local-workspace-authority/store'
+import { defaultUsageLedgerPath, readUsageTurns, rollupUsageSnapshot } from '#mcp/pi/usage-ledger'
 
-import { previewAgentConversation, type AgentConversationRouter } from './contracts'
+import {
+  previewAgentConversation,
+  type AgentConversationRouter,
+  type AgentToolScope
+} from './contracts'
+import { pageAgentConversation, type AgentConversationPageQuery } from './conversation-page'
 import { AGENT_MEDIA_ROUTE, agentMediaFileName, agentMediaMimeType } from './media'
 
 const ROUTE = '/agent-router/v1/pi'
@@ -32,6 +38,28 @@ type RouteOptions = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function optionalPositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function toolScope(value: unknown): AgentToolScope | undefined {
+  return value === 'board-worker' || value === 'general' ? value : undefined
+}
+
+function conversationPageQuery(context: Context): AgentConversationPageQuery {
+  const after = context.req.query('after')?.trim()
+  const before = context.req.query('before')?.trim()
+  return {
+    ...(after ? { after } : {}),
+    ...(before ? { before } : {}),
+    byteBudget: optionalPositiveInt(context.req.query('bytes')),
+    itemLimit: optionalPositiveInt(context.req.query('limit')),
+    turnLimit: optionalPositiveInt(context.req.query('turns'))
+  }
 }
 
 function errorResponse(context: Context, error: unknown) {
@@ -60,6 +88,11 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
 
   app.get(`${ROUTE}/status`, async (context) => context.json(await options.router.status()))
   app.get(`${ROUTE}/models`, (context) => context.json({ models: options.router.models() }))
+  app.get(`${ROUTE}/model-meter`, async (context) => {
+    const days = optionalPositiveInt(context.req.query('days')) ?? 7
+    const turns = await readUsageTurns(defaultUsageLedgerPath())
+    return context.json({ available: true, ...rollupUsageSnapshot(turns, days) })
+  })
   app.get(`${ROUTE}/provider-usage/:provider`, async (context) =>
     context.json({ usage: await options.router.providerUsage(context.req.param('provider')) })
   )
@@ -95,11 +128,25 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
       ? context.json(previewAgentConversation(thread, FOCUSED_CONVERSATION_PREVIEW_LIMIT))
       : context.json({ code: 'agent_thread_not_found', error: 'Agent conversation not found' }, 404)
   })
-  app.get(`${ROUTE}/conversations/:threadId`, (context) => {
+  app.get(`${ROUTE}/conversations/:threadId/messages`, (context) => {
     const thread = options.router.conversation(context.req.param('threadId'))
     return thread
-      ? context.json(thread)
+      ? context.json(pageAgentConversation(thread, conversationPageQuery(context)))
       : context.json({ code: 'agent_thread_not_found', error: 'Agent conversation not found' }, 404)
+  })
+  app.get(`${ROUTE}/conversations/:threadId`, (context) => {
+    const thread = options.router.conversation(context.req.param('threadId'))
+    if (!thread) {
+      return context.json(
+        { code: 'agent_thread_not_found', error: 'Agent conversation not found' },
+        404
+      )
+    }
+    return context.json(
+      context.req.query('page') === '1'
+        ? pageAgentConversation(thread, conversationPageQuery(context))
+        : thread
+    )
   })
 
   app.get(`${ROUTE}/jobs/:jobId`, (context) => {
@@ -211,7 +258,8 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
             options.authorityRoot,
             body.attachmentImagePaths
           ),
-          model: typeof body.model === 'string' ? body.model : undefined
+          model: typeof body.model === 'string' ? body.model : undefined,
+          toolScope: toolScope(body.toolScope)
         }
       )
       await attachmentStore.claim(threadId, attachmentReferences).catch(() => undefined)
@@ -269,7 +317,11 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
           body.attachmentImagePaths
         ),
         model: typeof body.model === 'string' ? body.model : '',
-        prompt: typeof body.prompt === 'string' ? body.prompt : ''
+        prompt: typeof body.prompt === 'string' ? body.prompt : '',
+        toolScope: toolScope(body.toolScope),
+        ...(body.historyScope === 'full' || body.historyScope === 'effectiveContext'
+          ? { historyScope: body.historyScope }
+          : {})
       }
       const receipt = sourceThreadId
         ? await options.router.fork(sourceThreadId, request)

@@ -2778,6 +2778,7 @@ dependencies = [
 name = "open_pencil"
 version = "0.13.2"
 dependencies = [
+ "base64 0.22.1",
  "fix-path-env",
  "font-kit",
  "reqwest 0.12.28",

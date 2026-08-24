@@ -1,6 +1,6 @@
 import type { Rect, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { authorityNodeSummary } from '#mcp/local-workspace-authority/native-artifact'
+import { authorityNodeSummary } from '#mcp/local-workspace-authority/node-summary'
 
 import {
   authorityBoardQueryCandidates,

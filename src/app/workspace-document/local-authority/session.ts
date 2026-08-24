@@ -1,10 +1,15 @@
-import type { AutomationPersistenceTransaction } from '@/app/automation/bridge/persistence'
 import { restoreReloadState, type ReloadStateSnapshot } from '@/app/document/io/reload-state'
 import type { EditorStore } from '@/app/editor/session'
 import {
+  omitUnchangedAuthorityImages,
+  omitUnchangedAuthorityPages,
+  smylrProductionImageSignature
+} from '@/app/smylr-production/document-persistence/plan'
+import {
   applySmylrProductionDocument,
   saveSmylrProductionDocument,
-  serializeSmylrProductionDocumentForAuthority
+  serializeSmylrProductionDocumentForAuthority,
+  smylrProductionDirtyAuthorityPages
 } from '@/app/smylr-production/document-state'
 import { loadOpenPencilWorkspaceSourceIdentity } from '@/app/workspace-document/identity'
 
@@ -63,6 +68,36 @@ export function createLocalWorkspaceAuthorityGraphBase(): LocalWorkspaceAuthorit
   }
 }
 
+export function createAuthorityImageSignatureMemory() {
+  let signature: string | null = null
+  return {
+    remember(next: string) {
+      signature = next
+    },
+    remembered() {
+      return signature
+    },
+    clear() {
+      signature = null
+    }
+  }
+}
+
+export function createAuthorityPageTreeMemory() {
+  let ready = false
+  return {
+    remember() {
+      ready = true
+    },
+    remembered() {
+      return ready
+    },
+    clear() {
+      ready = false
+    }
+  }
+}
+
 export function createSerializedLocalWorkspaceAuthorityOperations(): LocalWorkspaceAuthorityOperationSerializer {
   let tail = Promise.resolve()
   return <T>(operation: () => Promise<T>) => {
@@ -81,10 +116,10 @@ const serializeLocalWorkspaceAuthorityOperation =
   createSerializedLocalWorkspaceAuthorityOperations()
 
 export function createSerializedLocalWorkspacePersist<TStore>(
-  persistOnce: (store: TStore, transaction?: AutomationPersistenceTransaction) => Promise<boolean>,
+  persistOnce: (store: TStore) => Promise<boolean>,
   serializeOperation = createSerializedLocalWorkspaceAuthorityOperations()
-): (store: TStore, transaction?: AutomationPersistenceTransaction) => Promise<boolean> {
-  return (store, transaction) => serializeOperation(() => persistOnce(store, transaction))
+): (store: TStore) => Promise<boolean> {
+  return (store) => serializeOperation(() => persistOnce(store))
 }
 
 async function preserveRecovery(options: {
@@ -105,6 +140,8 @@ export function createLocalWorkspaceDocumentAuthority(
   dependencies: Partial<LocalWorkspaceDocumentAuthorityDependencies> = {}
 ) {
   const graphBase = createLocalWorkspaceAuthorityGraphBase()
+  const imageSignatures = createAuthorityImageSignatureMemory()
+  const pageTrees = createAuthorityPageTreeMemory()
   const applyDocument = dependencies.applyDocument ?? applySmylrProductionDocument
   const readHead = dependencies.readHead ?? readLocalWorkspaceAuthorityHead
   const refreshStatus = dependencies.refreshStatus ?? refreshLocalWorkspaceAuthorityStatus
@@ -119,6 +156,8 @@ export function createLocalWorkspaceDocumentAuthority(
         const authorityHead = await readHead()
         if (!authorityHead) {
           graphBase.clear()
+          imageSignatures.clear()
+          pageTrees.clear()
           const restored = await restoreBrowserCopy()
           if (restored && reloadState) await restoreReloadState(store, reloadState)
           return restored
@@ -126,12 +165,20 @@ export function createLocalWorkspaceDocumentAuthority(
         const restored = await applyDocument(store, authorityHead.document)
         if (restored) {
           graphBase.advance(authorityHead.contentHash)
+          imageSignatures.remember(smylrProductionImageSignature(store.graph).signature)
+          pageTrees.remember()
           if (reloadState) await restoreReloadState(store, reloadState)
           options.onHeadApplied?.(authorityHead, store)
-        } else graphBase.clear()
+        } else {
+          graphBase.clear()
+          imageSignatures.clear()
+          pageTrees.clear()
+        }
         return restored
       } catch (error) {
         graphBase.clear()
+        imageSignatures.clear()
+        pageTrees.clear()
         console.warn(
           '[Local workspace authority] Head restore failed; using the preserved browser copy:',
           error
@@ -143,10 +190,7 @@ export function createLocalWorkspaceDocumentAuthority(
     })
   }
 
-  async function persistOnce(
-    store: EditorStore,
-    transaction?: AutomationPersistenceTransaction
-  ): Promise<boolean> {
+  async function persistOnce(store: EditorStore): Promise<boolean> {
     if (options.isCloudActive()) return true
     if (!options.canWrite()) return false
 
@@ -154,6 +198,13 @@ export function createLocalWorkspaceDocumentAuthority(
     if (authorityStatus) {
       const document = serializeSmylrProductionDocumentForAuthority(store)
       if (!document) return false
+      const imageSignature = smylrProductionImageSignature(store.graph).signature
+      const wireDocument = omitUnchangedAuthorityPages(
+        omitUnchangedAuthorityImages(document, imageSignatures.remembered(), imageSignature),
+        store.graph,
+        smylrProductionDirtyAuthorityPages(store),
+        pageTrees.remembered()
+      )
       const requestId = `workspace-save-${crypto.randomUUID()}`
       try {
         if (authorityStatus.state === 'configured') {
@@ -179,6 +230,8 @@ export function createLocalWorkspaceDocumentAuthority(
             requestId
           )
           graphBase.advance(receipt.contentHash)
+          imageSignatures.remember(imageSignature)
+          pageTrees.remember()
         } else {
           const expectedContentHash = authorityStatus.contentHash
           if (!expectedContentHash || graphBase.hasDiverged(expectedContentHash)) {
@@ -198,11 +251,12 @@ export function createLocalWorkspaceDocumentAuthority(
             authorityStatus.identity.workspaceId,
             authorityStatus.revision,
             expectedContentHash,
-            document,
-            requestId,
-            transaction
+            wireDocument,
+            requestId
           )
           graphBase.advance(receipt.contentHash)
+          imageSignatures.remember(imageSignature)
+          pageTrees.remember()
         }
       } catch (error) {
         await preserveRecovery({
@@ -221,6 +275,11 @@ export function createLocalWorkspaceDocumentAuthority(
         console.error('[Local workspace authority] Save rejected:', error)
         return false
       }
+      options.onLocalHeadCommitted()
+      void saveSmylrProductionDocument(store).catch((error) => {
+        console.warn('[Local workspace authority] Browser cache save failed:', error)
+      })
+      return true
     }
 
     const saved = await saveSmylrProductionDocument(store)

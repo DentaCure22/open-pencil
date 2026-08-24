@@ -190,12 +190,24 @@ describe('context comment worker prompt', () => {
       target: null
     })
 
-    expect(prompt).toStartWith('Edit the attached generated image using the image editing tool.')
+    expect(prompt).toStartWith('Edit the attached image using the image editing tool.')
     expect(prompt).toContain('The source image has a transparent background.')
     expect(prompt).toContain('Preserve its alpha channel and keep the background transparent.')
     expect(prompt).toContain('Do not flatten it onto white, black, or any solid color')
     expect(prompt).toContain('1. (x: 47.4%, y: 22.2%) remove this tag')
     expect(prompt).toContain('Additional instructions:\ncenter this please')
+    expect(prompt).not.toContain('Target:')
+  })
+
+  test('keeps an unsent image in the image-edit flow', () => {
+    const prompt = contextCommentPrompt({
+      ...draft,
+      imageEdit: true,
+      target: null
+    })
+
+    expect(prompt).toStartWith('Edit the attached image using the image editing tool.')
+    expect(prompt).toContain('1. (x: 47.4%, y: 22.2%) remove this tag')
     expect(prompt).not.toContain('Target:')
   })
 

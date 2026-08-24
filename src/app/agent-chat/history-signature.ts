@@ -19,6 +19,7 @@ function videoFingerprint(video: { mimeType?: string; name?: string; url: string
 
 function partFingerprint(part: AiMessagePart): string {
   if (part.type === 'text') return `x${String(part.text.length)}`
+  if (part.type === 'commentary') return `m${part.state ?? ''}${String(part.text.length)}`
   if (part.type === 'reasoning') return `r${part.state ?? ''}${String(part.text.length)}`
   if (part.type === 'tool') {
     const images = part.images?.map(imageFingerprint).join(',') ?? ''

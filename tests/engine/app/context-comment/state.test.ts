@@ -137,6 +137,8 @@ describe('context comment screenshot state', () => {
     })
 
     expect(contextCommentState.draft?.capture?.evidenceId).toBe('generated-image')
+    expect(contextCommentState.draft?.imageEdit).toBe(true)
+    expect(contextCommentState.draft?.modelScope).toBe('task:thread-1')
     expect(contextCommentState.draft?.destination).toEqual({
       action: 'steer',
       kind: 'agent-conversation',
@@ -144,5 +146,17 @@ describe('context comment screenshot state', () => {
       threadId: 'thread-1'
     })
     expect(contextCommentState.draft?.target).toBeNull()
+  })
+
+  test('opens an unsent image as a standalone image-annotation task', () => {
+    openAgentImageComment(capture('draft-image'), undefined, 'task:new')
+
+    expect(contextCommentState.draft).toMatchObject({
+      capture: { evidenceId: 'draft-image' },
+      imageEdit: true,
+      modelScope: 'task:new',
+      target: null
+    })
+    expect(contextCommentState.draft?.destination).toBeUndefined()
   })
 })

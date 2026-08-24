@@ -1,5 +1,5 @@
 import type { NodeType, SceneGraph, SceneNode } from './'
-import { getWorldMatrix } from './coordinate'
+import { getInverseWorldMatrix } from './coordinate'
 import Matrix from './matrix'
 
 export interface HitTestOptions {
@@ -22,9 +22,7 @@ function hasVisibleFillOrStroke(node: SceneNode): boolean {
 }
 
 function containsPoint(px: number, py: number, node: SceneNode, graph: SceneGraph): boolean {
-  const m = getWorldMatrix(node, graph)
-
-  const inv = Matrix.invert(m)
+  const inv = getInverseWorldMatrix(node, graph)
   if (!inv) return false
 
   const [localX, localY] = Matrix.mapPoints(inv, [px, py])

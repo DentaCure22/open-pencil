@@ -198,7 +198,7 @@ describe('render cache regressions', () => {
       const originalX = movingNode.x
       graph.updateNodePositionPreview(movingNodeId, originalX + 20, movingNode.y)
       renderPreview(renderer, 10)
-      expect(renderer.profiler.stats.scenePictureMode).toBe('volatile')
+      expect(renderer.profiler.stats.scenePictureMode).toBe('preview')
       expect(renderer.profiler.stats.scenePictureMissReason).toBe('position-preview')
 
       graph.updateNode(movingNodeId, { x: originalX + 20 })

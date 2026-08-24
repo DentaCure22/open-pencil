@@ -1,3 +1,4 @@
+mod external_live_surface;
 mod fig_container;
 mod fonts;
 mod http;
@@ -6,6 +7,10 @@ mod menu_events;
 #[cfg(target_os = "macos")]
 mod window;
 
+use external_live_surface::{
+    start_external_live_surface_capture, stop_external_live_surface_capture,
+    ExternalLiveSurfaceSessions,
+};
 use fig_container::build_fig_file;
 use fonts::{list_system_fonts, load_system_font};
 use http::proxy_http_request;
@@ -116,11 +121,14 @@ pub fn run() {
 
     builder
         .manage(PendingOpen(Mutex::new(Vec::new())))
+        .manage(ExternalLiveSurfaceSessions::default())
         .invoke_handler(tauri::generate_handler![
             build_fig_file,
             list_system_fonts,
             load_system_font,
             proxy_http_request,
+            start_external_live_surface_capture,
+            stop_external_live_surface_capture,
             take_pending_open
         ])
         .plugin(tauri_plugin_opener::init())

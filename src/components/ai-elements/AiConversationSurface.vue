@@ -2,7 +2,7 @@
 import { refAutoReset, useClipboard, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
-import type { AgentConversationContextUsage } from '@/app/agent-chat/client'
+import type { AgentConversationContextUsage, AgentConversationTurn } from '@/app/agent-chat/client'
 import type { AgentPromptAnnotation, AgentPromptSubmission } from '@/app/agent-chat/models'
 import {
   speechDictationActiveOwner,
@@ -19,8 +19,19 @@ import AiMessageItem from './AiMessage.vue'
 import AiPromptInput from './AiPromptInput.vue'
 import AiStatusIndicator from './AiStatusIndicator.vue'
 import AiVideoGeneration from './AiVideoGeneration.vue'
-import { conversationNavigationItems } from './conversation-navigation'
-import { latestMessageCreatedAt } from './model'
+import {
+  conversationNavigationItems,
+  type ConversationNavigationItem
+} from './conversation-navigation'
+import { conversationRuns, type ConversationRun } from './conversation-runs'
+import {
+  conversationPaintedRuns,
+  conversationRunAlwaysIndexes,
+  conversationRunHeights,
+  conversationRunWindow,
+  conversationWindowFollowsLatest,
+  nextConversationRunHeight
+} from './conversation-window'
 import type { AiConversationStatus, AiMessage } from './types'
 
 const {
@@ -28,17 +39,21 @@ const {
   approvalVisible = false,
   canRetry = false,
   canStop = false,
+  chapterRailReady = true,
   contextUsage,
   disabled = false,
   emptyDescription,
   emptyTitle,
+  hasOlder = false,
   inputLabel = 'Message input',
+  loadingOlder = false,
   messages,
   modelValue,
   placeholder = 'Message this conversation…',
   sendLabel = 'Send message',
   scope,
   status,
+  turns,
   statusMessage,
   workingLabel
 } = defineProps<{
@@ -46,11 +61,14 @@ const {
   approvalVisible?: boolean
   canRetry?: boolean
   canStop?: boolean
+  chapterRailReady?: boolean
   contextUsage?: AgentConversationContextUsage
   disabled?: boolean
   emptyDescription?: string
   emptyTitle?: string
+  hasOlder?: boolean
   inputLabel?: string
+  loadingOlder?: boolean
   messages: AiMessage[]
   modelValue: string
   placeholder?: string
@@ -58,19 +76,10 @@ const {
   scope?: string
   status: AiConversationStatus
   statusMessage?: string
+  turns?: AgentConversationTurn[]
   workingLabel?: string
 }>()
 const attachments = defineModel<File[]>('attachments', { default: () => [] })
-
-type ConversationRun = {
-  activity: AiMessage[]
-  endedAt?: string
-  id: string
-  missingResponse: boolean
-  prompt?: AiMessage & { completedAt?: string }
-  startedAt?: string
-  visible: AiMessage[]
-}
 
 type AnnotationTarget = Pick<
   AgentPromptAnnotation,
@@ -91,53 +100,73 @@ type AnnotationMarker = {
   top: number
 }
 
-function hasVisibleContent(message: AiMessage): boolean {
-  if (message.text.trim()) return true
-  return Boolean(
-    message.parts?.some((part) => {
-      if (part.type === 'tool' || part.type === 'reasoning') return false
-      if (part.type === 'text') return Boolean(part.text.trim())
-      if (part.type === 'code') return Boolean(part.code.trim())
-      return true
-    })
-  )
-}
-
-const runs = computed<ConversationRun[]>(() => {
-  const grouped: Array<{
-    id: string
-    messages: AiMessage[]
-    prompt?: AiMessage & { completedAt?: string }
-  }> = []
-  for (const message of messages) {
-    if (message.role === 'user') {
-      grouped.push({ id: message.id, messages: [], prompt: message })
-      continue
-    }
-    if (!grouped.length) grouped.push({ id: `run:${message.id}`, messages: [] })
-    grouped.at(-1)?.messages.push(message)
-  }
-  return grouped.map((run) => {
-    const visible = run.messages.filter(hasVisibleContent)
-    return {
-      activity: run.messages.filter((message) =>
-        message.parts?.some((part) => part.type === 'tool' || part.type === 'reasoning')
-      ),
-      endedAt: run.prompt?.completedAt ?? latestMessageCreatedAt(run.messages),
-      id: run.id,
-      missingResponse: Boolean(run.prompt && !visible.length),
-      prompt: run.prompt,
-      startedAt: run.prompt?.createdAt ?? run.messages[0]?.createdAt,
-      visible
-    }
-  })
-})
+const runs = computed<ConversationRun[]>(() => conversationRuns(messages))
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
-const navigationItems = computed(() => conversationNavigationItems(messages))
+const navigationItems = computed(() => {
+  if (!chapterRailReady) return []
+  return turns?.length ? turns : conversationNavigationItems(messages)
+})
+const pendingRevealId = ref<string | null>(null)
+const measuredRunHeights = ref<Record<string, number>>({})
+const transcriptScrollTop = ref(0)
+const transcriptViewportHeight = ref(0)
+const runObservers = new Map<string, ResizeObserver>()
+let prependHeight: number | null = null
 const conversationThreadId = computed(() =>
   scope?.startsWith('task:') ? scope.slice('task:'.length) : undefined
 )
 const lastRunHasActivity = computed(() => Boolean(runs.value.at(-1)?.activity.length))
+const runWindow = computed(() => {
+  const list = runs.value
+  const alwaysIds = [pendingRevealId.value]
+  if (busy.value) {
+    const latest = list.at(-1)
+    if (latest) alwaysIds.push(latest.id, latest.prompt?.id)
+  }
+  const heights = conversationRunHeights(
+    list.map((run) => run.id),
+    measuredRunHeights.value
+  )
+  return conversationRunWindow(heights, {
+    alwaysIndexes: conversationRunAlwaysIndexes(list, alwaysIds),
+    live:
+      busy.value &&
+      conversationWindowFollowsLatest(
+        heights,
+        transcriptScrollTop.value,
+        transcriptViewportHeight.value
+      ),
+    scrollTop: transcriptScrollTop.value,
+    viewportHeight: transcriptViewportHeight.value
+  })
+})
+const paintedRuns = computed(() => conversationPaintedRuns(runs.value, runWindow.value))
+
+function syncTranscriptWindow() {
+  const viewport = transcriptViewport()
+  if (!viewport) return
+  transcriptScrollTop.value = viewport.scrollTop
+  transcriptViewportHeight.value = viewport.clientHeight
+}
+
+function observePaintedRun(runId: string, element: unknown) {
+  runObservers.get(runId)?.disconnect()
+  runObservers.delete(runId)
+  if (!(element instanceof HTMLElement) || typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver((entries) => {
+    const height = entries[0]?.contentRect.height
+    if (typeof height !== 'number') return
+    const latest = runs.value.at(-1)
+    const nextHeight = nextConversationRunHeight(measuredRunHeights.value[runId], height, {
+      allowShrink: !(busy.value && latest?.id === runId)
+    })
+    if (nextHeight === undefined) return
+    if (busy.value && latest && runId !== latest.id) return
+    measuredRunHeights.value = { ...measuredRunHeights.value, [runId]: nextHeight }
+  })
+  observer.observe(element)
+  runObservers.set(runId, observer)
+}
 
 function runSharesLatestTurn(run: ConversationRun): boolean {
   const latest = runs.value.at(-1)
@@ -153,6 +182,7 @@ const surface = ref<HTMLElement | null>(null)
 const copiedSelection = refAutoReset(false, 1_500)
 const selectedText = ref('')
 const pendingSelection = ref<AnnotationTarget | null>(null)
+const selectionActions = ref<HTMLElement | null>(null)
 const selectionPosition = ref({ left: 0, placeBelow: false, top: 0 })
 const selectionActionStyle = computed(() => ({
   left: `${String(selectionPosition.value.left)}px`,
@@ -184,6 +214,8 @@ const annotationMarkers = computed<AnnotationMarker[]>(() =>
 )
 
 const emit = defineEmits<{
+  'load-older': []
+  'reveal-chapter': [chapterId: string]
   retry: []
   send: [submission: AgentPromptSubmission]
   stop: []
@@ -195,6 +227,77 @@ function containWheel(event: WheelEvent) {
   event.stopPropagation()
   if (event.ctrlKey || event.metaKey) event.preventDefault()
 }
+
+function transcriptViewport(): HTMLElement | null {
+  return (
+    surface.value?.querySelector<HTMLElement>('[data-test-id="ai-conversation-viewport"]') ?? null
+  )
+}
+
+function escapedChapterId(value: string): string {
+  return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(value) : value.replaceAll('"', '\\"')
+}
+
+function chapterElement(itemId: string): HTMLElement | null {
+  return (
+    transcriptViewport()?.querySelector<HTMLElement>(
+      `[data-conversation-chapter-id="${escapedChapterId(itemId)}"]`
+    ) ?? null
+  )
+}
+
+function loadedChapter(itemId: string): boolean {
+  return runs.value.some((run) => run.prompt?.id === itemId)
+}
+
+function handleReveal(item: ConversationNavigationItem) {
+  const chapter = chapterElement(item.id)
+  if (chapter) {
+    chapter.scrollIntoView({ behavior: 'auto', block: 'start' })
+    return
+  }
+  pendingRevealId.value = item.id
+  if (loadedChapter(item.id)) return
+  emit('reveal-chapter', item.id)
+}
+
+watch(
+  () => messages[0]?.id,
+  (next, previous) => {
+    if (!previous || !next || next === previous) return
+    const viewport = transcriptViewport()
+    if (!viewport) return
+    prependHeight = viewport.scrollHeight
+    void nextTick(() => {
+      if (prependHeight === null) return
+      const live = transcriptViewport()
+      if (live) live.scrollTop += live.scrollHeight - prependHeight
+      prependHeight = null
+      syncTranscriptWindow()
+    })
+  }
+)
+
+watch(
+  () => [pendingRevealId.value, paintedRuns.value.map((item) => item.run.id).join('\0')] as const,
+  async ([chapterId]) => {
+    if (!chapterId) return
+    await nextTick()
+    const chapter = chapterElement(chapterId)
+    if (!chapter) return
+    chapter.scrollIntoView({ behavior: 'auto', block: 'start' })
+    pendingRevealId.value = null
+    syncTranscriptWindow()
+  }
+)
+
+watch(
+  () => messages.length,
+  () => {
+    void nextTick(syncTranscriptWindow)
+  },
+  { immediate: true }
+)
 
 async function scrollTranscriptToLatest() {
   await nextTick()
@@ -259,6 +362,20 @@ function targetFromSelection(selection: Selection): AnnotationTarget | null {
     sourceMessageId,
     startOffset: rawStartOffset + leadingWhitespace
   }
+}
+
+function selectionIsBackward(selection: Selection): boolean {
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection
+  if (!anchorNode || !focusNode) return false
+  if (anchorNode === focusNode) return anchorOffset > focusOffset
+  const probe = document.createRange()
+  try {
+    probe.setStart(anchorNode, anchorOffset)
+    probe.setEnd(focusNode, focusOffset)
+  } catch {
+    return false
+  }
+  return probe.collapsed
 }
 
 function messageElement(messageId: string): HTMLElement | null {
@@ -352,7 +469,16 @@ function restoreNativeSelection(range: Range) {
   selection?.addRange(range)
 }
 
+function hasAnnotationLayout() {
+  return annotations.length > 0 || Boolean(editingAnnotationId.value)
+}
+
 function refreshAnnotationGeometry() {
+  if (!hasAnnotationLayout()) {
+    if (Object.keys(markerPositions.value).length) markerPositions.value = {}
+    if (activeHighlightRects.value.length) activeHighlightRects.value = []
+    return
+  }
   const positions: Record<string, { left: number; top: number }> = {}
   const occupied = new Map<number, number>()
   for (const annotation of annotations) {
@@ -404,27 +530,29 @@ function syncSelectionActions() {
     pendingSelection.value = null
     return
   }
-  const target = targetFromSelection(selection)
-  if (!target) {
+  const quote = selection.toString().trim()
+  if (!quote) {
     selectedText.value = ''
     pendingSelection.value = null
     return
   }
   const range = selection.getRangeAt(0)
-  const rect = range.getBoundingClientRect()
+  const rects = visibleRects(range)
+  const rect =
+    (selectionIsBackward(selection) ? rects[0] : rects.at(-1)) ?? range.getBoundingClientRect()
   if (!rect.width && !rect.height) {
     selectedText.value = ''
     pendingSelection.value = null
     return
   }
-  selectedText.value = target.quote
-  pendingSelection.value = target
+  selectedText.value = quote
+  pendingSelection.value = targetFromSelection(selection)
   const left = Math.min(window.innerWidth - 112, Math.max(112, rect.left + rect.width / 2))
   const placeBelow = rect.top < 58
   selectionPosition.value = {
     left,
     placeBelow,
-    top: placeBelow ? rect.bottom + 8 : rect.top - 8
+    top: placeBelow ? rect.top + rect.height + 8 : rect.top - 8
   }
 }
 
@@ -536,10 +664,21 @@ function closeAnnotationOnOutsidePointer(event: PointerEvent) {
   closeAnnotationEditor()
 }
 
-function handleSurfaceScroll() {
+function closeSelectionActionsOnOutsidePointer(event: PointerEvent) {
+  if (!selectedText.value) return
+  const target = event.target
+  if (!(target instanceof Node)) return
+  if (surface.value?.contains(target) || selectionActions.value?.contains(target)) return
   selectedText.value = ''
   pendingSelection.value = null
-  refreshAnnotationGeometry()
+  window.getSelection()?.removeAllRanges()
+}
+
+function handleSurfaceScroll() {
+  syncTranscriptWindow()
+  selectedText.value = ''
+  pendingSelection.value = null
+  if (hasAnnotationLayout()) refreshAnnotationGeometry()
 }
 
 // Wait until the gesture ends before rendering selection actions. Updating this
@@ -547,28 +686,48 @@ function handleSurfaceScroll() {
 // while the pointer is still down, collapsing the browser's growing range.
 useEventListener(document, 'pointerup', syncSelectionActions)
 useEventListener(document, 'pointerdown', closeAnnotationOnOutsidePointer)
+useEventListener(document, 'pointerdown', closeSelectionActionsOnOutsidePointer, { capture: true })
 useEventListener(window, 'resize', () => {
+  syncTranscriptWindow()
   syncSelectionActions()
-  refreshAnnotationGeometry()
+  if (hasAnnotationLayout()) refreshAnnotationGeometry()
 })
 
+function annotationLayoutSignature() {
+  if (!hasAnnotationLayout()) return '0'
+  return `${annotations
+    .map(
+      (annotation) =>
+        `${annotation.id}:${annotation.sourceMessageId}:${annotation.startOffset}:${annotation.endOffset}:${annotation.quote.length}`
+    )
+    .join('|')}:${messages.length}`
+}
+
 watch(
-  () => [annotations, messages] as const,
+  annotationLayoutSignature,
   async () => {
+    if (!hasAnnotationLayout()) {
+      refreshAnnotationGeometry()
+      return
+    }
     await nextTick()
     refreshAnnotationGeometry()
   },
-  { deep: true, immediate: true }
+  { immediate: true }
 )
 
-onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
+onBeforeUnmount(() => {
+  stopSpeechDictation(annotationDictationOwner)
+  for (const observer of runObservers.values()) observer.disconnect()
+  runObservers.clear()
+})
 </script>
 
 <template>
   <section
     ref="surface"
     data-test-id="ai-conversation-surface"
-    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain select-text [container-type:inline-size]"
+    class="flex min-h-0 flex-1 flex-col overflow-clip overscroll-contain select-text [container-type:inline-size]"
     @keydown.stop
     @keyup="syncSelectionActions"
     @scroll.capture="handleSurfaceScroll"
@@ -584,30 +743,69 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
         data-test-id="ai-conversation-header-fade"
       />
     </div>
-    <AiConversation>
+    <AiConversation
+      :can-load-older="hasOlder"
+      :loading-older="loadingOlder"
+      @load-older="emit('load-older')"
+    >
       <template #overlay="{ scrollElement }">
-        <AiConversationNavigationRail :items="navigationItems" :scroll-element="scrollElement" />
+        <AiConversationNavigationRail
+          v-if="chapterRailReady"
+          :items="navigationItems"
+          :scroll-element="scrollElement"
+          @reveal="handleReveal"
+        />
       </template>
       <div
         v-if="messages.length"
-        class="agent-conversation-column mt-auto flex flex-col gap-5 py-4"
+        class="agent-conversation-column mt-auto flex flex-col gap-5 pt-10 pb-4"
       >
+        <button
+          v-if="hasOlder || loadingOlder"
+          type="button"
+          class="self-center rounded-full border border-border bg-panel px-3 py-1 text-[12px] text-muted hover:bg-hover hover:text-surface"
+          data-test-id="ai-conversation-load-older"
+          :disabled="loadingOlder"
+          @click="emit('load-older')"
+        >
+          {{ loadingOlder ? 'Loading earlier messages…' : 'Earlier messages' }}
+        </button>
         <div
-          v-for="(run, runIndex) in runs"
+          v-if="runWindow.leading"
+          aria-hidden="true"
+          data-test-id="ai-conversation-run-spacer-leading"
+          :style="{ height: `${String(runWindow.leading)}px` }"
+        />
+        <div
+          v-for="{ run, runIndex } in paintedRuns"
           :key="run.id"
-          class="flex scroll-mt-4 flex-col gap-2.5"
+          :ref="(element) => observePaintedRun(run.id, element)"
+          class="flex scroll-mt-10 flex-col gap-2.5 [contain:layout]"
           :data-conversation-chapter-id="run.prompt?.id"
         >
-          <AiMessageItem v-if="run.prompt" :message="run.prompt" />
+          <AiMessageItem
+            v-if="run.prompt"
+            :conversation-thread-id="conversationThreadId"
+            :message="run.prompt"
+            :model-scope="scope"
+            :steer="busy"
+          />
           <AiActivityDisclosure
-            v-if="run.activity.length || (runIndex === runs.length - 1 && busy)"
             :ended-at="run.endedAt"
             :messages="run.activity"
             :started-at="run.startedAt"
             :status="runIndex === runs.length - 1 && !approvalVisible ? status : 'ready'"
             :working-label="workingLabel"
           />
-          <AiMessageItem v-for="message in run.visible" :key="message.id" :message="message" />
+          <AiMessageItem
+            v-for="message in run.visible"
+            :key="message.id"
+            :conversation-thread-id="conversationThreadId"
+            :message="message"
+            :model-scope="scope"
+            :steer="busy"
+            :streaming="busy && runIndex === runs.length - 1"
+          />
           <AiImageGeneration
             v-if="run.activity.length"
             :conversation-thread-id="conversationThreadId"
@@ -632,7 +830,14 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
             message="No final response"
             status="needs_attention"
           />
+          <slot name="approval" :run-id="run.id" />
         </div>
+        <div
+          v-if="runWindow.trailing"
+          aria-hidden="true"
+          data-test-id="ai-conversation-run-spacer-trailing"
+          :style="{ height: `${String(runWindow.trailing)}px` }"
+        />
         <AiStatusIndicator
           v-if="
             !approvalVisible &&
@@ -644,7 +849,10 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
           :status="status"
         />
       </div>
-      <div v-else-if="busy" class="agent-conversation-column mt-auto flex flex-col gap-4 py-4">
+      <div
+        v-else-if="busy"
+        class="agent-conversation-column mt-auto flex flex-col gap-4 pt-10 pb-4"
+      >
         <AiActivityDisclosure :messages="[]" :status="status" :working-label="workingLabel" />
       </div>
       <AiConversationEmpty
@@ -652,10 +860,10 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
         :description="emptyDescription"
         :heading="emptyTitle"
       />
-      <div v-else-if="!approvalVisible" class="agent-conversation-column mt-auto py-4">
+      <div v-else-if="!approvalVisible" class="agent-conversation-column mt-auto pt-10 pb-4">
         <AiStatusIndicator :message="statusMessage" :status="status" />
       </div>
-      <slot name="approval" />
+      <slot v-if="!messages.length" name="approval" run-id="unattached" />
     </AiConversation>
     <AiPromptInput
       v-model:attachments="attachments"
@@ -751,12 +959,14 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
       </form>
       <div
         v-if="selectedText"
+        ref="selectionActions"
         data-test-id="ai-selection-actions"
         class="fixed z-[160] flex items-center overflow-hidden rounded-[11px] border border-border/90 bg-chrome-raised/98 text-[11px] font-medium text-surface shadow-chrome-menu backdrop-blur-xl select-none"
         :style="selectionActionStyle"
         @pointerdown.prevent
       >
         <button
+          v-if="pendingSelection"
           type="button"
           class="flex h-9 items-center gap-1.5 px-3 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
           @click="addSelectedTextToChat"
@@ -764,7 +974,7 @@ onBeforeUnmount(() => stopSpeechDictation(annotationDictationOwner))
           <icon-lucide-message-square-plus class="size-3.5" />
           <span>Add to chat</span>
         </button>
-        <span aria-hidden="true" class="h-5 w-px bg-border/80" />
+        <span v-if="pendingSelection" aria-hidden="true" class="h-5 w-px bg-border/80" />
         <button
           type="button"
           :aria-label="copiedSelection ? 'Selection copied' : 'Copy selection'"

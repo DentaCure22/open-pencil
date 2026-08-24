@@ -3,7 +3,6 @@ import { promiseTimeout } from '@vueuse/core'
 import { IS_BROWSER } from '@open-pencil/core/constants'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
-import type { AutomationPersistenceTransaction } from '@/app/automation/bridge/persistence'
 import { writeCacheValue } from '@/app/cache'
 import type { CachedSmylrProductionDocument } from '@/app/smylr-production/document-state'
 import type { OpenPencilWorkspaceIdentity } from '@/app/workspace-document/identity'
@@ -20,6 +19,7 @@ const DEV_LOCAL_AUTHORITY_AUTH_TOKEN =
   import.meta.env.DEV && typeof __OPENPENCIL_LOCAL_AUTHORITY_TOKEN__ === 'string'
     ? __OPENPENCIL_LOCAL_AUTHORITY_TOKEN__
     : null
+let cachedAuthorityToken: string | null = DEV_LOCAL_AUTHORITY_AUTH_TOKEN
 const AUTHORITY_BOOT_RETRIES = 10
 const AUTHORITY_BOOT_RETRY_MS = 200
 const AUTHORITY_CHANGE_RETRY_MS = 500
@@ -56,7 +56,6 @@ export type LocalWorkspaceAuthorityReceipt = {
   committedAt: string
   requestId: string
   status: 'committed' | 'initialized' | 'unchanged'
-  transaction?: AutomationPersistenceTransaction
   workspaceId: string
 }
 
@@ -364,15 +363,31 @@ export function parseLocalWorkspaceAuthorityReceipt(
   return candidate as LocalWorkspaceAuthorityReceipt
 }
 
-async function authorityToken(): Promise<string> {
-  const token = DEV_LOCAL_AUTHORITY_AUTH_TOKEN
-  if (!token) {
-    throw new LocalWorkspaceAuthorityClientError(
-      'authority_auth_unavailable',
-      'Local workspace authority authentication is unavailable'
-    )
+async function readLiveDevAuthorityToken(): Promise<string | null> {
+  if (!import.meta.env.DEV || !IS_BROWSER) return null
+  try {
+    const response = await fetch('/__openpencil/local-authority-auth', {
+      signal: AbortSignal.timeout(2_000)
+    })
+    if (!response.ok) return null
+    const payload = (await response.json()) as { token?: unknown }
+    return typeof payload.token === 'string' && payload.token.trim() ? payload.token.trim() : null
+  } catch {
+    return null
   }
-  return token
+}
+
+async function authorityToken(): Promise<string> {
+  if (cachedAuthorityToken) return cachedAuthorityToken
+  const live = await readLiveDevAuthorityToken()
+  if (live) {
+    cachedAuthorityToken = live
+    return live
+  }
+  throw new LocalWorkspaceAuthorityClientError(
+    'authority_auth_unavailable',
+    'Local workspace authority authentication is unavailable'
+  )
 }
 
 export type LocalWorkspacePresenceInput = {
@@ -405,6 +420,13 @@ export async function localWorkspaceAuthorityFetch(
 ): Promise<Response> {
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${await authorityToken()}`)
+  const response = await fetch(`${AUTHORITY_ORIGIN}${path}`, { ...init, headers })
+  if (response.status !== 401 || !import.meta.env.DEV) return response
+  cachedAuthorityToken = null
+  const live = await readLiveDevAuthorityToken()
+  if (!live) return response
+  cachedAuthorityToken = live
+  headers.set('Authorization', `Bearer ${live}`)
   return fetch(`${AUTHORITY_ORIGIN}${path}`, { ...init, headers })
 }
 
@@ -433,16 +455,6 @@ async function authorityRequest(
       payload?.error ?? `Local workspace authority request failed (${response.status})`,
       payload?.currentRevision
     )
-  }
-  return payload
-}
-
-async function authorityRpcRequest(
-  body: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const payload = await authorityRequest('/rpc', { body, method: 'POST' })
-  if (!isRecord(payload) || payload.ok !== true) {
-    throw new TypeError('Local workspace authority returned an invalid RPC response')
   }
   return payload
 }
@@ -580,54 +592,6 @@ export async function readLocalWorkspaceAuthorityHead(): Promise<LocalWorkspaceA
     revision: candidate.revision,
     updatedAt: candidate.updatedAt,
     version: 1
-  }
-}
-
-export async function revertLocalWorkspaceBoardTransaction(input: {
-  head: LocalWorkspaceAuthorityHead
-  pageId: string
-  requestId: string
-  transactionId: string
-}): Promise<void> {
-  const runtimeInstanceId = `local-authority:${input.head.authorityId}`
-  const target = {
-    content_document_id: input.head.identity.documentId,
-    document_id: input.head.identity.documentId,
-    page_id: input.pageId,
-    runtime_instance_id: runtimeInstanceId,
-    workspace_id: input.head.identity.workspaceId
-  }
-  const contextEnvelope = await authorityRpcRequest({
-    args: { ...target, target: 'known' },
-    command: 'board_context'
-  })
-  const contextResult = isRecord(contextEnvelope.result) ? contextEnvelope.result : null
-  const boardBuildBase =
-    contextResult && isRecord(contextResult.board_build_base)
-      ? contextResult.board_build_base
-      : null
-  if (!boardBuildBase) {
-    throw new TypeError('Local workspace authority returned no Board build context for Undo')
-  }
-
-  const buildEnvelope = await authorityRpcRequest({
-    args: {
-      ...boardBuildBase,
-      intent: 'Undo persisted agent Board transaction',
-      plan: {
-        artifacts: [],
-        contract: 'board-build-plan/v1',
-        operations: [{ kind: 'transaction.revert', transaction_id: input.transactionId }]
-      },
-      request_id: input.requestId
-    },
-    command: 'board_build'
-  })
-  const buildResult = isRecord(buildEnvelope.result) ? buildEnvelope.result : null
-  const persistence =
-    buildResult && isRecord(buildResult.persistence) ? buildResult.persistence : null
-  if (persistence?.status !== 'durable') {
-    throw new Error('Persisted Board transaction Undo was not durably acknowledged')
   }
 }
 
@@ -904,8 +868,7 @@ export async function commitLocalWorkspaceAuthority(
   expectedRevision: number,
   expectedContentHash: string,
   document: CachedSmylrProductionDocument,
-  requestId: string,
-  transaction?: AutomationPersistenceTransaction
+  requestId: string
 ): Promise<LocalWorkspaceAuthorityReceipt> {
   const receipt = parseLocalWorkspaceAuthorityReceipt(
     await authorityRequest('/commit', {
@@ -915,7 +878,6 @@ export async function commitLocalWorkspaceAuthority(
         expectedContentHash,
         expectedRevision,
         requestId,
-        ...(transaction ? { transaction } : {}),
         workspaceId
       }
     })

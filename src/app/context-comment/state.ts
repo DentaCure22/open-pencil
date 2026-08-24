@@ -61,7 +61,8 @@ export function openContextComment(
 
 export function openAgentImageComment(
   capture: NarratedTraceEvidence,
-  destination: ContextCommentDestination
+  destination?: ContextCommentDestination,
+  modelScope = destination?.modelScope
 ) {
   releaseCaptureSource()
   contextCommentState.captureMode = false
@@ -73,9 +74,11 @@ export function openAgentImageComment(
     capture,
     captureContext: null,
     captureSource: null,
-    destination,
+    ...(destination ? { destination } : {}),
     flow: 'screenshot',
     id: globalThis.crypto.randomUUID(),
+    imageEdit: true,
+    ...(modelScope ? { modelScope } : {}),
     target: null,
     text: ''
   }

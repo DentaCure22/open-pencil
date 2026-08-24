@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import AiToolCall from './AiToolCall.vue'
 import { resolveToolActivityState, toolGroupLabel } from './model'
@@ -12,13 +12,26 @@ type ToolItem = {
   part: ToolPart
 }
 
-const { activityCount, status, tools } = defineProps<{
+const {
+  activityCount,
+  open = false,
+  status,
+  tools
+} = defineProps<{
   activityCount: number
+  open?: boolean
   status: AiConversationStatus
   tools: ToolItem[]
 }>()
 
-const expanded = ref(false)
+const expanded = ref(open)
+const busy = computed(() => ['streaming', 'submitted'].includes(status))
+watch(
+  () => open,
+  (value) => {
+    expanded.value = value
+  }
+)
 const renderedTools = computed(() =>
   tools.map((tool) => ({
     ...tool,
@@ -76,6 +89,7 @@ const label = computed(() =>
       </span>
     </button>
     <Transition
+      :css="!busy"
       enter-active-class="grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-200 ease-out motion-reduce:transition-none"
       enter-from-class="-translate-y-0.5 grid-rows-[0fr] opacity-0"
       enter-to-class="grid-rows-[1fr] translate-y-0 opacity-100"
@@ -85,16 +99,27 @@ const label = computed(() =>
     >
       <div v-if="expanded" data-test-id="ai-tool-group-content">
         <div class="min-h-0 overflow-hidden">
-          <AiToolCall
-            v-for="tool in renderedTools"
-            :key="tool.key"
-            :error="tool.part.error"
-            :images="tool.part.images"
-            :input="tool.part.input"
-            :name="tool.part.name"
-            :output="tool.part.output"
-            :state="tool.state"
-          />
+          <TransitionGroup
+            tag="div"
+            :css="!busy"
+            enter-active-class="transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none"
+            enter-from-class="-translate-y-1 opacity-0"
+            enter-to-class="translate-y-0 opacity-100"
+            leave-active-class="transition-[opacity,transform] duration-150 ease-in motion-reduce:transition-none"
+            leave-from-class="translate-y-0 opacity-100"
+            leave-to-class="-translate-y-1 opacity-0"
+          >
+            <AiToolCall
+              v-for="tool in renderedTools"
+              :key="tool.key"
+              :error="tool.part.error"
+              :images="tool.part.images"
+              :input="tool.part.input"
+              :name="tool.part.name"
+              :output="tool.part.output"
+              :state="tool.state"
+            />
+          </TransitionGroup>
         </div>
       </div>
     </Transition>

@@ -1,4 +1,3 @@
-import { useNow } from '@vueuse/core'
 import { computed } from 'vue'
 
 import type { AgentConversationThread } from './client'
@@ -28,10 +27,23 @@ function conversationStateLabel(state?: string): string {
 }
 
 function activityOriginMs(input: LiveWorkingLabelInput): number | undefined {
-  const updated = Date.parse(input.updatedAt ?? '')
-  if (Number.isFinite(updated)) return updated
+  const recent = input.recentUpdate ?? ''
+  const hasElapsedSuffix = Boolean(
+    HEARTBEAT_ELAPSED_SUFFIX.exec(recent) || ELLIPSIS_ELAPSED_SUFFIX.exec(recent)
+  )
+  if (hasElapsedSuffix) {
+    const updated = Date.parse(input.updatedAt ?? '')
+    if (Number.isFinite(updated)) return updated
+  }
   const message = Date.parse(input.lastMessageAt ?? '')
-  return Number.isFinite(message) ? message : undefined
+  if (Number.isFinite(message)) return message
+  const updated = Date.parse(input.updatedAt ?? '')
+  return Number.isFinite(updated) ? updated : undefined
+}
+
+function shortWorkingActivity(activity: string): string {
+  const first = activity.split('\n')[0]?.trim() ?? activity
+  return first.length > 72 ? 'Working' : first
 }
 
 function splitElapsedActivity(recentUpdate: string): { activity: string; seconds: number } {
@@ -56,7 +68,7 @@ export function liveWorkingLabel(input: LiveWorkingLabelInput): string | undefin
   if (!isActiveConversationState(input.state)) return undefined
   const recent = input.recentUpdate?.trim() ?? ''
   const split = splitElapsedActivity(recent)
-  const activity = split.activity || conversationStateLabel(input.state)
+  const activity = shortWorkingActivity(split.activity || conversationStateLabel(input.state))
   const origin = activityOriginMs(input)
   const sinceUpdate =
     origin === undefined ? 0 : Math.max(0, Math.floor((input.now - origin) / 1_000))
@@ -106,7 +118,6 @@ export function useAgentBoardConversation(input: {
   workerConversationId?: string
 }) {
   const { error: historyError, history, refresh } = useAgentConversationHistory()
-  const now = useNow({ interval: 1_000 })
   const workerThreads = computed(() => {
     return (history.value?.threads ?? [])
       .filter((candidate) => matchesAgentBoardConversation(candidate, input.workerConversationId))
@@ -125,38 +136,12 @@ export function useAgentBoardConversation(input: {
     if (thread.value) return agentConversationTitle(thread.value)
     return input.fallbackTitle ?? (input.workerConversationId ? 'Task' : 'Task unavailable')
   })
-  const liveClock = computed(() => ({
-    lastMessageAt: thread.value?.messages.at(-1)?.createdAt,
-    now: now.value.getTime(),
-    recentUpdate: thread.value?.recentUpdate,
-    state: thread.value?.state,
-    updatedAt: thread.value?.updatedAt
-  }))
-  const isLiveStatus = computed(() => isActiveConversationState(thread.value?.state))
-  const statusLabel = computed(() =>
-    boardConversationStatusLabel({
-      ...liveClock.value
-    })
-  )
-  const workingLabel = computed(() =>
-    threadLiveWorkingLabel(thread.value ?? {}, liveClock.value.now)
-  )
-  const statusDotClass = computed(() => {
-    if (thread.value?.state === 'needs_attention') return 'bg-red-400'
-    if (isLiveStatus.value) return 'bg-amber-400'
-    if (statusLabel.value === 'idle') return 'bg-muted/60'
-    if (thread.value?.state === 'completed') return 'bg-success'
-    return 'bg-muted/60'
-  })
-
   return {
     historyError,
     refresh,
     resolvedThreadId,
-    statusDotClass,
     thread,
     title,
-    workerThreads,
-    workingLabel
+    workerThreads
   }
 }

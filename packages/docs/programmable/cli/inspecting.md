@@ -142,33 +142,19 @@ List design variables and their collections:
 openpencil variables design.fig
 ```
 
-## Live and persisted Board discovery
+## Live Board controls
 
-Use the canonical Board namespace to discover exact identity and acquire guarded context:
+The Board namespace is intentionally small:
 
 ```sh
-openpencil board list --json
-openpencil board context --workspace-id workspace-123 --page-id 0:1 --json
+openpencil board where --json
+openpencil board go "Board name" --json
+openpencil board theme auto --json
 ```
 
-Persisted local authority can answer both commands without an open editor. `board open` queues a
-short-lived exact page switch when the matching editor is not registered, and the editor consumes
-only the newest pending intent once it is available.
-`eval` is file-only and never targets a live Board.
-
-The complete guarded namespace is:
-
-```text
-openpencil board list|create|open|context|build|edit|connect|read|present|verify
-```
-
-Use `board build` for typed artifact creation/refinement. `board present` and live navigation require an editor runtime;
-persisted authority may support durable list, context, create, build, connect, read, and verify
-operations according to the capabilities returned by `board context`. `board edit` supports guarded
-top-level native-object update, move, resize, duplicate, and delete with exact target identity,
-revision checks, stable request receipts, and replay. Board rename/duplicate/delete and Board history commands remain intentionally absent until
-they have guarded receipts, exact-target validation, and normal Undo/Redo verification; raw `eval`
-is not their fallback.
+There is no Board authoring CLI. For persisted Board inspection or editing, use ordinary file tools
+on `workspace.index.jsonl` and the exact `workspace.json` records. `eval` remains file-only and never
+targets a live Board.
 
 ## Lint Designs
 

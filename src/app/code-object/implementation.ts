@@ -19,6 +19,12 @@ import type { Vector } from '@open-pencil/scene-graph/primitives'
 import { BOARD_SHAPE_PERMISSIONS } from '@/app/board-permissions'
 import type { EditorStore } from '@/app/editor/active-store'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
+import {
+  parseExternalLiveSurfacePreview,
+  parseExternalLiveSurfaceSource,
+  type ExternalLiveSurfacePreview,
+  type ExternalLiveSurfaceSource
+} from '@/app/external-live-surface/contracts'
 
 import type { CodeObjectBoardPermission } from './contracts'
 import {
@@ -26,6 +32,7 @@ import {
   BOARD_REMOTE_SOURCE,
   CODE_STARTER_SOURCE,
   EARTH_SIGNALS_SOURCE,
+  EXTERNAL_LIVE_SURFACE_SOURCE,
   FINANCIAL_DASHBOARD_SOURCE,
   INTERACTIVE_FORM_SOURCE,
   OFFICE_DOCUMENT_SOURCE,
@@ -149,6 +156,10 @@ export type SmylrProductionAppState = {
   view: 'live'
 }
 
+export type ExternalLiveSurfaceState = {
+  view: 'live'
+}
+
 export type TrustedWebAppLaunchMetadata = {
   launcherId: string
   startScript: string
@@ -175,6 +186,13 @@ export type OfficeSpreadsheetDocument = OpenPencilCodeDocument<
 >
 export type PptxDeckDocument = OpenPencilCodeDocument<'pptx-deck', PptxDeckState>
 export type PdfDocumentDocument = OpenPencilCodeDocument<'pdf-document', PdfDocumentState>
+export type ExternalLiveSurfaceDocument = OpenPencilCodeDocument<
+  'external-live-surface',
+  ExternalLiveSurfaceState
+> & {
+  captureSource: ExternalLiveSurfaceSource
+  preview: ExternalLiveSurfacePreview
+}
 export type AgentConversationTerminalDocument = OpenPencilCodeDocument<
   'agent-conversation-terminal',
   Record<string, never>
@@ -217,13 +235,19 @@ export type ReactShapeDocument =
   | OfficeSpreadsheetDocument
   | PptxDeckDocument
   | PdfDocumentDocument
+  | ExternalLiveSurfaceDocument
   | SmylrFlowScreenDocument
   | SmylrProductionAppDocument
 export type ReactShapeState = ReactShapeDocument['state']
 export type ReactShapePresetId =
   | Exclude<
       ReactShapeDocument['component'],
-      'code-starter' | 'pdf-document' | 'pptx-deck' | 'smylr-flow-screen' | 'smylr-production-app'
+      | 'code-starter'
+      | 'external-live-surface'
+      | 'pdf-document'
+      | 'pptx-deck'
+      | 'smylr-flow-screen'
+      | 'smylr-production-app'
     >
   | 'analytics-chart'
   | 'board-remote'
@@ -259,6 +283,27 @@ export function createAgentConversationTerminalDocument(input: {
     state: {},
     surface: { background: 'surface', overflow: 'scroll' },
     workerConversationId: input.workerConversationId
+  }
+}
+
+export function createExternalLiveSurfaceDocument(input: {
+  name: string
+  preview: ExternalLiveSurfacePreview
+  source: ExternalLiveSurfaceSource
+}): ExternalLiveSurfaceDocument {
+  return {
+    boardPermissions: [],
+    captureSource: structuredClone(input.source),
+    component: 'external-live-surface',
+    definitionId: `openpencil.external-live-surface.${input.source.selectionId}`,
+    name: input.name,
+    preview: structuredClone(input.preview),
+    props: {},
+    runtime: 'openpencil-code',
+    schemaVersion: CODE_OBJECT_SCHEMA_VERSION,
+    source: EXTERNAL_LIVE_SURFACE_SOURCE,
+    state: { view: 'live' },
+    surface: { background: 'surface', overflow: 'clip' }
   }
 }
 
@@ -1379,6 +1424,23 @@ function trustedSurfaceDocument(parsed: Record<string, unknown>): ReactShapeDocu
   })
 }
 
+function externalLiveSurfaceDocument(
+  parsed: Record<string, unknown>
+): ExternalLiveSurfaceDocument | null {
+  if (parsed.component !== 'external-live-surface') return null
+  const captureSource = parseExternalLiveSurfaceSource(parsed.captureSource)
+  const preview = parseExternalLiveSurfacePreview(parsed.preview)
+  if (!captureSource || !preview) return null
+  return materializeFrameOwnedFields(
+    parsed,
+    createExternalLiveSurfaceDocument({
+      name: recordString(parsed, 'name') ?? captureSource.element.accessibleName ?? 'Live surface',
+      preview,
+      source: captureSource
+    })
+  )
+}
+
 function standardReactShapeDocument(
   parsed: Record<string, unknown>,
   state: Record<string, unknown>
@@ -1483,6 +1545,8 @@ export function reactShapeDocument(node: SceneNode | null | undefined): ReactSha
   if (agent) return agent
   const trustedSurface = trustedSurfaceDocument(parsed)
   if (trustedSurface) return trustedSurface
+  const externalSurface = externalLiveSurfaceDocument(parsed)
+  if (externalSurface) return externalSurface
   const standard = standardReactShapeDocument(parsed, parsed.state)
   if (standard) return standard
   if (parsed.component !== 'smylr-flow-screen') return userCodeRecoveryDocument(parsed)

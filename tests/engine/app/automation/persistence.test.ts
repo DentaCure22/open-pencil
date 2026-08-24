@@ -9,13 +9,8 @@ import { createEditorStore } from '@/app/editor/session'
 describe('automation persistence acknowledgement', () => {
   test('returns the exact durable authority acknowledgement', async () => {
     const store = createEditorStore()
-    const transaction = {
-      pageId: '0:4',
-      requestId: 'request:durable-transaction',
-      route: 'board_build:plan/v1' as const
-    }
-    bindAutomationPersistence(store, (_requestedSceneRevision, receivedTransaction) => {
-      expect(receivedTransaction).toEqual(transaction)
+    bindAutomationPersistence(store, (requestedSceneRevision) => {
+      expect(requestedSceneRevision).toBe(17)
       return Promise.resolve({
         authority_id: 'authority:test',
         authority_revision: 42,
@@ -25,7 +20,7 @@ describe('automation persistence acknowledgement', () => {
       })
     })
 
-    await expect(requestAutomationPersistence(store, 17, 50, transaction)).resolves.toMatchObject({
+    await expect(requestAutomationPersistence(store, 17, 50)).resolves.toMatchObject({
       authority_id: 'authority:test',
       authority_revision: 42,
       content_hash: 'sha256:test',

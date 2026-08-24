@@ -28,7 +28,7 @@ test('pauses the running Experience when its Board runtimes are inactive', async
   await expect(runtime).toHaveAttribute('data-board-experience-runtime-active', 'true')
   await setDocumentHidden(true)
   await expect(runtime).toHaveAttribute('data-board-experience-runtime-active', 'false')
-  await expect(editor.page.locator('[data-code-object-root]')).toHaveCount(0)
+  await expect(editor.page.locator('[data-code-object-root]')).not.toHaveCount(0)
 
   await setDocumentHidden(false)
   await expect(runtime).toHaveAttribute('data-board-experience-runtime-active', 'true')

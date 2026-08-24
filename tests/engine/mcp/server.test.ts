@@ -140,7 +140,15 @@ function waitForWsListening(wss: InstanceType<typeof WebSocket.Server>): Promise
 }
 
 async function createTestClient() {
-  const { app, wss, close: closeServer } = startServer({ httpPort: 0, wsPort: 0 })
+  const {
+    app,
+    wss,
+    close: closeServer
+  } = startServer({
+    httpPort: 0,
+    toolSearch: false,
+    wsPort: 0
+  })
   const httpServer = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' })
   const actualHttpPort = (httpServer.address() as AddressInfo).port
   const actualWsPort = await waitForWsListening(wss)
@@ -206,16 +214,14 @@ describe('MCP server', () => {
     expect(names).toContain('set_fill')
     expect(names).toContain('get_page_tree')
     expect(names).toContain('render')
-    expect(names).toContain('board_build')
     expect(names).toContain('list_agent_chats')
     expect(names).toContain('get_agent_chat_context')
     expect(names).toContain('dispatch_work')
     expect(names).toContain('set_theme')
+    expect(names).not.toContain('board_build')
     expect(names).not.toContain('query_trace_history')
     expect(names).not.toContain('get_codegen_prompt')
     expect(tools.length).toBeGreaterThan(30)
-    const builder = tools.find((tool) => tool.name === 'board_build')
-    expect(builder?.description).toContain('Board')
   })
 
   test('tools have descriptions and input schemas', async () => {

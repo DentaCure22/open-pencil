@@ -42,4 +42,38 @@ describe('DOM overlay style cache', () => {
     cache.resolve(sibling)
     expect(calls.slice(-2)).toEqual([child.id, sibling.id])
   })
+
+  test('recomputes every overlay whose presented position changed', () => {
+    const store = createEditorStore()
+    const pageId = store.state.currentPageId
+    const first = store.graph.createNode('FRAME', pageId, { name: 'First', x: 0, y: 0 })
+    const second = store.graph.createNode('FRAME', pageId, { name: 'Second', x: 120, y: 40 })
+    const geometry = shallowRef<EditorOverlayGeometryRevision>({ nodeId: null, revision: 0 })
+    const calls: string[] = []
+    const cache = createEditorNodeOverlayStyleCache(store, geometry, (node) => {
+      calls.push(node.id)
+      return { transform: `${node.id}:${store.graph.getPresentedNodePosition(node.id).x}` }
+    })
+
+    cache.resolve(first)
+    cache.resolve(second)
+    expect(calls).toEqual([first.id, second.id])
+
+    store.graph.updateNodePositionPreview(first.id, 48, 12)
+    store.graph.updateNodePositionPreview(second.id, 168, 52)
+    geometry.value = { nodeId: second.id, revision: 1 }
+    cache.resolve(first)
+    cache.resolve(second)
+    expect(calls).toEqual([first.id, second.id, first.id, second.id])
+  })
+
+  test('does not resync the presentation camera for overlay-only chrome', async () => {
+    const presentation = await Bun.file('src/app/editor/presentation/index.ts').text()
+    expect(presentation).toContain("store.onEditorEvent('viewport:changed', shared.scheduleSync)")
+    expect(presentation).toContain("store.onEditorEvent('render:requested', shared.scheduleSync)")
+    expect(presentation).toContain("store.onEditorEvent('repaint:requested', shared.scheduleSync)")
+    expect(presentation).not.toContain(
+      "store.onEditorEvent('overlay:requested', shared.scheduleSync)"
+    )
+  })
 })

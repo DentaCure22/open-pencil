@@ -155,10 +155,35 @@ export function createDefaultNode(
 }
 
 /**
+ * True when a persisted record already has the runtime fields Board open and
+ * authority reads need. Current `workspace.json` writes complete nodes, so
+ * open/save can keep that object instead of allocating a fresh default blob.
+ */
+export function hasSceneNodeRuntimeDefaults(node: PersistedSceneNode): node is SceneNode {
+  return (
+    typeof node.id === 'string' &&
+    typeof node.type === 'string' &&
+    Array.isArray(node.childIds) &&
+    Array.isArray(node.pluginData) &&
+    Array.isArray(node.fills) &&
+    node.source != null &&
+    typeof node.source === 'object' &&
+    typeof node.x === 'number' &&
+    typeof node.y === 'number' &&
+    typeof node.width === 'number' &&
+    typeof node.height === 'number' &&
+    typeof node.visible === 'boolean' &&
+    typeof node.opacity === 'number' &&
+    typeof node.layoutMode === 'string'
+  )
+}
+
+/**
  * Restores fields omitted by compact or older persisted node records.
  * Explicit persisted values always win over current defaults.
  */
 export function hydrateSceneNodeDefaults(node: PersistedSceneNode): SceneNode {
+  if (hasSceneNodeRuntimeDefaults(node)) return node
   return createDefaultNode(() => node.id, node.type, node)
 }
 

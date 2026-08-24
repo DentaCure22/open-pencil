@@ -2,6 +2,7 @@ import { ref, type ComputedRef, type Ref } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { sameStringSet } from '@/app/code-object/runtime-residency'
 import {
   reconcileTrustedWebAppResidency,
   trustedWebAppResidencyFrameIds
@@ -24,6 +25,7 @@ export function useTrustedWebAppRuntimeResidency({
 }: TrustedWebAppRuntimeResidencyOptions) {
   const interactedAtByFrame = ref<Record<string, number>>({})
   const residentFrameIds = ref<Set<string>>(new Set())
+  const paintedFrameIds = ref<Set<string>>(new Set())
   let interactionSequence = 0
 
   function selectedFrameId() {
@@ -33,21 +35,42 @@ export function useTrustedWebAppRuntimeResidency({
     return selected && isSmylrProductionAppCodeObjectFrame(selected) ? selected.id : null
   }
 
+  function rememberPainted(nextResidentFrameIds: ReadonlySet<string>) {
+    const currentFrameIds = new Set(frames.value.map((frame) => frame.id))
+    const nextPaintedFrameIds = new Set<string>()
+    for (const frameId of paintedFrameIds.value) {
+      if (currentFrameIds.has(frameId)) nextPaintedFrameIds.add(frameId)
+    }
+    for (const frameId of nextResidentFrameIds) {
+      if (currentFrameIds.has(frameId)) nextPaintedFrameIds.add(frameId)
+    }
+    if (!sameStringSet(paintedFrameIds.value, nextPaintedFrameIds)) {
+      paintedFrameIds.value = nextPaintedFrameIds
+    }
+  }
+
   function reconcile(activeFrameId = selectedFrameId()) {
-    if (!documentVisible.value) return
+    if (!documentVisible.value) {
+      rememberPainted(residentFrameIds.value)
+      return
+    }
     const productionFrames = frames.value.filter(isSmylrProductionAppCodeObjectFrame)
     const eligibleFrameIds = trustedWebAppResidencyFrameIds({
       frameIds: productionFrames.map((frame) => frame.id),
       relevantFrameIds: activeFrameIds.value,
       residentFrameIds: residentFrameIds.value
     })
-    residentFrameIds.value = reconcileTrustedWebAppResidency({
+    const nextResidentFrameIds = reconcileTrustedWebAppResidency({
       activeFrameId:
         activeFrameId && eligibleFrameIds.includes(activeFrameId) ? activeFrameId : null,
       frameIds: eligibleFrameIds,
       interactedAtByFrame: interactedAtByFrame.value,
       residentFrameIds: residentFrameIds.value
     })
+    if (!sameStringSet(residentFrameIds.value, nextResidentFrameIds)) {
+      residentFrameIds.value = nextResidentFrameIds
+    }
+    rememberPainted(nextResidentFrameIds)
   }
 
   function promote(frameId: string) {
@@ -71,5 +94,9 @@ export function useTrustedWebAppRuntimeResidency({
     return residentFrameIds.value.has(frameId)
   }
 
-  return { isResident, promote, reconcile, retainCurrentFrames, selectedFrameId }
+  function isPainted(frameId: string) {
+    return paintedFrameIds.value.has(frameId) || residentFrameIds.value.has(frameId)
+  }
+
+  return { isPainted, isResident, promote, reconcile, retainCurrentFrames, selectedFrameId }
 }

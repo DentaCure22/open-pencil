@@ -83,4 +83,49 @@ describe('canvas culling', () => {
     expect(rendered).toContain(text.id)
     expect(renderer._culledCount).toBe(0)
   })
+
+  test('culls off-screen groups without walking their children', () => {
+    const graph = new SceneGraph()
+    const group = graph.createNode('GROUP', pageId(graph), {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 80
+    })
+    const child = graph.createNode('RECTANGLE', group.id, {
+      x: 0,
+      y: 0,
+      width: 40,
+      height: 40
+    })
+    const { renderer, rendered } = createRenderer()
+
+    renderNode(renderer, createCanvas(), graph, group.id, {})
+
+    expect(rendered).not.toContain(group.id)
+    expect(rendered).not.toContain(child.id)
+    expect(renderer._culledCount).toBeGreaterThan(0)
+  })
+
+  test('still draws overflowing children of an off-screen unclipped frame', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      clipsContent: false,
+      height: 80,
+      width: 80,
+      x: 0,
+      y: 0
+    })
+    const child = graph.createNode('RECTANGLE', frame.id, {
+      height: 40,
+      width: 40,
+      x: 1000,
+      y: 1000
+    })
+    const { renderer, rendered } = createRenderer()
+
+    renderNode(renderer, createCanvas(), graph, frame.id, {})
+
+    expect(rendered).toContain(child.id)
+  })
 })

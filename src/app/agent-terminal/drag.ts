@@ -1,5 +1,5 @@
 import { useEventListener } from '@vueuse/core'
-import { ref, type Ref } from 'vue'
+import { onScopeDispose, type Ref } from 'vue'
 
 import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 
@@ -16,34 +16,160 @@ import {
 } from './board-object'
 
 export const AGENT_CONVERSATION_DRAG_TYPE = 'application/x-openpencil-agent-conversation'
-const AGENT_CONVERSATION_DRAG_START_EVENT = 'openpencil:agent-conversation-drag-start'
+const AGENT_CONVERSATION_DRAG_TEXT_TYPE = 'text/plain'
 
 export type AgentConversationDragPayload = AgentConversationBoardThread & {
   newConversation?: true
   threadId: string
 }
 
+type PendingAgentConversationDrag = {
+  lastClientX: number
+  lastClientY: number
+  lastPoint: Vector | null
+  overBoard: boolean
+  placed: boolean
+  payload: AgentConversationDragPayload
+}
+
+let pendingAgentConversationDrag: PendingAgentConversationDrag | null = null
+let livePreview: HTMLElement | null = null
+let pointerIntent: {
+  payload: AgentConversationDragPayload
+  pointerId: number
+  startX: number
+  startY: number
+} | null = null
+let suppressAgentConversationClick = false
+let html5DragActive = false
+
+const POINTER_DRAG_THRESHOLD_PX = 8
+
 function hasAgentConversation(dataTransfer: DataTransfer | null): boolean {
   return Boolean(dataTransfer && [...dataTransfer.types].includes(AGENT_CONVERSATION_DRAG_TYPE))
+}
+
+let dragCursorRestore = ''
+let boardDragActivity: ((active: boolean) => void) | null = null
+
+export function isAgentConversationDragActive(): boolean {
+  return pendingAgentConversationDrag !== null
+}
+
+function createLivePreview(payload: AgentConversationDragPayload): HTMLElement | null {
+  if (typeof document === 'undefined') return null
+  const preview = document.createElement('div')
+  preview.dataset.testId = 'agent-conversation-drag-preview'
+  preview.textContent = payload.title
+  preview.style.cssText =
+    'position:fixed;left:0;top:0;z-index:2147483646;pointer-events:none;display:flex;height:28px;max-width:280px;align-items:center;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--color-panel, var(--panel));color:var(--color-surface, inherit);font-size:11px;font-weight:500;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 18px rgba(0,0,0,.28);will-change:transform;contain:layout style;user-select:none'
+  document.body.appendChild(preview)
+  return preview
+}
+
+function showLivePreview(payload: AgentConversationDragPayload) {
+  if (livePreview) return
+  livePreview = createLivePreview(payload)
+  if (typeof document !== 'undefined') {
+    dragCursorRestore = document.documentElement.style.cursor
+    document.documentElement.style.cursor = 'grabbing'
+  }
+}
+
+function moveLivePreview(clientX: number, clientY: number) {
+  if (!livePreview) return
+  livePreview.style.transform = `translate3d(${clientX - 16}px, ${clientY - 14}px, 0)`
+}
+
+function removeLivePreview() {
+  livePreview?.remove()
+  livePreview = null
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.cursor = dragCursorRestore
+    dragCursorRestore = ''
+  }
+}
+
+export function resolveAgentConversationDrag(
+  dataTransfer: DataTransfer | null
+): AgentConversationDragPayload | null {
+  return pendingAgentConversationDrag?.payload ?? readAgentConversationDrag(dataTransfer)
+}
+
+function startPendingAgentConversationDrag(
+  payload: AgentConversationDragPayload,
+  clientX = 0,
+  clientY = 0
+): void {
+  pendingAgentConversationDrag = {
+    lastClientX: clientX,
+    lastClientY: clientY,
+    lastPoint: null,
+    overBoard: false,
+    placed: false,
+    payload
+  }
+  suppressAgentConversationClick = true
+  showLivePreview(payload)
+  boardDragActivity?.(true)
+  if (clientX || clientY) moveLivePreview(clientX, clientY)
+}
+
+export function newAgentConversationDragPayload(): AgentConversationDragPayload {
+  return {
+    conversationId: createAgentConversationDraftId(),
+    newConversation: true,
+    threadId: 'new',
+    title: 'New task'
+  }
+}
+
+export function armAgentConversationPointerDrag(
+  event: PointerEvent,
+  payload: AgentConversationDragPayload
+): void {
+  if (event.button !== 0) return
+  pointerIntent = {
+    payload,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY
+  }
+  const target = event.currentTarget
+  if (target instanceof HTMLElement) {
+    try {
+      target.setPointerCapture(event.pointerId)
+    } catch {
+      // Capture is optional; window pointer listeners still track the drag.
+    }
+  }
+}
+
+export function shouldSuppressAgentConversationClick(): boolean {
+  if (!suppressAgentConversationClick) return false
+  suppressAgentConversationClick = false
+  return true
 }
 
 export function writeAgentConversationDrag(
   event: DragEvent,
   payload: AgentConversationDragPayload
 ): void {
-  if (!event.dataTransfer) return
-  event.dataTransfer.setData(AGENT_CONVERSATION_DRAG_TYPE, JSON.stringify(payload))
-  event.dataTransfer.effectAllowed = 'copyMove'
-  window.dispatchEvent(new CustomEvent(AGENT_CONVERSATION_DRAG_START_EVENT))
+  const resolved = pendingAgentConversationDrag?.payload ?? pointerIntent?.payload ?? payload
+  if (!pendingAgentConversationDrag) {
+    startPendingAgentConversationDrag(resolved, event.clientX, event.clientY)
+  }
+  pointerIntent = null
+  html5DragActive = true
+  if (event.dataTransfer) {
+    event.dataTransfer.setData(AGENT_CONVERSATION_DRAG_TEXT_TYPE, resolved.title)
+    event.dataTransfer.setData(AGENT_CONVERSATION_DRAG_TYPE, JSON.stringify(resolved))
+    event.dataTransfer.effectAllowed = 'copy'
+  }
 }
 
 export function writeNewAgentConversationDrag(event: DragEvent): void {
-  writeAgentConversationDrag(event, {
-    conversationId: createAgentConversationDraftId(),
-    newConversation: true,
-    threadId: 'new',
-    title: 'New task'
-  })
+  writeAgentConversationDrag(event, pointerIntent?.payload ?? newAgentConversationDragPayload())
 }
 
 export function readAgentConversationDrag(
@@ -173,49 +299,159 @@ export function placeAgentConversationBoardThread(
   return store.graph.getNode(existing.id) ?? existing
 }
 
+function clearAgentConversationDragState() {
+  removeLivePreview()
+  pendingAgentConversationDrag = null
+  pointerIntent = null
+  html5DragActive = false
+  boardDragActivity?.(false)
+  if (typeof window === 'undefined') {
+    suppressAgentConversationClick = false
+    return
+  }
+  window.setTimeout(() => {
+    suppressAgentConversationClick = false
+  }, 0)
+}
+
 export function useAgentConversationDrop(
   canvasAreaRef: Ref<HTMLElement | null>,
   store: EditorStore
 ) {
-  const isDraggingAgentConversation = ref(false)
-
-  function onDragEnter(event: DragEvent) {
-    if (!hasAgentConversation(event.dataTransfer)) return
-    event.preventDefault()
-    isDraggingAgentConversation.value = true
+  let boardBounds: DOMRect | null = null
+  boardDragActivity = (active) => {
+    const area = canvasAreaRef.value
+    if (area) area.style.pointerEvents = active ? 'none' : ''
+    if (active) {
+      store.setHoveredNode(null)
+      store.setAutoLayoutHover(null)
+    }
   }
+  onScopeDispose(() => {
+    boardDragActivity?.(false)
+    boardDragActivity = null
+  })
+
+  function refreshBoardBounds() {
+    boardBounds = canvasAreaRef.value?.getBoundingClientRect() ?? null
+  }
+
+  function isOverBoard(clientX: number, clientY: number) {
+    const bounds = boardBounds
+    return Boolean(
+      bounds &&
+        clientX >= bounds.left &&
+        clientX <= bounds.right &&
+        clientY >= bounds.top &&
+        clientY <= bounds.bottom
+    )
+  }
+
+  function pointFromClient(clientX: number, clientY: number): Vector | null {
+    if (!boardBounds) refreshBoardBounds()
+    if (!boardBounds) return null
+    return store.screenToCanvas(clientX - boardBounds.left, clientY - boardBounds.top)
+  }
+
+  function trackPointer(clientX: number, clientY: number) {
+    const intent = pointerIntent
+    if (intent && !pendingAgentConversationDrag) {
+      const dx = clientX - intent.startX
+      const dy = clientY - intent.startY
+      if (dx * dx + dy * dy >= POINTER_DRAG_THRESHOLD_PX * POINTER_DRAG_THRESHOLD_PX) {
+        startPendingAgentConversationDrag(intent.payload, clientX, clientY)
+        pointerIntent = null
+        refreshBoardBounds()
+      }
+    }
+    const pending = pendingAgentConversationDrag
+    if (!pending) return
+    pending.lastClientX = clientX
+    pending.lastClientY = clientY
+    pending.overBoard = isOverBoard(clientX, clientY)
+    moveLivePreview(clientX, clientY)
+  }
+
+  function measurePendingPoint() {
+    const pending = pendingAgentConversationDrag
+    if (!pending) return
+    refreshBoardBounds()
+    pending.overBoard = isOverBoard(pending.lastClientX, pending.lastClientY)
+    pending.lastPoint = pointFromClient(pending.lastClientX, pending.lastClientY)
+  }
+
+  function placeFromPending(point: Vector | null) {
+    const pending = pendingAgentConversationDrag
+    if (!pending || pending.placed || !point) return
+    pending.placed = true
+    removeLivePreview()
+    placeAgentConversationBoardThread(store, pending.payload, point)
+    pendingAgentConversationDrag = null
+  }
+
+  function finishIfOverBoard() {
+    measurePendingPoint()
+    const pending = pendingAgentConversationDrag
+    if (!pending || pending.placed || !pending.overBoard) return
+    placeFromPending(pending.lastPoint)
+  }
+
+  function onDragEnter(_event: DragEvent) {}
 
   function onDragOver(event: DragEvent) {
-    if (!hasAgentConversation(event.dataTransfer)) return
+    if (!pendingAgentConversationDrag && !pointerIntent) return
+    trackPointer(event.clientX, event.clientY)
+    if (!pendingAgentConversationDrag?.overBoard) return
     event.preventDefault()
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-    isDraggingAgentConversation.value = true
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   }
 
-  function onDragLeave(event: DragEvent) {
-    const area = canvasAreaRef.value
-    const related = event.relatedTarget
-    if (area && related instanceof Node && area.contains(related)) return
-    isDraggingAgentConversation.value = false
-  }
+  function onDragLeave(_event: DragEvent) {}
 
   function onDrop(event: DragEvent) {
-    const area = canvasAreaRef.value
-    const payload = readAgentConversationDrag(event.dataTransfer)
-    isDraggingAgentConversation.value = false
-    if (!area || !payload) return
+    const pending = pendingAgentConversationDrag
+    if (!pending) return
     event.preventDefault()
-    const bounds = area.getBoundingClientRect()
-    const point = store.screenToCanvas(event.clientX - bounds.left, event.clientY - bounds.top)
-    placeAgentConversationBoardThread(store, payload, point)
+    event.stopPropagation()
+    measurePendingPoint()
+    const point =
+      pending.lastPoint ??
+      pointFromClient(event.clientX, event.clientY) ??
+      (boardBounds
+        ? pointFromClient(
+            boardBounds.left + boardBounds.width / 2,
+            boardBounds.top + boardBounds.height / 2
+          )
+        : null)
+    placeFromPending(point)
+    clearAgentConversationDragState()
   }
 
-  useEventListener(window, AGENT_CONVERSATION_DRAG_START_EVENT, () => {
-    isDraggingAgentConversation.value = true
-  })
-  useEventListener(window, 'dragend', () => {
-    isDraggingAgentConversation.value = false
-  })
+  function onDragEnd() {
+    finishIfOverBoard()
+    clearAgentConversationDragState()
+  }
 
-  return { isDraggingAgentConversation, onDragEnter, onDragLeave, onDragOver, onDrop }
+  function onPointerMove(event: PointerEvent) {
+    if (!pendingAgentConversationDrag && !pointerIntent) return
+    trackPointer(event.clientX, event.clientY)
+  }
+
+  function onPointerUp(event: PointerEvent) {
+    if (!pendingAgentConversationDrag && !pointerIntent) return
+    trackPointer(event.clientX, event.clientY)
+    finishIfOverBoard()
+    if (html5DragActive && pendingAgentConversationDrag && !pendingAgentConversationDrag.placed) {
+      return
+    }
+    pointerIntent = null
+    clearAgentConversationDragState()
+  }
+
+  useEventListener(document, 'drop', onDrop, { capture: true })
+  useEventListener(window, 'dragend', onDragEnd)
+  useEventListener(window, 'pointermove', onPointerMove, { passive: true })
+  useEventListener(window, 'pointerup', onPointerUp)
+
+  return { onDragEnter, onDragLeave, onDragOver, onDrop }
 }

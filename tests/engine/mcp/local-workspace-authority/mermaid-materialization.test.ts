@@ -9,7 +9,7 @@ import {
   readAuthorityBoardDocument,
   writeAuthorityBoardDocument
 } from '#mcp/local-workspace-authority/document'
-import { readAuthorityMermaidSource } from '#mcp/local-workspace-authority/native-diagram'
+import { readAuthorityMermaidSource } from '#mcp/local-workspace-authority/mermaid-readback'
 import { LocalWorkspaceAuthorityStore } from '#mcp/local-workspace-authority/store'
 
 const roots: string[] = []

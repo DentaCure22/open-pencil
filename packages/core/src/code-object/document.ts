@@ -15,6 +15,7 @@ export const KNOWN_CODE_OBJECT_COMPONENTS = [
   'agent-conversation-terminal',
   'code-starter',
   'earth-signals',
+  'external-live-surface',
   'office-document',
   'office-spreadsheet',
   'open-source-workspace',
@@ -208,10 +209,14 @@ export function createSmylrTrustedWebAppDocument<BoardPermission = unknown>(inpu
   }
 }
 
+export function isCodeObjectKind(node: SceneNode | null | undefined): node is SceneNode {
+  return node?.type === 'FRAME' && pluginValue(node, 'kind') === CODE_OBJECT_KIND
+}
+
 export function parseCodeObjectDocument(
   node: SceneNode | null | undefined
 ): CodeObjectDocumentEnvelope | null {
-  if (node?.type !== 'FRAME' || pluginValue(node, 'kind') !== CODE_OBJECT_KIND) return null
+  if (!isCodeObjectKind(node)) return null
   const raw = pluginValue(node, 'document')
   if (!raw) return null
   try {

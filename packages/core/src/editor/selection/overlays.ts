@@ -1,7 +1,13 @@
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 import type { SnapGuide } from '@open-pencil/scene-graph/snap'
 
+import { isCodeObjectKind } from '#core/code-object/document'
 import type { EditorContext } from '#core/editor/types'
+
+function paintsCanvasHoverChrome(ctx: EditorContext, id: string | null) {
+  if (!id) return false
+  return !isCodeObjectKind(ctx.graph.getNode(id))
+}
 
 export function createSelectionOverlayActions(ctx: EditorContext) {
   function setMarquee(rect: Rect | null) {
@@ -24,7 +30,9 @@ export function createSelectionOverlayActions(ctx: EditorContext) {
     const previous = ctx.state.hoveredNodeId
     ctx.state.hoveredNodeId = id
     ctx.emitEditorEvent('hover:changed', id, previous)
-    ctx.requestOverlayRepaint()
+    if (paintsCanvasHoverChrome(ctx, previous) || paintsCanvasHoverChrome(ctx, id)) {
+      ctx.requestOverlayRepaint()
+    }
   }
 
   function setDropTarget(id: string | null) {

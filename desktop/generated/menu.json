@@ -90,6 +90,10 @@
         "type": "separator"
       },
       {
+        "id": "model-meter",
+        "label": "Cache"
+      },
+      {
         "id": "check-updates",
         "label": "Check for Updates…"
       },

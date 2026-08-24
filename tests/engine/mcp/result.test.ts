@@ -3,6 +3,10 @@ import { describe, expect, test } from 'bun:test'
 import { MAX_RESULT_BYTES, ok } from '#mcp/result'
 
 describe('MCP result formatting', () => {
+  test('keeps the model-facing result cap at 64KB', () => {
+    expect(MAX_RESULT_BYTES).toBe(64 * 1024)
+  })
+
   test('returns structured errors for oversized text results', () => {
     const result = ok({ payload: 'x'.repeat(MAX_RESULT_BYTES) }, 'large_tool')
 

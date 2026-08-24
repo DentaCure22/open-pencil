@@ -40,8 +40,9 @@ const activityCount = computed(() =>
   messages.reduce(
     (count, message) =>
       count +
-      messageParts(message).filter((part) => part.type === 'reasoning' || part.type === 'tool')
-        .length,
+      messageParts(message).filter(
+        (part) => part.type === 'commentary' || part.type === 'reasoning' || part.type === 'tool'
+      ).length,
     0
   )
 )
@@ -60,7 +61,7 @@ const generations = computed(() => {
   let activityIndex = 0
   const candidates = messages.flatMap((message) =>
     messageParts(message).flatMap((part, partIndex) => {
-      if (part.type !== 'reasoning' && part.type !== 'tool') return []
+      if (part.type !== 'commentary' && part.type !== 'reasoning' && part.type !== 'tool') return []
       const index = activityIndex
       activityIndex += 1
       if (part.type !== 'tool' || !isVideoGenerationTool(part.name, part.input)) return []

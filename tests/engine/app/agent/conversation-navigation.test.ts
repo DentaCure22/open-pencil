@@ -41,6 +41,29 @@ describe('conversation chapter navigation', () => {
     ])
   })
 
+  test('uses the last commentary as the chapter response when there is no answer bubble', () => {
+    expect(
+      conversationNavigationItems([
+        message('user-1', 'user', 'Add a spinner.'),
+        message('note-1', 'assistant', '', {
+          parts: [
+            {
+              state: 'complete',
+              text: 'The spinner is on the open chat and the thread list.',
+              type: 'commentary'
+            }
+          ]
+        })
+      ])
+    ).toEqual([
+      {
+        id: 'user-1',
+        prompt: 'Add a spinner.',
+        response: 'The spinner is on the open chat and the thread list.'
+      }
+    ])
+  })
+
   test('uses durable attachment and image labels when a prompt has no text', () => {
     expect(
       conversationNavigationItems([

@@ -120,6 +120,33 @@ export function browserCaptureAttachmentSummary(file: File): {
     : { captureCount: 1, recordingCount: 0, title: 'Chrome capture', traceLinked: true }
 }
 
+export type BrowserCaptureAttachmentPreview = {
+  height: number
+  imageUrl: string
+  title: string
+  width: number
+}
+
+export function browserCaptureAttachmentPreview(
+  file: File
+): BrowserCaptureAttachmentPreview | null {
+  if (!isBrowserCaptureAttachment(file)) return null
+  const session = attachedSessions.get(file)
+  if (!session) return null
+  const descriptor = attachedDescriptors.get(file)
+  const selection = descriptor?.selectionId
+    ? session.selections.find((candidate) => candidate.id === descriptor.selectionId)
+    : session.selections[0]
+  const snapshot = selection?.snapshot
+  if (!snapshot?.dataUrl || snapshot.width < 1 || snapshot.height < 1) return null
+  return {
+    height: snapshot.height,
+    imageUrl: snapshot.dataUrl,
+    title: descriptor?.title ?? session.title,
+    width: snapshot.width
+  }
+}
+
 export function browserCaptureAttachmentKey(file: File): string | null {
   if (!isBrowserCaptureAttachment(file)) return null
   const descriptor = attachedDescriptors.get(file)

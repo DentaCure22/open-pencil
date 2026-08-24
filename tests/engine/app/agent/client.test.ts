@@ -40,13 +40,45 @@ describe('Pi conversation inventory', () => {
     expect(thread?.messages[0]?.id).toBe('agent:thread-1:user-1')
   })
 
-  test('sorts the newest task first without synthesizing infrastructure threads', () => {
+  test('sorts by the last user message instead of later agent activity', () => {
     const history = agentConversationHistory([
-      conversation('older', { updatedAt: '2026-08-17T12:00:00.000Z' }),
-      conversation('newer', { updatedAt: '2026-08-17T12:02:00.000Z' })
+      conversation('older-user', {
+        lastUserMessageAt: '2026-08-17T12:00:00.000Z',
+        messages: [
+          {
+            createdAt: '2026-08-17T12:00:00.000Z',
+            id: 'user-old',
+            role: 'user',
+            text: 'Older request'
+          },
+          {
+            createdAt: '2026-08-17T12:04:00.000Z',
+            id: 'assistant-new',
+            role: 'assistant',
+            text: 'Later agent turn'
+          }
+        ],
+        updatedAt: '2026-08-17T12:04:00.000Z'
+      }),
+      conversation('newer-user', {
+        lastUserMessageAt: '2026-08-17T12:02:00.000Z',
+        messages: [
+          {
+            createdAt: '2026-08-17T12:02:00.000Z',
+            id: 'user-new',
+            role: 'user',
+            text: 'Newer request'
+          }
+        ],
+        updatedAt: '2026-08-17T12:02:00.000Z'
+      })
     ])
 
-    expect(history.threads.map((thread) => thread.nativeThreadId)).toEqual(['newer', 'older'])
+    expect(history.threads.map((thread) => thread.nativeThreadId)).toEqual([
+      'newer-user',
+      'older-user'
+    ])
+    expect(history.threads[0]?.lastUserMessageAt).toBe('2026-08-17T12:02:00.000Z')
     expect(agentConversationHistory([])).toEqual({ threads: [] })
   })
 })

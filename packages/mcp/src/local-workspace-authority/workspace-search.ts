@@ -10,11 +10,10 @@ import {
 import type { LocalWorkspaceAuthorityHead } from './types'
 import {
   buildWorkspaceJsonlIndex,
-  parseWorkspaceJsonlIndexMetadata,
+  parseWorkspaceJsonlIndex,
   WORKSPACE_JSONL_INDEX_FILE,
   workspaceJsonlIndexIsCurrent,
   type WorkspaceJsonlIndex,
-  type WorkspaceJsonlIndexRecord,
   writeWorkspaceJsonlIndex
 } from './workspace-jsonl-index'
 
@@ -31,37 +30,6 @@ function boundedLimit(value: number): number {
   return value
 }
 
-function isIndexRecord(value: unknown): value is WorkspaceJsonlIndexRecord {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Partial<WorkspaceJsonlIndexRecord>
-  return Boolean(
-    (record.kind === 'node' || record.kind === 'page') &&
-    typeof record.id === 'string' &&
-    typeof record.name === 'string' &&
-    typeof record.type === 'string' &&
-    typeof record.pageId === 'string' &&
-    typeof record.pageName === 'string' &&
-    typeof record.ownerId === 'string' &&
-    typeof record.canonicalObjectId === 'string' &&
-    typeof record.searchable === 'string'
-  )
-}
-
-function parseIndex(value: string): WorkspaceJsonlIndex | null {
-  const lines = value.split('\n').filter(Boolean)
-  const metadata = parseWorkspaceJsonlIndexMetadata(lines[0] ?? '')
-  if (!metadata) return null
-  const records = lines.slice(1).flatMap((line) => {
-    try {
-      const parsed = JSON.parse(line) as unknown
-      return isIndexRecord(parsed) ? [parsed] : []
-    } catch {
-      return []
-    }
-  })
-  return records.length === metadata.recordCount ? { metadata, records } : null
-}
-
 async function currentIndex(
   rootPath: string,
   head: LocalWorkspaceAuthorityHead
@@ -69,7 +37,7 @@ async function currentIndex(
   const filePath = path.join(rootPath, WORKSPACE_JSONL_INDEX_FILE)
   let parsed: WorkspaceJsonlIndex | null
   try {
-    parsed = parseIndex(await readFile(filePath, 'utf8'))
+    parsed = parseWorkspaceJsonlIndex(await readFile(filePath, 'utf8'))
   } catch {
     parsed = null
   }

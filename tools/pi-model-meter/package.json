@@ -1,0 +1,9 @@
+{
+  "name": "@open-pencil/pi-model-meter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "bun src/cli.ts",
+    "test": "bun test tests"
+  }
+}

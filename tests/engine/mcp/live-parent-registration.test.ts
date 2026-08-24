@@ -62,20 +62,30 @@ describe('live-parent MCP registration', () => {
     expect(schema.safeParse({ object_ids: [], page_id: '0:2' }).success).toBe(false)
   })
 
-  test('dispatch_work carries the exact words and their spoken window', () => {
+  test('dispatch_work carries exact words and a resolved intention', () => {
     const tools = setup()
     expect(tools.get('dispatch_work')?.description).toContain('what the user said')
     const schema = tools.get('dispatch_work')?.inputSchema
     expect(schema).toBeDefined()
     expect(Object.keys((schema as z.ZodObject<Record<string, z.ZodType>>).shape).sort()).toEqual([
       'action',
-      'continue_thread_id',
-      'done',
       'exact_words',
-      'target_thread_id',
-      'turn_ended_at',
-      'turn_started_at'
+      'intention',
+      'target_thread_id'
     ])
+    expect(
+      schema?.safeParse({
+        action: 'new',
+        exact_words: 'Build the status card.',
+        intention: 'Create a status card on the current Board.'
+      }).success
+    ).toBe(true)
+    expect(
+      schema?.safeParse({
+        exact_words: 'Build the status card.',
+        intention: 'Create a status card on the current Board.'
+      }).success
+    ).toBe(false)
   })
 
   test('lists structured chat candidates without transcript or session fields', () => {
@@ -272,19 +282,19 @@ describe('live-parent MCP registration', () => {
 
   test('routes new, continue, and fork without another dispatcher turn', () => {
     const shared = {
-      done: 'The requested Board change is complete.',
       exact_words: 'Keep fixing the Dental Chart.',
-      turn_ended_at: '2026-08-21T15:00:03.000Z',
-      turn_started_at: '2026-08-21T15:00:00.000Z'
+      intention: 'Finish the existing Dental Chart cleanup.'
     }
-    expect(composeDispatchRequest(shared)).toMatchObject({
+    expect(composeDispatchRequest({ ...shared, action: 'new' })).toMatchObject({
       action: 'new',
+      body: { toolScope: 'board-worker' },
       route: '/agent-router/v1/pi/dispatch'
     })
     expect(
       composeDispatchRequest({ ...shared, action: 'continue', target_thread_id: 'thread/one' })
     ).toMatchObject({
       action: 'continue',
+      body: { toolScope: 'board-worker' },
       route: '/agent-router/v1/pi/conversations/thread%2Fone/follow-up',
       targetThreadId: 'thread/one'
     })
@@ -292,6 +302,7 @@ describe('live-parent MCP registration', () => {
       composeDispatchRequest({ ...shared, action: 'fork', target_thread_id: 'thread/one' })
     ).toMatchObject({
       action: 'fork',
+      body: { toolScope: 'board-worker' },
       route: '/agent-router/v1/pi/conversations/thread%2Fone/fork',
       targetThreadId: 'thread/one'
     })
@@ -302,14 +313,16 @@ describe('live-parent MCP registration', () => {
 
   test('invokes the OpenPencil skill with Pi command syntax', () => {
     const prompt = composeDispatchWorkPrompt({
-      done: 'The requested Board change is complete.',
+      action: 'new',
       exact_words: 'Move the card to the left.',
-      turn_ended_at: '2026-08-21T15:00:03.000Z',
-      turn_started_at: '2026-08-21T15:00:00.000Z'
+      intention: 'Move the selected card left while preserving its other properties.'
     })
 
     expect(prompt).toStartWith('/skill:openpencil Move the card to the left.')
-    expect(prompt).toContain('Spoken turn: 2026-08-21T15:00:00.000Z to 2026-08-21T15:00:03.000Z')
+    expect(prompt).toContain(
+      'Intention: Move the selected card left while preserving its other properties.'
+    )
+    expect(prompt).not.toContain('Spoken turn:')
     expect(prompt).not.toContain('$openpencil')
   })
 })

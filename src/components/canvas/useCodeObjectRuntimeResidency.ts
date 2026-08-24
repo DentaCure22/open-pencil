@@ -11,12 +11,15 @@ import {
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import { codeObjectDocument } from '@/app/code-object/model'
-import { loadedCodeObjectRuntime } from '@/app/code-object/runtime'
 import {
   clearCodeObjectRuntimeActivity,
   publishCodeObjectRuntimeActivity
 } from '@/app/code-object/runtime-activity'
+import {
+  CODE_OBJECT_LIVE_RUNTIME_CAP,
+  reconcileLiveRuntimeResidency,
+  sameStringSet
+} from '@/app/code-object/runtime-residency'
 import type { EditorStore } from '@/app/editor/active-store'
 
 const CODE_OBJECT_RUNTIME_OVERSCAN_PX = 256
@@ -24,21 +27,22 @@ const CODE_OBJECT_RUNTIME_OVERSCAN_PX = 256
 interface CodeObjectRuntimeResidencyOptions {
   frames: ComputedRef<SceneNode[]>
   pinnedFrameIds: () => ReadonlySet<string>
-  preserveRuntimesOnUnmount: () => boolean
   store: EditorStore
 }
 
 export function useCodeObjectRuntimeResidency({
   frames,
   pinnedFrameIds,
-  preserveRuntimesOnUnmount,
   store
 }: CodeObjectRuntimeResidencyOptions) {
   const documentVisible = ref(!document.hidden)
   const viewportActiveFrameIds = ref<Set<string>>(new Set())
+  const interactedAtByFrame = ref<Record<string, number>>({})
+  const residentFrameIds = ref<Set<string>>(new Set())
   const surfaceHosts = new Map<string, HTMLElement>()
   let mounted = false
   let viewportObserver: IntersectionObserver | null = null
+  let interactionSequence = 0
 
   const relevantFrameIds = computed(() => {
     const pinned = pinnedFrameIds()
@@ -48,9 +52,24 @@ export function useCodeObjectRuntimeResidency({
         .map((frame) => frame.id)
     )
   })
-  const activeFrameIds = computed(() =>
-    documentVisible.value ? relevantFrameIds.value : new Set<string>()
-  )
+  const activeFrameIds = computed(() => {
+    if (!documentVisible.value) return new Set<string>()
+    return reconcileLiveRuntimeResidency({
+      cap: CODE_OBJECT_LIVE_RUNTIME_CAP,
+      frameIds: [...relevantFrameIds.value],
+      interactedAtByFrame: interactedAtByFrame.value,
+      pinnedFrameIds: [...pinnedFrameIds()],
+      residentFrameIds: residentFrameIds.value
+    })
+  })
+
+  function promote(frameId: string) {
+    interactionSequence += 1
+    interactedAtByFrame.value = {
+      ...interactedAtByFrame.value,
+      [frameId]: interactionSequence
+    }
+  }
 
   function updateViewportActivity(entries: IntersectionObserverEntry[]) {
     const nextFrameIds = new Set(viewportActiveFrameIds.value)
@@ -109,18 +128,24 @@ export function useCodeObjectRuntimeResidency({
     documentVisible.value = !document.hidden
   })
 
+  watch(frames, (nextFrames) => {
+    const currentFrameIds = new Set(nextFrames.map((frame) => frame.id))
+    const nextInteracted = Object.fromEntries(
+      Object.entries(interactedAtByFrame.value).filter(([frameId]) => currentFrameIds.has(frameId))
+    )
+    if (Object.keys(nextInteracted).length !== Object.keys(interactedAtByFrame.value).length) {
+      interactedAtByFrame.value = nextInteracted
+    }
+  })
+
   watch(
-    activeFrameIds,
-    (frameIds) => {
+    () => [...activeFrameIds.value].sort().join('\0'),
+    () => {
+      const frameIds = activeFrameIds.value
+      if (!sameStringSet(residentFrameIds.value, frameIds)) {
+        residentFrameIds.value = new Set(frameIds)
+      }
       publishCodeObjectRuntimeActivity(store, frameIds)
-      if (preserveRuntimesOnUnmount()) return
-      const reactRuntimeFrameIds = new Set(
-        [...frameIds].filter((frameId) => {
-          const frame = store.graph.getNode(frameId)
-          return frame && codeObjectDocument(frame)?.component !== 'smylr-production-app'
-        })
-      )
-      loadedCodeObjectRuntime()?.disposeCodeObjectsExcept(reactRuntimeFrameIds)
     },
     { immediate: true }
   )
@@ -142,5 +167,12 @@ export function useCodeObjectRuntimeResidency({
     clearCodeObjectRuntimeActivity(store)
   })
 
-  return { activeFrameIds, bindSurfaceHost, documentVisible, relevantFrameIds }
+  return {
+    activeFrameIds,
+    bindSurfaceHost,
+    documentVisible,
+    promote,
+    relevantFrameIds,
+    viewportActiveFrameIds
+  }
 }

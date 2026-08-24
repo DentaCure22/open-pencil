@@ -20,6 +20,7 @@ import type { TextEditor } from '#core/text/editor'
 
 import { LabelCache } from './labels/cache'
 import * as LabelHitTest from './labels/hit-test'
+import * as ParagraphCache from './paragraph-cache'
 import * as RenderColors from './renderer/colors'
 import * as RendererFonts from './renderer/fonts'
 import { destroyRenderer } from './renderer/lifecycle'
@@ -86,6 +87,14 @@ export class SkiaRenderer {
   scenePictureVersion = -1
   scenePicturePositionPreviewVersion = -1
   scenePicturePageId: string | null = null
+  scenePictureBounds: Rect | null = null
+  scenePictureBoundsVersion = -1
+  scenePictureBoundsPageId: string | null = null
+  scenePreviewBasePicture: SkPicture | null = null
+  scenePreviewBaseVersion = -1
+  scenePreviewBasePageId: string | null = null
+  scenePreviewBaseIds = ''
+  skipSceneNodeIds: ReadonlySet<string> | null = null
   sceneBacking: {
     image: CKImage
     pageId: string | null
@@ -129,6 +138,8 @@ export class SkiaRenderer {
   sceneBackingLastViewportEventAt = 0
   lastSceneViewport: { panX: number; panY: number; zoom: number } | null = null
   nodePictureCache = new Map<string, SkPicture | null>()
+  paragraphCache = new Map<string, ParagraphCache.ParagraphCacheEntry>()
+  paragraphCacheBytes = 0
   subtreePictureCache = new Map<string, SubtreePictureCacheEntry>()
   subtreePictureCachePageId: string | null = null
   subtreePictureCacheSceneVersion = -1
@@ -434,6 +445,10 @@ export class SkiaRenderer {
     RendererState.invalidateNodePicture(this, nodeId)
   }
 
+  invalidateParagraphCache(nodeId?: string): void {
+    ParagraphCache.invalidateParagraphCache(this, nodeId)
+  }
+
   invalidateSubtreePicture(nodeId: string): void {
     RendererState.invalidateSubtreePicture(this, nodeId)
   }
@@ -523,7 +538,8 @@ export class SkiaRenderer {
     showRulers: boolean,
     dpr: number,
     layer: RenderPipeline.RenderLayer = 'full',
-    selectionChromeOwnerIds?: ReadonlySet<string>
+    selectionChromeOwnerIds?: ReadonlySet<string>,
+    hoverChromeOwnerIds?: ReadonlySet<string>
   ): void {
     RenderPipeline.renderFromEditorState(
       this,
@@ -535,7 +551,8 @@ export class SkiaRenderer {
       showRulers,
       dpr,
       layer,
-      selectionChromeOwnerIds
+      selectionChromeOwnerIds,
+      hoverChromeOwnerIds
     )
   }
 
@@ -588,6 +605,14 @@ export class SkiaRenderer {
     opts?: { halfLeading?: boolean }
   ): Paragraph {
     return RenderText.buildParagraph(this, node, color, opts)
+  }
+
+  acquireParagraph(
+    node: SceneNode,
+    color?: Float32Array,
+    opts?: { halfLeading?: boolean }
+  ): Paragraph {
+    return ParagraphCache.acquireCachedParagraph(this, node, color, opts)
   }
 
   resolveFillColorInfo(

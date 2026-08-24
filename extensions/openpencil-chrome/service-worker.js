@@ -1,5 +1,9 @@
+import {
+  measureBrowserLiveSurface,
+  relayBrowserLiveSurfaceInput
+} from './external-surface-service.js'
+
 const OPENPENCIL_URLS = ['http://localhost:1420/*', 'http://127.0.0.1:1420/*']
-const OPENPENCIL_ORIGINS = ['http://localhost:1420/', 'http://127.0.0.1:1420/']
 const EVENT_CONTRACT = 'openpencil-browser-element/v1'
 const ACTIVE_CAPTURE_SESSION_KEY = 'openpencil-active-capture-session-v1'
 const PENDING_EVENTS_KEY = 'openpencil-pending-browser-events-v3'
@@ -12,10 +16,6 @@ let captureSessionMutation = Promise.resolve()
 
 function isWebPage(url) {
   return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
-}
-
-function isOpenPencilPage(url) {
-  return typeof url === 'string' && OPENPENCIL_ORIGINS.some((origin) => url.startsWith(origin))
 }
 
 async function sessionValue(key, fallback) {
@@ -356,6 +356,110 @@ async function stopMotionRecording(message) {
   }
 }
 
+function validLiveSurfaceSource(source) {
+  return Boolean(
+    source?.kind === 'chrome-element' &&
+    Number.isSafeInteger(source.tabId) &&
+    typeof source.page?.origin === 'string' &&
+    Number.isFinite(source.element?.bounds?.x) &&
+    Number.isFinite(source.element?.bounds?.y) &&
+    Number(source.element?.bounds?.width) > 0 &&
+    Number(source.element?.bounds?.height) > 0
+  )
+}
+
+async function startLiveSurfaceCapture(message) {
+  const command = message?.command
+  const source = command?.source
+  if (
+    command?.kind !== 'start-live-surface-capture' ||
+    typeof command.sessionId !== 'string' ||
+    !validLiveSurfaceSource(source)
+  ) {
+    return { ok: false, reason: 'invalid-live-surface-capture' }
+  }
+  const tab = await chrome.tabs.get(source.tabId).catch(() => null)
+  if (!tab?.id || !isWebPage(tab.url) || new URL(tab.url).origin !== source.page.origin) {
+    return { ok: false, reason: 'source-page-unavailable' }
+  }
+  try {
+    const measured = await measureBrowserLiveSurface(source).catch(() => null)
+    const bounds = measured?.ok ? measured.bounds : source.element.bounds
+    const viewport = measured?.ok
+      ? measured.viewport
+      : {
+          height: source.window?.innerHeight || source.element.bounds.height,
+          width: source.window?.innerWidth || source.element.bounds.width
+        }
+    await ensureOffscreenDocument()
+    await chrome.runtime.sendMessage({
+      kind: 'stop-live-surfaces-for-tab',
+      tabId: tab.id,
+      target: 'offscreen'
+    })
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id })
+    return chrome.runtime.sendMessage({
+      bounds,
+      kind: 'start-live-surface',
+      sessionId: command.sessionId,
+      streamId,
+      tabId: tab.id,
+      target: 'offscreen',
+      viewport
+    })
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : 'live-surface-capture-unavailable'
+    }
+  }
+}
+
+async function stopLiveSurfaceCapture(message) {
+  if (
+    message?.command?.kind !== 'stop-live-surface-capture' ||
+    typeof message.command.sessionId !== 'string'
+  ) {
+    return { ok: false, reason: 'invalid-live-surface-stop' }
+  }
+  await ensureOffscreenDocument()
+  return chrome.runtime.sendMessage({
+    kind: 'stop-live-surface',
+    sessionId: message.command.sessionId,
+    target: 'offscreen'
+  })
+}
+
+async function receiveLiveSurfaceEvent(message) {
+  if (typeof message.sessionId !== 'string') return false
+  if (message.kind === 'live-surface-frame') {
+    if (
+      typeof message.dataUrl !== 'string' ||
+      !message.dataUrl.startsWith('data:image/jpeg') ||
+      !Number.isSafeInteger(message.sequence)
+    ) {
+      return false
+    }
+    return sendEventToOpenPencil(
+      {
+        contract: EVENT_CONTRACT,
+        dataUrl: message.dataUrl,
+        kind: 'live-surface-frame',
+        sequence: message.sequence,
+        sessionId: message.sessionId
+      },
+      false
+    )
+  }
+  if (message.kind === 'live-surface-ended') {
+    return sendEventToOpenPencil(
+      { contract: EVENT_CONTRACT, kind: 'live-surface-ended', sessionId: message.sessionId },
+      false
+    )
+  }
+  return false
+}
+
 async function receiveRecordingComplete(message) {
   if (
     typeof message.captureSessionId !== 'string' ||
@@ -403,7 +507,7 @@ async function injectPicker(tabId, session) {
   try {
     const tab = await chrome.tabs.get(tabId)
     const page = pageForTab(tab)
-    if (!page || isOpenPencilPage(tab.url)) return { ok: false, reason: 'restricted-page' }
+    if (!page) return { ok: false, reason: 'restricted-page' }
     const joined = await joinCaptureSession(tabId, session.captureSessionId, page)
     if (!joined) return { ok: false, reason: 'capture-session-ended' }
     await chrome.scripting.executeScript({
@@ -440,9 +544,14 @@ async function pickerIsActive(tabId, captureSessionId) {
   }
 }
 
-async function armPickerFromOpenPencil() {
+async function armPickerFromOpenPencil(sender) {
   const session = await armCaptureSession()
-  return { captureSessionId: session.captureSessionId, ok: true, armed: true }
+  const tabId = sender?.tab?.id
+  if (typeof tabId !== 'number') {
+    return { captureSessionId: session.captureSessionId, ok: true, armed: true }
+  }
+  const result = await injectPicker(tabId, session)
+  return { ...result, armed: true }
 }
 
 async function activateCaptureOnTab(tabId) {
@@ -479,7 +588,7 @@ async function injectOpenPencilBridges() {
 }
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !isWebPage(tab.url) || isOpenPencilPage(tab.url)) {
+  if (!tab.id || !isWebPage(tab.url)) {
     await chrome.action.setBadgeBackgroundColor({ color: '#a33a3a' })
     await chrome.action.setBadgeText({ text: 'NO' })
     return
@@ -493,7 +602,7 @@ chrome.runtime.onInstalled.addListener(() => void injectOpenPencilBridges())
 async function activateSessionForSelectedTab(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId)
-    if (isWebPage(tab.url) && !isOpenPencilPage(tab.url)) await activateCaptureOnTab(tabId)
+    if (isWebPage(tab.url)) await activateCaptureOnTab(tabId)
   } catch (error) {
     console.debug('OpenPencil ignored a tab that closed during activation.', error)
   }
@@ -501,12 +610,7 @@ async function activateSessionForSelectedTab(tabId) {
 
 async function restoreSessionAfterNavigation(tabId, tab) {
   const session = await activeCaptureSession()
-  if (
-    !session ||
-    !isWebPage(tab.url) ||
-    isOpenPencilPage(tab.url) ||
-    (!tab.active && !session.tabIds.includes(tabId))
-  ) {
+  if (!session || !isWebPage(tab.url) || (!tab.active && !session.tabIds.includes(tabId))) {
     return
   }
   await injectPicker(tabId, session)
@@ -545,17 +649,22 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => void forgetClosedCaptureTab(tabId))
 
 const runtimeMessageHandlers = {
-  'activate-browser-element-picker': () => armPickerFromOpenPencil(),
+  'activate-browser-element-picker': (_message, sender) => armPickerFromOpenPencil(sender),
   'browser-element-annotate-requested': (message) => receiveAnnotateRequested(message),
   'browser-element-picker-ended': (message, sender) => receivePickerEnded(sender, message),
   'browser-element-picker-started': (message, sender) => receivePickerStarted(sender, message),
   'browser-element-selection': (message, sender) => receiveSelection(sender, message),
   'capture-visible-browser-element': (_message, sender) => captureVisibleSource(sender),
   'openpencil-ready': () => openPencilReady(),
+  'live-surface-ended': (message) => receiveLiveSurfaceEvent(message),
+  'live-surface-frame': (message) => receiveLiveSurfaceEvent(message),
+  'relay-browser-live-surface-input': (message) => relayBrowserLiveSurfaceInput(message),
   'reserve-browser-element-sequence': (message) => reserveCaptureSequence(message),
   'recording-complete': (message) => receiveRecordingComplete(message),
   'recording-failed': (message) => receiveRecordingFailed(message),
   'start-browser-motion-recording': (message, sender) => startMotionRecording(sender, message),
+  'start-browser-live-surface-capture': (message) => startLiveSurfaceCapture(message),
+  'stop-browser-live-surface-capture': (message) => stopLiveSurfaceCapture(message),
   'stop-browser-motion-recording': (message) => stopMotionRecording(message)
 }
 

@@ -174,7 +174,66 @@ describe('agent Trace evidence retention', () => {
       'Message 6',
       'Message 7'
     ])
+    expect(payload.lastUserMessageAt).toBe('2026-08-22T11:00:07.000Z')
     expect(JSON.stringify(payload)).not.toContain('hidden tool output')
+  })
+
+  test('pages a conversation tail without returning the full transcript', async () => {
+    const traceEvidence = new TraceEvidencePins()
+    const messages = Array.from({ length: 8 }, (_, index) => ({
+      createdAt: `2026-08-22T11:${String(index).padStart(2, '0')}:00.000Z`,
+      id: `user:${String(index)}`,
+      role: 'user' as const,
+      text: `Prompt ${String(index)}`
+    }))
+    const thread: AgentConversationThread = {
+      canFollowUp: true,
+      createdAt: '2026-08-22T11:00:00.000Z',
+      effort: 'high',
+      id: 'thread:page',
+      messages,
+      model: 'xai-auth/grok-4.6',
+      recentUpdate: 'Prompt 7',
+      sessionId: 'session:page',
+      state: 'completed',
+      task: 'Page this conversation',
+      updatedAt: '2026-08-22T11:07:00.000Z',
+      workerId: 'worker:page'
+    }
+    const app = appWithRoutes(
+      agentRouter({ conversation: (threadId) => (threadId === thread.id ? thread : null) }),
+      traceEvidence
+    )
+
+    const tail = await app.request('/agent-router/v1/pi/conversations/thread%3Apage?page=1', {
+      headers: AUTHORIZATION
+    })
+    const older = await app.request(
+      '/agent-router/v1/pi/conversations/thread%3Apage/messages?before=user%3A3',
+      { headers: AUTHORIZATION }
+    )
+    const tailPayload = (await tail.json()) as AgentConversationThread & {
+      hasOlder?: boolean
+      messageTotal?: number
+    }
+    const olderPayload = (await older.json()) as AgentConversationThread
+
+    expect(tail.status).toBe(200)
+    expect(older.status).toBe(200)
+    expect(tailPayload.messageTotal).toBe(8)
+    expect(tailPayload.hasOlder).toBe(true)
+    expect(tailPayload.messages.map((message) => message.id)).toEqual([
+      'user:3',
+      'user:4',
+      'user:5',
+      'user:6',
+      'user:7'
+    ])
+    expect(olderPayload.messages.map((message) => message.id)).toEqual([
+      'user:0',
+      'user:1',
+      'user:2'
+    ])
   })
 
   test('forks a resumable chat into a new native Pi thread', async () => {
@@ -216,6 +275,39 @@ describe('agent Trace evidence retention', () => {
         model: 'xai-auth/grok-4.6',
         prompt: '/skill:openpencil Try the alternate layout.'
       },
+      sourceThreadId: 'thread:source'
+    })
+  })
+
+  test('forwards an explicit full history scope on fork', async () => {
+    let observed: { request: AgentDispatchRequest; sourceThreadId: string } | null = null
+    const app = appWithRoutes(
+      agentRouter({
+        fork: async (sourceThreadId, request) => {
+          observed = { request, sourceThreadId }
+          return {
+            dispatchedAt: '2026-08-22T12:00:00.000Z',
+            jobId: 'job:forked',
+            state: 'running',
+            threadId: 'thread:forked'
+          }
+        }
+      }),
+      new TraceEvidencePins()
+    )
+
+    const response = await app.request('/agent-router/v1/pi/conversations/thread%3Asource/fork', {
+      body: JSON.stringify({
+        historyScope: 'full',
+        prompt: 'Keep the whole parent.'
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(202)
+    expect(observed).toMatchObject({
+      request: { historyScope: 'full', prompt: 'Keep the whole parent.' },
       sourceThreadId: 'thread:source'
     })
   })
@@ -303,6 +395,60 @@ describe('agent Trace evidence retention', () => {
       expect(await readFile(attachmentPath, 'utf8').catch(() => null)).toBeNull()
     } finally {
       await rm(authorityRoot, { force: true, recursive: true })
+    }
+  })
+
+  test('returns the model meter rollup from the usage ledger', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'openpencil-model-meter-route-'))
+    const ledgerPath = path.join(root, 'turns.jsonl')
+    const previous = process.env.OPENPENCIL_MODEL_METER_LOG
+    process.env.OPENPENCIL_MODEL_METER_LOG = ledgerPath
+    await writeFile(
+      ledgerPath,
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        cacheHitPercent: 82.9,
+        cacheRead: 20_331,
+        cacheWrite: 0,
+        compacted: false,
+        gapMs: null,
+        input: 4_207,
+        model: 'gemini-3-7-flash',
+        output: 80,
+        promptTokens: 24_538,
+        provider: 'antigravity',
+        reasoning: 20,
+        source: 'live',
+        threadId: 'session-1',
+        toolsPresent: false,
+        turnIndex: 2,
+        usageSource: 'agy-sqlite'
+      })}\n`
+    )
+    const app = appWithRoutes(agentRouter(), new TraceEvidencePins())
+    try {
+      const response = await app.request('/agent-router/v1/pi/model-meter?days=7', {
+        headers: AUTHORIZATION
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        available: true,
+        days: 7,
+        rows: [
+          {
+            callHitPercent: 100,
+            model: 'gemini-3-7-flash',
+            provider: 'antigravity',
+            tokenCachePercent: 82.9,
+            turns: 1
+          }
+        ],
+        turns: 1
+      })
+    } finally {
+      if (previous === undefined) delete process.env.OPENPENCIL_MODEL_METER_LOG
+      else process.env.OPENPENCIL_MODEL_METER_LOG = previous
+      await rm(root, { force: true, recursive: true })
     }
   })
 })

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OpenPencil Select",
-  "version": "0.4.0",
-  "description": "Capture Chrome element sessions with selectors, context screenshots, and optional motion recording for OpenPencil.",
+  "version": "0.6.0",
+  "description": "Capture persistent multi-tab Chrome and OpenPencil sessions with selectors, annotations, context screenshots, and optional motion recording.",
   "action": {
     "default_title": "Select for OpenPencil"
   },

@@ -39,7 +39,7 @@ function commandOf(body: Record<string, unknown>): string {
 
 /**
  * Routes each RPC to its declared execution surface before any transport is contacted.
- * Persisted-surface commands (Trace queries, Board reads/builds, workspace search) run against
+ * Persisted-surface commands (Trace queries, Board reads, workspace search) run against
  * the on-disk authority in-process — exactly like the CLI — so they never require the live app.
  * Only live-surface commands fall through to the WebSocket bridge.
  */

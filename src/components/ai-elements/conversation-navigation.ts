@@ -21,7 +21,7 @@ function navigationMessageText(message: AiMessage): string {
 
   return messageParts(message)
     .flatMap((part) => {
-      if (part.type === 'text') return [part.text.trim()]
+      if (part.type === 'text' || part.type === 'commentary') return [part.text.trim()]
       if (part.type === 'code') return [part.code.trim()]
       if (part.type === 'attachment') return [`Attachment: ${part.name}`]
       if (part.type === 'image') return [part.alt?.trim() || 'Image']

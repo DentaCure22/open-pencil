@@ -21,8 +21,12 @@ export type CachedSmylrProductionDocument = {
   figSchemaDeflated: Uint8Array | null
   foundationsRevision: string
   images: Array<[string, Uint8Array]>
+  imagesUnchanged?: boolean
   instanceIndex: Array<[string, string[]]>
+  mermaidFingerprint?: string
+  mermaidPresent?: boolean
   nodes: Array<[string, SceneNode]>
+  retainedPageIds?: string[]
   rootId: string
   variableCollections: Array<[string, VariableCollection]>
   variables: Array<[string, Variable]>
@@ -88,6 +92,50 @@ export function smylrProductionImageSignature(graph: SceneGraph) {
     signature += `${hash}:${data.byteLength}|`
   }
   return { byteLength, signature }
+}
+
+export function omitUnchangedAuthorityImages(
+  document: CachedSmylrProductionDocument,
+  previousSignature: string | null,
+  currentSignature: string
+): CachedSmylrProductionDocument {
+  if (
+    !previousSignature ||
+    previousSignature !== currentSignature ||
+    document.images.length === 0
+  ) {
+    return document
+  }
+  return { ...document, images: [], imagesUnchanged: true }
+}
+
+export function omitUnchangedAuthorityPages(
+  document: CachedSmylrProductionDocument,
+  graph: SceneGraph,
+  dirtyBoardIds: ReadonlySet<string> | null,
+  pagesRemembered: boolean
+): CachedSmylrProductionDocument {
+  if (!pagesRemembered || !dirtyBoardIds) return document
+  const retainedPageIds = graph
+    .getPages(true)
+    .map((page) => page.id)
+    .filter((pageId) => !dirtyBoardIds.has(pageId))
+  if (retainedPageIds.length === 0) return document
+
+  const keep = new Set<string>([document.rootId])
+  const root = graph.getNode(document.rootId)
+  for (const childId of root?.childIds ?? []) {
+    const child = graph.getNode(childId)
+    if (!child) continue
+    if (child.type === 'CANVAS' && !dirtyBoardIds.has(childId)) continue
+    keep.add(childId)
+    for (const node of graph.getDescendants(childId)) keep.add(node.id)
+  }
+  return {
+    ...document,
+    nodes: document.nodes.filter(([id]) => keep.has(id)),
+    retainedPageIds
+  }
 }
 
 function serializeBoard(

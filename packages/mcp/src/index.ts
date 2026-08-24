@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server'
 
 import { localAppLaunchersFromEnv } from './local-apps/config.js'
 import { startServer } from './server.js'
+import { mcpToolSearchEnabled } from './tool/registration.js'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
@@ -28,6 +29,7 @@ const { app, httpPort } = startServer({
   httpPort: port,
   wsPort,
   enableEval: process.env.OPENPENCIL_MCP_EVAL === '1',
+  toolSearch: mcpToolSearchEnabled(),
   mcpRoot: process.env.OPENPENCIL_MCP_ROOT?.trim() || process.cwd(),
   authToken: process.env.OPENPENCIL_MCP_AUTH_TOKEN?.trim() || null,
   corsOrigin:

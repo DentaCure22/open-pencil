@@ -450,6 +450,7 @@ export default function ${componentName}CodeObject({
 
 export const CODE_STARTER_SOURCE = registeredComponentSource('CodeStarter')
 export const EARTH_SIGNALS_SOURCE = registeredComponentSource('EarthSignals')
+export const EXTERNAL_LIVE_SURFACE_SOURCE = registeredComponentSource('ExternalLiveSurface')
 export const ORBIT_LAB_SOURCE = registeredComponentSource('OrbitLab')
 export const SIGNAL_BLOOM_SOURCE = registeredComponentSource('SignalBloom')
 export const OPEN_SOURCE_WORKSPACE_SOURCE = registeredComponentSource('OpenSourceWorkspace')

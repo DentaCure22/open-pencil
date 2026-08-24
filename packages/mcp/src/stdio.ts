@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { withPersistedAuthorityRouting } from './persisted-rpc.js'
 import { MCP_VERSION, registerTools } from './server.js'
 import { createStdioRpcBridge } from './stdio-bridge.js'
+import { mcpToolSearchEnabled } from './tool/registration.js'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.stdout.write(
@@ -35,7 +36,8 @@ const mcpServer = new McpServer({ name: 'open-pencil', version: MCP_VERSION })
 registerTools(mcpServer, {
   enableEval,
   mcpRoot,
-  sendRpc: withPersistedAuthorityRouting(bridge.sendRpc)
+  sendRpc: withPersistedAuthorityRouting(bridge.sendRpc),
+  toolSearch: mcpToolSearchEnabled()
 })
 
 const transport = new StdioServerTransport()

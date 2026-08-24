@@ -58,9 +58,9 @@ export function contextCommentImageInstructions(draft: ContextCommentDraft) {
 }
 
 export function contextCommentPrompt(draft: ContextCommentDraft) {
-  if (draft.destination?.kind === 'agent-conversation') {
+  if (draft.imageEdit || draft.destination?.kind === 'agent-conversation') {
     return [
-      'Edit the attached generated image using the image editing tool.',
+      'Edit the attached image using the image editing tool.',
       'Apply the numbered comments and additional instructions exactly.',
       ...(draft.capture?.sourceHasTransparency
         ? [

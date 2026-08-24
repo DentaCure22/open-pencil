@@ -63,7 +63,7 @@ export async function probePiProviderUsage(
   options: ProbePiProviderUsageOptions
 ): Promise<AgentProviderUsage | null> {
   const { model, provider } = parsePiModelId(options.model)
-  if (provider !== 'xai' && provider !== 'xai-auth') return null
+  if (provider !== 'xai-auth') return null
 
   let finish: (usage: AgentProviderUsage | null) => void = () => undefined
   let settled = false
@@ -149,7 +149,7 @@ export class PiProviderUsageService {
       .find(
         (candidate) =>
           candidate.group.toLowerCase() === key &&
-          (candidate.id.startsWith('xai-auth/') || candidate.id.startsWith('xai/'))
+          candidate.id.startsWith('xai-auth/')
       )
     if (!model) return null
     const request = probePiProviderUsage({

@@ -4,7 +4,10 @@ import { computed, ref } from 'vue'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { useEditorPresentationViewport } from '@/app/editor/presentation'
+import {
+  useEditorOverlayGeometryVersion,
+  useEditorPresentationViewport
+} from '@/app/editor/presentation'
 import {
   CODE_OBJECT_RESIZE_HANDLE_STYLE,
   CODE_OBJECT_ROTATE_HANDLE_STYLE,
@@ -17,6 +20,7 @@ import {
 const { frame, revision } = defineProps<{ frame: SceneNode; revision: number }>()
 const store = useEditorStore()
 const presentationViewport = useEditorPresentationViewport(store)
+const overlayGeometry = useEditorOverlayGeometryVersion(store)
 const controlRevision = ref(0)
 const frameTransform = createCodeObjectTransformController(store, () => {
   controlRevision.value += 1
@@ -25,16 +29,19 @@ const frameTransform = createCodeObjectTransformController(store, () => {
 const overlayStyle = computed(() => {
   void controlRevision.value
   void revision
+  void overlayGeometry.revision
   return codeObjectScreenOverlayStyle(store, frame, presentationViewport.value)
 })
 const resizeHandles = computed(() => {
   void controlRevision.value
   void revision
+  void overlayGeometry.revision
   return codeObjectResizeHandles(frame, presentationViewport.value.zoom)
 })
 const rotationHandles = computed(() => {
   void controlRevision.value
   void revision
+  void overlayGeometry.revision
   return codeObjectRotationHandles(frame, presentationViewport.value.zoom)
 })
 </script>

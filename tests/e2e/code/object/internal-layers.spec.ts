@@ -352,8 +352,8 @@ test('bounds live Smylr runtimes and restores each parked frame view', async () 
   }
 
   await expect(editor.page.locator('[data-code-object-id]')).toHaveCount(5)
-  await expect(editor.page.getByTestId('smylr-trusted-web-app-frame')).toHaveCount(4)
-  await expect(editor.page.getByTestId('smylr-trusted-web-app-paused')).toHaveCount(1)
+  await expect(editor.page.getByTestId('smylr-trusted-web-app-frame')).toHaveCount(5)
+  await expect(editor.page.getByTestId('smylr-trusted-web-app-paused')).toHaveCount(0)
 
   const duplicateDocument = await frameDocument(duplicateFrameIds.at(-1) ?? '')
   expect(duplicateDocument).toBe(await frameDocument(originalFrameId))
@@ -408,8 +408,8 @@ test('bounds live Smylr runtimes and restores each parked frame view', async () 
     .toBeCloseTo(originalBeforeMove.y, 0)
 
   await expect(originalSurface.getByTestId('smylr-trusted-web-app-frame')).toHaveCount(1)
-  await expect(editor.page.getByTestId('smylr-trusted-web-app-frame')).toHaveCount(4)
-  await expect(editor.page.getByTestId('smylr-trusted-web-app-paused')).toHaveCount(1)
+  await expect(editor.page.getByTestId('smylr-trusted-web-app-frame')).toHaveCount(5)
+  await expect(editor.page.getByTestId('smylr-trusted-web-app-paused')).toHaveCount(0)
   await expect(originalIframe).not.toHaveAttribute(
     'data-runtime-instance-id',
     originalRuntimeInstanceId

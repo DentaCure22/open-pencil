@@ -11,7 +11,7 @@ import {
   isVideoGenerationTool,
   latestMessageCreatedAt,
   messageParts,
-  resolveReasoningActivityState,
+  resolveCommentaryActivityState,
   resolveToolActivityState,
   shortToolInput,
   toolCallKind,
@@ -35,6 +35,7 @@ describe('AI Elements Vue chat model', () => {
   test('preserves every supported structured message part', () => {
     const parts: AiMessagePart[] = [
       { text: 'Answer', type: 'text' },
+      { state: 'streaming', text: 'Milestone update', type: 'commentary' },
       { state: 'streaming', text: 'Thinking', type: 'reasoning' },
       { input: '{}', name: 'read_file', state: 'pending', type: 'tool' },
       { input: '{}', name: 'search', state: 'running', type: 'tool' },
@@ -76,6 +77,7 @@ describe('AI Elements Vue chat model', () => {
 
   test('maps transport and lifecycle states to the rendered chat status', () => {
     expect(conversationStatus({ sending: true, state: 'idle' })).toBe('submitted')
+    expect(conversationStatus({ sending: true, state: 'running' })).toBe('streaming')
     expect(conversationStatus({ state: 'running' })).toBe('streaming')
     expect(conversationStatus({ state: 'needs_attention' })).toBe('needs_attention')
     expect(conversationStatus({ error: 'Failed', state: 'running' })).toBe('error')
@@ -117,10 +119,21 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallLabel('bash')).toBe('Ran command')
     expect(toolCallLabel('Read')).toBe('Read')
     expect(toolCallLabel('Edited files')).toBe('Edited files')
-    expect(toolCallLabel('connected_app_search')).toBe('Searched')
-    expect(toolCallLabel('mcp', '{"search":"today"}')).toBe('Searched')
+    expect(toolCallLabel('connected_app_search')).toBe('Looked up apps')
+    expect(toolCallLabel('mcp', '{"search":"today"}')).toBe('Looked up apps')
+    expect(toolCallLabel('mcp', '{"describe":"codex_apps_gmail_search_emails"}')).toBe(
+      'Looked up apps'
+    )
     expect(toolCallLabel('mcp', '{"action":"connect"}')).toBe('Connected app')
     expect(toolCallLabel('mcp', '{"server":"codex_apps"}')).toBe('Connected app')
+    expect(toolCallLabel('codex_apps_gmail_search_emails')).toBe('Read mail')
+    expect(
+      toolCallLabel(
+        'codex_apps_gmail_search_emails',
+        '{"tool":"codex_apps_gmail_search_emails","args":{"query":"newer_than:1d"}}'
+      )
+    ).toBe('Read mail')
+    expect(toolCallLabel('send_message')).toBe('Sent a text')
     expect(
       toolCallLabel(
         'call_mcp_tool',
@@ -132,10 +145,14 @@ describe('AI Elements Vue chat model', () => {
         'call_mcp_tool',
         '{"Arguments":{"tool":"codex_apps_gmail_get_profile"},"ToolName":"mcp","toolSummary":"Check Gmail profile"}'
       )
-    ).toBe('codex apps gmail get profile')
+      ).toBe('Read mail')
     expect(toolCallKind('read_file')).toBe('read')
     expect(toolCallKind('bash')).toBe('command')
-    expect(toolCallKind('connected_app_search')).toBe('search')
+    expect(toolCallKind('connected_app_search')).toBe('connected-app')
+    expect(toolCallKind('mcp', '{"describe":"codex_apps_gmail_search_emails"}')).toBe(
+      'connected-app'
+    )
+    expect(toolCallKind('codex_apps_gmail_search_emails')).toBe('mail')
     expect(toolCallKind('mcp', '{"server":"codex_apps"}')).toBe('connected-app')
     expect(toolCallKind('openpencil_board_screenshot')).toBe('image')
     expect(toolCallKind('codex_apps_exa_web_fetch_exa')).toBe('web')
@@ -203,10 +220,10 @@ describe('AI Elements Vue chat model', () => {
   })
 
   test('keeps exactly one live activity and preserves terminal errors', () => {
-    expect(resolveReasoningActivityState('streaming', 0, 2, 'streaming')).toBe('complete')
-    expect(resolveReasoningActivityState('streaming', 1, 2, 'streaming')).toBe('streaming')
-    expect(resolveReasoningActivityState('streaming', 1, 2, 'stopped')).toBe('stopped')
-    expect(resolveReasoningActivityState('streaming', 1, 2, 'needs_attention')).toBe('stopped')
+    expect(resolveCommentaryActivityState('streaming', 0, 2, 'streaming')).toBe('complete')
+    expect(resolveCommentaryActivityState('streaming', 1, 2, 'streaming')).toBe('streaming')
+    expect(resolveCommentaryActivityState('streaming', 1, 2, 'stopped')).toBe('stopped')
+    expect(resolveCommentaryActivityState('streaming', 1, 2, 'needs_attention')).toBe('stopped')
 
     expect(resolveToolActivityState('running', 0, 2, 'streaming')).toBe('success')
     expect(resolveToolActivityState('pending', 1, 2, 'streaming')).toBe('pending')

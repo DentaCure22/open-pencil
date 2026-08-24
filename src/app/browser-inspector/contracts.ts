@@ -27,6 +27,15 @@ export type BrowserElementSelection = {
   }
   id: string
   page: { origin: string; title: string; url: string }
+  sourceWindow?: {
+    devicePixelRatio: number
+    innerHeight: number
+    innerWidth: number
+    outerHeight: number
+    outerWidth: number
+    screenX: number
+    screenY: number
+  }
   session: {
     captureSessionId?: string
     captureStartedAt?: string
@@ -36,6 +45,7 @@ export type BrowserElementSelection = {
     tabId: number
   }
   snapshot: { dataUrl: string; height: number; width: number }
+  surfacePreview?: { dataUrl: string; height: number; width: number }
   traceEventId?: string
 }
 
@@ -222,6 +232,26 @@ function validSnapshot(value: UnknownRecord | null) {
   )
 }
 
+function validSourceWindow(value: unknown) {
+  if (value === undefined) return true
+  const candidate = record(value)
+  return Boolean(
+    candidate &&
+    finiteNumber(candidate.screenX) &&
+    finiteNumber(candidate.screenY) &&
+    finiteNumber(candidate.outerWidth) &&
+    candidate.outerWidth > 0 &&
+    finiteNumber(candidate.outerHeight) &&
+    candidate.outerHeight > 0 &&
+    finiteNumber(candidate.innerWidth) &&
+    candidate.innerWidth > 0 &&
+    finiteNumber(candidate.innerHeight) &&
+    candidate.innerHeight > 0 &&
+    finiteNumber(candidate.devicePixelRatio) &&
+    candidate.devicePixelRatio > 0
+  )
+}
+
 function validTimestamp(value: unknown): value is string {
   return boundedString(value, 64) && Boolean(value) && Number.isFinite(Date.parse(value))
 }
@@ -281,6 +311,8 @@ function browserElementSelection(value: unknown): BrowserElementSelection | null
     !validPage(record(candidate.page)) ||
     !validSession(record(candidate.session)) ||
     !validSnapshot(record(candidate.snapshot)) ||
+    (candidate.surfacePreview !== undefined && !validSnapshot(record(candidate.surfacePreview))) ||
+    !validSourceWindow(candidate.sourceWindow) ||
     !validAnnotations(candidate.annotations) ||
     (candidate.traceEventId !== undefined && !boundedString(candidate.traceEventId, 128))
   ) {

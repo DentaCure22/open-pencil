@@ -42,3 +42,18 @@ export function figmaBlendModeToSkia(ck: CanvasKit, mode?: BlendMode): SkBlendMo
 export function needsIsolatedBlendLayer(mode?: BlendMode): boolean {
   return mode !== undefined && mode !== 'NORMAL' && mode !== 'PASS_THROUGH'
 }
+
+export function needsNodeCompositingLayer(node: {
+  blendMode?: BlendMode
+  opacity: number
+}): boolean {
+  return node.opacity < 1 || needsIsolatedBlendLayer(node.blendMode)
+}
+
+export function childNeedsParentIsolation(child: {
+  blendMode?: BlendMode
+  opacity: number
+  visible: boolean
+}): boolean {
+  return child.visible && needsNodeCompositingLayer(child)
+}

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { useEventListener } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { Markdown } from 'vue-stream-markdown'
-import 'vue-stream-markdown/index.css'
-
+import AiMarkdown from './AiMarkdown.vue'
 import type { ConversationNavigationItem } from './conversation-navigation'
 
 const MINIMUM_NAVIGATION_ITEMS = 4
@@ -15,6 +13,10 @@ const MARKER_PROGRESS_SCALE = 0.7692
 const { items, scrollElement } = defineProps<{
   items: ConversationNavigationItem[]
   scrollElement: HTMLElement | null
+}>()
+
+const emit = defineEmits<{
+  reveal: [item: ConversationNavigationItem]
 }>()
 
 type ScrubState = {
@@ -183,8 +185,9 @@ function markerProgress(index: number): number {
 
 function markerLineStyle(index: number) {
   const progress = markerProgress(index)
+  const scale = MARKER_BASE_SCALE + MARKER_PROGRESS_SCALE * progress
   return {
-    transform: `scaleX(${String(MARKER_BASE_SCALE + MARKER_PROGRESS_SCALE * progress)})`,
+    width: `${String(26 * scale)}px`,
     transitionDuration: scrubbing.value ? '0ms' : '160ms',
     transitionTimingFunction:
       'linear(0, 0.398 10%, 0.682 20%, 0.843 30%, 0.925 40%, 0.972 50%, 1.004 60%, 1.008 70%, 1.003 80%, 1)'
@@ -218,7 +221,10 @@ function flashChapter(chapter: HTMLElement) {
 
 function revealItem(item: ConversationNavigationItem, behavior: ScrollBehavior) {
   const chapter = chapterElement(item.id)
-  if (!chapter) return
+  if (!chapter) {
+    emit('reveal', item)
+    return
+  }
   chapter.scrollIntoView({ behavior, block: 'start' })
   flashChapter(chapter)
 }
@@ -398,11 +404,11 @@ onBeforeUnmount(() => {
       >
         <span
           aria-hidden="true"
-          class="flex h-0.5 w-[30px] items-center transition-[color,opacity] duration-150 motion-reduce:transition-none"
+          class="flex h-1 w-[30px] items-center transition-[color,opacity] duration-150 motion-reduce:transition-none"
           :class="markerTone(item, index)"
         >
           <span
-            class="h-full w-[26px] origin-left bg-current transition-transform motion-reduce:transition-none"
+            class="h-full w-[26px] rounded-[1.5px] bg-current transition-[width] motion-reduce:transition-none"
             :style="markerLineStyle(index)"
           />
         </span>
@@ -423,17 +429,13 @@ onBeforeUnmount(() => {
       <div class="truncate text-[15px] leading-5 font-semibold tracking-[-0.01em]">
         {{ previewItem.prompt }}
       </div>
-      <Markdown
+      <div
         v-if="previewItem.response"
-        :content="previewItem.response"
-        :controls="false"
-        :enable-animate="false"
-        :mermaid="false"
-        mode="static"
-        :previewers="false"
         class="chapter-preview-markdown mt-2.5 text-muted/90"
         data-test-id="ai-conversation-chapter-response"
-      />
+      >
+        <AiMarkdown :content="previewItem.response" />
+      </div>
     </div>
   </Teleport>
 </template>

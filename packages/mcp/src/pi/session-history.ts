@@ -1,7 +1,9 @@
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 
-import { applyPiEvent, piEventText } from './events'
+import { closingTextFromAssistantMessage } from './closing-text'
+import { applyPiEvent } from './events'
 import type { PiRpcProcess } from './rpc-process'
+import { collapseDuplicateTurnResponses, normalizedThreadText } from './thread-memory'
 
 type SessionEntry = {
   id: string
@@ -42,10 +44,8 @@ function messageContent(message: Record<string, unknown>): Record<string, unknow
   return Array.isArray(message.content) ? message.content.filter(isRecord) : []
 }
 
-function finalAssistantText(message: Record<string, unknown>): string {
-  if (message.role !== 'assistant' || message.stopReason === 'toolUse') return ''
-  if (messageContent(message).some((part) => part.type === 'toolCall')) return ''
-  return piEventText(message).trim()
+function finalAssistantText(message: Record<string, unknown>, fallbackModelId?: string): string {
+  return closingTextFromAssistantMessage(message, fallbackModelId)
 }
 
 function entryTimestamp(entry: SessionEntry, message: Record<string, unknown>): string {
@@ -58,15 +58,21 @@ function applyBaselineTail(thread: AgentConversationThread, entries: SessionEntr
   const lastUserIndex = entries.findLastIndex((entry) => entry.message?.role === 'user')
   const finalEntry = entries
     .slice(lastUserIndex + 1)
-    .findLast((entry) => entry.message && finalAssistantText(entry.message))
+    .findLast((entry) => entry.message && finalAssistantText(entry.message, thread.model))
   if (!finalEntry?.message) return ''
-  const text = finalAssistantText(finalEntry.message)
+  const text = finalAssistantText(finalEntry.message, thread.model)
   const latestUserIndex = thread.messages.findLastIndex((message) => message.role === 'user')
-  if (
-    thread.messages
-      .slice(latestUserIndex + 1)
-      .some((message) => message.role === 'assistant' && message.text === text)
-  ) {
+  const existing = thread.messages
+    .slice(latestUserIndex + 1)
+    .find(
+      (message) =>
+        message.role === 'assistant' &&
+        normalizedThreadText(message.text) === normalizedThreadText(text)
+    )
+  if (existing) {
+    const timestamp = entryTimestamp(finalEntry, finalEntry.message)
+    existing.completedAt =
+      existing.completedAt && existing.completedAt >= timestamp ? existing.completedAt : timestamp
     return text
   }
   const timestamp = entryTimestamp(finalEntry, finalEntry.message)
@@ -92,8 +98,10 @@ function applyIncrementalEntries(
     const message = entry.message
     if (!message) continue
     if (message.role === 'assistant') {
-      if (applyPiEvent(thread, { message, type: 'message_end' }, turnKey)) applied = true
-      const text = finalAssistantText(message)
+      if (applyPiEvent(thread, { id: entry.id, message, type: 'message_end' }, turnKey)) {
+        applied = true
+      }
+      const text = finalAssistantText(message, thread.model)
       if (text) finalResponse = text
       for (const part of messageContent(message)) {
         if (part.type !== 'toolCall' || typeof part.id !== 'string') continue
@@ -139,6 +147,7 @@ function applyIncrementalEntries(
     }
     if (message.isError === true) toolError = `${message.toolName} failed.`
   }
+  collapseDuplicateTurnResponses(thread)
   return { applied, finalResponse, toolError }
 }
 

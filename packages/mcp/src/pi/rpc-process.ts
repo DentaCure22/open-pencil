@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { StringDecoder } from 'node:string_decoder'
 
 const COMMAND_TIMEOUT_MS = 15_000
+export const PI_PROMPT_COMMAND_TIMEOUT_MS = 180_000
 const FORCE_CLOSE_MS = 1_000
 
 export type PiRpcRecord = Record<string, unknown> & { type: string }
@@ -13,6 +14,10 @@ export type PiRpcResponse = PiRpcRecord & {
   id?: string
   success: boolean
   type: 'response'
+}
+
+export function isPiRpcTimeout(error: unknown): boolean {
+  return error instanceof Error && /Pi RPC \S+ timed out\.$/.test(error.message)
 }
 
 type ResponseWaiter = {
@@ -64,7 +69,7 @@ export class PiRpcProcess {
   private pending = ''
   private stderr = ''
 
-  private constructor(private readonly options: PiRpcProcessOptions) {
+  private constructor(private options: PiRpcProcessOptions) {
     this.child = spawn(options.executable, options.args, {
       cwd: options.cwd,
       env: options.env,
@@ -90,7 +95,7 @@ export class PiRpcProcess {
       this.forceCloseTimer = null
       const detail = this.stderr.trim()
       this.rejectResponseWaiters(detail || 'Pi RPC process exited.')
-      options.onExit(code, signal, detail)
+      this.options.onExit(code, signal, detail)
     })
   }
 
@@ -103,8 +108,16 @@ export class PiRpcProcess {
     return process
   }
 
+  get isAlive(): boolean {
+    return !this.closing && this.child.exitCode === null && this.child.signalCode === null
+  }
+
   get isClosing(): boolean {
     return this.closing
+  }
+
+  bind(handlers: Pick<PiRpcProcessOptions, 'onEvent' | 'onExit'>): void {
+    this.options = { ...this.options, ...handlers }
   }
 
   async command(
@@ -140,13 +153,14 @@ export class PiRpcProcess {
     this.child.stdin.write(`${JSON.stringify(command)}\n`)
   }
 
-  close(): void {
+  close(options?: { graceMs?: number }): void {
     if (this.closing) return
     this.closing = true
     this.child.kill('SIGTERM')
+    const graceMs = options?.graceMs ?? FORCE_CLOSE_MS
     this.forceCloseTimer = setTimeout(() => {
       if (this.child.exitCode === null) this.child.kill('SIGKILL')
-    }, FORCE_CLOSE_MS)
+    }, graceMs)
     this.forceCloseTimer.unref()
   }
 

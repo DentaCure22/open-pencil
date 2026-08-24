@@ -186,7 +186,9 @@ export function contextCommentTargetLines(target: ContextCommentTarget): string[
     ...(layout ? [`Layout: ${layout}`] : []),
     ...(live.ownerPath?.length
       ? ['Owner:', ...live.ownerPath.map((owner) => `- ${ownerLine(owner)}`)]
-      : (target.source ? [`Source: ${ownerLine(target.source)}`] : [])),
+      : target.source
+        ? [`Source: ${ownerLine(target.source)}`]
+        : []),
     ...(target.hierarchy?.parent ? [`Parent: ${target.hierarchy.parent.label}`] : []),
     ...(target.hierarchy?.children.length
       ? [`Children: ${target.hierarchy.children.map((child) => child.label).join(', ')}`]

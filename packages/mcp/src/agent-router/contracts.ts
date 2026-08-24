@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs'
-
 import type { AgentModelDefinition } from '#mcp/agent-models/catalog'
 import type { AgentJobRecord } from '#mcp/agent-router/jobs'
 
 type AgentConversationState = 'completed' | 'needs_attention' | 'running' | 'stopped'
 type AgentToolState = 'approval' | 'error' | 'pending' | 'running' | 'success'
+export type AgentToolScope = 'board-worker' | 'general'
 
 export type AgentExtensionUiRequest = {
   id: string
@@ -27,6 +26,7 @@ export type AgentConversationAttachmentPart =
 
 type AgentConversationPart =
   | AgentConversationAttachmentPart
+  | { state?: 'complete' | 'streaming'; text: string; type: 'commentary' }
   | { state?: 'complete' | 'streaming'; text: string; type: 'reasoning' }
   | {
       error?: string
@@ -52,6 +52,7 @@ export type AgentConversationContextUsage = {
   autoCompactionEnabled: boolean
   cacheHitPercent?: number
   compacting: boolean
+  compactionStalled?: boolean
   contextWindow: number
   lastCompactedAt?: string
   percent: number | null
@@ -67,10 +68,13 @@ const AGENT_CONVERSATION_PREVIEW_LIMIT = 3
 export type AgentConversationThread = {
   canFollowUp: boolean
   contextUsage?: AgentConversationContextUsage
+  compactForkPending?: boolean
   createdAt: string
   effort: string
+  forkedFromId?: string
   id: string
   lastPiEntryId?: string
+  lastUserMessageAt?: string
   messages: AgentConversationMessage[]
   model: string
   pendingUiRequests?: AgentExtensionUiRequest[]
@@ -79,6 +83,7 @@ export type AgentConversationThread = {
   sessionId: string | null
   state: AgentConversationState
   task: string
+  toolScope?: AgentToolScope
   updatedAt: string
   workerId: string
 }
@@ -88,9 +93,11 @@ export type AgentDispatchRequest = {
   displayPrompt?: string
   effort?: string
   evidencePath?: string
+  historyScope?: 'effectiveContext' | 'full'
   imagePaths?: string[]
   model?: string
   prompt: string
+  toolScope?: AgentToolScope
 }
 
 export type AgentDispatchReceipt = {
@@ -126,6 +133,7 @@ export interface AgentConversationRouter {
       evidencePath?: string
       imagePaths?: string[]
       model?: string
+      toolScope?: AgentToolScope
     }
   ): Promise<AgentDispatchReceipt>
   fork(threadId: string, request: AgentDispatchRequest): Promise<AgentDispatchReceipt>
@@ -149,6 +157,7 @@ export interface AgentConversationRouter {
       evidencePath?: string
       imagePaths?: string[]
       model?: string
+      toolScope?: AgentToolScope
     }
   ): Promise<AgentDispatchReceipt>
   stop(threadId: string): boolean
@@ -179,7 +188,28 @@ function isConversationMessage(value: unknown): value is AgentConversationMessag
   )
 }
 
-function isConversationThread(value: unknown): value is AgentConversationThread {
+export function agentConversationLastUserMessageAt(
+  thread: Pick<AgentConversationThread, 'createdAt' | 'messages'>
+): string {
+  return (
+    thread.messages.findLast((message) => message.role === 'user')?.createdAt ?? thread.createdAt
+  )
+}
+
+export function compareAgentConversationsByLastUserMessage(
+  left: Pick<AgentConversationThread, 'createdAt' | 'messages' | 'updatedAt'> & {
+    lastUserMessageAt?: string
+  },
+  right: Pick<AgentConversationThread, 'createdAt' | 'messages' | 'updatedAt'> & {
+    lastUserMessageAt?: string
+  }
+): number {
+  const leftAt = left.lastUserMessageAt ?? agentConversationLastUserMessageAt(left)
+  const rightAt = right.lastUserMessageAt ?? agentConversationLastUserMessageAt(right)
+  return rightAt.localeCompare(leftAt) || right.updatedAt.localeCompare(left.updatedAt)
+}
+
+export function isConversationThread(value: unknown): value is AgentConversationThread {
   return (
     isRecord(value) &&
     typeof value.canFollowUp === 'boolean' &&
@@ -196,6 +226,11 @@ function isConversationThread(value: unknown): value is AgentConversationThread 
     typeof value.task === 'string' &&
     typeof value.updatedAt === 'string' &&
     typeof value.workerId === 'string' &&
+    (value.toolScope === undefined ||
+      value.toolScope === 'board-worker' ||
+      value.toolScope === 'general') &&
+    (value.compactForkPending === undefined || typeof value.compactForkPending === 'boolean') &&
+    (value.forkedFromId === undefined || typeof value.forkedFromId === 'string') &&
     (value.piHistoryInitialized === undefined || typeof value.piHistoryInitialized === 'boolean')
   )
 }
@@ -209,7 +244,9 @@ export function previewAgentConversation(
     ...(thread.contextUsage ? { contextUsage: thread.contextUsage } : {}),
     createdAt: thread.createdAt,
     effort: thread.effort,
+    ...(thread.forkedFromId ? { forkedFromId: thread.forkedFromId } : {}),
     id: thread.id,
+    lastUserMessageAt: agentConversationLastUserMessageAt(thread),
     messages: thread.messages
       .filter((message) => message.text.trim())
       .slice(-Math.max(1, Math.trunc(messageLimit)))
@@ -228,17 +265,8 @@ export function previewAgentConversation(
     sessionId: thread.sessionId,
     state: thread.state,
     task: thread.task,
+    ...(thread.toolScope ? { toolScope: thread.toolScope } : {}),
     updatedAt: thread.updatedAt,
     workerId: thread.workerId
-  }
-}
-
-export function readAgentConversationHistory(historyPath?: string): AgentConversationThread[] {
-  if (!historyPath) return []
-  try {
-    const value: unknown = JSON.parse(readFileSync(historyPath, 'utf8'))
-    return Array.isArray(value) ? value.filter(isConversationThread) : []
-  } catch {
-    return []
   }
 }

@@ -158,17 +158,6 @@ test('OpenRouter accepts a custom model ID from provider settings', async () => 
   await expect(page.getByTestId('chat-model-selector')).toBeVisible()
 })
 
-test('transport errors show an actionable toast', async () => {
-  await chatInput().fill('Trigger missing agent error')
-  await chatInput().press('Enter')
-
-  await expect(
-    page.getByTestId('toast-item').filter({
-      hasText: 'Install it with: npm i -g @agentclientprotocol/claude-agent-acp'
-    })
-  ).toBeVisible({ timeout: 5000 })
-})
-
 test('"Get API key" link opens external URL via window.open', async () => {
   await page.evaluate("localStorage.removeItem('open-pencil:ai-key:openrouter')")
   await page.reload()

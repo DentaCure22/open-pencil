@@ -7,23 +7,25 @@ import {
 } from '@open-pencil/core/rpc'
 
 describe('RPC execution-surface classifier', () => {
-  test('defaults Board work without runtime identity to persisted authority', () => {
-    expect(classifyRpcExecutionSurface('board_build')).toBe('persisted_authority')
+  test('defaults Board reads without runtime identity to persisted authority', () => {
     expect(classifyRpcExecutionSurface('board_context', { target: 'current' })).toBe(
       'persisted_authority'
     )
-    expect(
-      classifyRpcExecutionSurface('board_build', { runtime_instance_id: 'local-authority:1' })
-    ).toBe('persisted_authority')
+    expect(classifyRpcExecutionSurface('board_read')).toBe('persisted_authority')
   })
 
-  test('keeps durable Board commands on authority even with a stale live identity', () => {
-    expect(
-      classifyRpcExecutionSurface('board_build', { runtime_instance_id: 'runtime:live-editor' })
-    ).toBe('persisted_authority')
+  test('keeps durable read commands on authority even with a stale live identity', () => {
     expect(
       classifyRpcExecutionSurface('trace_query', { runtime_instance_id: 'runtime:live-editor' })
     ).toBe('persisted_authority')
+  })
+
+  test('does not classify removed Board authoring commands', () => {
+    for (const command of ['board_build', 'board_change', 'board_fixture']) {
+      expect(() => classifyRpcExecutionSurface(command)).toThrow(
+        'rpc_execution_surface_unclassified'
+      )
+    }
   })
 
   test('keeps live-only commands and current_visible on the live runtime', () => {
@@ -31,6 +33,7 @@ describe('RPC execution-surface classifier', () => {
     expect(classifyRpcExecutionSurface('board_context', { target: 'current_visible' })).toBe(
       'live_runtime'
     )
+    expect(classifyRpcExecutionSurface('tool', { name: 'create_page' })).toBe('live_runtime')
   })
 
   test('keeps persisted search off the live runtime', () => {

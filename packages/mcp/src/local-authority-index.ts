@@ -50,6 +50,7 @@ const sharedAgentRouterConfig = {
   executable: agentExecutable,
   historyPath: path.join(localWorkspaceRoot, 'pi-conversations.json'),
   stallTimeoutMs: Number.parseInt(process.env.OPENPENCIL_PI_STALL_TIMEOUT_MS ?? '900000', 10),
+  warmPoolSize: Number.parseInt(process.env.OPENPENCIL_PI_WARM_POOL_SIZE ?? '2', 10),
   watchdogProbeMs: Number.parseInt(process.env.OPENPENCIL_PI_WATCHDOG_PROBE_MS ?? '30000', 10),
   workspaceRoot: agentWorkspaceRoot
 }

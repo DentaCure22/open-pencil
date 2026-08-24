@@ -27,7 +27,9 @@ describe('local workspace authority change marker', () => {
     const markerBeforeExternalChange = await store.externalStateMarker()
 
     const workspacePath = path.join(root, 'workspace.json')
-    const document = JSON.parse(await readFile(workspacePath, 'utf8')) as { nodes: string[] }
+    const persisted = await readFile(workspacePath, 'utf8')
+    expect(persisted).toBe(`${JSON.stringify({ nodes: ['initial'] })}\n`)
+    const document = JSON.parse(persisted) as { nodes: string[] }
     document.nodes.push('direct-json-edit')
     await writeFile(workspacePath, `${JSON.stringify(document, null, 2)}\n`)
 

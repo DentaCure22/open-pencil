@@ -147,6 +147,7 @@ test('Smylr uses one integrated contextual sidebar', async () => {
   await expect(editor.page.getByTestId('left-panel-chats-tab')).toHaveText('CHATS')
   await expect(editor.page.getByTestId('left-panel-assets-tab')).toHaveText('ASSETS')
   await expect(editor.page.getByTestId('left-panel-trace-tab')).toHaveText('ACTIVITY')
+  await expect(editor.page.getByTestId('left-panel-cache-tab')).toHaveText('CACHE')
 
   const toolbarMotion = editor.page.getByTestId('toolbar-motion')
   await expect(toolbarMotion).toHaveAttribute('data-sidebar-integrated', 'true')

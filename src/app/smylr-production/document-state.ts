@@ -190,9 +190,6 @@ export function bindSmylrProductionDocumentPersistence(store: EditorStore): () =
       rebuildNodeBoardIndex(store, runtime)
       for (const board of store.graph.getPages(true)) markBoardDirty(runtime, board.id)
       markSharedDirty(runtime)
-    }),
-    store.onEditorEvent('render:requested', () => {
-      markSharedDirty(runtime)
     })
   ]
 
@@ -207,6 +204,12 @@ export function smylrProductionPersistenceStats(
   store: EditorStore
 ): SmylrProductionPersistenceStats | null {
   return persistenceRuntimes.get(store)?.lastStats ?? null
+}
+
+export function smylrProductionDirtyAuthorityPages(store: EditorStore): ReadonlySet<string> | null {
+  const runtime = persistenceRuntimes.get(store)
+  if (!runtime?.stopTracking) return null
+  return dirtyBoardIdsForSave(runtime, new Set(store.graph.getPages(true).map((board) => board.id)))
 }
 
 export {
@@ -254,7 +257,43 @@ export function isCachedSmylrProductionDocument(
   )
 }
 
+function pluginEntry(node: SceneNode, key: string): string | null {
+  const value = node.pluginData?.find(
+    (entry) => entry.pluginId === 'open-pencil' && entry.key === key
+  )?.value
+  return typeof value === 'string' ? value : null
+}
+
+function mermaidNodeFingerprint(node: SceneNode): string | null {
+  if (typeof (node as { mermaidSource?: unknown }).mermaidSource === 'string') {
+    return `src:${node.id}:${(node as { mermaidSource: string }).mermaidSource}`
+  }
+  if (pluginEntry(node, 'mermaid/role') !== 'diagram') return null
+  return `role:${node.id}:${pluginEntry(node, 'mermaid/source') ?? ''}`
+}
+
+function serializeGraphNodes(graph: SceneGraph): {
+  mermaidFingerprint: string
+  mermaidPresent: boolean
+  nodes: Array<[string, SceneNode]>
+} {
+  const nodes: Array<[string, SceneNode]> = []
+  const fingerprints: string[] = []
+  for (const entry of graph.nodes) {
+    nodes.push(entry)
+    const fingerprint = mermaidNodeFingerprint(entry[1])
+    if (fingerprint) fingerprints.push(fingerprint)
+  }
+  fingerprints.sort()
+  return {
+    mermaidFingerprint: fingerprints.join('\n'),
+    mermaidPresent: fingerprints.length > 0,
+    nodes
+  }
+}
+
 function serializeSmylrProductionDocument(graph: SceneGraph): CachedSmylrProductionDocument {
+  const { mermaidFingerprint, mermaidPresent, nodes } = serializeGraphNodes(graph)
   return {
     activeMode: [...graph.activeMode],
     documentColorSpace: graph.documentColorSpace,
@@ -263,7 +302,9 @@ function serializeSmylrProductionDocument(graph: SceneGraph): CachedSmylrProduct
     foundationsRevision: SMYLR_FOUNDATIONS_REVISION,
     images: [...graph.images],
     instanceIndex: [...graph.instanceIndex].map(([id, nodeIds]) => [id, [...nodeIds]]),
-    nodes: [...graph.nodes],
+    mermaidFingerprint,
+    mermaidPresent,
+    nodes,
     rootId: graph.rootId,
     variableCollections: [...graph.variableCollections],
     variables: [...graph.variables],

@@ -7,7 +7,10 @@ import { SceneGraph } from '@open-pencil/scene-graph'
 
 import {
   buildWorkspaceJsonlIndex,
+  ensureWorkspaceJsonlIndex,
   parseWorkspaceJsonlIndexMetadata,
+  patchWorkspaceJsonlIndex,
+  prepareWorkspaceJsonlIndex,
   serializeWorkspaceJsonlIndex,
   WORKSPACE_JSONL_INDEX_FILE,
   workspaceJsonlIndexIsCurrent,
@@ -211,5 +214,81 @@ describe('workspace JSONL index', () => {
     expect(written).not.toContain('Initial name')
     expect(parseWorkspaceJsonlIndexMetadata(written)).toEqual(metadata)
     expect((await readdir(root)).filter((name) => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  test('patches move and rename without walking the whole Board graph', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    page.name = 'Patients'
+    const frame = graph.createNode('FRAME', page.id, {
+      height: 80,
+      name: 'Card',
+      width: 120,
+      x: 40,
+      y: 60
+    })
+    const text = graph.createNode('TEXT', frame.id, {
+      height: 10,
+      name: 'Label',
+      text: 'Omar',
+      width: 20,
+      x: 8,
+      y: 12
+    })
+    const previous = {
+      document: structuredClone(savedDocument(graph)),
+      index: buildWorkspaceJsonlIndex(indexSource(graph))
+    }
+
+    frame.x = 140
+    frame.y = 180
+    frame.name = 'Moved card'
+    const moved = indexSource(graph, 8, 'content-hash-8')
+    const patched = patchWorkspaceJsonlIndex(moved, previous)
+
+    expect(patched).not.toBeNull()
+    expect(patched).toEqual(buildWorkspaceJsonlIndex(moved))
+    expect(patched?.records.find(({ id }) => id === text.id)?.bounds).toEqual({
+      height: 10,
+      width: 20,
+      x: 148,
+      y: 192
+    })
+    expect(patched?.records.find(({ id }) => id === frame.id)?.name).toBe('Moved card')
+
+    graph.createNode('FRAME', page.id, { name: 'New card' })
+    expect(patchWorkspaceJsonlIndex(indexSource(graph, 9, 'content-hash-9'), previous)).toBeNull()
+    expect(
+      prepareWorkspaceJsonlIndex(indexSource(graph, 9, 'content-hash-9'), previous).records
+    ).toHaveLength(4)
+  })
+
+  test('warms the in-memory index from disk so the first save can patch', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'openpencil-workspace-jsonl-warm-'))
+    roots.push(root)
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const frame = graph.createNode('FRAME', page.id, {
+      height: 80,
+      name: 'Card',
+      width: 120,
+      x: 40,
+      y: 60
+    })
+    const source = indexSource(graph)
+    await writeWorkspaceJsonlIndex(root, source)
+
+    const warmed = await ensureWorkspaceJsonlIndex(root, source)
+    expect(warmed.index).toEqual(buildWorkspaceJsonlIndex(source))
+    if (!warmed.index) throw new Error('Expected a warmed workspace index')
+
+    const previousDocument = structuredClone(source.document)
+    frame.x = 200
+    const moved = indexSource(graph, 8, 'content-hash-8')
+    const patched = prepareWorkspaceJsonlIndex(moved, {
+      document: previousDocument,
+      index: warmed.index
+    })
+    expect(patched.records.find(({ id }) => id === frame.id)?.bounds.x).toBe(200)
   })
 })

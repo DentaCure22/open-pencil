@@ -74,6 +74,7 @@ export interface ServerOptions {
   httpPort?: number
   wsPort?: number
   enableEval?: boolean
+  toolSearch?: boolean
   mcpRoot?: string | null
   authToken?: string | null
   corsOrigin?: string | string[] | null
@@ -104,7 +105,12 @@ export function startServer(options: ServerOptions = {}) {
   const mcpSessions = createMcpSessionManager({
     serverVersion: MCP_VERSION,
     registerTools: (mcpServer: McpServer) =>
-      registerTools(mcpServer, { enableEval, mcpRoot, sendRpc })
+      registerTools(mcpServer, {
+        enableEval,
+        mcpRoot,
+        sendRpc,
+        toolSearch: options.toolSearch
+      })
   })
   const browserRpc = createBrowserRpcBridge({
     authToken,

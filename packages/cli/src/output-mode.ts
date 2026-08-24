@@ -1,22 +1,4 @@
-const AGENT_BOARD_COMMANDS = new Set([
-  'build',
-  'change',
-  'connect',
-  'context',
-  'create',
-  'edit',
-  'fixture',
-  'get',
-  'history',
-  'list',
-  'ls',
-  'nearby',
-  'open',
-  'present',
-  'read',
-  'search',
-  'verify'
-])
+const AGENT_BOARD_COMMANDS = new Set(['go', 'theme', 'where'])
 
 export function applyAgentOutputMode(rawArgs: string[], outputMode: string | undefined): string[] {
   const boardCommand = rawArgs[0] === 'board' && AGENT_BOARD_COMMANDS.has(rawArgs[1] ?? '')
@@ -26,7 +8,5 @@ export function applyAgentOutputMode(rawArgs: string[], outputMode: string | und
   if (rawArgs.includes('--no-json')) {
     throw new Error(`OPENPENCIL_OUTPUT=${outputMode} conflicts with --no-json.`)
   }
-  const withJson = rawArgs.includes('--json') ? rawArgs : [...rawArgs, '--json']
-  if (outputMode !== 'release' || rawArgs[1] !== 'build') return withJson
-  return withJson.includes('--release-summary') ? withJson : [...withJson, '--release-summary']
+  return rawArgs.includes('--json') ? rawArgs : [...rawArgs, '--json']
 }

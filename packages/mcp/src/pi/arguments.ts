@@ -6,6 +6,7 @@ export type PiLaunchMode = 'fork' | 'new' | 'resume'
 
 export type PiRpcArgumentsInput = {
   effort: string
+  mcpConfigPath?: string
   mode: PiLaunchMode
   model: string
   sessionDir?: string
@@ -34,10 +35,11 @@ function imageMimeType(filePath: string): string | null {
 
 export function parsePiModelId(modelId: string): { model: string; provider: string } {
   const slash = modelId.indexOf('/')
-  if (slash <= 0) return { model: modelId, provider: 'xai' }
+  const model = slash <= 0 ? modelId : modelId.slice(slash + 1)
+  const provider = slash <= 0 ? 'xai-auth' : modelId.slice(0, slash)
   return {
-    model: modelId.slice(slash + 1),
-    provider: modelId.slice(0, slash)
+    model,
+    provider: provider === 'xai' ? 'xai-auth' : provider
   }
 }
 
@@ -62,6 +64,7 @@ export function piRpcArguments(input: PiRpcArgumentsInput): string[] {
     input.sessionId
   ]
   if (input.sessionDir) args.push('--session-dir', input.sessionDir)
+  if (input.mcpConfigPath) args.push('--mcp-config', input.mcpConfigPath)
   if (input.mode === 'fork' && input.sourceSessionId) {
     args.push('--fork', input.sourceSessionId)
   }

@@ -2,9 +2,13 @@ import { describe, expect, test } from 'bun:test'
 
 import type { AgentConversationHistory } from '@/app/agent-chat/client'
 import {
+  applyConversationPage,
+  applyConversationPreviewMetadata,
   reconcileAgentConversationHistory,
   reconcileRetainedConversationMessages,
-  retainedTranscriptNeedsHydrate
+  retainMissingOpenTranscripts,
+  retainedTranscriptNeedsHydrate,
+  sameAgentConversationHistory
 } from '@/app/agent-chat/reconcile'
 
 function history(
@@ -73,6 +77,23 @@ describe('agent history reconciliation', () => {
     expect(reconciled.threads[0]).toBe(previous.threads[0])
   })
 
+  test('reuses the messages array when only thread metadata changes', () => {
+    const previous = history('Completed')
+    const next = structuredClone(previous)
+    const nextThread = next.threads[0]
+    if (!nextThread) throw new Error('Missing thread fixture')
+    nextThread.updatedAt = '2026-08-17T12:02:00.000Z'
+    const reconciled = reconcileAgentConversationHistory(previous, next)
+    const reconciledThread = reconciled.threads[0]
+    if (!reconciledThread) throw new Error('Reconciled thread unavailable')
+
+    expect(reconciledThread).not.toBe(previous.threads[0])
+    expect(reconciledThread.messages).toBe(previous.threads[0]?.messages)
+    expect(reconciledThread.updatedAt).toBe('2026-08-17T12:02:00.000Z')
+    expect(sameAgentConversationHistory(previous, reconciled)).toBe(false)
+    expect(sameAgentConversationHistory(previous, previous)).toBe(true)
+  })
+
   test('replaces a tool row when its screenshot arrives', () => {
     const previous = history('Taking screenshot')
     const next = structuredClone(previous)
@@ -128,6 +149,32 @@ describe('agent history reconciliation', () => {
 
     expect(reconciled.threads[0]?.messages[0]).toBe(message)
     expect(reconciled.threads[0]?.messages[0]?.completedAt).toBe('2026-08-17T12:01:10.000Z')
+  })
+
+  test('preview polls keep an open transcript mounted and only refresh metadata', () => {
+    const previous = history('Running command', 'Stable final response')
+    const current = previous.threads[0]
+    if (!current) throw new Error('Missing current thread')
+    const preview = {
+      ...current,
+      messages: [
+        {
+          createdAt: '2026-08-17T12:00:00.000Z',
+          id: 'final-1',
+          role: 'assistant' as const,
+          text: 'Preview dropped the tool row.'
+        }
+      ],
+      recentUpdate: 'Writing response…',
+      updatedAt: '2026-08-17T12:01:08.000Z'
+    }
+
+    const next = applyConversationPreviewMetadata(current, preview)
+
+    expect(next.messages).toBe(current.messages)
+    expect(next.messages).toHaveLength(2)
+    expect(next.recentUpdate).toBe('Writing response…')
+    expect(next.updatedAt).toBe('2026-08-17T12:01:08.000Z')
   })
 
   test('keeps a retained transcript mounted while merging a new preview tail', () => {
@@ -279,5 +326,126 @@ describe('agent history reconciliation', () => {
 
     expect(reconciled).toHaveLength(1)
     expect(reconciled[0]?.parts).toEqual(previous[0]?.parts)
+    expect(reconciled[0]?.text).toBe('Working')
+  })
+
+  test('preview answer text is not thrown away when the retained row still has commentary', () => {
+    const previous = [
+      {
+        createdAt: '2026-08-23T14:00:00.000Z',
+        id: 'asst-1',
+        parts: [{ state: 'complete' as const, text: 'Checking the header.', type: 'commentary' }],
+        role: 'assistant' as const,
+        text: ''
+      }
+    ]
+    const preview = [
+      {
+        createdAt: '2026-08-23T14:00:01.000Z',
+        completedAt: '2026-08-23T14:00:02.000Z',
+        id: 'asst-1',
+        role: 'assistant' as const,
+        text: 'The New task button is in.'
+      }
+    ]
+
+    const reconciled = reconcileRetainedConversationMessages(previous, preview)
+
+    expect(reconciled).toEqual([
+      expect.objectContaining({
+        completedAt: '2026-08-23T14:00:02.000Z',
+        id: 'asst-1',
+        parts: previous[0]?.parts,
+        text: 'The New task button is in.'
+      })
+    ])
+  })
+
+  test('keeps an open transcript when a poll omits that thread', () => {
+    const previous = history('Running')
+    const open = previous.threads[0]
+    if (!open) throw new Error('Missing open thread')
+    const next: AgentConversationHistory = { threads: [] }
+
+    const retained = retainMissingOpenTranscripts(previous, next, [open.id])
+    const dropped = retainMissingOpenTranscripts(previous, next, [])
+
+    expect(retained.threads).toEqual([open])
+    expect(dropped.threads).toEqual([])
+  })
+
+  test('merges a tail page, then older and delta pages without dropping cursors', () => {
+    const open = history('Running').threads[0]
+    if (!open) throw new Error('Missing open thread')
+    const tail = applyConversationPage(
+      open,
+      {
+        ...open,
+        hasOlder: true,
+        hasNewer: false,
+        olderBefore: 'user-4',
+        messages: [
+          {
+            createdAt: '2026-08-17T12:02:00.000Z',
+            id: 'user-4',
+            role: 'user',
+            text: 'Latest prompt'
+          }
+        ],
+        turns: [{ id: 'user-1', prompt: 'First', response: 'Earlier' }]
+      },
+      'tail'
+    )
+    expect(tail.hasOlder).toBe(true)
+    expect(tail.olderBefore).toBe('user-4')
+    expect(tail.messages.map((message) => message.id)).toEqual(['final-1', 'tool-1', 'user-4'])
+
+    const older = applyConversationPage(
+      tail,
+      {
+        ...tail,
+        hasOlder: false,
+        olderBefore: 'user-1',
+        messages: [
+          {
+            createdAt: '2026-08-17T11:00:00.000Z',
+            id: 'user-1',
+            role: 'user',
+            text: 'First prompt'
+          }
+        ]
+      },
+      'older'
+    )
+    expect(older.hasOlder).toBe(false)
+    expect(older.olderBefore).toBe('user-1')
+    expect(older.messages.map((message) => message.id)).toEqual([
+      'user-1',
+      'final-1',
+      'tool-1',
+      'user-4'
+    ])
+
+    const delta = applyConversationPage(
+      older,
+      {
+        ...older,
+        hasOlder: false,
+        hasNewer: false,
+        messages: [
+          {
+            createdAt: '2026-08-17T12:03:00.000Z',
+            id: 'assistant-9',
+            role: 'assistant',
+            text: 'Newest answer'
+          }
+        ],
+        newerAfter: 'assistant-9'
+      },
+      'delta'
+    )
+    expect(delta.hasOlder).toBe(false)
+    expect(delta.olderBefore).toBe('user-1')
+    expect(delta.messages.at(-1)?.id).toBe('assistant-9')
   })
 })

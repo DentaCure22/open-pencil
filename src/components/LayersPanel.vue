@@ -3,6 +3,7 @@ import { defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 
 import { agentChatsPanelOpenEpoch } from '@/app/agent-chat/panel'
+import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
 import { tracePanelOpenEpoch } from '@/app/narrated-trace'
 import BrowserInspectorSelection from './browser-inspector/BrowserInspectorSelection.vue'
 import LayerTree from './LayerTree/LayerTree.vue'
@@ -14,15 +15,16 @@ const AgentChatsPanel = defineAsyncComponent(() => import('./agent-chat/AgentCha
 const NarratedTracePanel = defineAsyncComponent(
   () => import('./narrated-trace/NarratedTracePanel.vue')
 )
+const ModelMeterPanel = defineAsyncComponent(() => import('./model-meter/ModelMeterPanel.vue'))
 const VariablesDialog = defineAsyncComponent(() => import('./variables/VariablesDialog.vue'))
 
-type UtilityKind = 'assets' | 'chats' | 'layers' | 'trace'
+type UtilityKind = 'assets' | 'cache' | 'chats' | 'layers' | 'trace'
 
 const openUtility = ref<UtilityKind>('layers')
 const variablesOpen = ref(false)
 
 const utilityContentClass =
-  'col-span-4 row-start-3 flex min-h-0 flex-1 flex-col overflow-hidden outline-none'
+  'col-span-5 row-start-3 flex min-h-0 flex-1 flex-col overflow-clip outline-none'
 const utilityTabClass =
   'flex min-w-0 items-center justify-center rounded-[9px] border border-transparent px-0.5 text-[9px] leading-none font-semibold tracking-[0.025em] outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border'
 
@@ -45,6 +47,10 @@ watch(agentChatsPanelOpenEpoch, () => {
   openUtility.value = 'chats'
 })
 
+watch(modelMeterPanelOpenEpoch, () => {
+  openUtility.value = 'cache'
+})
+
 function utilityTabStateClass(kind: UtilityKind) {
   return openUtility.value === kind
     ? 'border-chrome-control-border bg-chrome-control-active text-surface shadow-sm'
@@ -61,17 +67,17 @@ async function revealInsertedAsset(nodeId: string) {
 <template>
   <aside
     data-test-id="layers-panel"
-    class="layers-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent"
+    class="layers-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-transparent"
     style="contain: paint layout style"
   >
     <TabsRoot
       v-model="openUtility"
       data-test-id="left-panel-utility-area"
-      class="relative grid min-h-0 grow basis-0 grid-cols-4 grid-rows-[3.25rem_auto_minmax(0,1fr)] overflow-hidden pb-1"
+      class="relative grid min-h-0 grow basis-0 grid-cols-5 grid-rows-[3.25rem_auto_minmax(0,1fr)] overflow-clip pb-1"
     >
       <TabsList
         aria-label="Sidebar utilities"
-        class="bg-chrome-control ring-chrome-control-border z-10 col-span-4 row-start-1 mx-1 mt-2 mb-1 grid grid-cols-4 rounded-[12px] p-1 ring-1 ring-inset"
+        class="bg-chrome-control ring-chrome-control-border z-10 col-span-5 row-start-1 mx-1 mt-2 mb-1 grid grid-cols-5 rounded-[12px] p-1 ring-1 ring-inset"
       >
         <TabsTrigger
           value="layers"
@@ -101,9 +107,16 @@ async function revealInsertedAsset(nodeId: string) {
         >
           <span>ACTIVITY</span>
         </TabsTrigger>
+        <TabsTrigger
+          value="cache"
+          data-test-id="left-panel-cache-tab"
+          :class="[utilityTabClass, utilityTabStateClass('cache')]"
+        >
+          <span>CACHE</span>
+        </TabsTrigger>
       </TabsList>
 
-      <div class="col-span-4 row-start-2 min-w-0">
+      <div class="col-span-5 row-start-2 min-w-0">
         <BrowserInspectorSelection />
       </div>
 
@@ -153,6 +166,14 @@ async function revealInsertedAsset(nodeId: string) {
         :class="utilityContentClass"
       >
         <NarratedTracePanel />
+      </TabsContent>
+
+      <TabsContent
+        value="cache"
+        data-test-id="left-panel-cache-content"
+        :class="utilityContentClass"
+      >
+        <ModelMeterPanel />
       </TabsContent>
     </TabsRoot>
     <VariablesDialog v-if="variablesOpen" v-model:open="variablesOpen" />

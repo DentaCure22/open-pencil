@@ -2,6 +2,212 @@
 
 ## Unreleased
 
+- Stop asking Board and sidebar Pi chats to narrate progress every few steps.
+  The launch no longer appends that extra system line.
+- Board image and video makers stay named-only: Codex for a generic picture,
+  Grok or Gemini/Nano Banana only when you name that provider, Grok video only
+  when you name Grok. Gemini/Veo video is not wired.
+- Board CLI and chat tools no longer offer create, build, or change. The
+  remaining Board commands are where, go, and theme. Add and edit by changing
+  Board files.
+- File Board chat notes into the same Codex notebook both harnesses already
+  read, instead of a second Pi-only folder.
+- Keep a working chat from jumping while it streams: the live reply stays put
+  when a tool starts, tool rows do not slide in, and older turns keep their
+  height so the transcript does not snap.
+- Keep the Thinking line still while a turn is running, with a light shimmer,
+  instead of swapping in tool names or a ticking timer. The duration shows
+  after the turn settles.
+- Ease live chat text in instead of dropping whole chunks. The reply,
+  commentary, and thought lines catch up smoothly, then settle at once when
+  the turn finishes.
+- Stream the open chat while it is working, and keep the last full transcript
+  when you leave and come back so messages do not pop in.
+- Keep the model’s live commentary visible while it works. Private thinking
+  stays in the Thought fold, not in the reply.
+- Show one visible answer per chat turn. Earlier “I’m checking…” text stays in
+  the thought lane. A real answer is no longer hidden just because the same
+  turn also has thoughts or tools.
+- Keep a quiet per-turn cache and token ledger for live Pi/CHATS turns, plus a
+  headless probe that can roll up and check the same records. Settings now
+  opens a Cache sidebar view with the same rollup in the web and desktop apps.
+  The context chip still shows only the latest turn.
+- Drop the built-in Grok API mailbox from Board chats. Grok subscription
+  login (`xai-auth`) is the only xAI door. Old `xai/…` picks remap there.
+  Connected apps are no longer pinned onto every letter; the cook searches
+  plugins, same idea as Codex. Chrome helper, the old memory dump, Grok’s
+  extra file-hands, Grok search/image bridges, and the Gemini Ask helper
+  are off the default letter. Grok extras and `/xai-tools` are gone from
+  the login door. X search is a plugin. Handbook search is a plugin.
+  Login doors stay as packages. The Pi Chrome Connector is a search-only
+  plugin, not a package dump. Chat tool labels now match across cooks:
+  looking up an app, reading mail, and sending a text use the same words
+  whether the ticket came from Grok or Cursor. Grok video is a search-only
+  plugin again. Old memory-search tickets stay off the activity lane. When a
+  login tags `final_answer`, that text is the visible close for Grok, Cursor,
+  Codex, and Gemini.
+- Stop the composer attach menu from flickering on hover. Sessions opens as a
+  side column in the same panel instead of a second floating menu, so moving
+  onto a session no longer closes it. The surface is solid so the Board grid
+  does not flash through.
+- Show Antigravity thoughts, tool inputs, and tool results in the chat
+  activity lane. Gemini leftover thinking stays visible as commentary, a
+  later `[agy input]` / `[agy output]` fills the same tool, and offloaded
+  “saved to file” dumps are inlined into the Result panel.
+- Send OpenPencil Pi chats to the named connected-app plugin first. Calendar,
+  mail, Drive, QuickBooks, and Linear now search `mcp` before Chrome, memory,
+  or the Mac desktop. Routing lives in the Pi agent notes once; the chat
+  launch prompt only asks for short progress updates.
+- Make hover chrome on Board chat cards and other Code Objects instant. The
+  outline is CSS on the card instead of a CanvasKit stroke that flickered
+  against the DOM hit target and redrew the overlay canvas on every pass.
+  Hover no longer adds a second card identity or pointer listeners on the
+  hit target. Dragging a chat from CHATS onto the Board moves only the small
+  widget with the pointer. While you drag, the Board does not hover, hit-test,
+  or redraw under the chip. The chat appears when you let go. New task, the
+  thread list, and the name header all use that path.
+- Replace the Pi memory dump with a Codex-shaped handbook: next turns get
+  the short index, not 16k of daily notes. A quiet Board chat is extracted
+  after about 20 minutes, then the Pi worker is unloaded and the next
+  message resumes from disk.
+- Show a black “Thought for” label at the top of every agent turn. Thought
+  text stays unboxed above the tools.
+- Keep the sidebar chat from jumping when the model or attach menu opens, or
+  when a new chat starts. Focus no longer scrolls the sidebar chrome.
+- Stop Board chat cards from leaving a grey plate at the old spot while
+  they move. The move preview now punches a hole through the scene instead
+  of painting a solid page-colored rectangle over the grid.
+- Compact-fork a chat from its stored tail instead of copying the parent
+  Pi session. The task menu Compact-fork opens an idle lighter chat and
+  does not send a continue prompt. Fork keeps the native Pi history. A
+  later follow-up can attach the stored tail. `dispatch_work` action
+  `fork` still sends the spoken ask. Pass `historyScope: "full"` for the
+  native session copy.
+- After Pi auto-compaction, mark the context meter stalled when the window
+  is still about 80% full or stored history is still huge. That points at
+  compact-fork instead of another summarizer. Older stored tool I/O now
+  keeps a head-and-tail replay buffer.
+- Bound leftover tool dumps in open chats: page copies and loaded Vue
+  transcripts keep the start and end of fat command output instead of the
+  whole dump.
+- Virtualize long open agent transcripts so only the visible turns plus a
+  small overscan stay mounted. Chapter-rail jumps remount a loaded turn
+  without refetching, and the live turn stays painted while it streams.
+- Parse only the live streaming assistant bubble incrementally so completed
+  markdown blocks are not rebuilt on every token.
+- Keep ordinary Pi chats on the user's MCP catalog, but launch Board-dispatched
+  workers with a generated, fail-closed catalog containing only OpenPencil
+  `board_where` and `board_screenshot`. Explicit user MCP config is filtered too,
+  so connected apps and live-parent controls cannot leak into Board workers.
+- Open long agent chats on a recent tail instead of the full transcript.
+  Older turns load on scroll, the Earlier messages control, or a chapter-rail
+  jump. Live polls fetch only new messages. History now writes each thread
+  body separately so one update does not rewrite every chat, and each page
+  stays under a 256 KB byte budget instead of an uncapped item count.
+- Pi chats no longer keep a second copy of the same wrap-up or commentary when
+  session history replays a different id.
+- Title image-only chats as Screenshot or Image in the CHATS list instead of
+  the raw capture filename.
+- Assistant markdown now styles real paragraphs and renders tables, images, and task lists.
+- Default OpenPencil MCP to tool search: the advertised catalog stays a
+  small Board-read set plus `search_tools` and `invoke_tool`, so agents load
+  schemas on demand instead of receiving every design tool each turn. Set
+  `OPENPENCIL_MCP_TOOL_SEARCH=0` when a client needs the full named list.
+- Keep the 64 KB model-facing MCP result cap, and bound stored Pi thread
+  memory by clipping old tool output and writing compact history JSON after
+  native compaction.
+- Keep large Boards from locking up on save, hover, and chat: stringify
+  `workspace.json` once per commit, skip mermaid compilation when none is
+  present, keep fill-only paints from wiping positions, skip empty overlay
+  work, and stop deep-watching idle chat transcripts.
+- Keep pan, drag, and save off the slow path: skip isolation layers unless a
+  parent or child actually needs compositing, keep move-only edits from
+  wiping cached pictures, persist only after graph changes, and move the
+  canvas grid plus Code Object chrome onto cached styles and CSS variables.
+- Keep Board chats and Code Objects visible when the local workspace service
+  restarts: reuse the published auth token, do not save over the Board just
+  because it was restored, and show that chats are unavailable instead of an
+  empty list.
+- Stop Code Object cards from crashing the Board overlay: live-runtime
+  residency no longer rewrites its own input set on every Vue tick.
+- Fill the agent composer stop control as a solid rounded square so it no
+  longer reads as a hollow Lucide outline.
+- Start new Pi agent sessions from a warm process pool so the first prompt
+  does not wait on a cold `pi --mode rpc` boot. Empty-session history and
+  matching model/thinking RPCs are skipped, and the pool refills in the
+  background for the next chat.
+- Keep page-level card drags from redrawing the whole Board: reuse a scene
+  picture with holes for the moving frames, then paint only those frames live.
+- Keep nested card drags on the same preview path: punch holes for any moving
+  object on the page, then paint only the topmost movers live.
+- Cut save, open, and idle hitch on packed Boards: reuse complete persisted
+  nodes instead of allocating a default blob for every record, skip overlay
+  list walks on move-only edits, index `workspace.jsonl` without hydrating the
+  whole graph, patch that index on move-only saves instead of walking every
+  node, return the save receipt before writing the 21 MB history snapshot,
+  keep the editor moving after an authority save instead of waiting on the
+  browser cache, skip mermaid scans when the Board says none are present,
+  walk overlay frames without allocating child arrays, paint chat-card chrome
+  before mounting conversation surfaces, paint only the latest chat turns
+  before a card’s viewport is measured, hydrate open transcripts two at a
+  time on idle instead of all at once, keep Board chat cards on preview
+  text until click or idle, skip the chapter rail until a card is active,
+  skip resending unchanged Board images on later saves, skip unchanged pages
+  on later Board saves, return a save receipt before writing the 22 MB Board
+  file, warm the workspace index from disk so the first save after a restart
+  can patch, skip mermaid compile when diagram sources did not change, keep
+  the profiler from treating
+  idle page hops as multi-second frames, paint the visible Patients viewport
+  first instead of recording the whole scene cache on the opening frame,
+  reuse the painted scene cache while dragging instead of recording the rest
+  of the page again, and reuse descendant visual bounds while panning.
+- Keep hover, overlay, and save cheaper on packed Boards: reuse inverse world
+  matrices for hit-testing, cache Code Object descriptors across overlay ticks,
+  skip overlay rescans on tool changes, and rebuild the workspace index only
+  when the Board revision actually changes.
+- Keep packed Boards lighter without parking cards: chat and Code Object
+  surfaces stay painted, off-screen work is skipped with `content-visibility`,
+  and only extra JS updates stay capped. Group-drag now moves every selected
+  card live. `workspace.json` still saves compact JSON instead of pretty-printed
+  28 MB snapshots.
+- Keep text-heavy boards responsive while panning by reusing CanvasKit paragraph
+  layouts across frames instead of rebuilding and deleting them on every paint.
+- Keep agent tool activity closer to Cursor: group reads, searches, and commands,
+  leave the current group open while it runs, and collapse that group when the
+  next thought arrives. Finished turns summarize as “Explored 8 files, 2
+  searches” instead of a generic activity dump.
+- Stop agent chats from flickering while a turn is running. Open transcripts keep
+  their mounted messages across preview polls, streamed commentary is not
+  replaced by the answer, and a still-running task stays in the working state
+  instead of flipping back to ready.
+- Capture each enabled Pi model's wrap-up the way that provider actually writes
+  it: last plain text for Cursor and xAI, Codex `final_answer` when present, and
+  only the last text block for Antigravity's concatenated stops. Cursor streamed
+  closes stay in the same bubble even when that row still has commentary parts; a
+  close already on the thread still completes the turn, and a commentary-tagged
+  wrap-up is shown as a chat bubble instead of “No final response.”
+  Cursor and other slow first-token models no longer fail the turn when Pi
+  takes longer than 15 seconds to acknowledge `prompt` or `steer`; the chat
+  stays running until the wrap-up arrives.
+- Start each new sidebar task with an empty composer and transcript instead of
+  carrying over the previous prompt, image, or optimistic `new-task` turn.
+- Show Codex-style agent progress as plain inline commentary alongside tool
+  activity, without a `Thought` icon or nested disclosure. OpenAI commentary
+  phases and Gemini's natural pre-tool updates stay visible, while raw reasoning
+  summaries and Gemini's structured tool envelopes remain out of the transcript.
+  New workers are prompted to report meaningful milestones instead of narrating
+  every inspection or tool call, and legacy provider-thought rows are removed
+  during history hydration.
+- Remove the global floating toast pop-ups, including repeated refresh and
+  Chrome capture notices that covered the Board.
+- Keep agent transcripts mounted and pinned to their latest message through
+  refresh hydration and rapid tool-activity updates without visible scroll jumps
+  or flicker while the agent is working. The transcript viewport now uses stable
+  stick-to-bottom refs instead of rebinding observers and snapping scroll on
+  every working-tick render, and annotation geometry stays idle until there is
+  something to measure. An open sidebar chat now keeps its selected thread across
+  panel remounts and incomplete history polls, so the Chats view no longer jumps
+  back to the list or another task mid-turn.
 - Add a Codex-style user-message chapter rail to shared sidebar and Board agent
   conversations. Four or more prompts gain scroll-synced markers, neighbor
   expansion on hover, prompt/response preview cards, click-to-jump highlighting,
@@ -11,11 +217,27 @@
   chats use a compact 32 px inset while wider Board chat objects retain 44 px.
   The chapter rail sits slightly below the transcript midpoint so it feels
   centered against the full chat surface, including the composer.
+  Text-selection actions now close when the user clicks outside the agent chat,
+  while clicks on the selection card itself remain interactive. Copy now works
+  across multiple transcript messages through both the selection card and the
+  native copy shortcut, while annotation creation stays scoped to one message.
+  Composer annotation chips use a flat white bordered treatment in light mode
+  instead of blending into the gray composer.
   The desktop sidebar now opens at 27% of the workspace and can stretch to 30%
   when more reading room is useful.
 - Show Pi tool approvals inside the active task instead of auto-declining them.
-  Messages sends now display the exact recipient and text with compact Send and
-  Cancel actions, and remain blocked until the user chooses Send.
+  Messages sends now preview the recipient above one or more exact,
+  right-aligned blue outgoing bubbles, with quiet Cancel and Send text actions
+  beneath the outgoing text. Sending, Sent, Cancelled,
+  and Not sent sit quietly beneath the outgoing text instead of competing with
+  it. These states reuse that inline anatomy in both themes, and sends remain
+  blocked until the user chooses Send.
+  Approval previews now stay attached to their originating chat turn. A newer
+  follow-up or steering message cancels any untouched Messages approval, removes
+  its actions, and leaves the settled preview in transcript history.
+  Wrapped Antigravity results settle the inline state instead of leaving it on
+  Sending. The Messages bridge now accepts an explicit ordered `texts` sequence
+  for separate bubbles while preserving newlines inside a single bubble.
 - Let Pi model scopes pin a supported reasoning level per provider/model, keeping
   OpenPencil's live model catalog aligned with the curated Pi configuration.
 - Replace the bulky agent composer context fill with a slim, bounded circular
@@ -37,6 +259,32 @@
   Trace, and can be dragged into sidebar or Board agent chats without sending.
   One armed session now persists across tabs the user visits, keeps globally
   ordered selection numbers, and never changes the active Chrome tab itself.
+  Session children now stay collapsed until their parent is opened in an anchored
+  dropdown, and screenshot comments reuse the Board's floating pill editor so a
+  numbered pin can be reopened and revised directly on the image. The same picker
+  can now select OpenPencil's own UI and canvas while leaving its session and
+  annotation controls interactive. Session headers stay white, omit the redundant
+  disclosure arrow, reveal removal only on hover or focus, and no longer add a
+  separator beneath the capture basket. Their dropdown uses a compact four-pixel
+  shell inset and tighter, shorter child rows.
+  Selection children use the complete row to
+  open annotation, remove the old separator rules, use a soft rounded hover and
+  focus highlight with optically even content insets, and reveal only their
+  remove action on hover or keyboard focus. The light annotation review now blends its
+  header and screenshot stage into one continuous white surface without a hard
+  divider seam. Its header now uses a deterministic compact display title,
+  removes the redundant instruction line, and reveals the close action only on
+  header hover or keyboard focus.
+- Let a Chrome selector capture be dragged onto the Board as one persisted
+  external live-surface Code Object. The selector now keeps a clean element-only
+  crop separate from its annotated agent context. On macOS desktop, an embedded
+  ScreenCaptureKit helper reconnects the exact window-relative source region at
+  30 fps using Retina-aware, latest-frame transport. The browser build uses the
+  Chrome extension's tab-capture stream to keep that selected region live without
+  copying or restyling its DOM. Existing Code Object Design/Interact behavior owns
+  Board transforms, while Interact relays bounded pointer, wheel, key, and text
+  input back through the Chrome extension. The native transport follows Attune's
+  capture mechanics without importing Attune's destination UI or DOM-twin styling.
 - Make photo and video drag-and-drop reliable across the full Board surface,
   including over native media and other overlay-backed objects. Dropped photos
   become native image rectangles, while videos become movable, source-backed
@@ -52,7 +300,10 @@
   inspection. Sending now transfers the draft out of the composer immediately,
   keeps image previews and file or video cards above and outside the sent text
   bubble, and preserves those attachments when the authoritative conversation
-  replaces the optimistic preview.
+  replaces the optimistic preview. Image drafts now show their actual thumbnail
+  in the prompt bar, Chrome capture drafts reuse that same snapshot chip, and
+  images can open the same annotation editor before send or directly from the
+  conversation transcript.
 - Let user prompts and assistant responses share the same one-click copy affordance
   beneath the message alongside its local timestamp. The copy action stays quiet
   with the timestamp until message hover or keyboard focus and gives
@@ -141,9 +392,10 @@
   routing context. Inventory reads now distinguish currently running chats from
   completed chats that remain resumable, avoid duplicate generic searches, and
   never imply that resident chats are visibly placed on the current Board.
-  Board workers keep normal Pi tools, connected apps, and machine access. They
-  receive only read-only `board_where` and `board_screenshot` from OpenPencil;
-  dispatch, navigation, and theme remain parent-only. Saved-scene screenshots
+  Board workers keep normal provider, file, and machine tools. Their MCP surface
+  contains only read-only `board_where` and `board_screenshot` from OpenPencil;
+  connected apps, dispatch, navigation, and theme remain outside the worker.
+  Saved-scene screenshots
   are bounded to exact object IDs and stay inside the expandable tool result
   that produced them. They load the short file skill explicitly for
   Board work, and presence includes a bounded current selection for targeting.
@@ -187,6 +439,8 @@
   concrete tool identity, and tool inputs remain expandable even when no result is returned.
   Because its bridge reports zero usage, estimate and label context consumption instead of leaving
   the meter frozen at zero.
+- Chat message text stays readable, and assistant replies render markdown
+  (bold, lists, inline code) instead of showing the raw markers.
 - Board agents run on Pi. Sidebar CHATS and Board cards share one conversation
   history and the original Vue chat chrome, so a send in either place is the
   same thread. Each conversation now owns one resident `pi --mode rpc` session,
@@ -276,8 +530,9 @@
   page-owner locks, lexical fallback, and fat directed-work packets. Board workers
   use the JSONL index, Trace files, and ordinary file tools on `workspace.json`;
   CLI/MCP mutation adapters are not part of their contract.
-- Keep Board workers as resident Pi sessions with one short `$openpencil` file
-  contract. Dispatch stays Board-only so ordinary Codex work remains in its own task.
+- Keep Board workers as resident Pi sessions with a restricted MCP catalog and
+  the direct user prompt. Dispatch stays Board-only so ordinary Codex work remains
+  in its own task.
 - Keep Worker and embedded Smylr apps attached to the Board camera. Agent hosts no
   longer use `content-visibility`, so they pan and zoom with the canvas. Entering Interact keeps
   the same conversation tree and stick-to-bottom viewport instead of remounting the transcript at

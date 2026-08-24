@@ -5,6 +5,7 @@ import {
   agentConversationCopyText,
   agentConversationDisplayTitle,
   agentConversationLastResponseText,
+  agentConversationLastUserMessageAt,
   isAgentConversationArchived,
   isAgentConversationPinned,
   isAgentConversationUnread,
@@ -15,15 +16,20 @@ import {
   sortAgentConversationThreads
 } from '@/app/agent-chat/thread-preferences'
 
-function thread(id: string, updatedAt: string): AgentConversationThread {
+function thread(
+  id: string,
+  updatedAt: string,
+  lastUserMessageAt = '2026-08-22T12:00:00.000Z'
+): AgentConversationThread {
   return {
     canFollowUp: true,
     createdAt: '2026-08-22T12:00:00.000Z',
     effort: 'high',
     id: `agent:${id}`,
+    lastUserMessageAt,
     messages: [
       {
-        createdAt: '2026-08-22T12:00:00.000Z',
+        createdAt: lastUserMessageAt,
         id: `${id}:user`,
         role: 'user',
         text: 'Move this card to the right.'
@@ -67,6 +73,24 @@ describe('agent conversation preferences', () => {
     setAgentConversationTitle(first, '')
     setAgentConversationUnread(first, false)
     setAgentConversationArchived(first, false)
+  })
+
+  test('keeps tasks ordered by the last user message, not later agent turns', () => {
+    const olderUser = thread('older-user', '2026-08-22T12:10:00.000Z', '2026-08-22T12:00:00.000Z')
+    const newerUser = thread('newer-user', '2026-08-22T12:03:00.000Z', '2026-08-22T12:05:00.000Z')
+    const previewWithoutUser = {
+      ...olderUser,
+      nativeThreadId: 'preview-without-user',
+      lastUserMessageAt: '2026-08-22T12:04:00.000Z',
+      messages: olderUser.messages.filter((message) => message.role === 'assistant')
+    }
+
+    expect(
+      sortAgentConversationThreads([olderUser, newerUser, previewWithoutUser]).map(
+        (item) => item.nativeThreadId
+      )
+    ).toEqual(['newer-user', 'preview-without-user', 'older-user'])
+    expect(agentConversationLastUserMessageAt(previewWithoutUser)).toBe('2026-08-22T12:04:00.000Z')
   })
 
   test('copies a complete readable transcript and its latest agent response', () => {

@@ -5,6 +5,7 @@ import {
   CODE_OBJECT_PLUGIN_ID,
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument,
+  isCodeObjectKind,
   parseCodeObjectDocument,
   serializeCodeObjectPluginData,
   SMYLR_CODE_OBJECT_FRAME_KIND,
@@ -61,6 +62,8 @@ describe('Code Object persisted document contract', () => {
 
     expect(parseCodeObjectDocument(text)).toBeNull()
     expect(parseCodeObjectDocument(frame)).toBeNull()
+    expect(isCodeObjectKind(text)).toBe(false)
+    expect(isCodeObjectKind(frame)).toBe(true)
   })
 
   test('serializes the complete registered Smylr iframe contract', () => {

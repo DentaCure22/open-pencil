@@ -3,7 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import {
   browserCaptureSessionAgentContext,
   browserElementAgentContext,
-  browserElementTraceTarget
+  browserElementTraceTarget,
+  compactBrowserElementTitle
 } from '@/app/browser-inspector/context'
 import {
   parseBrowserElementCommandResult,
@@ -40,6 +41,15 @@ const selection: BrowserElementSelection = {
 }
 
 describe('Chrome element context', () => {
+  test('uses a deterministic compact display title without changing short labels', () => {
+    expect(compactBrowserElementTitle('Patient search')).toBe('Patient search')
+    expect(
+      compactBrowserElementTitle(
+        '  Home   Explore 1 Notifications Chat Grok History Creator Studio Premium Profile More Post  '
+      )
+    ).toBe('Home Explore 1 Notifications…')
+  })
+
   test('stays selection context for Trace and the agent', () => {
     expect(browserElementAgentContext(selection)).toContain('Chrome DOM selection:')
     expect(browserElementAgentContext(selection)).toContain('[aria-label="Save patient"]')

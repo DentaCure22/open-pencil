@@ -1,9 +1,16 @@
 {
   "mcpServers": {
     "openpencil": {
-      "directTools": ["board_where", "board_screenshot"],
+      "directTools": false,
       "disabled": false,
-      "includeTools": ["board_where", "board_screenshot"]
+      "includeTools": [
+        "board_screenshot",
+        "board_where",
+        "get_agent_chat_context",
+        "list_agent_chats",
+        "set_theme"
+      ],
+      "lifecycle": "lazy"
     }
   }
 }

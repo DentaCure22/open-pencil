@@ -68,13 +68,28 @@ export function setAgentConversationUnread(thread: AgentConversationThread, unre
   updatePreference(thread.nativeThreadId, { unread })
 }
 
+export function agentConversationLastUserMessageAt(
+  thread: Pick<AgentConversationThread, 'createdAt' | 'messages'> & {
+    lastUserMessageAt?: string
+  }
+): string {
+  const fromField = thread.lastUserMessageAt
+  const fromMessages = thread.messages.findLast((message) => message.role === 'user')?.createdAt
+  if (fromField && fromMessages) return fromField > fromMessages ? fromField : fromMessages
+  return fromField ?? fromMessages ?? thread.createdAt
+}
+
 export function sortAgentConversationThreads(
   threads: readonly AgentConversationThread[]
 ): AgentConversationThread[] {
   return [...threads].sort((left, right) => {
     const pinDifference =
       Number(isAgentConversationPinned(right)) - Number(isAgentConversationPinned(left))
-    return pinDifference || right.updatedAt.localeCompare(left.updatedAt)
+    if (pinDifference) return pinDifference
+    const byUser = agentConversationLastUserMessageAt(right).localeCompare(
+      agentConversationLastUserMessageAt(left)
+    )
+    return byUser || right.updatedAt.localeCompare(left.updatedAt)
   })
 }
 

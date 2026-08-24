@@ -1,11 +1,12 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import { cloneSceneNode } from '@open-pencil/scene-graph/copy'
 
 export function collectSubtrees(graph: SceneGraph, rootIds: string[]): SceneNode[] {
   const result: SceneNode[] = []
   function walk(id: string) {
     const node = graph.getNode(id)
     if (!node) return
-    result.push(structuredClone(node))
+    result.push(cloneSceneNode(node))
     for (const childId of node.childIds) walk(childId)
   }
   for (const id of rootIds) walk(id)
@@ -17,7 +18,7 @@ export function snapshotSubtree(graph: SceneGraph, rootId: string): Map<string, 
   const walk = (id: string) => {
     const node = graph.getNode(id)
     if (!node) return
-    index.set(id, structuredClone(node))
+    index.set(id, cloneSceneNode(node))
     for (const childId of node.childIds) walk(childId)
   }
   walk(rootId)

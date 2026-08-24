@@ -21,7 +21,7 @@ const GEOMETRY_CACHE_KEYS = new Set<keyof SceneNode>([
   'strokeGeometry'
 ])
 
-const NODE_PICTURE_STABLE_PREVIEW_KEYS = new Set<keyof SceneNode>([
+const NODE_PICTURE_STABLE_KEYS = new Set<keyof SceneNode>([
   'x',
   'y',
   'rotation',
@@ -30,9 +30,36 @@ const NODE_PICTURE_STABLE_PREVIEW_KEYS = new Set<keyof SceneNode>([
   'parentId'
 ])
 
+const PARAGRAPH_CACHE_KEYS = new Set<keyof SceneNode>([
+  'fills',
+  'fontFamily',
+  'fontFeatures',
+  'fontSize',
+  'fontVariations',
+  'fontWeight',
+  'height',
+  'italic',
+  'leadingTrim',
+  'letterSpacing',
+  'lineHeight',
+  'maxLines',
+  'styleRuns',
+  'text',
+  'textAlignHorizontal',
+  'textAutoResize',
+  'textDecoration',
+  'textDecorationFills',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textDirection',
+  'textTruncation',
+  'width'
+])
+
 export type RendererInvalidation = {
   geometryCache: boolean
   nodePicture: boolean
+  paragraphCache: boolean
 }
 
 export function rendererInvalidationForChanges(
@@ -41,10 +68,9 @@ export function rendererInvalidationForChanges(
 ): RendererInvalidation {
   const keys = Object.keys(changes) as (keyof SceneNode)[]
   const geometryCache = keys.some((key) => GEOMETRY_CACHE_KEYS.has(key))
-  const nodePicture = options.preview
-    ? keys.some((key) => !NODE_PICTURE_STABLE_PREVIEW_KEYS.has(key))
-    : true
-  return { geometryCache, nodePicture }
+  const nodePicture = keys.some((key) => !NODE_PICTURE_STABLE_KEYS.has(key))
+  const paragraphCache = keys.some((key) => PARAGRAPH_CACHE_KEYS.has(key))
+  return { geometryCache, nodePicture, paragraphCache }
 }
 
 function invalidateRenderersForChange(
@@ -58,6 +84,7 @@ function invalidateRenderersForChange(
   for (const renderer of renderers) {
     if (invalidation.geometryCache) renderer.invalidateVectorPath(id)
     if (invalidation.nodePicture) renderer.invalidateNodePicture(id)
+    if (invalidation.paragraphCache) renderer.invalidateParagraphCache(id)
     const subtreeId = renderer.pageId ? topLevelSubtreeId(graph, id, renderer.pageId) : null
     if (subtreeId) renderer.invalidateSubtreePicture(subtreeId)
   }
@@ -94,11 +121,26 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
     options.emitEditorEvent('node:previewUpdated', id, changes)
   }
 
-  function onNodeStructureChanged(nodeId: string) {
+  function invalidateStructure(nodeIds: Array<string | null | undefined>) {
+    const graph = options.getGraph()
     for (const renderer of options.getRenderers()) {
-      renderer.invalidateNodePicture(nodeId)
-      renderer.clearSubtreePictureCache()
+      let targeted = false
+      for (const nodeId of nodeIds) {
+        if (!nodeId) continue
+        renderer.invalidateNodePicture(nodeId)
+        renderer.invalidateParagraphCache(nodeId)
+        const subtreeId = renderer.pageId ? topLevelSubtreeId(graph, nodeId, renderer.pageId) : null
+        if (subtreeId) {
+          renderer.invalidateSubtreePicture(subtreeId)
+          targeted = true
+        }
+      }
+      if (!targeted) renderer.clearSubtreePictureCache()
     }
+  }
+
+  function onNodeStructureChanged(nodeId: string, extraIds: Array<string | null | undefined> = []) {
+    invalidateStructure([nodeId, ...extraIds])
     options.scheduleComponentSync(nodeId)
     options.requestRender()
   }
@@ -110,7 +152,7 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       previewUpdated: onNodePreviewUpdated,
       created: (node) => {
         options.emitEditorEvent('node:created', node)
-        onNodeStructureChanged(node.id)
+        onNodeStructureChanged(node.id, [node.parentId])
       },
       deleted: (id) => {
         options.emitEditorEvent('node:deleted', id)
@@ -118,11 +160,11 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       },
       reparented: (nodeId, oldParentId, newParentId) => {
         options.emitEditorEvent('node:reparented', nodeId, oldParentId, newParentId)
-        onNodeStructureChanged(nodeId)
+        onNodeStructureChanged(nodeId, [oldParentId, newParentId])
       },
       reordered: (nodeId, parentId, index) => {
         options.emitEditorEvent('node:reordered', nodeId, parentId, index)
-        onNodeStructureChanged(nodeId)
+        onNodeStructureChanged(nodeId, [parentId])
       }
     })
   }

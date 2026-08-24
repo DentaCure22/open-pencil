@@ -6,10 +6,11 @@ import { createEditor } from '#core/editor'
 import { rendererInvalidationForChanges } from '#core/editor/graph-events'
 
 describe('graph event renderer invalidation', () => {
-  test('committed updates always invalidate node pictures', () => {
+  test('position-only committed updates keep node pictures', () => {
     expect(rendererInvalidationForChanges({ x: 10 }, { preview: false })).toEqual({
       geometryCache: false,
-      nodePicture: true
+      nodePicture: false,
+      paragraphCache: false
     })
   })
 
@@ -23,14 +24,28 @@ describe('graph event renderer invalidation', () => {
   test('position-only preview updates keep node pictures', () => {
     expect(rendererInvalidationForChanges({ x: 10, y: 20 }, { preview: true })).toEqual({
       geometryCache: false,
-      nodePicture: false
+      nodePicture: false,
+      paragraphCache: false
     })
+  })
+
+  test('text layout fields invalidate the paragraph cache without treating position as text', () => {
+    expect(
+      rendererInvalidationForChanges({ text: 'Hello' }, { preview: true }).paragraphCache
+    ).toBe(true)
+    expect(
+      rendererInvalidationForChanges({ fontWeight: 700 }, { preview: false }).paragraphCache
+    ).toBe(true)
+    expect(rendererInvalidationForChanges({ x: 12, y: 8 }, { preview: false }).paragraphCache).toBe(
+      false
+    )
   })
 
   test('size preview updates invalidate node pictures for effects and cached shapes', () => {
     expect(rendererInvalidationForChanges({ width: 20, height: 30 }, { preview: true })).toEqual({
       geometryCache: false,
-      nodePicture: true
+      nodePicture: true,
+      paragraphCache: true
     })
   })
 

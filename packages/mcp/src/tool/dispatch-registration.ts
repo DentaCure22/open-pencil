@@ -113,13 +113,10 @@ function connectionFailure(error: unknown, port: number): Error {
 }
 
 export type DispatchWorkArgs = {
-  action?: DispatchWorkAction
-  continue_thread_id?: string
-  done: string
+  action: DispatchWorkAction
   exact_words: string
+  intention: string
   target_thread_id?: string
-  turn_ended_at: string
-  turn_started_at: string
 }
 
 type DispatchResponsePayload = {
@@ -129,11 +126,6 @@ type DispatchResponsePayload = {
   state?: string
   threadId?: string
 }
-
-const isoTimestamp = z
-  .string()
-  .trim()
-  .refine((value) => Number.isFinite(Date.parse(value)), 'Expected an ISO timestamp')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
@@ -317,8 +309,7 @@ export function composeDispatchWorkPrompt(args: DispatchWorkArgs): string {
   return [
     `/skill:openpencil ${args.exact_words.trim()}`,
     '',
-    `Spoken turn: ${args.turn_started_at} to ${args.turn_ended_at}`,
-    `Done: ${args.done.trim()}`
+    `Intention: ${args.intention.trim()}`
   ].join('\n')
 }
 
@@ -328,45 +319,37 @@ export function composeDispatchRequest(args: DispatchWorkArgs): {
   route: string
   targetThreadId?: string
 } {
-  const legacyThreadId = args.continue_thread_id?.trim()
   const targetThreadId = args.target_thread_id?.trim()
-  if (legacyThreadId && targetThreadId && legacyThreadId !== targetThreadId) {
-    throw new TypeError('continue_thread_id and target_thread_id must identify the same chat.')
-  }
-  const selectedThreadId = targetThreadId || legacyThreadId
-  const action = args.action ?? (selectedThreadId ? 'continue' : 'new')
-  if (action === 'new' && selectedThreadId) {
+  const action = args.action
+  if (action === 'new' && targetThreadId) {
     throw new TypeError('A new chat must not include a target thread ID.')
   }
-  if (action === 'fork' && legacyThreadId && !targetThreadId) {
-    throw new TypeError(
-      'fork requires target_thread_id; continue_thread_id is only for continuation.'
-    )
-  }
   if (action === 'continue') {
-    if (!selectedThreadId) throw new TypeError('continue requires target_thread_id.')
+    if (!targetThreadId) throw new TypeError('continue requires target_thread_id.')
     return {
       action,
       body: {
         displayPrompt: args.exact_words.trim(),
-        message: composeDispatchWorkPrompt(args)
+        message: composeDispatchWorkPrompt(args),
+        toolScope: 'board-worker'
       },
-      route: `/agent-router/v1/pi/conversations/${encodeURIComponent(selectedThreadId)}/follow-up`,
-      targetThreadId: selectedThreadId
+      route: `/agent-router/v1/pi/conversations/${encodeURIComponent(targetThreadId)}/follow-up`,
+      targetThreadId
     }
   }
   if (action === 'fork') {
-    if (!selectedThreadId) throw new TypeError('fork requires target_thread_id.')
+    if (!targetThreadId) throw new TypeError('fork requires target_thread_id.')
     return {
       action,
       body: {
         displayPrompt: args.exact_words.trim(),
         effort: '',
         model: '',
-        prompt: composeDispatchWorkPrompt(args)
+        prompt: composeDispatchWorkPrompt(args),
+        toolScope: 'board-worker'
       },
-      route: `/agent-router/v1/pi/conversations/${encodeURIComponent(selectedThreadId)}/fork`,
-      targetThreadId: selectedThreadId
+      route: `/agent-router/v1/pi/conversations/${encodeURIComponent(targetThreadId)}/fork`,
+      targetThreadId
     }
   }
   return {
@@ -375,7 +358,8 @@ export function composeDispatchRequest(args: DispatchWorkArgs): {
       displayPrompt: args.exact_words.trim(),
       effort: '',
       model: '',
-      prompt: composeDispatchWorkPrompt(args)
+      prompt: composeDispatchWorkPrompt(args),
+      toolScope: 'board-worker'
     },
     route: '/agent-router/v1/pi/dispatch'
   }
@@ -383,7 +367,7 @@ export function composeDispatchRequest(args: DispatchWorkArgs): {
 
 function dispatchReason(action: DispatchWorkAction): string {
   if (action === 'continue') return 'Sent the instruction to the existing chat.'
-  if (action === 'fork') return 'Forked the selected chat with its existing context.'
+  if (action === 'fork') return 'Compact-forked the selected chat with its stored tail.'
   return 'Started a new Board worker chat.'
 }
 
@@ -423,9 +407,6 @@ async function getAgentChatContext(args: { thread_id: string }) {
 }
 
 async function sendDispatch(args: DispatchWorkArgs) {
-  if (Date.parse(args.turn_started_at) > Date.parse(args.turn_ended_at)) {
-    throw new TypeError('turn_started_at must not be after turn_ended_at.')
-  }
   const auth = await agentAuth()
   const request = composeDispatchRequest(args)
   let response: Response
@@ -465,7 +446,7 @@ export function registerDispatchWorkTool(mcpServer: McpServer): void {
     'list_agent_chats',
     {
       description:
-        'List up to six compact resident Pi chats once. Omit query for inventory or status questions; otherwise use concrete subject terms. Lifecycle state and resumability are separate. This does not report which chat cards are visible or placed on the current Board. No transcripts or tool output. Read-only.',
+        'List compact resident Pi chats when the user asks about them, routing prior work, or the current task genuinely depends on another chat. Omit query for inventory or status; otherwise use concrete subject terms. It does not report Board placement, transcripts, or tool output. Read-only.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(MAX_CHAT_LIMIT).optional(),
         query: z
@@ -488,7 +469,7 @@ export function registerDispatchWorkTool(mcpServer: McpServer): void {
     'get_agent_chat_context',
     {
       description:
-        'Read one bounded resident Pi chat preview only when two list_agent_chats candidates remain genuinely plausible. Returns at most six human-facing messages and no tool calls, tool output, reasoning, attachments, or session data. Read-only.',
+        'Read one bounded resident Pi chat preview after list_agent_chats identifies a genuinely relevant candidate. Returns at most six human-facing messages and no tool calls, tool output, reasoning, attachments, or session data. Read-only.',
       inputSchema: z.object({
         thread_id: z.string().trim().min(1).describe('Exact thread ID from list_agent_chats')
       })
@@ -505,28 +486,23 @@ export function registerDispatchWorkTool(mcpServer: McpServer): void {
     'dispatch_work',
     {
       description:
-        'Send exactly what the user said to a new, continued, or forked Board worker chat. List candidate chats first when prior context may matter. Continuing a running chat steers its active turn. Returns assignment, not completion.',
+        'Send exactly what the user said plus a resolved intention to a new, continued, or forked Board worker chat. Continuing a running chat steers its active turn. Returns assignment, not completion.',
       inputSchema: z.object({
         action: z
           .enum(['continue', 'fork', 'new'])
-          .describe('Continue a relevant chat, fork useful context, or start new')
-          .optional(),
-        continue_thread_id: z
+          .describe('Continue a relevant chat, compact-fork its stored tail, or start new'),
+        exact_words: z.string().trim().min(1).describe('What the user said, verbatim'),
+        intention: z
           .string()
           .trim()
           .min(1)
-          .describe('Deprecated continuation alias; prefer target_thread_id with action')
-          .optional(),
-        done: z.string().trim().min(1).describe('One sentence describing the finished result'),
-        exact_words: z.string().trim().min(1).describe('What the user said, verbatim'),
+          .describe('Resolved target and intended result in one bounded sentence'),
         target_thread_id: z
           .string()
           .trim()
           .min(1)
           .describe('Exact candidate thread ID for continue or fork')
-          .optional(),
-        turn_ended_at: isoTimestamp.describe('End of the spoken turn'),
-        turn_started_at: isoTimestamp.describe('Start of the spoken turn')
+          .optional()
       })
     },
     async (args: DispatchWorkArgs) => {

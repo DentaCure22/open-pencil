@@ -35,10 +35,10 @@ export function conversationStatus(input: {
   state?: string
 }): AiConversationStatus {
   if (input.error) return 'error'
-  if (input.sending) return 'submitted'
   if (input.state === 'needs_attention') return 'needs_attention'
   if (input.state === 'stopped') return 'stopped'
   if (input.state === 'running') return 'streaming'
+  if (input.sending) return 'submitted'
   return 'ready'
 }
 
@@ -88,6 +88,7 @@ export type AiToolKind =
   | 'handoff'
   | 'image'
   | 'list'
+  | 'mail'
   | 'message'
   | 'read'
   | 'search'
@@ -109,6 +110,7 @@ const SHORT_TOOL_INPUT_KEYS = [
   'path',
   'query',
   'search',
+  'describe',
   'pattern',
   'glob',
   'uri',
@@ -195,6 +197,9 @@ function bridgedToolName(value: ToolInputRecord): string {
   if (typeof value.Arguments.search === 'string' && value.Arguments.search.trim()) {
     return 'connected_app_search'
   }
+  if (typeof value.Arguments.describe === 'string' && value.Arguments.describe.trim()) {
+    return 'connected_app_search'
+  }
   return name
 }
 
@@ -205,14 +210,41 @@ function displayToolName(name: string, input?: string): string {
     const bridged = bridgedToolName(parsed)
     if (bridged) return bridged
   }
+  if (normalizedName === 'connected_app_search') return 'connected_app_search'
   if (normalizedName !== 'mcp') return name
   if (!isToolInputRecord(parsed)) return 'connected app'
   const tool = stringField(parsed.tool)
   if (tool) return tool
   const action = stringField(parsed.action)
   if (action) return action
-  if (typeof parsed.search === 'string') return 'search'
+  if (typeof parsed.search === 'string' || typeof parsed.describe === 'string') {
+    return 'connected_app_search'
+  }
   return 'connected app'
+}
+
+function normalizedDisplayName(name: string, input?: string): string {
+  return displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
+}
+
+export function isAppLookup(name: string, input?: string): boolean {
+  return normalizedDisplayName(name, input) === 'connected app search'
+}
+
+function isMailTool(name: string, input?: string): boolean {
+  const normalized = normalizedDisplayName(name, input)
+  return normalized.includes('gmail') || /\bemail\b/.test(normalized)
+}
+
+function isSendText(name: string, input?: string): boolean {
+  const normalized = normalizedDisplayName(name, input)
+  return normalized === 'send message' || normalized.includes('send message')
+}
+
+/** Old pi-memory tickets. Keep them off the activity lane. */
+export function isRetiredMemoryTool(name: string): boolean {
+  const normalized = name.trim().replaceAll(' ', '_').toLowerCase()
+  return normalized === 'memory_search' || normalized === 'memory_read'
 }
 
 function mediaToolInput(input?: string): ToolInputRecord | null {
@@ -274,6 +306,9 @@ export function toolCallKind(name: string, input?: string): AiToolKind {
   const normalized = displayToolName(name, input).replaceAll('_', ' ').toLowerCase()
   if (isVideoGenerationTool(name, input)) return 'video'
   if (isImageGenerationTool(name, input)) return 'image'
+  if (isAppLookup(name, input)) return 'connected-app'
+  if (isMailTool(name, input)) return 'mail'
+  if (isSendText(name, input)) return 'tool'
   if (includesToolTerm(normalized, ['search', 'grep'])) return 'search'
   if (
     includesToolTerm(normalized, ['command', 'shell']) ||
@@ -301,6 +336,9 @@ export function toolCallKind(name: string, input?: string): AiToolKind {
 export function toolCallLabel(name: string, input?: string): string {
   const displayName = displayToolName(name, input)
   const kind = toolCallKind(name, input)
+  if (isAppLookup(name, input)) return 'Looked up apps'
+  if (kind === 'mail') return 'Read mail'
+  if (isSendText(name, input)) return 'Sent a text'
   if (kind === 'search') return 'Searched'
   if (kind === 'command') return 'Ran command'
   if (kind === 'read') return 'Read'
@@ -317,6 +355,9 @@ export function toolCallLabel(name: string, input?: string): string {
 export function toolCallProgressLabel(name: string, input?: string): string {
   const displayName = displayToolName(name, input)
   const kind = toolCallKind(name, input)
+  if (isAppLookup(name, input)) return 'Looking up apps'
+  if (kind === 'mail') return 'Reading mail'
+  if (isSendText(name, input)) return 'Sending a text'
   if (kind === 'search') return 'Searching'
   if (kind === 'command') return 'Running command'
   if (kind === 'read') return 'Reading'
@@ -341,6 +382,7 @@ const TOOL_GROUP_LABELS: Record<AiToolKind, string> = {
   handoff: 'Created handoff',
   image: 'Viewed images',
   list: 'Listed files',
+  mail: 'Read mail',
   message: 'Messaged worker',
   read: 'Read files',
   search: 'Searched',
@@ -360,9 +402,12 @@ export function toolGroupLabel(
     const generatedVideo = kind === 'video' && isVideoGenerationTool(tool.name, tool.input)
     if (!labels.has(kind) || running) {
       let label = TOOL_GROUP_LABELS[kind]
+      if (isAppLookup(tool.name, tool.input)) label = running ? 'Looking up apps' : 'Looked up apps'
       if (generatedImage) label = 'Generated image'
       if (generatedVideo) label = 'Generated video'
-      if (running) label = toolCallProgressLabel(tool.name, tool.input)
+      if (running && !isAppLookup(tool.name, tool.input)) {
+        label = toolCallProgressLabel(tool.name, tool.input)
+      }
       labels.set(kind, label)
     }
   }
@@ -390,8 +435,8 @@ export function formatElapsedDuration(durationMs: number): string {
   return minutes ? `${String(minutes)}m ${String(seconds)}s` : `${String(seconds)}s`
 }
 
-export function resolveReasoningActivityState(
-  state: Extract<AiMessagePart, { type: 'reasoning' }>['state'],
+export function resolveCommentaryActivityState(
+  state: Extract<AiMessagePart, { type: 'commentary' }>['state'],
   index: number,
   activityCount: number,
   status: AiConversationStatus

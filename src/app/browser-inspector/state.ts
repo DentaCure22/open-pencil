@@ -121,7 +121,6 @@ export function startBrowserCaptureSession(input: {
       title: browserCaptureSessionTitle([input.page], input.startedAt)
     })
   }
-  browserInspectorState.expandedSessionId = input.captureSessionId
 }
 
 function captureSessionIdentity(selection: BrowserElementSelection) {
@@ -160,20 +159,23 @@ export function acceptBrowserElementSelection(selection: BrowserElementSelection
   browserInspectorState.error = null
   browserInspectorState.pickerStatus = 'active'
   browserInspectorState.activeSessionId = captureSessionId
-  browserInspectorState.expandedSessionId = captureSessionId
   return { selection: normalized, session }
 }
 
 export function selectBrowserCaptureSession(sessionId: string | null) {
-  browserInspectorState.expandedSessionId =
+  setBrowserCaptureSessionExpanded(
     browserInspectorState.expandedSessionId === sessionId ? null : sessionId
+  )
+}
+
+export function setBrowserCaptureSessionExpanded(sessionId: string | null) {
+  browserInspectorState.expandedSessionId = sessionId
 }
 
 export function requestBrowserElementAnnotation(sessionId: string, selectionId: string) {
   if (!getBrowserCaptureSession(sessionId)?.selections.some((item) => item.id === selectionId)) {
     return
   }
-  browserInspectorState.expandedSessionId = sessionId
   browserInspectorState.annotationRequest = { selectionId, sessionId }
 }
 
@@ -186,7 +188,7 @@ export function removeBrowserCaptureSession(sessionId: string) {
   if (index === -1) return
   browserInspectorState.sessions.splice(index, 1)
   if (browserInspectorState.expandedSessionId === sessionId) {
-    browserInspectorState.expandedSessionId = browserInspectorState.sessions.at(-1)?.id ?? null
+    browserInspectorState.expandedSessionId = null
   }
   if (browserInspectorState.activeSessionId === sessionId) {
     browserInspectorState.activeSessionId = null
@@ -358,13 +360,16 @@ export function requestBrowserElementPicker(timeoutMs = 2_500): Promise<boolean>
       resolve(ok)
     }
     const receive = (event: MessageEvent) => {
-      if (event.source !== window || event.origin !== window.location.origin) return
+      if (event.origin !== window.location.origin) return
       const result = parseBrowserElementCommandResult(event.data)
       if (!result || result.requestId !== requestId) return
       finish(result.ok, result.reason)
     }
     const timer = window.setTimeout(() => finish(false, 'extension-unavailable'), timeoutMs)
     window.addEventListener('message', receive)
-    window.postMessage(command, window.location.origin)
+    document.documentElement.setAttribute(
+      'data-openpencil-browser-element-command',
+      JSON.stringify(command)
+    )
   })
 }

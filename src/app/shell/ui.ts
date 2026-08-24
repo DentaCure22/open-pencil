@@ -1,29 +1,7 @@
 import { useEventListener } from '@vueuse/core'
-import { ref } from 'vue'
 
 import { isTauri } from '@/app/tauri/env'
-import type { ToastVariant } from '@/components/ui/toast'
 
-export type { ToastVariant } from '@/components/ui/toast'
-
-export interface Toast {
-  id: number
-  message: string
-  variant: ToastVariant
-  /** Number of times this message has been raised since it appeared. */
-  count: number
-}
-
-const TOAST_DURATION = 3000
-// Errors stay long enough to read but always self-clean, so a
-// stuck/repeating error source can't pile up over the canvas.
-const ERROR_TOAST_DURATION = 10000
-// Hard cap on stacked toasts. Older toasts drop off when a new one would
-// exceed this. Belt-and-suspenders against any error source we missed.
-const TOAST_STACK_LIMIT = 5
-
-const toasts = ref<Toast[]>([])
-let nextId = 0
 let errorHandlersInitialized = false
 
 export function isBenignResizeObserverError(message: string): boolean {
@@ -33,38 +11,15 @@ export function isBenignResizeObserverError(message: string): boolean {
   )
 }
 
-function push(message: string, variant: ToastVariant) {
-  // Dedupe: if the same message+variant is already visible, increment
-  // its repeat count instead of stacking a duplicate. Prevents the
-  // cascade-on-every-frame failure mode where a single unhealthy
-  // event source floods the viewport.
-  const existing = toasts.value.find((t) => t.message === message && t.variant === variant)
-  if (existing) {
-    existing.count += 1
-    existing.id = ++nextId
-    return
-  }
-  toasts.value.push({ id: ++nextId, message, variant, count: 1 })
-  if (toasts.value.length > TOAST_STACK_LIMIT) {
-    toasts.value.splice(0, toasts.value.length - TOAST_STACK_LIMIT)
-  }
+// Floating notifications are intentionally disabled. Keep the facade while
+// callers migrate important feedback into the surface that owns the action.
+function discardNotification(message: string) {
+  void message
 }
 
-function info(message: string) {
-  push(message, 'default')
-}
-
-function warning(message: string) {
-  push(message, 'warning')
-}
-
-function error(message: string) {
-  push(message, 'error')
-}
-
-function remove(id: number) {
-  toasts.value = toasts.value.filter((t) => t.id !== id)
-}
+const info = discardNotification
+const warning = discardNotification
+const error = discardNotification
 
 function setupGlobalErrorHandler() {
   if (errorHandlersInitialized) return
@@ -87,11 +42,7 @@ export const toast = {
   info,
   warning,
   error,
-  remove,
-  toasts,
-  setupGlobalErrorHandler,
-  TOAST_DURATION,
-  ERROR_TOAST_DURATION
+  setupGlobalErrorHandler
 }
 
 export async function openExternalLink(url: string) {

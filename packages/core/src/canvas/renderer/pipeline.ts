@@ -38,7 +38,8 @@ export function renderFromEditorState(
   showRulers = true,
   dpr = 1,
   layer: RenderLayer = 'full',
-  selectionChromeOwnerIds?: ReadonlySet<string>
+  selectionChromeOwnerIds?: ReadonlySet<string>,
+  hoverChromeOwnerIds?: ReadonlySet<string>
 ): void {
   r.dpr = dpr
   r.panX = state.panX
@@ -56,6 +57,7 @@ export function renderFromEditorState(
     state.selectedIds,
     {
       selectionChromeOwnerIds,
+      hoverChromeOwnerIds,
       hoveredNodeId: state.hoveredNodeId,
       enteredContainerId: state.enteredContainerId,
       editingTextId: state.editingTextId,
@@ -115,15 +117,48 @@ function canUseScenePicture(
 ): boolean {
   return (
     !hasVolatileOverlays &&
+    !graph.hasNodePositionPresentations() &&
     !!r.scenePicture &&
-    graph.positionPreviewVersion === r.scenePicturePositionPreviewVersion &&
     sceneVersion === r.scenePictureVersion &&
     r.pageId === r.scenePicturePageId
   )
 }
 
+function nodeIsOnPage(graph: SceneGraph, nodeId: string, pageId: string): boolean {
+  let current = graph.getNode(nodeId)
+  while (current) {
+    if (current.id === pageId) return true
+    current = current.parentId ? graph.getNode(current.parentId) : undefined
+  }
+  return false
+}
+
+function previewPresentedNodeIds(
+  graph: SceneGraph,
+  pageId: string | null
+): { liveIds: string[]; skipIds: string[] } | null {
+  if (!pageId) return null
+  const ids = graph.presentedNodeIds()
+  if (ids.length === 0) return null
+  const presented = new Set(ids)
+  const liveIds: string[] = []
+  for (const id of ids) {
+    if (!nodeIsOnPage(graph, id, pageId)) return null
+    let ancestorId = graph.getNode(id)?.parentId ?? null
+    let nested = false
+    while (ancestorId && ancestorId !== pageId) {
+      if (presented.has(ancestorId)) {
+        nested = true
+        break
+      }
+      ancestorId = graph.getNode(ancestorId)?.parentId ?? null
+    }
+    if (!nested) liveIds.push(id)
+  }
+  return { liveIds, skipIds: [...ids] }
+}
+
 const now = typeof performance !== 'undefined' ? () => performance.now() : () => 0
-const absPositionCacheSceneVersions = new WeakMap<SceneGraph, number>()
 
 function measure<T>(fn: () => T): { value: T; duration: number } {
   const start = now()
@@ -145,11 +180,6 @@ export function render(
   p.setScenePictureRecordTime(0)
   p.setFlushTime(0)
 
-  if (absPositionCacheSceneVersions.get(graph) !== sceneVersion) {
-    graph.clearAbsPosCache()
-    absPositionCacheSceneVersions.set(graph, sceneVersion)
-  }
-
   const canvas = r.surface.getCanvas()
   if (layer === 'full') {
     canvas.clear(r.ck.Color4f(r.pageColor.r, r.pageColor.g, r.pageColor.b, 1))
@@ -165,11 +195,11 @@ export function render(
   }
   updateSceneBackingPreviewState(r, layer)
 
-  const hasPositionPreview =
-    graph.hasNodePositionPresentations() &&
-    graph.positionPreviewVersion !== r.scenePicturePositionPreviewVersion &&
-    sceneVersion === r.scenePictureVersion
-  const hasVolatileOverlays = hasPositionPreview || hasVolatileOverlay(overlays)
+  const positionPreview = previewPresentedNodeIds(graph, r.pageId)
+  const hasPositionPreview = graph.hasNodePositionPresentations()
+  const hasVolatileOverlays = hasVolatileOverlay(overlays)
+  const canCompositePositionPreview =
+    hasPositionPreview && !hasVolatileOverlays && positionPreview !== null
 
   const canUsePicture = canUseScenePicture(r, graph, sceneVersion, hasVolatileOverlays)
   const cacheMissReason = scenePictureMissReason(
@@ -190,7 +220,17 @@ export function render(
       !hasVolatileOverlays &&
       renderSceneBacking(r, canvas, graph, sceneVersion)
     ) {
-      p.setScenePictureMode('hit', 'backing')
+      if (hasPositionPreview && positionPreview) {
+        canvas.translate(r.panX, r.panY)
+        canvas.scale(r.zoom, r.zoom)
+        punchPresentedRestBounds(r, canvas, graph, positionPreview.skipIds)
+        for (const id of positionPreview.liveIds) {
+          r.renderNode(canvas, graph, id, overlays)
+        }
+        p.setScenePictureMode('preview', 'backing')
+      } else {
+        p.setScenePictureMode('hit', 'backing')
+      }
     } else {
       canvas.translate(r.panX, r.panY)
       canvas.scale(r.zoom, r.zoom)
@@ -202,7 +242,8 @@ export function render(
         sceneVersion,
         canUsePicture,
         cacheMissReason,
-        hasVolatileOverlays
+        hasVolatileOverlays || (hasPositionPreview && !canCompositePositionPreview),
+        canCompositePositionPreview ? positionPreview : null
       )
     }
     p.endPhase('render:scene')
@@ -215,40 +256,16 @@ export function render(
     canvas.scale(r.dpr, r.dpr)
     r.labelCache.update(graph, r.pageId, sceneVersion, graph.positionPreviewVersion)
     p.beginPhase('render:sectionTitles')
-    r.drawSectionTitles(canvas, graph)
+    if (r.labelCache.getAllSections().length > 0) r.drawSectionTitles(canvas, graph)
     p.endPhase('render:sectionTitles')
     p.beginPhase('render:componentLabels')
-    r.drawComponentLabels(canvas, graph)
+    if (r.labelCache.getAllComponents().length > 0) r.drawComponentLabels(canvas, graph)
     p.endPhase('render:componentLabels')
     canvas.restore()
 
     canvas.save()
     canvas.scale(r.dpr, r.dpr)
-
-    r.drawHoverHighlight(
-      canvas,
-      graph,
-      overlays.hoveredNodeId === overlays.nodeEditState?.nodeId ? null : overlays.hoveredNodeId
-    )
-    r.drawEnteredContainer(canvas, graph, overlays.enteredContainerId)
-    p.beginPhase('render:selection')
-    r.drawSelection(canvas, graph, selectedIds, overlays)
-    p.endPhase('render:selection')
-    r.drawFlashes(canvas, graph)
-    drawPageGuides(r, canvas, graph)
-    r.drawSnapGuides(canvas, overlays.snapGuides)
-    r.drawMarquee(canvas, overlays.marquee)
-    r.drawLayoutInsertIndicator(canvas, overlays.layoutInsertIndicator)
-    r.drawAutoLayoutHover(canvas, graph, overlays.autoLayoutHover)
-    r.drawNodeEditOverlay(canvas, graph, overlays.nodeEditState)
-    r.drawPenOverlay(canvas, overlays.penState)
-    r.drawRemoteCursors(canvas, graph, overlays.remoteCursors)
-    p.beginPhase('render:rulers')
-    if (r.showRulers) r.drawRulers(canvas, graph, selectedIds)
-    p.endPhase('render:rulers')
-
-    p.drawHUD(canvas, r.showRulers)
-
+    renderOverlayChrome(r, canvas, graph, selectedIds, overlays)
     canvas.restore()
   }
 
@@ -261,6 +278,46 @@ export function render(
   p.endFrame()
 }
 
+function renderOverlayChrome(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  selectedIds: Set<string>,
+  overlays: RenderOverlays
+): void {
+  const p = r.profiler
+  if (
+    overlays.hoveredNodeId &&
+    overlays.hoveredNodeId !== overlays.nodeEditState?.nodeId &&
+    !overlays.hoverChromeOwnerIds?.has(overlays.hoveredNodeId)
+  ) {
+    r.drawHoverHighlight(canvas, graph, overlays.hoveredNodeId)
+  }
+  if (overlays.enteredContainerId) {
+    r.drawEnteredContainer(canvas, graph, overlays.enteredContainerId)
+  }
+  p.beginPhase('render:selection')
+  if (selectedIds.size > 0) r.drawSelection(canvas, graph, selectedIds, overlays)
+  p.endPhase('render:selection')
+  if (r._flashes.length > 0) r.drawFlashes(canvas, graph)
+  drawPageGuides(r, canvas, graph)
+  if (overlays.snapGuides?.length) r.drawSnapGuides(canvas, overlays.snapGuides)
+  if (overlays.marquee) r.drawMarquee(canvas, overlays.marquee)
+  if (overlays.layoutInsertIndicator) {
+    r.drawLayoutInsertIndicator(canvas, overlays.layoutInsertIndicator)
+  }
+  if (overlays.autoLayoutHover) r.drawAutoLayoutHover(canvas, graph, overlays.autoLayoutHover)
+  if (overlays.nodeEditState) r.drawNodeEditOverlay(canvas, graph, overlays.nodeEditState)
+  if (overlays.penState) r.drawPenOverlay(canvas, overlays.penState)
+  if (overlays.remoteCursors?.length) {
+    r.drawRemoteCursors(canvas, graph, overlays.remoteCursors)
+  }
+  p.beginPhase('render:rulers')
+  if (r.showRulers) r.drawRulers(canvas, graph, selectedIds)
+  p.endPhase('render:rulers')
+  if (r.profiler.hudVisible) p.drawHUD(canvas, r.showRulers)
+}
+
 function renderSceneContent(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -269,7 +326,8 @@ function renderSceneContent(
   sceneVersion: number,
   canUsePicture: boolean,
   cacheMissReason: string,
-  hasVolatileOverlays: boolean
+  hasVolatileOverlays: boolean,
+  positionPreview: { liveIds: string[]; skipIds: string[] } | null
 ): void {
   const p = r.profiler
   if (canUsePicture) {
@@ -281,22 +339,36 @@ function renderSceneContent(
       p.setScenePictureDrawTime(duration)
     }
     p.endPhase('render:drawPicture')
-  } else if (hasVolatileOverlays) {
+    return
+  }
+  if (positionPreview) {
+    p.setScenePictureMode('preview', 'position-preview')
+    r._nodeCount = 0
+    r._culledCount = 0
+    p.beginPhase('render:preview')
+    const { duration } = measure(() =>
+      renderPositionPreview(r, canvas, graph, overlays, sceneVersion, positionPreview)
+    )
+    p.setScenePictureDrawTime(duration)
+    p.endPhase('render:preview')
+    return
+  }
+  if (hasVolatileOverlays) {
     p.setScenePictureMode('volatile', cacheMissReason)
     r._nodeCount = 0
     r._culledCount = 0
     p.beginPhase('render:volatile')
     renderPageChildren(r, canvas, graph, overlays)
     p.endPhase('render:volatile')
-  } else {
-    p.setScenePictureMode('record', cacheMissReason)
-    r._nodeCount = 0
-    r._culledCount = 0
-    p.beginPhase('render:recordPicture')
-    const { duration } = measure(() => recordScenePicture(r, canvas, graph, sceneVersion))
-    p.setScenePictureRecordTime(duration)
-    p.endPhase('render:recordPicture')
+    return
   }
+  p.setScenePictureMode('record', cacheMissReason)
+  r._nodeCount = 0
+  r._culledCount = 0
+  p.beginPhase('render:recordPicture')
+  const { duration } = measure(() => recordScenePicture(r, canvas, graph, sceneVersion))
+  p.setScenePictureRecordTime(duration)
+  p.endPhase('render:recordPicture')
 }
 
 function renderPageChildren(
@@ -312,6 +384,52 @@ function renderPageChildren(
   }
 }
 
+function punchPresentedRestBounds(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  ids: readonly string[]
+): void {
+  r.fillPaint.setAlphaf(1)
+  r.fillPaint.setShader(null)
+  r.fillPaint.setColor(r.ck.Color4f(0, 0, 0, 1))
+  r.fillPaint.setBlendMode(r.ck.BlendMode.Clear)
+  for (const id of ids) {
+    const bounds = graph.getAuthoritativeAbsoluteBounds(id)
+    if (bounds.width <= 0 || bounds.height <= 0) continue
+    canvas.drawRect(
+      r.ck.LTRBRect(bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height),
+      r.fillPaint
+    )
+  }
+  r.fillPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+}
+
+function renderPositionPreview(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  overlays: RenderOverlays,
+  sceneVersion: number,
+  preview: { liveIds: readonly string[]; skipIds: readonly string[] }
+): void {
+  if (
+    r.scenePicture &&
+    r.scenePictureVersion === sceneVersion &&
+    r.scenePicturePageId === r.pageId
+  ) {
+    canvas.drawPicture(r.scenePicture)
+    punchPresentedRestBounds(r, canvas, graph, preview.skipIds)
+  } else {
+    r.skipSceneNodeIds = new Set(preview.skipIds)
+    renderPageChildren(r, canvas, graph, overlays)
+    r.skipSceneNodeIds = null
+  }
+  for (const id of preview.liveIds) {
+    r.renderNode(canvas, graph, id, overlays)
+  }
+}
+
 function recordScenePicture(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -323,21 +441,31 @@ function recordScenePicture(
   r.worldViewport = { x: -1e6, y: -1e6, w: 2e6, h: 2e6 }
   const recorder = new r.ck.PictureRecorder()
   const pageNode = graph.getNode(r.pageId ?? graph.rootId)
-  const sceneContentBounds = pageNode
-    ? computeDescendantVisualBounds(
-        pageNode.childIds,
-        (id) => graph.getNode(id),
-        (id) => graph.getAbsolutePosition(id)
-      )
-    : null
-  const sceneBounds = sceneContentBounds
-    ? {
-        x: sceneContentBounds.minX,
-        y: sceneContentBounds.minY,
-        width: sceneContentBounds.maxX - sceneContentBounds.minX,
-        height: sceneContentBounds.maxY - sceneContentBounds.minY
-      }
-    : { x: 0, y: 0, width: 1, height: 1 }
+  const canReuseBounds =
+    r.scenePictureBounds &&
+    r.scenePictureBoundsVersion === sceneVersion &&
+    r.scenePictureBoundsPageId === r.pageId
+  const sceneContentBounds =
+    canReuseBounds || !pageNode
+      ? null
+      : computeDescendantVisualBounds(
+          pageNode.childIds,
+          (id) => graph.getNode(id),
+          (id) => graph.getAbsolutePosition(id)
+        )
+  const sceneBounds =
+    (canReuseBounds ? r.scenePictureBounds : null) ??
+    (sceneContentBounds
+      ? {
+          x: sceneContentBounds.minX,
+          y: sceneContentBounds.minY,
+          width: sceneContentBounds.maxX - sceneContentBounds.minX,
+          height: sceneContentBounds.maxY - sceneContentBounds.minY
+        }
+      : { x: 0, y: 0, width: 1, height: 1 })
+  r.scenePictureBounds = sceneBounds
+  r.scenePictureBoundsVersion = sceneVersion
+  r.scenePictureBoundsPageId = r.pageId
   const padding = 1024
   const bounds = r.ck.LTRBRect(
     sceneBounds.x - padding,

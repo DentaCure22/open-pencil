@@ -69,6 +69,9 @@ const tooltip = computed(() => {
       : 'Throughput unavailable'
   )
   if (contextUsage.lastCompactedAt) details.push('Compacted this session')
+  if (contextUsage.compactionStalled) {
+    details.push('Context still full after compaction. Compact-fork from the task menu')
+  }
   return details.join(' · ')
 })
 </script>

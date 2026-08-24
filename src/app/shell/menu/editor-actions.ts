@@ -3,6 +3,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import { openMermaidDialog } from '@/app/diagram/mermaid/dialog'
 import { useEditorStore } from '@/app/editor/active-store'
 import { openMediaEvidenceDialog } from '@/app/media-evidence/dialog'
+import { showModelMeterPanel } from '@/app/model-meter/panel'
 
 type TextFormatUpdates = {
   fontWeight?: number
@@ -62,6 +63,7 @@ export function createSharedEditorMenuActions(
     'theme-auto': () => setTheme('auto'),
     'insert-media': () => void openMediaEvidenceDialog(),
     'insert-mermaid': openMermaidDialog,
+    'model-meter': showModelMeterPanel,
     'text.bold': toggleSelectedTextBold,
     'text.italic': toggleSelectedTextItalic,
     'text.underline': toggleSelectedTextUnderline,

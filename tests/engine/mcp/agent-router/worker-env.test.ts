@@ -31,4 +31,18 @@ describe('agentWorkerEnv', () => {
     expect(agentWorkerEnv(parentEnv).MCP_DIRECT_TOOLS).toBe('codex_apps,google drive_search')
     expect(parentEnv.MCP_DIRECT_TOOLS).toBe('codex_apps,google drive_search')
   })
+
+  test('turns off the pi-memory dump so the handbook owns inject', () => {
+    expect(agentWorkerEnv({ PATH: '/usr/bin' }).PI_MEMORY_INJECT).toBe('0')
+    expect(agentWorkerEnv({ PATH: '/usr/bin', PI_MEMORY_INJECT: '1' }).PI_MEMORY_INJECT).toBe('1')
+  })
+
+  test('points Pi handbook writes at the live Codex notebook', () => {
+    const env = agentWorkerEnv({ PATH: '/usr/bin' })
+    expect(env.PI_MEMORIES_DIR).toBe(path.join(homedir(), '.codex', 'memories'))
+    expect(env.PI_MEMORIES_CONTROL_DIR).toBe(path.join(homedir(), '.pi', 'agent', 'memories'))
+    expect(
+      agentWorkerEnv({ PATH: '/usr/bin', PI_MEMORIES_DIR: '/tmp/isolated-memories' }).PI_MEMORIES_DIR
+    ).toBe('/tmp/isolated-memories')
+  })
 })

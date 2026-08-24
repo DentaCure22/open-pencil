@@ -14,6 +14,7 @@ import {
   localWorkspaceAuthorityToken,
   openPencilLocalWorkspaceAuthorityPlugin
 } from './vite/local-workspace-authority'
+import { initialJavaScriptBudgetPlugin } from './vite/performance-budget'
 import { openPencilPwaPlugin } from './vite/pwa'
 import { rawMarkdownPlugin } from './vite/raw-markdown'
 import { createDevServerOptions } from './vite/server'
@@ -51,7 +52,8 @@ export default defineConfig(async ({ command, mode }) => {
         smylrAppRoot: env.OPENPENCIL_SMYLR_APP_ROOT?.trim()
       }),
       vue(),
-      openPencilPwaPlugin(base)
+      openPencilPwaPlugin(base),
+      initialJavaScriptBudgetPlugin()
     ],
     clearScreen: false,
     build: {

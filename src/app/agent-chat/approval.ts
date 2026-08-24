@@ -2,7 +2,7 @@ import type { AgentExtensionUiRequest, AgentExtensionUiResponse } from './client
 
 export type MessageApprovalPreview = {
   recipient: string
-  text: string
+  texts: string[]
 }
 
 export type MessageApprovalState = 'cancelled' | 'failed' | 'pending' | 'sending' | 'sent'
@@ -16,12 +16,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
+function nestedMessageArguments(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null
+  if (typeof value.text === 'string' || Array.isArray(value.texts)) return value
+  for (const key of ['Arguments', 'arguments', 'args']) {
+    const nested = value[key]
+    if (isRecord(nested)) {
+      const result = nestedMessageArguments(nested)
+      if (result) return result
+    }
+  }
+  return null
+}
+
+function messageTexts(args: Record<string, unknown>): string[] | null {
+  const hasText = typeof args.text === 'string'
+  const hasTexts = Array.isArray(args.texts)
+  if (hasText === hasTexts) return null
+  if (typeof args.text === 'string') return args.text ? [args.text] : null
+  const texts = args.texts as unknown[]
+  if (!texts.length || texts.some((text) => typeof text !== 'string' || !text)) return null
+  return texts as string[]
+}
+
 function messagePreviewFromArguments(value: unknown): MessageApprovalPreview | null {
-  if (!isRecord(value) || typeof value.text !== 'string' || !value.text) return null
-  const label = typeof value.recipient_label === 'string' ? value.recipient_label.trim() : ''
-  const chatGuid = typeof value.chat_guid === 'string' ? value.chat_guid.trim() : ''
+  const args = nestedMessageArguments(value)
+  if (!args) return null
+  const texts = messageTexts(args)
+  if (!texts) return null
+  const label = typeof args.recipient_label === 'string' ? args.recipient_label.trim() : ''
+  const chatGuid = typeof args.chat_guid === 'string' ? args.chat_guid.trim() : ''
   if (!label && !chatGuid) return null
-  return { recipient: label || chatGuid, text: value.text }
+  return { recipient: label || chatGuid, texts }
 }
 
 export function messageApprovalPreview(

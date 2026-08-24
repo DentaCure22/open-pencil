@@ -13,6 +13,7 @@ import {
   codeObjectScreenOverlayStyle,
   codeObjectViewportPresetId,
   createCodeObjectTransformController,
+  liveIframeHostStyle,
   type CodeObjectTransformControllerStore
 } from '@/app/code-object/transform'
 
@@ -57,6 +58,11 @@ test('Code Object surface and selection chrome share the frame corner radius', (
     borderRadius: '8px',
     height: '450px',
     width: '720px'
+  })
+  expect(liveIframeHostStyle(codeObjectCanvasStyle(store, frame))).toMatchObject({
+    backfaceVisibility: 'visible',
+    contain: 'layout',
+    willChange: 'auto'
   })
 })
 

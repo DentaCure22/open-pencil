@@ -21,15 +21,26 @@ import {
   piPromptInputWithEvidence,
   piRpcArguments,
   piThinkingLevel,
-  type PiLaunchMode
+  type PiLaunchMode,
+  type PiPromptInput
 } from './arguments'
 import { validatePiSelection } from './catalog'
-import { applyPiEvent, finalizePiStreamingAssistant, restorePiStreamingAssistant } from './events'
+import { compactForkPrompt, resolvePiForkLaunch, type PiForkPlan } from './compact-fork'
+import {
+  applyPiEvent,
+  ensureVisibleFinalResponse,
+  finalizePiStreamingAssistant,
+  restorePiStreamingAssistant,
+  threadClosingText
+} from './events'
+import { PiProcessPool, type PiWarmProcess } from './process-pool'
 import { PiProviderUsageService } from './provider-usage'
 import type { PiRouterConfig } from './router-config'
 import {
   capturePiOutcome,
   completePendingUserMessages,
+  createIdleForkThread,
+  createPiSession,
   createPiThread,
   createPiUserMessage,
   isRecord,
@@ -40,27 +51,58 @@ import {
   type PiSession,
   type ValidatedPiRequest
 } from './router-state'
-import { PiRpcProcess, type PiRpcRecord } from './rpc-process'
-import { reconcilePiSessionHistory } from './session-history'
 import {
-  applyMeasuredAntigravityThroughput,
+  isPiRpcTimeout,
+  PI_PROMPT_COMMAND_TIMEOUT_MS,
+  PiRpcProcess,
+  type PiRpcRecord
+} from './rpc-process'
+import { reconcilePiSessionHistory } from './session-history'
+import { resolveIdleUnloadGraceMs, resolveIdleUnloadMs } from './session-idle'
+import {
+  applyMeasuredAntigravityUsage,
   applyPiEventTelemetry,
   applyPiSessionStats,
   applyPiStateTelemetry
 } from './telemetry'
+import { appendUsageTurnBestEffort, buildLiveUsageTurn, emptyUsageTokens } from './usage-ledger'
 import { PiSessionWatchdog } from './watchdog'
+import {
+  boardWorkerPrompt,
+  resolveBoardWorkerMcpConfigPath,
+  resolvePiSessionMcpConfigPath
+} from './worker-mcp'
 
 const MAX_PROMPT_BYTES = 128 * 1024
 
 export type { PiRouterConfig } from './router-config'
 
 export class PiAgentRouter implements AgentConversationRouter {
+  private readonly boardWorkerMcpConfigPath?: string
+  private readonly mcpConfigPath?: string
+  private readonly pool: PiProcessPool
   private readonly state: PiRouterState
   private readonly providerUsageService: PiProviderUsageService
   private readonly watchdog: PiSessionWatchdog
 
   constructor(readonly config: PiRouterConfig) {
     this.state = new PiRouterState(config.historyPath)
+    this.mcpConfigPath = resolvePiSessionMcpConfigPath({
+      mcpConfigPath: config.mcpConfigPath
+    })
+    this.boardWorkerMcpConfigPath = resolveBoardWorkerMcpConfigPath({
+      mcpConfigPath: config.mcpConfigPath,
+      sessionDir: config.sessionDir
+    })
+    this.pool = new PiProcessPool({
+      cwd: config.workspaceRoot,
+      ...warmProcessSelection(config),
+      env: agentWorkerEnv(process.env, config.executable),
+      executable: config.executable,
+      ...(this.mcpConfigPath ? { mcpConfigPath: this.mcpConfigPath } : {}),
+      ...(config.sessionDir ? { sessionDir: config.sessionDir } : {}),
+      size: config.warmPoolSize
+    })
     this.providerUsageService = new PiProviderUsageService({
       executable: config.executable,
       models: () => this.models(),
@@ -76,10 +118,16 @@ export class PiAgentRouter implements AgentConversationRouter {
         void this.settleTurnFromSession(thread, session)
       }
     })
+    this.pool.ensure()
   }
 
   close(): void {
+    this.pool.close()
     this.state.close()
+  }
+
+  waitForWarmProcess(count = 1, timeoutMs = 3_000): Promise<boolean> {
+    return this.pool.waitUntilReady(count, timeoutMs)
   }
 
   job(jobId: string): AgentJobRecord | null {
@@ -166,6 +214,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       evidencePath?: string
       imagePaths?: string[]
       model?: string
+      toolScope?: AgentConversationThread['toolScope']
     }
   ): Promise<AgentDispatchReceipt> {
     const thread = this.state.requireThread(threadId)
@@ -174,6 +223,19 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (session?.activeJobId) {
       return this.steer(threadId, prompt, selection)
     }
+    if (session?.pendingUiRequests.size) {
+      this.cancelPendingUiRequests(session)
+      this.state.persist()
+    }
+    const requestedToolScope = selection?.toolScope ?? thread.toolScope ?? 'general'
+    if (thread.toolScope && requestedToolScope !== thread.toolScope) {
+      throw new Error('This Pi conversation cannot change tool scope; start a new chat instead.')
+    }
+    if (!thread.toolScope) {
+      thread.toolScope = requestedToolScope
+      if (session) this.state.disposeSession(thread.id)
+      this.state.persist()
+    }
     const request = this.validate({
       attachments: selection?.attachments,
       displayPrompt: selection?.displayPrompt,
@@ -181,8 +243,21 @@ export class PiAgentRouter implements AgentConversationRouter {
       evidencePath: selection?.evidencePath,
       imagePaths: selection?.imagePaths,
       model: selection?.model?.trim() || thread.model,
-      prompt
+      prompt,
+      toolScope: requestedToolScope
     })
+    if (thread.compactForkPending) {
+      thread.compactForkPending = false
+      return this.launch(
+        this.validate({
+          ...request,
+          displayPrompt: selection?.displayPrompt ?? prompt,
+          prompt: compactForkPrompt(thread, prompt)
+        }),
+        { kind: 'new' },
+        thread
+      )
+    }
     const sessionId = thread.sessionId
     if (!sessionId) throw new Error('This Pi conversation has no native session.')
     return this.launch(request, { kind: 'resume', sessionId }, thread)
@@ -198,6 +273,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       evidencePath?: string
       imagePaths?: string[]
       model?: string
+      toolScope?: AgentConversationThread['toolScope']
     }
   ): Promise<AgentDispatchReceipt> {
     const thread = this.state.requireThread(threadId)
@@ -206,6 +282,15 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (!session?.activeJobId) {
       return this.followUp(threadId, prompt, selection)
     }
+    const requestedToolScope = selection?.toolScope ?? thread.toolScope ?? 'general'
+    if (thread.toolScope && requestedToolScope !== thread.toolScope) {
+      throw new Error('This Pi conversation cannot change tool scope; start a new chat instead.')
+    }
+    if (!thread.toolScope && selection?.toolScope) {
+      throw new Error(
+        'A running legacy Pi conversation cannot change tool scope; start a new chat.'
+      )
+    }
     const request = this.validate({
       attachments: selection?.attachments,
       displayPrompt: selection?.displayPrompt,
@@ -213,12 +298,14 @@ export class PiAgentRouter implements AgentConversationRouter {
       evidencePath: selection?.evidencePath,
       imagePaths: selection?.imagePaths,
       model: thread.model,
-      prompt
+      prompt,
+      toolScope: requestedToolScope
     })
     const jobId = session.activeJobId
     const now = new Date().toISOString()
     const messageId = randomUUID()
     const previousRecentUpdate = thread.recentUpdate
+    this.cancelPendingUiRequests(session)
     const finalizedStreaming = finalizePiStreamingAssistant(thread, jobId, messageId, now)
     thread.messages.push(createPiUserMessage(request, now, messageId))
     thread.recentUpdate = 'Applying your latest instruction…'
@@ -230,16 +317,29 @@ export class PiAgentRouter implements AgentConversationRouter {
         request.evidencePath,
         request.imagePaths
       )
-      const response = await session.process.command({
-        ...input,
-        type: 'steer'
-      })
+      const response = await session.process.command(
+        {
+          ...input,
+          type: 'steer'
+        },
+        PI_PROMPT_COMMAND_TIMEOUT_MS
+      )
       if (!response.success) {
         throw new Error(response.error || 'Pi rejected the steering correction.')
       }
       session.finalResponse = ''
       this.state.persist()
     } catch (error) {
+      if (isPiRpcTimeout(error)) {
+        session.finalResponse = ''
+        this.state.persist()
+        return {
+          dispatchedAt: new Date().toISOString(),
+          jobId,
+          state: 'running',
+          threadId: thread.id
+        }
+      }
       const messageIndex = thread.messages.findIndex((message) => message.id === messageId)
       if (messageIndex !== -1) thread.messages.splice(messageIndex, 1)
       if (finalizedStreaming) restorePiStreamingAssistant(thread, jobId, messageId)
@@ -263,12 +363,63 @@ export class PiAgentRouter implements AgentConversationRouter {
 
   async fork(threadId: string, request: AgentDispatchRequest): Promise<AgentDispatchReceipt> {
     const source = this.state.requireThread(threadId)
-    const sessionId = source.sessionId
-    if (!sessionId) throw new Error('This Pi conversation has no native session.')
-    return this.launch(this.validate(request), {
-      kind: 'fork',
-      sessionId
+    const plan = resolvePiForkLaunch(source, request)
+    if (plan.idle) return this.forkIdle(source, plan)
+    return this.launch(this.validate(plan.request), plan.mode)
+  }
+
+  private async forkIdle(
+    source: AgentConversationThread,
+    plan: PiForkPlan
+  ): Promise<AgentDispatchReceipt> {
+    const now = new Date().toISOString()
+    const selection = validatePiSelection(
+      this.models(),
+      plan.request.model || source.model,
+      plan.request.effort || source.effort
+    )
+    const thread = createIdleForkThread({
+      compactForkPending: plan.mode.kind === 'new',
+      effort: selection.effort,
+      forkedFromId: plan.forkedFromId,
+      messages: plan.seedMessages,
+      model: selection.model,
+      now,
+      recentUpdate: plan.mode.kind === 'fork' ? 'Forked.' : 'Compact-forked.',
+      sessionId: null,
+      task: source.task,
+      toolScope: plan.request.toolScope ?? source.toolScope ?? 'general',
+      workerId: this.state.availableWorkerId()
     })
+    this.state.threads.push(thread)
+    this.state.persist()
+    if (plan.mode.kind === 'fork') {
+      try {
+        await this.ensureSession(
+          thread,
+          { ...plan.request, ...selection, prompt: source.task || 'Fork' },
+          plan.mode
+        )
+        thread.state = 'completed'
+        thread.recentUpdate = 'Forked.'
+        thread.updatedAt = new Date().toISOString()
+        this.state.persist()
+      } catch (error) {
+        const detail =
+          safeStatusText(error instanceof Error ? error.message : error) || 'Pi could not fork.'
+        const index = this.state.threads.findIndex((candidate) => candidate.id === thread.id)
+        if (index !== -1) this.state.threads.splice(index, 1)
+        this.state.disposeSession(thread.id)
+        this.state.persist()
+        throw new Error(detail)
+      }
+    }
+    return {
+      dispatchedAt: now,
+      jobId: randomUUID(),
+      state: 'queued',
+      threadId: thread.id
+    }
   }
 
   stop(threadId: string): boolean {
@@ -337,11 +488,18 @@ export class PiAgentRouter implements AgentConversationRouter {
       existing ??
       createPiThread(
         request,
-        mode.kind === 'fork' ? 'Forking relevant Pi context.' : 'Starting Pi.',
+        mode.kind === 'fork'
+          ? 'Forking relevant Pi context.'
+          : mode.kind === 'new' && mode.forkedFromId
+            ? 'Starting a compact-fork.'
+            : 'Starting Pi.',
         now,
         this.state.availableWorkerId()
       )
-    if (!existing) this.state.threads.push(thread)
+    if (!existing) {
+      if (mode.kind !== 'resume' && mode.forkedFromId) thread.forkedFromId = mode.forkedFromId
+      this.state.threads.push(thread)
+    }
     thread.state = 'running'
     thread.updatedAt = now
     thread.model = request.model
@@ -355,7 +513,7 @@ export class PiAgentRouter implements AgentConversationRouter {
         thread.messages.push(createPiUserMessage(request, now))
         this.state.persist()
       }
-      await this.startTurn(thread, session, request, jobId)
+      await this.startTurn(thread, session, request, jobId, mode)
     } catch (error) {
       const detail =
         safeStatusText(error instanceof Error ? error.message : error) || 'Pi could not start.'
@@ -378,10 +536,52 @@ export class PiAgentRouter implements AgentConversationRouter {
   ): Promise<PiSession> {
     const existing = this.state.sessions.get(thread.id)
     if (existing && !existing.process.isClosing) return existing
+    if (mode.kind === 'new' && request.toolScope !== 'board-worker') {
+      const warm = await this.pool.claim()
+      if (warm) {
+        const adopted = this.adoptWarmProcess(thread, warm)
+        if (adopted) return adopted
+      }
+    }
+    return this.spawnSession(thread, request, mode)
+  }
+
+  private adoptWarmProcess(thread: AgentConversationThread, warm: PiWarmProcess): PiSession | null {
+    this.bindProcess(thread, warm.process)
+    if (!warm.process.isAlive) return null
+    const session = createPiSession(warm.process, {
+      effort: warm.effort,
+      model: warm.model
+    })
+    this.state.sessions.set(thread.id, session)
+    thread.sessionId = warm.sessionId
+    applyPiStateTelemetry(thread, warm.state)
+    thread.canFollowUp = true
+    this.state.persist()
+    if (!warm.process.isAlive) {
+      this.state.sessions.delete(thread.id)
+      return null
+    }
+    return session
+  }
+
+  private async spawnSession(
+    thread: AgentConversationThread,
+    request: ValidatedPiRequest,
+    mode: PiLaunch
+  ): Promise<PiSession> {
     const launchMode: PiLaunchMode = mode.kind
     const sessionId = mode.kind === 'resume' ? mode.sessionId : thread.id
+    const mcpConfigPath =
+      request.toolScope === 'board-worker' ? this.boardWorkerMcpConfigPath : this.mcpConfigPath
+    if (request.toolScope === 'board-worker' && !mcpConfigPath) {
+      throw new Error(
+        'Board worker MCP isolation is unavailable; start OpenPencil with a session directory.'
+      )
+    }
     const args = piRpcArguments({
       effort: request.effort,
+      ...(mcpConfigPath ? { mcpConfigPath } : {}),
       mode: launchMode,
       model: request.model,
       ...(this.config.sessionDir ? { sessionDir: this.config.sessionDir } : {}),
@@ -401,36 +601,27 @@ export class PiAgentRouter implements AgentConversationRouter {
         if (rpc) this.handleExit(thread.id, rpc, code, signal, stderr)
       }
     })
-    const session: PiSession = {
-      aborting: null,
-      activeJobId: null,
-      antigravityUsageCursor: null,
-      finalResponse: '',
-      firstTokenAt: null,
-      generatedCharacters: 0,
-      generationBaseTokens: null,
-      generationElapsedMs: 0,
-      lastEventAt: Date.now(),
-      lastError: '',
-      lastProbeAt: null,
-      lastToolError: '',
-      pendingUiRequests: new Map(),
-      probeInFlight: false,
-      process: rpc,
-      recovering: false,
-      settling: false
-    }
+    const session = createPiSession(rpc, {
+      effort: request.effort,
+      model: request.model
+    })
     this.state.sessions.set(thread.id, session)
     try {
-      const state = await rpc.command({ type: 'get_state' })
+      const stateCommand = rpc.command({ type: 'get_state' })
+      const statsCommand = mode.kind === 'new' ? null : rpc.command({ type: 'get_session_stats' })
+      const state = await stateCommand
       if (!state.success) throw new Error(state.error || 'Pi RPC session is unavailable.')
       if (isRecord(state.data) && typeof state.data.sessionId === 'string') {
         thread.sessionId = state.data.sessionId
       }
       applyPiStateTelemetry(thread, state.data)
-      const stats = await rpc.command({ type: 'get_session_stats' })
-      if (stats.success) applyPiSessionStats(thread, stats.data)
-      await this.reconcileSession(thread, session, `session:${thread.id}`)
+      if (statsCommand) {
+        const stats = await statsCommand
+        if (stats.success) applyPiSessionStats(thread, stats.data)
+      }
+      if (mode.kind !== 'new') {
+        await this.reconcileSession(thread, session, `session:${thread.id}`)
+      }
       thread.canFollowUp = true
       this.state.persist()
       return session
@@ -440,23 +631,34 @@ export class PiAgentRouter implements AgentConversationRouter {
     }
   }
 
+  private bindProcess(thread: AgentConversationThread, rpc: PiRpcProcess): void {
+    rpc.bind({
+      onEvent: (event) => this.handleEvent(thread.id, rpc, event),
+      onExit: (code, signal, stderr) => this.handleExit(thread.id, rpc, code, signal, stderr)
+    })
+  }
+
   private async startTurn(
     thread: AgentConversationThread,
     session: PiSession,
     request: ValidatedPiRequest,
-    jobId: string
+    jobId: string,
+    mode: PiLaunch
   ): Promise<void> {
     session.activeJobId = jobId
     session.aborting = null
     session.finalResponse = ''
     session.generationElapsedMs = 0
+    session.eventTurnKey = jobId
     session.lastError = ''
     session.lastEventAt = Date.now()
     session.lastProbeAt = null
     session.lastToolError = ''
+    session.lastTurnUsage = null
     session.probeInFlight = false
     session.recovering = false
     session.settling = false
+    this.state.clearIdleUnload(thread.id)
     thread.state = 'running'
     thread.model = request.model
     thread.effort = request.effort
@@ -465,41 +667,76 @@ export class PiAgentRouter implements AgentConversationRouter {
     this.state.jobs.register(jobId, thread.id, 'running')
     this.state.persist()
 
-    const { model, provider } = parsePiModelId(request.model)
-    const modelResponse = await session.process.command({
-      modelId: model,
-      provider,
-      type: 'set_model'
-    })
-    if (!modelResponse.success)
-      throw new Error(modelResponse.error || 'Pi rejected the selected model.')
-    applyPiStateTelemetry(thread, modelResponse.data)
-    const thinkingResponse = await session.process.command({
-      level: piThinkingLevel(request.effort),
-      type: 'set_thinking_level'
-    })
-    if (!thinkingResponse.success) {
-      throw new Error(thinkingResponse.error || 'Pi rejected the selected thinking level.')
+    const prompt =
+      request.toolScope === 'board-worker' && mode.kind !== 'resume'
+        ? boardWorkerPrompt(request.prompt)
+        : request.prompt
+    const inputPromise = piPromptInputWithEvidence(prompt, request.evidencePath, request.imagePaths)
+    if (session.configuredModel !== request.model) {
+      const { model, provider } = parsePiModelId(request.model)
+      const modelResponse = await session.process.command({
+        modelId: model,
+        provider,
+        type: 'set_model'
+      })
+      if (!modelResponse.success)
+        throw new Error(modelResponse.error || 'Pi rejected the selected model.')
+      applyPiStateTelemetry(thread, modelResponse.data)
+      session.configuredModel = request.model
+    }
+    if (piThinkingLevel(session.configuredEffort) !== piThinkingLevel(request.effort)) {
+      const thinkingResponse = await session.process.command({
+        level: piThinkingLevel(request.effort),
+        type: 'set_thinking_level'
+      })
+      if (!thinkingResponse.success) {
+        throw new Error(thinkingResponse.error || 'Pi rejected the selected thinking level.')
+      }
+      session.configuredEffort = request.effort
     }
     session.antigravityUsageCursor = request.model.startsWith('antigravity/')
-      ? await captureAntigravityUsageCursor(this.piSessionIds(thread))
+      ? await (this.config.captureAntigravityUsageCursor ?? captureAntigravityUsageCursor)(
+          this.piSessionIds(thread)
+        )
       : null
-    const input = await piPromptInputWithEvidence(
-      request.prompt,
-      request.evidencePath,
-      request.imagePaths
-    )
-    const promptResponse = await session.process.command({
-      ...input,
-      type: 'prompt'
-    })
-    if (!promptResponse.success) throw new Error(promptResponse.error || 'Pi rejected the prompt.')
+    const input = await inputPromise
     session.lastEventAt = Date.now()
     this.state.armHeartbeat(
       thread,
       (now) => this.watchdog.tick(thread, session, now),
       this.watchdog.intervalMs
     )
+    this.deliverPromptCommand(thread, session, jobId, input)
+  }
+
+  private deliverPromptCommand(
+    thread: AgentConversationThread,
+    session: PiSession,
+    jobId: string,
+    input: PiPromptInput
+  ): void {
+    void (async () => {
+      try {
+        const promptResponse = await session.process.command(
+          {
+            ...input,
+            type: 'prompt'
+          },
+          PI_PROMPT_COMMAND_TIMEOUT_MS
+        )
+        if (!promptResponse.success) {
+          throw new Error(promptResponse.error || 'Pi rejected the prompt.')
+        }
+      } catch (error) {
+        if (isPiRpcTimeout(error)) return
+        if (this.state.sessions.get(thread.id) !== session) return
+        if (session.activeJobId !== jobId) return
+        const detail =
+          safeStatusText(error instanceof Error ? error.message : error) ||
+          'Pi rejected the prompt.'
+        this.failTurn(thread, jobId, detail)
+      }
+    })()
   }
 
   private handleEvent(threadId: string, process: PiRpcProcess, event: PiRpcRecord): void {
@@ -512,7 +749,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       this.handleExtensionUi(thread, session, event)
       return
     }
-    const turnKey = session.activeJobId ?? `session:${thread.id}`
+    const turnKey = session.activeJobId ?? session.eventTurnKey ?? `session:${thread.id}`
     const applied = applyPiEvent(thread, event, turnKey)
     const telemetryApplied = applyPiEventTelemetry(thread, session, event)
     capturePiOutcome(session, event)
@@ -530,9 +767,10 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (session.settling) return
     session.settling = true
     try {
-      const turnKey = session.activeJobId ?? `session:${thread.id}`
+      const turnKey = session.activeJobId ?? session.eventTurnKey ?? `session:${thread.id}`
       await this.reconcileSession(thread, session, turnKey)
       await this.applySettledAntigravityUsage(thread, session)
+      await this.appendUsageLedger(thread, session)
       this.settleTurn(thread, session)
     } finally {
       session.settling = false
@@ -546,9 +784,40 @@ export class PiAgentRouter implements AgentConversationRouter {
     const cursor = session.antigravityUsageCursor
     session.antigravityUsageCursor = null
     if (!cursor) return
-    const usage = await readAntigravityTurnUsage(this.piSessionIds(thread), cursor)
+    const usage = await (this.config.readAntigravityTurnUsage ?? readAntigravityTurnUsage)(
+      this.piSessionIds(thread),
+      cursor
+    )
     if (!usage) return
-    applyMeasuredAntigravityThroughput(thread, usage.output, session.generationElapsedMs)
+    applyMeasuredAntigravityUsage(thread, usage, session.generationElapsedMs)
+    session.lastTurnUsage = {
+      source: 'agy-sqlite',
+      tokens: {
+        cacheRead: usage.cacheRead,
+        cacheWrite: 0,
+        input: usage.input,
+        output: usage.output,
+        reasoning: usage.reasoning
+      }
+    }
+  }
+
+  private async appendUsageLedger(
+    thread: AgentConversationThread,
+    session: PiSession
+  ): Promise<void> {
+    const captured = session.lastTurnUsage
+    const tokens = captured?.tokens ?? emptyUsageTokens()
+    const usageSource =
+      captured?.source ?? (thread.contextUsage?.tokensEstimated === true ? 'estimated' : 'pi-event')
+    await appendUsageTurnBestEffort(
+      buildLiveUsageTurn(thread, {
+        at: new Date().toISOString(),
+        sessionId: thread.sessionId,
+        tokens,
+        usageSource
+      })
+    )
   }
 
   private piSessionIds(thread: AgentConversationThread): string[] {
@@ -566,17 +835,25 @@ export class PiAgentRouter implements AgentConversationRouter {
       session.aborting = null
       session.activeJobId = null
       this.state.persist()
+      this.state.armIdleUnload(thread.id, resolveIdleUnloadMs(), () => {
+        this.unloadIdleSession(thread.id)
+      })
       return
     }
     if (!jobId) {
       session.aborting = null
       this.state.persist()
+      this.state.armIdleUnload(thread.id, resolveIdleUnloadMs(), () => {
+        this.unloadIdleSession(thread.id)
+      })
       return
     }
-    if (session.finalResponse.trim()) {
+    const answer = session.finalResponse.trim() || threadClosingText(thread)
+    if (answer) {
+      ensureVisibleFinalResponse(thread, answer, now)
       thread.state = 'completed'
-      thread.recentUpdate = session.finalResponse.trim().slice(0, 500)
-      this.state.jobs.settle(jobId, 'completed', session.finalResponse.trim())
+      thread.recentUpdate = answer.slice(0, 500)
+      this.state.jobs.settle(jobId, 'completed', answer)
     } else {
       thread.state = 'needs_attention'
       thread.recentUpdate =
@@ -586,6 +863,16 @@ export class PiAgentRouter implements AgentConversationRouter {
     thread.updatedAt = now
     session.activeJobId = null
     this.state.persist()
+    this.state.armIdleUnload(thread.id, resolveIdleUnloadMs(), () => {
+      this.unloadIdleSession(thread.id)
+    })
+  }
+
+  private unloadIdleSession(threadId: string): void {
+    const thread = this.state.threads.find((candidate) => candidate.id === threadId)
+    const session = this.state.sessions.get(threadId)
+    if (!thread || !session || session.activeJobId) return
+    this.state.disposeSession(threadId, { graceMs: resolveIdleUnloadGraceMs() })
   }
 
   private async reconcileSession(
@@ -745,5 +1032,13 @@ export class PiAgentRouter implements AgentConversationRouter {
     this.state.jobs.settle(jobId, 'failed', detail)
     this.state.clearHeartbeat(thread.id)
     this.state.persist()
+  }
+}
+
+function warmProcessSelection(config: PiRouterConfig): { effort: string; model: string } {
+  const model = config.models?.[0]
+  return {
+    effort: model?.defaultEffort ?? 'high',
+    model: model?.id ?? 'xai-auth/grok-4.6'
   }
 }

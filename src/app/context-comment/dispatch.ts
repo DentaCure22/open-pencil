@@ -1,3 +1,4 @@
+import { boardWorkerLaunchFields } from '@/app/agent-chat/board-worker'
 import type { AgentModelSelection } from '@/app/agent-chat/models'
 import { localWorkspaceAuthorityFetch } from '@/app/workspace-document/local-authority/client'
 
@@ -32,7 +33,7 @@ async function dispatchDirectly(
         ...(draft.capture ? { evidenceId: draft.capture.evidenceId } : {}),
         effort: selection.effort,
         model: selection.model,
-        prompt
+        ...boardWorkerLaunchFields(prompt)
       }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',

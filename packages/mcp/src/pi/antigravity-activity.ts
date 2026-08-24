@@ -1,6 +1,12 @@
+import { readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { imagePreviewFromPath } from './image-preview'
+
+const MAX_RESOLVED_OUTPUT = 12_000
+const MAX_OFFLOAD_FILE_BYTES = 2 * 1024 * 1024
+const OFFLOAD_NOTICE =
+  /(?:output was large and was saved to|saved to:|Resource offloaded to)\s+(file:\/\/[^\s\]\r\n]+|[^\s\]\r\n]+)/i
 
 type AntigravityActivityDetail = { input?: string; output?: string }
 
@@ -30,6 +36,7 @@ function antigravityToolName(label: string, input: string): string {
   const args = isRecord(parsed?.Arguments) ? parsed.Arguments : null
   if (typeof args?.tool === 'string' && args.tool.trim()) return args.tool.trim()
   if (typeof args?.search === 'string' && args.search.trim()) return 'connected_app_search'
+  if (typeof args?.describe === 'string' && args.describe.trim()) return 'connected_app_search'
   return bridgedName
 }
 
@@ -96,16 +103,73 @@ export function antigravityToolImages(
   })
 }
 
+function offloadPath(output: string): string {
+  const raw = OFFLOAD_NOTICE.exec(output)?.[1]?.trim() ?? ''
+  if (!raw) return ''
+  if (raw.startsWith('file://')) return localResourcePath(raw)
+  return raw
+}
+
+function readCappedText(path: string): string {
+  try {
+    const size = statSync(path).size
+    if (size <= 0 || size > MAX_OFFLOAD_FILE_BYTES) return ''
+    const bytes = readFileSync(path)
+    if (bytes.includes(0)) return ''
+    const text = bytes.toString('utf8').trim()
+    if (!text) return ''
+    return text.length <= MAX_RESOLVED_OUTPUT
+      ? text
+      : `${text.slice(0, MAX_RESOLVED_OUTPUT - 1).trimEnd()}…`
+  } catch {
+    return ''
+  }
+}
+
+export function antigravityResolvedOutput(name: string, output: string): string {
+  const trimmed = output.trim()
+  if (!trimmed || isAntigravityImageTool(name)) return trimmed
+  const path = offloadPath(trimmed)
+  if (!path) return trimmed
+  const loaded = readCappedText(path)
+  if (!loaded) return trimmed
+  if (trimmed.length <= 800) return loaded
+  const preface = trimmed.split(/\r?\n\[Resource offloaded to /, 1)[0]?.trim() ?? trimmed
+  return `${preface}\n\n${loaded}`.trim()
+}
+
+function antigravityActivityPattern(): RegExp {
+  return /\[agy (edit|tool): ([^\]\r\n]+)\](?:\r?\n\[agy input\]\r?\n([\s\S]*?)\r?\n\[\/agy input\])?(?:\r?\n\[agy output\]\r?\n([\s\S]*?)\r?\n\[\/agy output\])?/g
+}
+
 export function pendingAntigravityOutput(value?: string): boolean {
   return !value || /^Step is still running\.?$/i.test(value.trim())
 }
 
-function sameAntigravityActivity(first: AntigravityActivity, second: AntigravityActivity): boolean {
-  if (first.type !== second.type || first.input !== second.input) return false
-  if (first.type === 'edit' && second.type === 'edit') {
-    return first.description === second.description
+export function antigravityThoughtText(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  let text = value.replace(antigravityActivityPattern(), '\n')
+  const incomplete = text.indexOf('[agy')
+  if (incomplete !== -1) text = text.slice(0, incomplete)
+  const thought = text.replace(/\n{3,}/g, '\n\n').trim()
+  return !thought || ['thinking', 'thought'].includes(thought.toLowerCase()) ? '' : thought
+}
+
+function antigravityActivityName(activity: AntigravityActivity): string {
+  return activity.type === 'edit' ? activity.description : activity.name
+}
+
+function canUpgradeAntigravityActivity(
+  previous: AntigravityActivity,
+  next: AntigravityActivity
+): boolean {
+  if (previous.type !== next.type) return false
+  if (antigravityActivityName(previous) !== antigravityActivityName(next)) return false
+  if (previous.input && next.input && previous.input !== next.input) return false
+  if (!pendingAntigravityOutput(previous.output) && pendingAntigravityOutput(next.output)) {
+    return false
   }
-  return first.type === 'tool' && second.type === 'tool' && first.name === second.name
+  return Boolean(next.input && !previous.input) || !pendingAntigravityOutput(next.output)
 }
 
 export function antigravityActivities(
@@ -114,13 +178,12 @@ export function antigravityActivities(
 ): AntigravityActivity[] {
   if (typeof value !== 'string') return []
   const activities: AntigravityActivity[] = []
-  const pattern =
-    /\[agy (edit|tool): ([^\]\r\n]+)\](?:\r?\n\[agy input\]\r?\n([\s\S]*?)\r?\n\[\/agy input\])?(?:\r?\n\[agy output\]\r?\n([\s\S]*?)\r?\n\[\/agy output\])?/g
-  for (const match of value.matchAll(pattern)) {
+  for (const match of value.matchAll(antigravityActivityPattern())) {
     const label = match[2]?.trim()
     if (!label) continue
     const input = safeActivityText(match[3])
-    const output = safeActivityText(match[4])
+    const name = match[1] === 'edit' ? 'edit' : antigravityToolName(label, input)
+    const output = antigravityResolvedOutput(name, safeActivityText(match[4]))
     const activity: AntigravityActivity =
       match[1] === 'edit'
         ? {
@@ -131,17 +194,12 @@ export function antigravityActivities(
           }
         : {
             ...(input ? { input } : {}),
-            name: antigravityToolName(label, input),
+            name,
             ...(output ? { output } : {}),
             type: 'tool'
           }
     const previous = activities.at(-1)
-    if (
-      previous &&
-      sameAntigravityActivity(previous, activity) &&
-      pendingAntigravityOutput(previous.output) &&
-      !pendingAntigravityOutput(activity.output)
-    ) {
+    if (previous && canUpgradeAntigravityActivity(previous, activity)) {
       activities[activities.length - 1] = activity
     } else {
       activities.push(activity)

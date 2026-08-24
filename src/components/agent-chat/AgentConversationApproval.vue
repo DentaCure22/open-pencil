@@ -51,70 +51,77 @@ function deny() {
 <template>
   <section
     v-if="message"
-    class="flex min-h-[50px] items-center gap-2.5 rounded-[12px] border border-agent-approval-border bg-agent-approval-surface px-2 py-1.5 text-[12px] text-surface"
+    class="group/message-approval grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-2.5 py-1 text-[12px] text-surface"
     data-test-id="agent-ui-approval"
     :data-state="state"
   >
     <img :src="messagesAppIconUrl" alt="" class="size-8 shrink-0 object-contain" />
-    <div class="min-w-0 flex-1">
-      <h3
-        class="truncate text-[12.5px] font-semibold tracking-[-0.015em]"
-        data-test-id="agent-message-recipient"
-      >
-        Message {{ message.recipient }}
-      </h3>
-      <p
-        class="line-clamp-2 text-[11px] leading-[15px] text-muted"
-        data-test-id="agent-message-approval-text"
-      >
-        {{ message.text }}
-      </p>
-    </div>
-    <div v-if="state === 'pending'" class="flex shrink-0 items-center gap-1.5">
-      <button
-        type="button"
-        class="h-7 rounded-full px-1 font-semibold text-muted transition-colors duration-150 hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent-approval-action/30 disabled:cursor-default disabled:opacity-45 motion-reduce:transition-none"
-        :disabled="busy"
-        @click="deny"
-      >
-        Cancel
-      </button>
-      <button
-        type="button"
-        :aria-label="busy ? 'Sending message…' : 'Send'"
-        class="flex size-8 items-center justify-center rounded-full bg-agent-approval-action text-agent-approval-action-foreground transition-[background-color,opacity,transform] duration-150 hover:bg-agent-approval-action-hover active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent-approval-action/35 disabled:cursor-default disabled:opacity-55 disabled:active:scale-100 motion-reduce:transition-none"
-        :disabled="busy || !approval"
-        @click="approve"
-      >
-        <icon-lucide-loader-circle v-if="busy" class="size-3.5 animate-spin" aria-hidden="true" />
-        <icon-lucide-arrow-up v-else class="size-4 stroke-[2]" aria-hidden="true" />
-      </button>
-    </div>
-    <div
-      v-else
-      class="flex min-w-[76px] shrink-0 items-center justify-center gap-1.5 font-semibold"
-      :class="{
-        'text-agent-approval-action': state === 'sending',
-        'text-muted': state === 'cancelled',
-        'text-[var(--color-success)]': state === 'sent',
-        'text-[var(--color-warning-action)]': state === 'failed'
-      }"
-      data-test-id="agent-message-approval-status"
-      role="status"
-    >
-      <icon-lucide-loader-circle
-        v-if="state === 'sending'"
-        class="size-3.5 animate-spin"
-        aria-hidden="true"
-      />
-      <icon-lucide-check-circle-2
-        v-else-if="state === 'sent'"
-        class="size-3.5"
-        aria-hidden="true"
-      />
-      <icon-lucide-x-circle v-else-if="state === 'cancelled'" class="size-3.5" aria-hidden="true" />
-      <icon-lucide-circle-alert v-else class="size-3.5" aria-hidden="true" />
-      <span>{{ statusLabel }}</span>
+    <div class="min-w-0 flex-1" data-test-id="agent-message-approval-content">
+      <div class="flex h-5 min-w-0 items-start gap-2">
+        <h3
+          class="min-w-0 flex-1 truncate pt-px text-[12.5px] font-semibold leading-[18px] tracking-[-0.012em]"
+          data-test-id="agent-message-recipient"
+        >
+          {{ message.recipient }}
+        </h3>
+      </div>
+      <div class="mt-0.5 flex min-w-0 flex-col items-end gap-1">
+        <p
+          v-for="(text, index) in message.texts"
+          :key="`${String(index)}:${text}`"
+          class="max-w-full rounded-[16px] rounded-br-[5px] bg-agent-approval-action px-3 py-1.5 text-[12.5px] leading-[17px] break-words whitespace-pre-wrap text-agent-approval-action-foreground"
+          data-test-id="agent-message-approval-text"
+        >
+          {{ text }}
+        </p>
+        <div
+          v-if="state !== 'pending'"
+          class="flex h-4 shrink-0 items-center gap-1 pr-0.5 text-[10.5px] font-medium"
+          :class="{
+            'text-agent-approval-action': state === 'sending' || state === 'sent',
+            'text-muted': state === 'cancelled' || state === 'failed'
+          }"
+          data-test-id="agent-message-approval-status"
+          role="status"
+        >
+          <icon-lucide-loader-circle v-if="state === 'sending'" class="size-3" aria-hidden="true" />
+          <icon-lucide-check
+            v-else-if="state === 'sent'"
+            class="size-3 stroke-[2.2]"
+            aria-hidden="true"
+          />
+          <icon-lucide-x-circle
+            v-else-if="state === 'cancelled'"
+            class="size-3"
+            aria-hidden="true"
+          />
+          <icon-lucide-circle-alert v-else class="size-3" aria-hidden="true" />
+          <span>{{ statusLabel }}</span>
+        </div>
+        <div
+          v-if="state === 'pending'"
+          class="flex h-5 items-center gap-4 text-[11.5px] font-medium leading-5"
+          data-test-id="agent-message-approval-actions"
+        >
+          <button
+            type="button"
+            class="rounded-sm text-muted transition-colors duration-150 hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent-approval-action/30 disabled:cursor-default disabled:opacity-45 motion-reduce:transition-none"
+            :disabled="busy"
+            @click="deny"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            :aria-label="busy ? 'Sending messages…' : 'Send'"
+            class="rounded-sm text-agent-approval-action transition-colors duration-150 hover:text-agent-approval-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-agent-approval-action/35 disabled:cursor-default disabled:opacity-55 motion-reduce:transition-none"
+            :disabled="busy || !approval"
+            @click="approve"
+          >
+            {{ busy ? 'Sending…' : 'Send' }}
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 

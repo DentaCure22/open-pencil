@@ -209,6 +209,8 @@ export type ContextCommentDraft = {
   destination?: ContextCommentDestination
   flow: ContextCommentFlow
   id: string
+  imageEdit?: boolean
+  modelScope?: string
   target: ContextCommentTarget | null
   text: string
 }

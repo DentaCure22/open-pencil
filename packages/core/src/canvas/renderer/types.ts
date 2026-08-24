@@ -14,6 +14,8 @@ export interface RulerTheme {
 export interface RenderOverlays {
   /** Selected nodes whose product-owned overlay replaces native selection chrome. */
   selectionChromeOwnerIds?: ReadonlySet<string>
+  /** Hovered nodes whose product-owned overlay replaces the canvas hover stroke. */
+  hoverChromeOwnerIds?: ReadonlySet<string>
   hoveredNodeId?: string | null
   enteredContainerId?: string | null
   editingTextId?: string | null

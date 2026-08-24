@@ -34,9 +34,9 @@ export function editorViewportInsets(): ViewportInsets {
 
   let left = sidebarShell
     ? Math.max(VIEWPORT_SAFE_GAP, sidebarShell.right - canvas.left + VIEWPORT_SAFE_GAP)
-    : (leftPanel
-        ? Math.max(VIEWPORT_SAFE_GAP, leftPanel.right - canvas.left + VIEWPORT_SAFE_GAP)
-        : VIEWPORT_SAFE_GAP)
+    : leftPanel
+      ? Math.max(VIEWPORT_SAFE_GAP, leftPanel.right - canvas.left + VIEWPORT_SAFE_GAP)
+      : VIEWPORT_SAFE_GAP
   let right = propertiesOnRight
     ? Math.max(VIEWPORT_SAFE_GAP, canvas.right - propertiesOnRight.left + VIEWPORT_SAFE_GAP)
     : VIEWPORT_SAFE_GAP

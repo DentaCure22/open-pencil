@@ -43,7 +43,8 @@ export function useCanvasInput(
   hitTestComponentLabel: (cx: number, cy: number) => SceneNode | null,
   hitTestFrameTitle: (cx: number, cy: number) => SceneNode | null,
   onCursorMove?: (cx: number, cy: number) => void,
-  getViewportInsets?: () => ViewportInsets
+  getViewportInsets?: () => ViewportInsets,
+  isPointerBlocked?: () => boolean
 ) {
   const drag = ref<DragState | null>(null)
   const cursorOverride = ref<string | null>(null)
@@ -186,6 +187,7 @@ export function useCanvasInput(
   }
 
   function onMouseMove(e: MouseEvent) {
+    if (isPointerBlocked?.()) return
     let coords: ReturnType<typeof getCoords> | null = null
     const pointerCoords = () => {
       coords ??= getCoords(e)
@@ -311,10 +313,17 @@ export function useCanvasInput(
   useEventListener(canvasRef, 'mousedown', onMouseDown)
   useEventListener(canvasRef, 'mousemove', onMouseMove)
   useEventListener(canvasRef, 'mouseup', onMouseUp)
-  useEventListener(canvasRef, 'mouseleave', () => {
-    if (!drag.value) {
-      editor.setHoveredNode(null)
+  useEventListener(canvasRef, 'mouseleave', (event: MouseEvent) => {
+    if (drag.value) return
+    if (
+      event.relatedTarget instanceof Element &&
+      event.relatedTarget.closest(
+        '[data-code-object-id], [data-test-id="code-object-design-hit-target"]'
+      )
+    ) {
+      return
     }
+    editor.setHoveredNode(null)
   })
   useEventListener(window, 'mouseup', () => {
     if (drag.value) onMouseUp()

@@ -22,7 +22,7 @@ export interface FrameCapture {
   culledNodes: number
   drawCalls: number
   scenePictureCacheHit: boolean
-  scenePictureMode: 'hit' | 'record' | 'volatile' | 'none'
+  scenePictureMode: 'hit' | 'record' | 'preview' | 'volatile' | 'none'
   scenePictureMissReason: string
   scenePictureDrawTimeMs: number
   scenePictureRecordTimeMs: number

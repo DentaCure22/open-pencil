@@ -6,7 +6,6 @@ export type RpcExecutionSurface = 'live_runtime' | 'persisted_authority'
 type RpcArguments = Record<string, unknown>
 
 const PERSISTED_ONLY_COMMANDS = new Set([
-  'board_fixture',
   'list_documents',
   'trace_get_gesture',
   'trace_query',
@@ -16,13 +15,9 @@ const PERSISTED_ONLY_COMMANDS = new Set([
 ])
 
 const AUTHORITY_DEFAULT_COMMANDS = new Set([
-  'board_build',
-  'board_change',
   'board_context',
   'board_open',
-  'board_prepare_edit',
-  'board_read',
-  'board_verify'
+  'board_read'
 ])
 
 const LIVE_ONLY_COMMANDS = new Set([
@@ -49,7 +44,7 @@ const LIVE_ONLY_COMMANDS = new Set([
   'variables'
 ])
 
-const AUTHORITY_DEFAULT_TOOLS = new Set(['create_page', 'search_board_memory'])
+const AUTHORITY_DEFAULT_TOOLS = new Set(['search_board_memory'])
 
 function rpcArguments(value: unknown): RpcArguments {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as RpcArguments) : {}

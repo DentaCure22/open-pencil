@@ -8,6 +8,13 @@ const pickerPath = new URL('../../../extensions/openpencil-chrome/picker.js', im
 
 type PickerHarnessWindow = typeof window & {
   __openPencilMessages?: Array<{ kind?: string }>
+  __openPencilRuntimeListeners?: Array<
+    (
+      message: { captureSessionId?: string; kind?: string },
+      sender: unknown,
+      sendResponse: (response: unknown) => void
+    ) => unknown
+  >
   __openpencilPickerSessionConfig?: {
     captureSessionId: string
     captureStartedAt: string
@@ -157,6 +164,79 @@ test('keeps one numbered session active across multiple selections', async ({ pa
   expect(ended?.captureSessionId).toBe(started?.captureSessionId)
 })
 
+test('selects OpenPencil while leaving its capture and annotation controls interactive', async ({
+  page
+}) => {
+  const pickerSource = await readFile(pickerPath, 'utf8')
+  await page.setViewportSize({ width: 720, height: 440 })
+  await page.setContent(`
+    <main style="display:flex;gap:24px;padding:100px">
+      <button aria-label="Board canvas" style="width:240px;height:120px">Board canvas</button>
+      <div data-openpencil-browser-inspector-ui>
+        <button aria-label="Annotate capture" style="width:180px;height:120px">Annotate</button>
+      </div>
+    </main>
+  `)
+  await page.evaluate(() => {
+    const target = window as PickerHarnessWindow & { __openPencilUiClicks?: number }
+    document.querySelector('[aria-label="Annotate capture"]')?.addEventListener('click', () => {
+      target.__openPencilUiClicks = (target.__openPencilUiClicks ?? 0) + 1
+    })
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: {
+        runtime: {
+          sendMessage: (message: { kind?: string }) => {
+            target.__openPencilMessages ??= []
+            target.__openPencilMessages.push(structuredClone(message))
+            if (message.kind === 'capture-visible-browser-element') {
+              const canvas = document.createElement('canvas')
+              canvas.width = window.innerWidth
+              canvas.height = window.innerHeight
+              return Promise.resolve({ dataUrl: canvas.toDataURL('image/png'), ok: true })
+            }
+            return Promise.resolve({ ok: true })
+          }
+        }
+      }
+    })
+  })
+  await page.addScriptTag({ content: pickerSource })
+
+  await page.getByRole('button', { name: 'Annotate capture' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as PickerHarnessWindow & { __openPencilUiClicks?: number })
+            .__openPencilUiClicks ?? 0
+      )
+    )
+    .toBe(1)
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          ((window as PickerHarnessWindow).__openPencilMessages ?? []).filter(
+            (message) => message.kind === 'browser-element-selection'
+          ).length
+      )
+    )
+    .toBe(0)
+
+  await page.getByRole('button', { name: 'Board canvas' }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          ((window as PickerHarnessWindow).__openPencilMessages ?? []).filter(
+            (message) => message.kind === 'browser-element-selection'
+          ).length
+      )
+    )
+    .toBe(1)
+})
+
 test('continues one globally numbered session after the user switches tabs', async ({
   context
 }) => {
@@ -184,7 +264,21 @@ test('continues one globally numbered session after the user switches tabs', asy
           configurable: true,
           value: {
             runtime: {
-              onMessage: { addListener: () => undefined, removeListener: () => undefined },
+              onMessage: {
+                addListener: (
+                  listener: NonNullable<PickerHarnessWindow['__openPencilRuntimeListeners']>[number]
+                ) => {
+                  target.__openPencilRuntimeListeners ??= []
+                  target.__openPencilRuntimeListeners.push(listener)
+                },
+                removeListener: (
+                  listener: NonNullable<PickerHarnessWindow['__openPencilRuntimeListeners']>[number]
+                ) => {
+                  target.__openPencilRuntimeListeners = (
+                    target.__openPencilRuntimeListeners ?? []
+                  ).filter((candidate) => candidate !== listener)
+                }
+              },
               sendMessage: async (message: { kind?: string }) => {
                 target.__openPencilMessages ??= []
                 target.__openPencilMessages.push(structuredClone(message))
@@ -257,4 +351,16 @@ test('continues one globally numbered session after the user switches tabs', asy
   await expect(secondTab).toHaveScreenshot('extension-picker-cross-tab.png', {
     animations: 'disabled'
   })
+  await secondTab.keyboard.press('Escape')
+  await firstTab.evaluate((sessionId) => {
+    for (const listener of (window as PickerHarnessWindow).__openPencilRuntimeListeners ?? []) {
+      listener(
+        { captureSessionId: sessionId, kind: 'browser-element-picker-stop-session' },
+        {},
+        () => undefined
+      )
+    }
+  }, captureSessionId)
+  await expect(firstTab.locator('[data-op-inspector-layer]')).toHaveCount(0)
+  await expect(secondTab.locator('[data-op-inspector-layer]')).toHaveCount(0)
 })

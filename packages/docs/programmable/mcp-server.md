@@ -122,103 +122,24 @@ Server starts on port 7600 (override with `PORT` env var). Endpoints:
 - `GET /health` — server status
 - `POST /mcp` — MCP Streamable HTTP (SSE). Sessions via `mcp-session-id` header.
 
-## Workflow
+## Board workflow
 
-### Normal Board automation
+The MCP service provides bounded Board discovery and live controls. Persisted Board authoring does
+not use `board_build`, `board_change`, a mutation handshake, or a Board-specific CLI.
 
-The MCP server continues to expose lower-level design and standalone-file tools. For normal
-persisted Board work, agents use the public Board CLI facade:
+For agent Board work:
 
-| Need                                 | Command         |
-| ------------------------------------ | --------------- |
-| Find an unknown Board                | `board search`  |
-| Create an explicitly requested Board | `board create`  |
-| Apply one complete Board outcome     | `board build`   |
-| Reveal a saved result on request     | `board present` |
+1. Read the live Board identity and selected IDs with the available Board context tool.
+2. Use `workspace.index.jsonl` only when an exact object or page ID still needs discovery.
+3. Read and edit the exact records in `workspace.json` with ordinary file tools.
+4. Preserve stable IDs, hierarchy, connections, Code Object source/state, and unrelated records.
+5. Re-read the saved records. Use a Board screenshot only when rendered-pixel proof matters.
 
-`board build` accepts one `board-build-request/v1` through `--request`:
+Trace is optional read-only context. Read the bounded adjacent `trace-context.json`, verify its
+status and expiry, then follow its exact IDs into `workspace.json`.
 
-```json
-{
-  "contract": "board-build-request/v1",
-  "target": {
-    "workspace_id": "workspace-id",
-    "content_document_id": "content-document-id",
-    "document_id": "document-id",
-    "page_id": "board-page-id"
-  },
-  "request_id": "stable-logical-request-id",
-  "intent": "Describe the complete desired Board outcome",
-  "plan": {
-    "contract": "board-build-plan/v1",
-    "artifacts": [
-      {
-        "alias": "status",
-        "recipe": {
-          "kind": "native_card",
-          "title": "Status",
-          "body": "Ready",
-          "placement": { "target": { "kind": "auto" } }
-        }
-      }
-    ]
-  }
-}
-```
-
-The plan may combine native artifacts, Mermaid, Code Objects, semantic composition, and object
-operations in one atomic transaction. Use
-`--request-file` only when the complete request is too large for practical shell quoting.
-
-Runtime IDs, context tokens, expected revisions, fresh-context handshakes, fingerprints, retries,
-authority preparation, persistence, and Undo stay inside OpenPencil. Do not sequence diagnostic MCP
-operations to prepare a normal Board mutation.
-
-Trace remains optional read-only context. Local coding agents normally read the bounded adjacent
-`trace-context.json` directly, check its status and expiry, and follow its exact IDs into
-`workspace.json`. External CLI/MCP callers can still add `--latest-gesture` or one exact
-`--gesture-id` to a build command. Use `board present` only when the user asks to reveal the saved
-result in a connected editor; it is not required for persistence.
-
-### Primitive editing
-
-Use the lower-level MCP tools when working below the persisted Board workflow:
-
-1. **Discover targets** — call `list_documents`.
-2. **Read** — `get_page_tree`, `find_nodes`, `get_node`, `list_pages`.
-3. **Create** — `create_shape`, `render` (JSX).
-4. **Modify** — `set_fill`, `set_stroke`, `set_layout`, `update_node`, `set_effects`.
-5. **Structure** — `reparent_node`, `group_nodes`, `clone_node`, `delete_node`.
-6. **Export** — use the format-specific export tools when a file is required.
-
-These tools are not a substitute for the public Board facade. Normal persisted Board changes belong
-in one `board-build-request/v1`; OpenPencil prepares and validates authority internally.
-
-### Mermaid flow boards
-
-For Product Maps, technical flows, journeys, and state diagrams, include a `native_diagram`
-artifact with complete Mermaid source inside the request's `board-build-plan/v1`. OpenPencil
-handles placement, native node generation, persistence, and Undo as part of the same
-`board build`.
-
-Use an optional semantic placement hint only when the user asks for a relationship such as “below
-this object” or “near the traced region.” Placement never carries authority. To redraw an existing
-diagram, target its exact owner in the plan so its identity and position can be preserved.
-
-### Code Objects on Boards
-
-Use one Code Object when the requested result is app-like, stateful, or interactive. Put the
-`code_object` recipe and complete authored TSX inside an artifact in the same
-`board-build-plan/v1`; use `--request-file` only when that complete request is too large for the
-shell.
-
-Code Object TSX is trusted in-process code, not a security sandbox. Static ambient-capability checks
-are defense in depth, not confinement. Run only source authored for the user's request; external or
-untrusted content belongs behind the product's sandboxed embed boundary.
-
-Refinement should target the exact existing owner in the plan so OpenPencil can preserve identity,
-state, geometry, and metadata. Runtime selection, current source and
-revision checks, persistence, and replay remain internal to the Board builder.
+Mermaid and Code Objects remain source-backed Board records. Edit their persisted source and
+descriptor fields directly instead of routing them through a second semantic authoring API.
 
 ## AI Agent Skill
 

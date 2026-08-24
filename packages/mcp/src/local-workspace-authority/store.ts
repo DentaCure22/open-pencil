@@ -22,9 +22,12 @@ import {
   pruneJsonHistory,
   readJsonFile,
   readJsonHistory,
+  readSerializedJsonFile,
   writeJsonFile,
-  writeJsonHistory
+  writeJsonHistory,
+  writeSerializedJsonFile
 } from './json-file'
+import { documentMayNeedMermaidMaterialization } from './mermaid-presence'
 import {
   normalizeLocalWorkspaceTraceGesture,
   type LocalWorkspaceTraceEvidenceReference,
@@ -47,7 +50,6 @@ import {
   type LocalWorkspaceAuthorityHead,
   type LocalWorkspaceAuthorityStatus,
   type LocalWorkspaceCommitReceipt,
-  type LocalWorkspaceCommitTransaction,
   type LocalWorkspaceIdentity,
   type LocalWorkspaceNavigationIntent,
   type LocalWorkspacePresence,
@@ -57,7 +59,12 @@ import {
   type RecordLocalWorkspacePresenceRequest,
   type RecordLocalWorkspaceThemeRequest
 } from './types'
-import { ensureWorkspaceJsonlIndex } from './workspace-jsonl-index'
+import { restoreUnchangedAuthorityImages } from './unchanged-images'
+import { restoreUnchangedAuthorityPages } from './unchanged-pages'
+import {
+  ensureWorkspaceJsonlIndex,
+  type WorkspaceJsonlIndexPrevious
+} from './workspace-jsonl-index'
 
 const AUTHORITY_METADATA_FILE = 'authority.json'
 const AUTHORITY_DOCUMENT_FILE = 'workspace.json'
@@ -101,6 +108,7 @@ type PersistedLocalWorkspaceAuthorityLedger = Pick<
 type LocalWorkspaceAuthorityStateCache = {
   documentMarker: string
   ledgerMarker: string
+  pendingDocumentWrite: boolean
   state: PersistedLocalWorkspaceAuthorityState | null
   status: LocalWorkspaceAuthorityStatus
 }
@@ -197,28 +205,8 @@ function isReceipt(value: unknown): value is LocalWorkspaceCommitReceipt {
     (candidate.status === 'committed' ||
       candidate.status === 'initialized' ||
       candidate.status === 'unchanged') &&
-    (candidate.transaction === undefined || isCommitTransaction(candidate.transaction)) &&
     typeof candidate.workspaceId === 'string'
   )
-}
-
-function isCommitTransaction(value: unknown): value is LocalWorkspaceCommitTransaction {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<LocalWorkspaceCommitTransaction>
-  return Boolean(
-    typeof candidate.pageId === 'string' &&
-    candidate.pageId.length > 0 &&
-    typeof candidate.requestId === 'string' &&
-    candidate.requestId.length > 0 &&
-    candidate.route === 'board_build:plan/v1'
-  )
-}
-
-function sameCommitTransaction(
-  first: LocalWorkspaceCommitTransaction,
-  second: LocalWorkspaceCommitTransaction
-): boolean {
-  return first.pageId === second.pageId && first.requestId === second.requestId
 }
 
 function isState(value: unknown): value is PersistedLocalWorkspaceAuthorityState {
@@ -683,7 +671,11 @@ function traceSpokenTurn(
   }
 }
 
-function serializedDocument(document: unknown): string {
+function hashSerializedDocument(serialized: string): string {
+  return createHash('sha256').update(serialized).digest('hex')
+}
+
+function serializeDocument(document: unknown): { hash: string; serialized: string } {
   const serialized = JSON.stringify(document)
   if (typeof serialized !== 'string') {
     throw new LocalWorkspaceAuthorityStoreError(
@@ -691,11 +683,29 @@ function serializedDocument(document: unknown): string {
       'Workspace document must be JSON-serializable'
     )
   }
-  return serialized
+  return {
+    hash: hashSerializedDocument(serialized),
+    serialized
+  }
 }
 
-function documentHash(document: unknown): string {
-  return createHash('sha256').update(serializedDocument(document)).digest('hex')
+function cloneIdentity(identity: LocalWorkspaceIdentity): LocalWorkspaceIdentity {
+  return { ...identity }
+}
+
+function historyDocument(value: unknown): unknown {
+  if (isState(value)) return value.document
+  if (value && typeof value === 'object') return value
+  return null
+}
+
+function serializeAuthorityState(
+  state: PersistedLocalWorkspaceAuthorityState,
+  serializedDocument: string
+): string {
+  const { document: _document, ...rest } = state
+  const envelope = JSON.stringify(rest)
+  return `${envelope.slice(0, -1)},"document":${serializedDocument}}`
 }
 
 function boundedReceipts(
@@ -1019,6 +1029,8 @@ export class LocalWorkspaceAuthorityStore {
   private readonly semanticServices: boolean
   private stateCache: LocalWorkspaceAuthorityStateCache | null = null
   private workspaceIndexVerifiedKey: string | null = null
+  private workspaceIndexCache: WorkspaceJsonlIndexPrevious | null = null
+  private historyWriteTail: Promise<void> = Promise.resolve()
 
   constructor(options: LocalWorkspaceAuthorityStoreOptions) {
     this.rootPath = path.resolve(options.root)
@@ -1586,6 +1598,10 @@ export class LocalWorkspaceAuthorityStore {
 
   status(): Promise<LocalWorkspaceAuthorityStatus> {
     return this.withWriteLock(async () => {
+      if (this.stateCache?.pendingDocumentWrite && this.stateCache.state) {
+        await this.bestEffortEnsureWorkspaceIndex(this.stateCache.state)
+        return structuredClone(this.stateCache.status)
+      }
       const metadata = await this.ensureMetadata()
       const [documentMarker, ledgerMarker] = await Promise.all([
         jsonFileMarker(this.documentPath),
@@ -1642,6 +1658,7 @@ export class LocalWorkspaceAuthorityStore {
       throw new TypeError('Local workspace authority revision must be a non-negative integer')
     }
     return this.withWriteLock(async () => {
+      await this.historyWriteTail
       const metadata = await this.ensureMetadata()
       const current = await this.readState(metadata)
       if (!current || revision > current.revision) return null
@@ -1657,25 +1674,6 @@ export class LocalWorkspaceAuthorityStore {
     })
   }
 
-  transactionReceipts(requestId: string): Promise<LocalWorkspaceCommitReceipt[]> {
-    const normalizedRequestId = normalizedId(requestId)
-    if (!normalizedRequestId) {
-      throw new TypeError('Local workspace transaction request ID is required')
-    }
-    return this.withWriteLock(async () => {
-      const metadata = await this.ensureMetadata()
-      const current = await this.readState(metadata)
-      if (!current) return []
-      this.assertStateMatchesMetadata(current, metadata)
-      return Object.values(current.receipts)
-        .filter(
-          (receipt): receipt is LocalWorkspaceCommitReceipt =>
-            receipt?.transaction?.requestId === normalizedRequestId
-        )
-        .map((receipt) => structuredClone(receipt))
-    })
-  }
-
   initialize(request: InitializeLocalWorkspaceRequest): Promise<LocalWorkspaceCommitReceipt> {
     return this.withWriteLock(async () => {
       const metadata = await this.ensureMetadata()
@@ -1686,7 +1684,7 @@ export class LocalWorkspaceAuthorityStore {
         )
       }
       const materialized = await this.materializeDocument(request.document)
-      const contentHash = documentHash(materialized.document)
+      const { hash: contentHash, serialized } = serializeDocument(materialized.document)
       const current = await this.readState(metadata)
       if (current) {
         this.assertStateMatchesMetadata(current, metadata)
@@ -1736,13 +1734,13 @@ export class LocalWorkspaceAuthorityStore {
         authorityId: metadata.authorityId,
         contentHash,
         document: materialized.document,
-        identity: structuredClone(metadata.identity),
+        identity: cloneIdentity(metadata.identity),
         receipts: { [request.requestId]: receipt },
         revision: 1,
         updatedAt: receipt.committedAt,
         version: LOCAL_WORKSPACE_AUTHORITY_VERSION
       }
-      await this.writeState(metadata, state)
+      await this.writeState(metadata, state, true, serialized)
       this.notifyHeadCommitted(receipt)
       return receipt
     })
@@ -1765,37 +1763,19 @@ export class LocalWorkspaceAuthorityStore {
         )
       }
       this.assertStateMatchesMetadata(current, metadata)
-      const materialized = await this.materializeDocument(request.document)
-      const contentHash = documentHash(materialized.document)
+      const incoming = restoreUnchangedAuthorityImages(
+        restoreUnchangedAuthorityPages(request.document, current.document),
+        current.document
+      )
+      const materialized = await this.materializeDocument(incoming, current.document)
+      const { hash: contentHash, serialized } = serializeDocument(materialized.document)
       const replay = current.receipts[request.requestId]
       if (replay) {
-        if (
-          replay.contentHash === contentHash &&
-          ((replay.transaction === undefined && request.transaction === undefined) ||
-            (replay.transaction !== undefined &&
-              request.transaction !== undefined &&
-              sameCommitTransaction(replay.transaction, request.transaction)))
-        ) {
-          return replay
-        }
+        if (replay.contentHash === contentHash) return replay
         throw new LocalWorkspaceAuthorityStoreError(
           'idempotency_conflict',
           `Request "${request.requestId}" was already used for different content`
         )
-      }
-
-      let transaction = request.transaction
-      if (transaction) {
-        const prior = Object.values(current.receipts).find(
-          (receipt) => receipt?.transaction?.requestId === transaction?.requestId
-        )?.transaction
-        if (prior && !sameCommitTransaction(prior, transaction)) {
-          throw new LocalWorkspaceAuthorityStoreError(
-            'idempotency_conflict',
-            `Board transaction "${transaction.requestId}" was already recorded for a different target`
-          )
-        }
-        if (prior) transaction = undefined
       }
 
       if (request.expectedRevision !== current.revision) {
@@ -1820,19 +1800,9 @@ export class LocalWorkspaceAuthorityStore {
           metadata,
           requestId: request.requestId,
           status: 'unchanged',
-          transaction,
           baseRevision: current.revision,
           appliedRevision: current.revision
         })
-        if (!transaction) return receipt
-        await this.writeState(
-          metadata,
-          {
-            ...current,
-            receipts: boundedReceipts(current.receipts, receipt)
-          },
-          false
-        )
         return receipt
       }
 
@@ -1842,7 +1812,6 @@ export class LocalWorkspaceAuthorityStore {
         metadata,
         requestId: request.requestId,
         status: 'committed',
-        transaction,
         baseRevision: current.revision,
         appliedRevision: nextRevision
       })
@@ -1854,7 +1823,10 @@ export class LocalWorkspaceAuthorityStore {
         revision: nextRevision,
         updatedAt: receipt.committedAt
       }
-      await this.writeState(metadata, nextState)
+      await this.writeState(metadata, nextState, true, serialized, {
+        deferDocument: true,
+        deferHistory: true
+      })
       this.notifyHeadCommitted(receipt)
       return receipt
     })
@@ -1883,38 +1855,52 @@ export class LocalWorkspaceAuthorityStore {
       jsonFileMarker(this.documentPath),
       jsonFileMarker(this.ledgerPath)
     ])
+    if (this.stateCache?.pendingDocumentWrite && this.stateCache.state) {
+      return this.stateCache.state
+    }
     if (
       this.stateCache?.documentMarker === documentMarker &&
       this.stateCache.ledgerMarker === ledgerMarker
     ) {
       return this.stateCache.state
     }
-    const savedDocument = await this.readJson(this.documentPath)
+    const savedDocument = await readSerializedJsonFile(this.documentPath)
     if (savedDocument === null) {
       await this.cacheStatus(metadata, null, documentMarker, ledgerMarker)
       return null
     }
-    const materialized = await this.materializeDocument(savedDocument)
+    const materialized = await this.materializeDocument(savedDocument.value)
     let document = materialized.document
-    if (materialized.changed) await this.atomicWrite(this.documentPath, document)
+    let serialized = materialized.changed
+      ? serializeDocument(document)
+      : {
+          hash: hashSerializedDocument(savedDocument.serialized),
+          serialized: savedDocument.serialized
+        }
+    if (materialized.changed)
+      await writeSerializedJsonFile(this.documentPath, serialized.serialized)
     const persistedLedger = await this.readJson(this.ledgerPath)
     if (persistedLedger !== null && !isLedger(persistedLedger)) {
       throw new TypeError('Local workspace authority ledger is invalid')
     }
-    let contentHash = documentHash(document)
+    let contentHash = serialized.hash
     if (persistedLedger !== null && persistedLedger.contentHash !== contentHash) {
+      await this.historyWriteTail
       const staleRewriteRevision = await findJsonHistoryRevisionByHash(
         this.historyPath,
         contentHash
       )
       if (staleRewriteRevision !== null && staleRewriteRevision < persistedLedger.revision) {
-        const restored = await readJsonHistory(this.historyPath, persistedLedger.revision)
-        if (isState(restored)) {
+        const restored = historyDocument(
+          await readJsonHistory(this.historyPath, persistedLedger.revision)
+        )
+        if (restored !== null) {
           console.warn(
             `[Local workspace authority] workspace.json matched saved revision ${String(staleRewriteRevision)}; keeping revision ${String(persistedLedger.revision)}`
           )
-          await this.atomicWrite(this.documentPath, restored.document)
-          document = restored.document
+          serialized = serializeDocument(restored)
+          await writeSerializedJsonFile(this.documentPath, serialized.serialized)
+          document = restored
           contentHash = persistedLedger.contentHash
         }
       }
@@ -1938,12 +1924,17 @@ export class LocalWorkspaceAuthorityStore {
     const state = {
       authorityId: metadata.authorityId,
       document,
-      identity: structuredClone(metadata.identity),
+      identity: cloneIdentity(metadata.identity),
       ...currentLedger
     }
     if (persistedLedger !== currentLedger) {
       await this.atomicWrite(this.ledgerPath, currentLedger)
-      await writeJsonHistory(this.historyPath, state.revision, state.contentHash, state)
+      await writeJsonHistory(
+        this.historyPath,
+        state.revision,
+        state.contentHash,
+        serializeAuthorityState(state, serialized.serialized)
+      )
       await this.pruneHistory()
       await this.bestEffortEnsureWorkspaceIndex(state)
       await this.refreshDirectTraceContext(state)
@@ -1966,7 +1957,8 @@ export class LocalWorkspaceAuthorityStore {
     metadata: PersistedLocalWorkspaceAuthorityMetadata,
     state: PersistedLocalWorkspaceAuthorityState | null,
     knownDocumentMarker?: string,
-    knownLedgerMarker?: string
+    knownLedgerMarker?: string,
+    options?: { pendingDocumentWrite?: boolean }
   ): Promise<void> {
     const [documentMarker, ledgerMarker] =
       knownDocumentMarker !== undefined && knownLedgerMarker !== undefined
@@ -1975,6 +1967,7 @@ export class LocalWorkspaceAuthorityStore {
     this.stateCache = {
       documentMarker,
       ledgerMarker,
+      pendingDocumentWrite: options?.pendingDocumentWrite === true,
       state,
       status: this.statusFromState(metadata, state)
     }
@@ -1987,7 +1980,7 @@ export class LocalWorkspaceAuthorityStore {
     return {
       authorityId: metadata.authorityId,
       contentHash: state?.contentHash ?? null,
-      identity: structuredClone(metadata.identity),
+      identity: cloneIdentity(metadata.identity),
       revision: state?.revision ?? 0,
       seedWorkspaceId: metadata.seedWorkspaceId,
       state: state ? 'ready' : 'configured',
@@ -1996,11 +1989,16 @@ export class LocalWorkspaceAuthorityStore {
     }
   }
 
-  private async materializeDocument(document: unknown): Promise<{
+  private async materializeDocument(
+    document: unknown,
+    previous?: unknown
+  ): Promise<{
     changed: boolean
     document: unknown
   }> {
-    if (!this.semanticServices) return { changed: false, document }
+    if (!this.semanticServices || !documentMayNeedMermaidMaterialization(document, previous)) {
+      return { changed: false, document }
+    }
     const { materializeAuthorityMermaidDocument } = await import('./mermaid-materialization')
     return materializeAuthorityMermaidDocument(document)
   }
@@ -2010,14 +2008,22 @@ export class LocalWorkspaceAuthorityStore {
     force = false
   ): Promise<void> {
     const verificationKey = `${String(state.revision)}:${state.contentHash}`
-    if (!force && this.workspaceIndexVerifiedKey === verificationKey) return Promise.resolve()
-    return ensureWorkspaceJsonlIndex(this.rootPath, this.headFromState(state)).then(
-      () => {
+    if (force) this.workspaceIndexVerifiedKey = null
+    return ensureWorkspaceJsonlIndex(
+      this.rootPath,
+      this.headFromState(state),
+      this.workspaceIndexCache
+    ).then(
+      (result) => {
         this.workspaceIndexVerifiedKey = verificationKey
+        if (result.index) {
+          this.workspaceIndexCache = { document: state.document, index: result.index }
+        }
         return undefined
       },
       (error: unknown) => {
         this.workspaceIndexVerifiedKey = null
+        this.workspaceIndexCache = null
         if (
           error instanceof TypeError &&
           error.message === 'Local workspace authority contains an invalid Board document'
@@ -2046,7 +2052,7 @@ export class LocalWorkspaceAuthorityStore {
       authorityId: state.authorityId,
       contentHash: state.contentHash,
       document: state.document,
-      identity: structuredClone(state.identity),
+      identity: cloneIdentity(state.identity),
       revision: state.revision,
       updatedAt: state.updatedAt,
       version: LOCAL_WORKSPACE_AUTHORITY_VERSION
@@ -2060,7 +2066,6 @@ export class LocalWorkspaceAuthorityStore {
     metadata: PersistedLocalWorkspaceAuthorityMetadata
     requestId: string
     status: LocalWorkspaceCommitReceipt['status']
-    transaction?: LocalWorkspaceCommitTransaction
   }): LocalWorkspaceCommitReceipt {
     return {
       appliedRevision: options.appliedRevision,
@@ -2070,7 +2075,6 @@ export class LocalWorkspaceAuthorityStore {
       committedAt: new Date().toISOString(),
       requestId: options.requestId,
       status: options.status,
-      ...(options.transaction ? { transaction: structuredClone(options.transaction) } : {}),
       workspaceId: options.metadata.identity.workspaceId
     }
   }
@@ -2160,9 +2164,15 @@ export class LocalWorkspaceAuthorityStore {
     } catch {
       return null
     }
-    const embeds = document.source.nodes.flatMap(([id, node]) => {
-      if (node.type !== 'FRAME') return []
-      if (id === pageId || !document.graph.isDescendant(id, pageId)) return []
+    const embeds: Array<{ current: boolean; id: string; name: string }> = []
+    const pending = [...(document.graph.getNode(pageId)?.childIds ?? [])]
+    while (pending.length > 0) {
+      const id = pending.pop()
+      if (!id || id === pageId) continue
+      const node = document.graph.getNode(id)
+      if (!node) continue
+      pending.push(...node.childIds)
+      if (node.type !== 'FRAME') continue
       const data = Array.isArray(node.pluginData) ? node.pluginData : []
       const smylr = data.some(
         (entry) =>
@@ -2170,10 +2180,13 @@ export class LocalWorkspaceAuthorityStore {
           entry.key === 'kind' &&
           entry.value === 'smylr-code-object-frame'
       )
-      if (!smylr) return []
-      const current = node.name.toLowerCase().includes('current')
-      return [{ current, id, name: node.name }]
-    })
+      if (!smylr) continue
+      embeds.push({
+        current: node.name.toLowerCase().includes('current'),
+        id,
+        name: node.name
+      })
+    }
     const current = embeds.filter((embed) => embed.current)
     const matches = current.length > 0 ? current : embeds
     if (matches.length === 1) return matches[0].id
@@ -2203,11 +2216,11 @@ export class LocalWorkspaceAuthorityStore {
     } catch {
       throw new TypeError('The saved Board document has no page list to resolve by name.')
     }
-    return document.source.nodes.flatMap(([id, node]) =>
-      node.type === 'CANVAS' && node.parentId === document.source.rootId
-        ? [{ id, name: node.name }]
-        : []
-    )
+    const root = document.graph.getNode(document.source.rootId)
+    return (root?.childIds ?? []).flatMap((id) => {
+      const node = document.graph.getNode(id)
+      return node?.type === 'CANVAS' ? [{ id, name: node.name }] : []
+    })
   }
 
   private async readJson(filePath: string): Promise<unknown> {
@@ -2233,7 +2246,7 @@ export class LocalWorkspaceAuthorityStore {
   }
 
   private async atomicWrite(filePath: string, value: unknown): Promise<void> {
-    await writeJsonFile(filePath, value)
+    await writeJsonFile(filePath, value, { space: 0 })
   }
 
   private async readTraceSnapshot(includeEvidenceStatuses = true): Promise<TraceFileSnapshot> {
@@ -2301,12 +2314,36 @@ export class LocalWorkspaceAuthorityStore {
     })
   }
 
+  flushHistoryWrites(): Promise<void> {
+    return this.historyWriteTail
+  }
+
+  private enqueueHistoryWrite(work: () => Promise<void>): void {
+    this.historyWriteTail = this.historyWriteTail.then(work, work)
+  }
+
   private async writeState(
     metadata: PersistedLocalWorkspaceAuthorityMetadata,
     state: PersistedLocalWorkspaceAuthorityState,
-    contentChanged = true
+    contentChanged = true,
+    serializedDocument = contentChanged ? serializeDocument(state.document).serialized : undefined,
+    options?: { deferDocument?: boolean; deferHistory?: boolean }
   ): Promise<void> {
-    if (contentChanged) await this.atomicWrite(this.documentPath, state.document)
+    const persistDocument = async () => {
+      if (contentChanged && serializedDocument) {
+        await writeSerializedJsonFile(this.documentPath, serializedDocument)
+      }
+    }
+    const persistHistory = async () => {
+      if (!contentChanged || !serializedDocument) return
+      const snapshot = serializeAuthorityState(state, serializedDocument)
+      await writeJsonHistory(this.historyPath, state.revision, state.contentHash, snapshot)
+      await this.pruneHistory()
+    }
+
+    if (contentChanged && serializedDocument && !options?.deferDocument) {
+      await persistDocument()
+    }
     await this.atomicWrite(this.ledgerPath, {
       contentHash: state.contentHash,
       receipts: state.receipts,
@@ -2314,12 +2351,25 @@ export class LocalWorkspaceAuthorityStore {
       updatedAt: state.updatedAt,
       version: state.version
     } satisfies PersistedLocalWorkspaceAuthorityLedger)
-    if (contentChanged) {
-      await writeJsonHistory(this.historyPath, state.revision, state.contentHash, state)
-      await this.pruneHistory()
-    }
-    await this.bestEffortEnsureWorkspaceIndex(state, true)
+    await this.bestEffortEnsureWorkspaceIndex(state)
     if (contentChanged) await this.refreshDirectTraceContext(state)
+
+    const deferIo = Boolean(
+      contentChanged && serializedDocument && (options?.deferDocument || options?.deferHistory)
+    )
+    if (deferIo) {
+      await this.cacheStatus(metadata, state, undefined, undefined, {
+        pendingDocumentWrite: options?.deferDocument === true
+      })
+      this.enqueueHistoryWrite(async () => {
+        if (options?.deferDocument) await persistDocument()
+        await persistHistory()
+        await this.cacheStatus(metadata, state)
+      })
+      return
+    }
+
+    if (contentChanged && serializedDocument) await persistHistory()
     await this.cacheStatus(metadata, state)
   }
 

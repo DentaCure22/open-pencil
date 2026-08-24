@@ -9,16 +9,28 @@ describe('Pi worker MCP config', () => {
     ) as {
       mcpServers: Record<
         string,
-        { directTools?: string[]; disabled?: boolean; includeTools?: string[] }
+        {
+          directTools?: boolean | string[]
+          disabled?: boolean
+          includeTools?: string[]
+          lifecycle?: string
+        }
       >
     }
 
     expect(config).toEqual({
       mcpServers: {
         openpencil: {
-          directTools: ['board_where', 'board_screenshot'],
+          directTools: false,
           disabled: false,
-          includeTools: ['board_where', 'board_screenshot']
+          includeTools: [
+            'board_screenshot',
+            'board_where',
+            'get_agent_chat_context',
+            'list_agent_chats',
+            'set_theme'
+          ],
+          lifecycle: 'lazy'
         }
       }
     })

@@ -49,6 +49,8 @@ function createRenderer() {
     imageFilterCache: new Map(),
     maskFilterCache: new Map(),
     nodePictureCache: new Map(),
+    paragraphCache: new Map(),
+    paragraphCacheBytes: 0,
     subtreePictureCache: new Map(),
     scenePicture: null,
     sceneBacking: null,
@@ -65,10 +67,19 @@ test('destroyRenderer deletes all renderer-owned paints and label fonts', () => 
   const parentOutlinePaint = renderer.parentOutlinePaint
   const sectionTitleFont = renderer.sectionTitleFont
   const componentLabelFont = renderer.componentLabelFont
+  const paragraph = { delete: mock() }
+  renderer.paragraphCache.set('text-1', {
+    bytes: 4096,
+    nodeId: 'text-1',
+    paragraph: paragraph as never
+  })
+  renderer.paragraphCacheBytes = 4096
 
   destroyRenderer(renderer)
 
   expect(parentOutlinePaint.delete).toHaveBeenCalled()
   expect(sectionTitleFont?.delete).toHaveBeenCalled()
   expect(componentLabelFont?.delete).toHaveBeenCalled()
+  expect(paragraph.delete).toHaveBeenCalled()
+  expect(renderer.paragraphCache.size).toBe(0)
 })

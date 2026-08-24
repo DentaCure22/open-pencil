@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   acceptOptimisticConversation,
   beginOptimisticConversation,
+  clearOptimisticConversation,
   completeOptimisticConversation,
   failOptimisticConversation,
   mergeOptimisticMessages,
@@ -110,5 +111,19 @@ describe('agent chat optimistic lifecycle', () => {
       { role: 'user', text: 'Reply in this card' },
       { role: 'assistant', text: 'Visible Pi response' }
     ])
+  })
+
+  test('clears a completed new-task draft so the next empty chat stays empty', () => {
+    const threadId = 'new-task'
+    const id = beginOptimisticConversation(threadId, 'Previous prompt', [
+      new File(['png'], 'reference.png', { type: 'image/png' })
+    ])
+    acceptOptimisticConversation(threadId, id)
+    completeOptimisticConversation(threadId, id, 'Task started.')
+    expect(mergeOptimisticMessages(threadId, [])).toHaveLength(2)
+
+    clearOptimisticConversation(threadId)
+    expect(optimisticConversation(threadId)).toBeUndefined()
+    expect(mergeOptimisticMessages(threadId, [])).toEqual([])
   })
 })

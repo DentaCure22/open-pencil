@@ -20,7 +20,6 @@ import { forwardFrameSurfaceWheel } from '@/app/editor/canvas/embedded-surface-w
 import { focusCanvasSurface } from '@/app/editor/canvas/surface/focus'
 import { closeCodeObjectFullFrame, fullFrameCodeObjectId } from '@/app/code-object/full-frame'
 import {
-  codeObjectDocument,
   createCodeObjectBoardClient,
   dispatchCodeObjectBoardAction,
   isCodeObjectFrame,
@@ -37,7 +36,11 @@ import {
   type CodeObjectMoveDrag,
   type CodeObjectInteractionMode
 } from '@/app/code-object/interaction'
-import { codeObjectFramesForOverlay } from '@/app/code-object/overlays'
+import {
+  cachedCodeObjectDocument,
+  codeObjectFramesForOverlay,
+  overlayListNeedsRescan
+} from '@/app/code-object/overlays'
 import { notifyCodeObjectInspectorChanged } from '@/app/code-object/inspector'
 import { preserveCodeObjectRuntimeDuringHotUpdate } from '@/app/code-object/hmr-residency'
 import {
@@ -55,6 +58,7 @@ import { placeExtractedPdfPage } from '@/app/media-evidence/extraction'
 import type { PdfPageImage } from '@/app/media-evidence/pdf'
 import { mediaEvidenceSource } from '@/app/media-evidence/source'
 import { codeObjectCanvasStyle, liveIframeHostStyle } from '@/app/code-object/transform'
+import { useEditorNodeOverlayStyle } from '@/app/editor/presentation'
 import {
   liveInspectorActiveFrameId,
   liveInspectorInteractionMode,
@@ -77,6 +81,7 @@ type TemplateRefBinder = (frameId: string, value: TemplateRefValue) => void
 const store = useEditorStore()
 const { resolvedTheme } = useAppTheme()
 const syncTick = ref(0)
+const conversationSurfacesReady = ref(false)
 const modeByFrame = ref<Record<string, CodeObjectInteractionMode>>({})
 const moveDrag = ref<CodeObjectMoveDrag | null>(null)
 const interactionClickCandidateFrameId = ref<string | null>(null)
@@ -90,16 +95,15 @@ const boundRuntimeHosts = new Map<string, HTMLElement>()
 const runtimeHostRefs = new Map<string, TemplateRefHandler>()
 const surfaceHostRefs = new Map<string, TemplateRefHandler>()
 
+const resolveCanvasStyle = useEditorNodeOverlayStyle(store, (node) =>
+  codeObjectCanvasStyle(store, node)
+)
+
 const shapes = computed(() => {
   void syncTick.value
   void store.state.currentPageId
   return codeObjectFramesForOverlay(store.graph, store.state.currentPageId)
 })
-const documentByFrameId = computed(() => {
-  void store.state.sceneVersion
-  return new Map(shapes.value.map((frame) => [frame.id, codeObjectDocument(frame)]))
-})
-
 function pinnedRuntimeFrameIds() {
   void syncTick.value
   const frameIds = new Set<string>()
@@ -108,6 +112,7 @@ function pinnedRuntimeFrameIds() {
     if (selectedId) frameIds.add(selectedId)
   }
   if (moveDrag.value?.frameId) frameIds.add(moveDrag.value.frameId)
+  if (fullFrameCodeObjectId.value) frameIds.add(fullFrameCodeObjectId.value)
   for (const [frameId, mode] of Object.entries(modeByFrame.value)) {
     if (mode === 'interact') frameIds.add(frameId)
   }
@@ -117,10 +122,11 @@ function pinnedRuntimeFrameIds() {
 const runtimeResidency = useCodeObjectRuntimeResidency({
   frames: shapes,
   pinnedFrameIds: pinnedRuntimeFrameIds,
-  preserveRuntimesOnUnmount: preserveCodeObjectRuntimeDuringHotUpdate,
   store
 })
 const runtimeActiveFrameIds = runtimeResidency.activeFrameIds
+const runtimeViewportFrameIds = runtimeResidency.viewportActiveFrameIds
+const promoteRuntime = runtimeResidency.promote
 const runtimeBindSurfaceHost = runtimeResidency.bindSurfaceHost
 const boundSurfaceHosts = new Map<string, HTMLElement>()
 function bindSurfaceHost(frameId: string, value: TemplateRefValue) {
@@ -135,7 +141,7 @@ const smylrRuntimeResidency = useTrustedWebAppRuntimeResidency({
   frames: shapes,
   store
 })
-const isSmylrRuntimeResident = smylrRuntimeResidency.isResident
+const isSmylrRuntimePainted = smylrRuntimeResidency.isPainted
 const promoteSmylrRuntime = smylrRuntimeResidency.promote
 const reconcileSmylrRuntimes = smylrRuntimeResidency.reconcile
 const selectedSmylrFrameId = smylrRuntimeResidency.selectedFrameId
@@ -173,7 +179,7 @@ function isSmylrProductionFrame(frame: SceneNode) {
 }
 
 function documentFor(frame: SceneNode) {
-  return documentByFrameId.value.get(frame.id) ?? null
+  return cachedCodeObjectDocument(frame)
 }
 
 function agentDocumentFor(frame: SceneNode) {
@@ -201,6 +207,10 @@ function isRuntimeActive(frameId: string) {
   return runtimeActiveFrameIds.value.has(frameId)
 }
 
+function isViewportRelevant(frameId: string) {
+  return runtimeViewportFrameIds.value.has(frameId) || pinnedRuntimeFrameIds().has(frameId)
+}
+
 function isSmylrContainerMode(frame: SceneNode) {
   return (
     isSmylrProductionFrame(frame) &&
@@ -220,8 +230,25 @@ function isSelected(frameId: string) {
   return store.state.selectedIds.has(frameId)
 }
 
+function paintOwnedHoverChrome(frameId: string | null) {
+  if (
+    frameId &&
+    !store.state.selectedIds.has(frameId) &&
+    isCodeObjectFrame(store.graph.getNode(frameId))
+  ) {
+    boundSurfaceHosts.get(frameId)?.setAttribute('data-hovered', '')
+    return
+  }
+}
+
+function syncOwnedHoverChrome(frameId: string | null, previousFrameId: string | null) {
+  if (previousFrameId) boundSurfaceHosts.get(previousFrameId)?.removeAttribute('data-hovered')
+  paintOwnedHoverChrome(frameId)
+}
+
 function setMode(frameId: string, mode: CodeObjectInteractionMode) {
   const frame = store.graph.getNode(frameId)
+  promoteRuntime(frameId)
   if (frame && isSmylrProductionFrame(frame)) promoteSmylrRuntime(frameId)
   store.select([frameId])
   modeByFrame.value = { ...modeByFrame.value, [frameId]: mode }
@@ -270,21 +297,31 @@ function surfaceCanvasStyle(frame: SceneNode) {
       width: '100%'
     } satisfies CSSProperties
   }
-  return codeObjectCanvasStyle(store, frame)
+  return resolveCanvasStyle(frame)
 }
 
 function runtimeSurfaceCanvasStyle(frame: SceneNode) {
   const style = surfaceCanvasStyle(frame)
-  const liveHost =
-    isSmylrProductionFrame(frame) || isSmylrComponentCodeObject(frame)
-      ? liveIframeHostStyle(style)
-      : style
-  if (!isSmylrComponentCodeObject(frame) || fullFrameCodeObjectId.value === frame.id) {
-    return liveHost
-  }
+  const liveSurface =
+    isSmylrProductionFrame(frame) ||
+    isSmylrComponentCodeObject(frame) ||
+    Boolean(agentDocumentFor(frame))
+  const liveHost = liveSurface ? liveIframeHostStyle(style) : style
+  const sized =
+    !isSmylrComponentCodeObject(frame) || fullFrameCodeObjectId.value === frame.id
+      ? liveHost
+      : ({
+          ...liveHost,
+          height: `${smylrComponentRuntimeHeight(frame, modeFor(frame.id) === 'interact')}px`
+        } satisfies CSSProperties)
+  if (liveSurface) return sized
+  const width = Math.max(1, frame.width)
+  const height = Math.max(1, Number.parseFloat(String(sized.height)) || frame.height)
   return {
-    ...liveHost,
-    height: `${smylrComponentRuntimeHeight(frame, modeFor(frame.id) === 'interact')}px`
+    ...sized,
+    containIntrinsicSize: `auto ${width}px auto ${height}px`,
+    contentVisibility:
+      runtimeViewportFrameIds.value.size > 0 && !isViewportRelevant(frame.id) ? 'auto' : 'visible'
   } satisfies CSSProperties
 }
 
@@ -306,21 +343,23 @@ function focusCodeObject(frameId: string) {
   return loadedCodeObjectRuntime()?.focusCodeObject(frameId) ?? false
 }
 
-async function renderFrameWithRuntime(runtime: CodeObjectRuntimeModule, frame: SceneNode) {
+async function renderFrameWithRuntime(
+  runtime: CodeObjectRuntimeModule,
+  frame: SceneNode,
+  options?: { force?: boolean }
+) {
   const currentFrame = store.graph.getNode(frame.id)
-  if (!mounted || !currentFrame || !isRuntimeActive(frame.id)) {
-    runtime.disposeCodeObject(frame.id)
-    return
-  }
-  const shape = codeObjectDocument(currentFrame)
+  if (!mounted || !currentFrame) return
+  const shape = cachedCodeObjectDocument(currentFrame)
   if (!shape) return
   if (
     shape.component === 'smylr-production-app' ||
     shape.component === 'agent-conversation-terminal'
   ) {
-    runtime.disposeCodeObject(frame.id)
     return
   }
+  const alreadyPainted = runtime.hasCodeObjectRuntime(frame.id)
+  if (!options?.force && !isRuntimeActive(frame.id) && alreadyPainted) return
   const host = boundRuntimeHosts.get(currentFrame.id)
   if (!host) return
   runtime.attachCodeObject(currentFrame.id, host)
@@ -350,22 +389,21 @@ async function renderFrameWithRuntime(runtime: CodeObjectRuntimeModule, frame: S
   scheduleInspectorNotification()
 }
 
-async function renderFrame(frame: SceneNode) {
-  if (!isRuntimeActive(frame.id)) {
-    disposeCodeObject(frame.id)
-    return
-  }
-  const shape = codeObjectDocument(frame)
+async function renderFrame(frame: SceneNode, options?: { force?: boolean }) {
+  const shape = cachedCodeObjectDocument(frame)
   if (!shape) return
   if (
     shape.component === 'smylr-production-app' ||
     shape.component === 'agent-conversation-terminal'
   ) {
-    disposeCodeObject(frame.id)
+    return
+  }
+  const runtime = loadedCodeObjectRuntime()
+  if (!options?.force && !isRuntimeActive(frame.id) && runtime?.hasCodeObjectRuntime(frame.id)) {
     return
   }
   try {
-    await renderFrameWithRuntime(await loadCodeObjectRuntime(), frame)
+    await renderFrameWithRuntime(await loadCodeObjectRuntime(), frame, options)
   } catch (error) {
     console.error('[code-object] Runtime failed to load', error)
   }
@@ -386,9 +424,9 @@ function extractPdfPage(frameId: string, pageNumber: number, image: PdfPageImage
   placeExtractedPdfPage(store, frame, source, pageNumber, image)
 }
 
-function renderActiveFrames() {
+function renderActiveFrames(options?: { force?: boolean }) {
   for (const frame of shapes.value) {
-    if (isRuntimeActive(frame.id)) void renderFrame(frame)
+    void renderFrame(frame, options)
   }
 }
 
@@ -436,7 +474,7 @@ function bindHost(frameId: string, value: TemplateRefValue) {
   boundRuntimeHosts.set(frameId, host)
   void loadCodeObjectRuntime()
     .then((runtime) => {
-      if (!mounted || boundRuntimeHosts.get(frameId) !== host || !isRuntimeActive(frameId)) {
+      if (!mounted || boundRuntimeHosts.get(frameId) !== host) {
         return undefined
       }
       runtime.attachCodeObject(frameId, host)
@@ -482,6 +520,7 @@ function containInteractionKey(frame: SceneNode, event: KeyboardEvent) {
 
 function selectShape(frameId: string) {
   const frame = store.graph.getNode(frameId)
+  promoteRuntime(frameId)
   if (frame && isSmylrProductionFrame(frame)) {
     promoteSmylrRuntime(frameId)
     setLiveInspectorActiveFrame(frameId)
@@ -706,7 +745,7 @@ watch(
   () => renderActiveFrames(),
   { flush: 'post' }
 )
-watch(resolvedTheme, renderActiveFrames)
+watch(resolvedTheme, () => renderActiveFrames({ force: true }))
 watch(fullFrameCodeObjectId, (frameId, previousFrameId) => {
   if (previousFrameId && previousFrameId !== frameId) exitInteraction(previousFrameId)
   if (!frameId) return
@@ -722,6 +761,11 @@ watch(fullFrameCodeObjectId, (frameId, previousFrameId) => {
 
 onMounted(() => {
   mounted = true
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      conversationSurfacesReady.value = true
+    })
+  })
   unsubscribe = [
     store.onEditorEvent('graph:replaced', () => {
       sync()
@@ -729,7 +773,6 @@ onMounted(() => {
       const runtime = loadedCodeObjectRuntime()
       if (!runtime) return
       for (const [frameId, host] of boundRuntimeHosts) {
-        if (!isRuntimeActive(frameId)) continue
         runtime.attachCodeObject(frameId, host)
         const frame = store.graph.getNode(frameId)
         if (frame) void renderFrameWithRuntime(runtime, frame)
@@ -757,11 +800,8 @@ onMounted(() => {
     }),
     store.onEditorEvent('node:reparented', sync),
     store.onEditorEvent('node:reordered', sync),
-    store.onEditorEvent('node:previewUpdated', () => {
-      sync()
-    }),
     store.onEditorEvent('node:updated', (id, changes) => {
-      sync()
+      if (overlayListNeedsRescan(changes)) sync()
       if ('pluginData' in changes) scheduleRuntimeRender(id)
     }),
     store.onEditorEvent('selection:changed', () => {
@@ -793,9 +833,12 @@ onMounted(() => {
         setLiveInspectorActiveFrame(null)
         reconcileSmylrRuntimes()
       }
-      sync()
+      const hoveredId = store.state.hoveredNodeId
+      if (hoveredId && store.state.selectedIds.has(hoveredId)) {
+        boundSurfaceHosts.get(hoveredId)?.removeAttribute('data-hovered')
+      }
     }),
-    store.onEditorEvent('tool:changed', sync)
+    store.onEditorEvent('hover:changed', syncOwnedHoverChrome)
   ]
   reconcileSmylrRuntimes()
   renderActiveFrames()
@@ -829,11 +872,15 @@ onUnmounted(() => {
       class="absolute top-0 left-0 overflow-hidden [&_[data-code-object-inspector-selected=true]]:outline [&_[data-code-object-inspector-selected=true]]:outline-2 [&_[data-code-object-inspector-selected=true]]:outline-violet-400 [&_[data-code-object-inspector-selected=true]]:outline-offset-[-2px]"
       :class="[
         surfaceAcceptsPointer(frame) ? 'pointer-events-auto' : 'pointer-events-none',
-        agentDocumentFor(frame) ? 'shadow-agent-card' : '',
+        agentDocumentFor(frame) ? 'bg-agent-surface shadow-agent-card' : '',
+        isSmylrProductionFrame(frame) ? 'bg-neutral-950' : '',
         isSelected(frame.id) &&
         modeFor(frame.id) === 'interact' &&
         fullFrameCodeObjectId !== frame.id
           ? 'outline outline-2 outline-offset-0 outline-component/70'
+          : '',
+        !isSelected(frame.id)
+          ? 'data-[hovered]:outline data-[hovered]:outline-2 data-[hovered]:outline-offset-0 data-[hovered]:outline-component/70'
           : '',
         fullFrameCodeObjectId === frame.id
           ? 'z-[18]'
@@ -852,14 +899,14 @@ onUnmounted(() => {
       @wheel="handleSurfaceWheel(frame, $event)"
     >
       <AgentConversationBoardSurface
-        v-if="agentDocumentFor(frame)"
+        v-if="agentDocumentFor(frame) && conversationSurfacesReady"
         :frame-id="frame.id"
         :interaction-enabled="modeFor(frame.id) === 'interact'"
         :thread-name="frame.name"
         :worker-conversation-id="agentWorkerConversationId(frame)"
       />
       <SmylrTrustedWebApp
-        v-else-if="isSmylrProductionFrame(frame) && isSmylrRuntimeResident(frame.id)"
+        v-else-if="isSmylrProductionFrame(frame) && isSmylrRuntimePainted(frame.id)"
         :active="isSelected(frame.id)"
         :component-surface="isSmylrComponentCodeObject(frame)"
         :frame-id="frame.id"
@@ -873,17 +920,10 @@ onUnmounted(() => {
       />
       <div
         v-else-if="isSmylrProductionFrame(frame)"
-        class="flex size-full items-center justify-center bg-neutral-950 text-xs text-neutral-400"
-        data-test-id="smylr-trusted-web-app-paused"
-      >
-        Paused · select to resume
-      </div>
-      <div
-        v-else-if="isRuntimeActive(frame.id)"
-        :ref="runtimeHostRef(frame.id)"
-        class="size-full"
+        class="size-full bg-neutral-950"
+        aria-hidden="true"
       />
-      <div v-else class="size-full" data-test-id="code-object-runtime-paused" />
+      <div v-else :ref="runtimeHostRef(frame.id)" class="size-full" />
     </div>
 
     <div
@@ -893,7 +933,7 @@ onUnmounted(() => {
     >
       <div
         v-if="modeFor(frame.id) === 'design' && !isSmylrContainerMode(frame)"
-        class="absolute inset-0 z-[1] cursor-pointer"
+        class="absolute inset-0 z-[1] cursor-pointer hover:outline hover:outline-2 hover:outline-offset-0 hover:outline-component/70"
         :class="store.state.activeTool === 'SELECT' ? 'pointer-events-auto' : 'pointer-events-none'"
         :aria-label="`${frame.name}. Click to interact or drag to move.`"
         data-test-id="code-object-design-hit-target"

@@ -79,6 +79,7 @@ export function renderCodeObject(
   )
   const context = {
     document,
+    frameId,
     interactionEnabled: source.interactionEnabled ?? false,
     onExtractPdfPage: source.onExtractPdfPage,
     onStateChange,
@@ -137,6 +138,10 @@ export function disposeCodeObjectsExcept(frameIds: ReadonlySet<string>) {
   for (const frameId of runtimes.keys()) {
     if (!frameIds.has(frameId)) disposeCodeObject(frameId)
   }
+}
+
+export function hasCodeObjectRuntime(frameId: string) {
+  return runtimes.has(frameId)
 }
 
 export function codeObjectRuntimeCount() {

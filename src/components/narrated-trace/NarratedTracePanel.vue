@@ -15,14 +15,9 @@ import {
 import { useEditorStore } from '@/app/editor/active-store'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import {
-  currentLocalWorkspaceAuthorityStatus,
   readLocalWorkspaceTraceEvidenceOverview,
   type LocalWorkspaceTraceEvidenceOverview
 } from '@/app/workspace-document/local-authority/client'
-import {
-  DURABLE_HISTORY_LABEL,
-  latestAppliedBoardTransaction
-} from '@/app/workspace-document/local-authority/history'
 import {
   buildNarratedTraceActivityFeed,
   clearNarratedTraceMicTurns,
@@ -63,7 +58,6 @@ const retainedItems = shallowRef<NarratedTraceActivityItem[]>([])
 const evidenceImages = shallowRef<Record<string, string>>({})
 const evidenceOverview = shallowRef<LocalWorkspaceTraceEvidenceOverview | null>(null)
 const expandedEventIds = ref(new Set<string>())
-const historyEpoch = ref(0)
 const activityCursor = ref<string | null>(null)
 const newerActivityCursors = ref<Array<string | null>>([])
 const activityLoading = ref(false)
@@ -186,17 +180,6 @@ const agentReceipts = computed(() => {
   }
 })
 
-const latestUndoableAgentRequestId = computed(() => {
-  void store.state.sceneVersion
-  void historyEpoch.value
-  const authority = currentLocalWorkspaceAuthorityStatus()
-  if (!authority || authority.state !== 'ready' || store.undo.undoLabel !== DURABLE_HISTORY_LABEL) {
-    return null
-  }
-  const transaction = latestAppliedBoardTransaction(store, authority.revision)
-  return transaction?.pageId === store.state.currentPageId ? transaction.requestId : null
-})
-
 function agentReceiptKey(receipt: MutationRequestReceipt) {
   return `agent:${receipt.requestId}`
 }
@@ -223,12 +206,6 @@ function canRevealAgentReceipt(receipt: MutationRequestReceipt) {
 
 function copyAgentReceipt(receipt: MutationRequestReceipt) {
   void copy(JSON.stringify(receipt, null, 2))
-}
-
-function undoAgentReceipt(receipt: MutationRequestReceipt) {
-  if (latestUndoableAgentRequestId.value !== receipt.requestId) return
-  store.undoAction()
-  historyEpoch.value += 1
 }
 
 async function refreshHistory() {
@@ -807,17 +784,6 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                 {{ receipt.mutationReceipt.appliedRevision }}
               </div>
             </div>
-            <button
-              v-if="latestUndoableAgentRequestId === receipt.requestId"
-              type="button"
-              data-test-id="agent-activity-undo"
-              aria-label="Undo latest agent change"
-              class="flex h-6 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[9px] font-medium text-muted/70 hover:bg-violet-300/10 hover:text-surface"
-              @click="undoAgentReceipt(receipt)"
-            >
-              <icon-lucide-undo-2 class="size-3" />
-              Undo
-            </button>
             <button
               type="button"
               data-test-id="agent-activity-reveal"

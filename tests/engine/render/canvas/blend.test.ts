@@ -131,6 +131,38 @@ describe('canvas blend modes', () => {
     expect(renderer.opacityPaint.setBlendMode).toHaveBeenLastCalledWith('SrcOver')
   })
 
+  test('does not isolate an opaque NORMAL parent whose children also composite in place', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      blendMode: 'NORMAL',
+      height: 200,
+      width: 200
+    })
+    graph.createNode('RECTANGLE', frame.id, { height: 40, width: 40 })
+    const renderer = createRenderer()
+    const canvas = createCanvas()
+
+    renderNode(renderer, canvas as Canvas, graph, frame.id, {})
+
+    expect(canvas.saveLayer).not.toHaveBeenCalled()
+  })
+
+  test('isolates a NORMAL parent when a child needs compositing', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      blendMode: 'NORMAL',
+      height: 200,
+      width: 200
+    })
+    graph.createNode('RECTANGLE', frame.id, { height: 40, opacity: 0.5, width: 40 })
+    const renderer = createRenderer()
+    const canvas = createCanvas()
+
+    renderNode(renderer, canvas as Canvas, graph, frame.id, {})
+
+    expect(canvas.saveLayer).toHaveBeenCalledTimes(2)
+  })
+
   test('applies fill blend modes per fill and resets shared paint', () => {
     const graph = new SceneGraph()
     const fill: Fill = {

@@ -9,12 +9,33 @@ import { ALL_TOOLS, type ToolDef } from '@open-pencil/core/tools'
 import type { RpcJsonObject } from '#mcp/json'
 import { MAX_RESULT_BYTES, fail, ok, resultTooLargeMessage } from '#mcp/result'
 
-import { registerBoardBuildTool } from './board-build-registration'
 import { registerDispatchWorkTool } from './dispatch-registration'
 import { writeToolOutput } from './output'
 import { paramToZod } from './schema'
+import {
+  ADVERTISED_BOARD_TOOL_NAMES,
+  INVOKE_TOOL_NAME,
+  SEARCH_TOOLS_NAME,
+  findOpenPencilTool,
+  searchOpenPencilTools
+} from './search'
+
+export function mcpToolSearchEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  override?: boolean
+): boolean {
+  if (typeof override === 'boolean') return override
+  const raw = env.OPENPENCIL_MCP_TOOL_SEARCH?.trim().toLowerCase()
+  return raw !== '0' && raw !== 'false' && raw !== 'off'
+}
 
 export type RpcSender = (body: Record<string, unknown>) => Promise<unknown>
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+const advertisedBoardToolNameSet = new Set<string>(ADVERTISED_BOARD_TOOL_NAMES)
 
 const automationTargetSchema = {
   content_document_id: z
@@ -32,6 +53,17 @@ const automationTargetSchema = {
     .describe('Stable OpenPencil workspace ID; preferred for normal Board work')
     .optional()
 }
+
+const invokeToolSchema = z.object({
+  arguments: z.record(z.string(), z.unknown()).optional(),
+  name: z.string().trim().min(1),
+  ...automationTargetSchema,
+  context_token: z.string().trim().min(1).optional(),
+  expected_revision: z.number().int().nonnegative().optional(),
+  request_id: z.string().trim().min(1).optional(),
+  task_id: z.string().trim().min(1).optional(),
+  trace_id: z.string().trim().min(1).optional()
+})
 
 function guardedMutationToolSchema(shape: Record<string, z.ZodType>) {
   return z.object({
@@ -116,15 +148,67 @@ export interface RegisterToolsOptions {
   enableEval: boolean
   mcpRoot?: string | null
   sendRpc: RpcSender
+  toolSearch?: boolean
 }
 
 export function registerTools(mcpServer: McpServer, options: RegisterToolsOptions) {
   const { enableEval, sendRpc } = options
   const resolvedRoot = options.mcpRoot ? resolve(options.mcpRoot) : null
+  const toolSearch = mcpToolSearchEnabled(process.env, options.toolSearch)
   const register = mcpServer.registerTool.bind(mcpServer) as (...a: unknown[]) => void
 
-  for (const def of ALL_TOOLS) {
-    if (!enableEval && def.name === 'eval') continue
+  const executeTool = async (def: ToolDef, args: Record<string, unknown>) => {
+    try {
+      const { target, args: toolArgs, mutation } = splitAutomationTarget(args)
+      const result = await sendRpc({
+        command: 'tool',
+        args: { ...target, mutation, name: def.name, args: toolArgs }
+      })
+      const res = result as { ok?: boolean; result?: unknown; error?: string; target?: unknown }
+      if (res.ok === false) return fail(new Error(res.error))
+      const r = res.result as RpcJsonObject | undefined
+      const filePath = typeof toolArgs.path === 'string' ? toolArgs.path : null
+      if (r && filePath && resolvedRoot) {
+        const written = await writeToolOutput(def.name, r, filePath, resolvedRoot)
+        if (written) return written
+      }
+      if (r && 'base64' in r && 'mimeType' in r) {
+        const base64 = String(r.base64)
+        const bytes = Buffer.byteLength(base64, 'utf8')
+        if (bytes > MAX_RESULT_BYTES) {
+          return fail(
+            new Error(
+              resultTooLargeMessage(
+                `Image from "${def.name}"`,
+                bytes,
+                'Export a smaller region or lower the scale/resolution.'
+              )
+            )
+          )
+        }
+        return {
+          content: [
+            {
+              type: 'image' as const,
+              data: base64,
+              mimeType: r.mimeType as string
+            }
+          ]
+        }
+      }
+      return ok(
+        r && typeof r === 'object'
+          ? { ...r, ...(res.target ? { target: res.target } : {}) }
+          : { value: r, ...(res.target ? { target: res.target } : {}) },
+        def.name
+      )
+    } catch (e) {
+      return fail(e)
+    }
+  }
+
+  const registerNamedTool = (def: ToolDef) => {
+    if (!enableEval && def.name === 'eval') return
     const shape: Record<string, z.ZodType> = {}
     for (const [key, param] of Object.entries(def.params)) {
       shape[key] = paramToZod(param)
@@ -140,59 +224,75 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
               ...automationTargetSchema
             })
       },
+      async (args: Record<string, unknown>) => executeTool(def, args)
+    )
+  }
+
+  for (const def of ALL_TOOLS) {
+    if (toolSearch && !advertisedBoardToolNameSet.has(def.name)) {
+      continue
+    }
+    registerNamedTool(def)
+  }
+
+  register(
+    SEARCH_TOOLS_NAME,
+    {
+      description: toolSearch
+        ? 'Search the OpenPencil tool catalog by task. Returns names and short descriptions. Call invoke_tool with a returned name to run it.'
+        : 'Search the OpenPencil tool catalog by task. Returns names and short descriptions. Then call the matching tool by name.',
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(16).optional(),
+        query: z.string().trim().min(1).describe('What you need to do on the Board')
+      })
+    },
+    (args: { limit?: number; query: string }) =>
+      ok({
+        tools: searchOpenPencilTools(args.query, args.limit),
+        use: 'Call invoke_tool with name and the tool arguments, including Board target fields for mutations.'
+      })
+  )
+
+  if (toolSearch) {
+    register(
+      INVOKE_TOOL_NAME,
+      {
+        description:
+          'Run an OpenPencil catalog tool by name after search_tools. Mutations still need the exact Board target and request ID.',
+        inputSchema: invokeToolSchema
+      },
       async (args: Record<string, unknown>) => {
-        try {
-          const { target, args: toolArgs, mutation } = splitAutomationTarget(args)
-          const result = await sendRpc({
-            command: 'tool',
-            args: { ...target, mutation, name: def.name, args: toolArgs }
-          })
-          const res = result as { ok?: boolean; result?: unknown; error?: string; target?: unknown }
-          if (res.ok === false) return fail(new Error(res.error))
-          const r = res.result as RpcJsonObject | undefined
-          const filePath = typeof toolArgs.path === 'string' ? toolArgs.path : null
-          if (r && filePath && resolvedRoot) {
-            const written = await writeToolOutput(def.name, r, filePath, resolvedRoot)
-            if (written) return written
-          }
-          if (r && 'base64' in r && 'mimeType' in r) {
-            const base64 = String(r.base64)
-            const bytes = Buffer.byteLength(base64, 'utf8')
-            if (bytes > MAX_RESULT_BYTES) {
-              return fail(
-                new Error(
-                  resultTooLargeMessage(
-                    `Image from "${def.name}"`,
-                    bytes,
-                    'Export a smaller region or lower the scale/resolution.'
-                  )
-                )
-              )
-            }
-            return {
-              content: [
-                {
-                  type: 'image' as const,
-                  data: base64,
-                  mimeType: r.mimeType as string
-                }
-              ]
-            }
-          }
-          return ok(
-            r && typeof r === 'object'
-              ? { ...r, ...(res.target ? { target: res.target } : {}) }
-              : { value: r, ...(res.target ? { target: res.target } : {}) },
-            def.name
-          )
-        } catch (e) {
-          return fail(e)
+        const name = typeof args.name === 'string' ? args.name : ''
+        const def = findOpenPencilTool(name)
+        if (!def) return fail(new Error(`Unknown tool "${name}". Search with search_tools first.`))
+        if (!enableEval && def.name === 'eval') {
+          return fail(new Error('eval is disabled on this server.'))
         }
+        const forwarded = isRecord(args.arguments) ? { ...args.arguments } : {}
+        for (const [key, value] of Object.entries(args)) {
+          if (key === 'name' || key === 'arguments') continue
+          if (forwarded[key] === undefined) forwarded[key] = value
+        }
+        if (def.mutates) {
+          const required = [
+            'content_document_id',
+            'document_id',
+            'page_id',
+            'runtime_instance_id',
+            'workspace_id',
+            'expected_revision',
+            'request_id'
+          ]
+          const missing = required.filter((key) => forwarded[key] === undefined)
+          if (missing.length) {
+            return fail(new Error(`invoke_tool ${def.name} is missing ${missing.join(', ')}.`))
+          }
+        }
+        return executeTool(def, forwarded)
       }
     )
   }
 
-  registerBoardBuildTool(mcpServer, sendRpc)
   registerDispatchWorkTool(mcpServer)
 
   register(

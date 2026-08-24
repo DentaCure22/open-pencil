@@ -24,10 +24,7 @@ import { useRoute } from 'vue-router'
 
 import { useViewportKind, formatShortcut, useI18n } from '@open-pencil/vue'
 
-import {
-  bindAutomationPersistence,
-  type AutomationPersistenceTransaction
-} from '@/app/automation/bridge/persistence'
+import { bindAutomationPersistence } from '@/app/automation/bridge/persistence'
 import { initializeOpenPencilCloud, openPencilCloud } from '@/app/cloud/workspace'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
 import {
@@ -104,10 +101,8 @@ import {
   readLocalWorkspaceNavigationIntent,
   readLocalWorkspaceThemeIntent,
   refreshLocalWorkspaceAuthorityStatus,
-  revertLocalWorkspaceBoardTransaction,
   subscribeLocalWorkspaceAuthorityChanges
 } from '@/app/workspace-document/local-authority/client'
-import { createLocalWorkspaceAuthorityHistoryBridge } from '@/app/workspace-document/local-authority/history'
 import { shouldAllowConcurrentLocalWorkspaceWriters } from '@/app/workspace-document/local-authority/mode'
 import { createLocalWorkspaceNavigationConsumer } from '@/app/workspace-document/local-authority/navigation'
 import { revealLocalWorkspaceNavigationTargets } from '@/app/workspace-document/local-authority/reveal'
@@ -116,6 +111,7 @@ import { createLocalWorkspaceDocumentAuthority } from '@/app/workspace-document/
 import { createLocalWorkspaceAuthorityHeadSynchronizer } from '@/app/workspace-document/local-authority/synchronizer'
 import EmptyBoardStart from '@/components/EmptyBoardStart.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
+import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
 import MermaidImportDialog from '@/components/diagram/MermaidImportDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import { provideMobileHud } from '@/components/MobileHud/context'
@@ -358,13 +354,10 @@ async function restoreSmylrDocument(active: ReturnType<typeof getActiveStore>) {
   return restored
 }
 
-async function persistSmylrDocumentNow(
-  active: ReturnType<typeof getActiveStore>,
-  transaction?: AutomationPersistenceTransaction
-) {
+async function persistSmylrDocumentNow(active: ReturnType<typeof getActiveStore>) {
   const sceneVersion = active.state.sceneVersion
-  if (!transaction && localAuthorityHeadSynchronizer.isAcknowledged(sceneVersion)) return true
-  const persisted = await localDocumentAuthority.persist(active, transaction)
+  if (localAuthorityHeadSynchronizer.isAcknowledged(sceneVersion)) return true
+  const persisted = await localDocumentAuthority.persist(active)
   if (persisted && active.state.sceneVersion === sceneVersion) {
     localAuthorityHeadSynchronizer.acknowledge(sceneVersion)
   }
@@ -383,18 +376,9 @@ const persistSmylrDocument = useDebounceFn(
   () => {
     if (isSmylrProductionWorkspace) void persistSmylrDocumentNow(workspaceStore)
   },
-  300,
-  { maxWait: 1000 }
+  800,
+  { maxWait: 2500 }
 )
-
-const localAuthorityHistory = createLocalWorkspaceAuthorityHistoryBridge({
-  onError: (error) => {
-    console.warn('[Local workspace authority] Durable history action failed:', error)
-  },
-  revertTransaction: revertLocalWorkspaceBoardTransaction,
-  store: workspaceStore,
-  synchronize: () => synchronizeLocalWorkspaceAuthorityHead(true)
-})
 
 const localDocumentAuthority = createLocalWorkspaceDocumentAuthority({
   canWrite: canWriteLocalWorkspaceDocument,
@@ -405,8 +389,7 @@ const localDocumentAuthority = createLocalWorkspaceDocumentAuthority({
     stopSmylrDocumentPersistenceTracking()
     if (newerHead) void synchronizeLocalWorkspaceAuthorityHead(true)
   },
-  onHeadApplied: (head) => {
-    localAuthorityHistory.applyHead(head)
+  onHeadApplied: () => {
     collab.publishGraphReplacement()
   },
   onLocalHeadCommitted: () => localWorkspaceAuthority?.notifyHeadCommitted()
@@ -545,11 +528,11 @@ function requestLocalWorkspaceAuthorityHeadSynchronization(): void {
 if (isSmylrProductionWorkspace) {
   releaseAutomationPersistence = bindAutomationPersistence(
     workspaceStore,
-    async (requestedSceneRevision, transaction) => {
+    async (requestedSceneRevision) => {
       if (workspaceStore.state.sceneVersion !== requestedSceneRevision) {
         return { reason: 'concurrent_scene_change', status: 'unknown' }
       }
-      const saved = await persistSmylrDocumentNow(workspaceStore, transaction)
+      const saved = await persistSmylrDocumentNow(workspaceStore)
       if (!saved) return { reason: 'save_not_acknowledged', status: 'unknown' }
       if (workspaceStore.state.sceneVersion !== requestedSceneRevision) {
         return { reason: 'concurrent_scene_change', status: 'unknown' }
@@ -600,15 +583,19 @@ function startSmylrDocumentPersistenceTracking() {
   }
   const active = workspaceStore
   stopSmylrDocumentTracking = bindSmylrProductionDocumentPersistence(active)
-  stopSmylrDocumentPersistence = active.onEditorEvent(
-    'render:requested',
-    scheduleSmylrDocumentPersistence
-  )
+  const stopPersistTriggers = [
+    active.onEditorEvent('node:created', scheduleSmylrDocumentPersistence),
+    active.onEditorEvent('node:updated', scheduleSmylrDocumentPersistence),
+    active.onEditorEvent('node:reparented', scheduleSmylrDocumentPersistence),
+    active.onEditorEvent('node:reordered', scheduleSmylrDocumentPersistence)
+  ]
+  stopSmylrDocumentPersistence = () => {
+    for (const stop of stopPersistTriggers) stop()
+  }
   // Deletion must reach local storage before a quick reload can restore the
   // previous graph. Coalesce child deletions into one same-turn save instead
-  // of waiting for the normal 300 ms document debounce.
+  // of waiting for the normal 800 ms document debounce.
   stopSmylrDeletePersistence = active.onEditorEvent('node:deleted', persistSmylrDocumentAfterDelete)
-  void persistSmylrDocumentNow(active)
 }
 
 function startSmylrViewPersistence() {
@@ -989,6 +976,10 @@ function closeLayersPanel() {
   }
 }
 
+watch(modelMeterPanelOpenEpoch, () => {
+  openLayersPanel()
+})
+
 function openLayersPanel() {
   if (showLayersPanel.value) return
   sidebarTransitionEpoch += 1
@@ -1059,7 +1050,6 @@ onUnmounted(() => {
   stopLocalWorkspaceAuthorityHeadSubscription = null
   releaseAutomationPersistence?.()
   releaseAutomationPersistence = null
-  localAuthorityHistory.dispose()
   releaseSmylrProductionDocumentWriteGuard?.()
   localWorkspaceAuthority?.close()
   localWorkspaceAuthority = null
@@ -1148,7 +1138,7 @@ onUnmounted(() => {
             :data-full-frame="fullFrameCodeObjectId ? 'true' : 'false'"
             :data-compact-tab-dragging="compactSidebarTabDragging ? 'true' : 'false'"
             :style="layersShellMotionStyle"
-            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-11 -translate-y-1/2 overflow-hidden border border-chrome-border bg-sidebar shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
+            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-11 -translate-y-1/2 overflow-clip border border-chrome-border bg-sidebar shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
             :class="
               showLayersPanel
                 ? 'h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] rounded-[14px] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
@@ -1175,7 +1165,7 @@ onUnmounted(() => {
               data-test-id="layers-shell"
               :aria-hidden="!showLayersPanel"
               :inert="showLayersPanel ? undefined : true"
-              class="flex min-h-0 min-w-0 flex-col overflow-hidden transition-[opacity,transform] motion-reduce:transition-none [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
+              class="flex min-h-0 min-w-0 flex-col overflow-clip transition-[opacity,transform] motion-reduce:transition-none [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
               :class="
                 showLayersPanel
                   ? 'flex-1 translate-x-0 opacity-100 delay-75 duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'

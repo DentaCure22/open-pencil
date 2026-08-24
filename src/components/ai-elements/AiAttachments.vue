@@ -1,10 +1,51 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+
+import { openAgentImageAnnotation, readImagePreviewSize } from '@/app/context-comment'
+import { toast } from '@/app/shell/ui'
+
 import { formatAttachmentSize } from './model'
 import type { AiMessagePart } from './types'
 
-const { parts } = defineProps<{
+const {
+  conversationThreadId,
+  modelScope,
+  parts,
+  steer = false
+} = defineProps<{
+  conversationThreadId?: string
+  modelScope?: string
   parts: Extract<AiMessagePart, { type: 'attachment' | 'image' }>[]
+  steer?: boolean
 }>()
+
+const annotatingImageUrl = ref<string | null>(null)
+
+async function annotateImage(
+  part: Extract<AiMessagePart, { type: 'image' }>,
+  event: MouseEvent
+): Promise<void> {
+  const renderedImage = (event.currentTarget as HTMLElement).querySelector('img')
+  if (annotatingImageUrl.value) return
+  annotatingImageUrl.value = part.url
+  try {
+    const size = await readImagePreviewSize(renderedImage)
+    await openAgentImageAnnotation({
+      action: steer ? 'steer' : 'follow-up',
+      height: size.height,
+      imageUrl: part.url,
+      modelScope,
+      threadId: conversationThreadId,
+      width: size.width
+    })
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : 'The image annotation editor is unavailable.'
+    )
+  } finally {
+    annotatingImageUrl.value = null
+  }
+}
 </script>
 
 <template>
@@ -25,15 +66,26 @@ const { parts } = defineProps<{
           formatAttachmentSize(part.size)
         }}</span>
       </a>
-      <a
+      <button
         v-else
-        :href="part.url"
-        target="_blank"
-        rel="noreferrer"
-        class="block overflow-hidden rounded-[6px] border border-border bg-input"
+        type="button"
+        data-test-id="ai-chat-image"
+        :aria-label="`Annotate ${part.alt ?? 'image'}`"
+        class="group/image relative block max-w-full cursor-crosshair overflow-hidden rounded-[6px] border border-border bg-input text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        @click="annotateImage(part, $event)"
       >
-        <img :src="part.url" :alt="part.alt ?? 'Generated image'" class="max-h-48 max-w-full" />
-      </a>
+        <img :src="part.url" :alt="part.alt ?? 'Image attachment'" class="max-h-48 max-w-full" />
+        <span
+          class="absolute right-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover/image:opacity-100 group-focus-visible/image:opacity-100"
+        >
+          <icon-lucide-loader-circle
+            v-if="annotatingImageUrl === part.url"
+            class="size-3 animate-spin"
+          />
+          <icon-lucide-message-circle-plus v-else class="size-3" />
+          Annotate
+        </span>
+      </button>
     </template>
   </div>
 </template>

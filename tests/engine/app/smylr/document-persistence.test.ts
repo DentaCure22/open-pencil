@@ -4,7 +4,10 @@ import { SceneGraph } from '@open-pencil/scene-graph'
 
 import {
   assembleIncrementalSmylrProductionDocument,
-  planSmylrProductionDocumentPersistence
+  omitUnchangedAuthorityImages,
+  omitUnchangedAuthorityPages,
+  planSmylrProductionDocumentPersistence,
+  type CachedSmylrProductionDocument
 } from '@/app/smylr-production/document-persistence/plan'
 
 function createWorkspaceGraph() {
@@ -135,5 +138,37 @@ describe('Smylr production incremental document persistence', () => {
     expect(next.boardSnapshots).toHaveLength(1)
     expect(next.boardSnapshots[0]?.nodes).toHaveLength(21)
     expect(next.manifest.boardRefs).toHaveLength(50)
+  })
+
+  test('omits unchanged Board images on later authority saves', () => {
+    const document = {
+      images: [['asset', new Uint8Array([1, 2, 3])]]
+    } as unknown as CachedSmylrProductionDocument
+    expect(omitUnchangedAuthorityImages(document, null, '1:asset:3|')).toBe(document)
+    expect(omitUnchangedAuthorityImages(document, '1:asset:3|', '1:asset:3|')).toEqual({
+      images: [],
+      imagesUnchanged: true
+    })
+    expect(omitUnchangedAuthorityImages(document, '1:asset:3|', '1:asset:4|')).toBe(document)
+  })
+
+  test('omits unchanged Board pages on later authority saves', () => {
+    const { firstBoard, firstNode, graph, secondBoard, secondNode } = createWorkspaceGraph()
+    const document = {
+      nodes: [...graph.nodes],
+      rootId: graph.rootId
+    } as unknown as CachedSmylrProductionDocument
+
+    expect(omitUnchangedAuthorityPages(document, graph, new Set([firstBoard.id]), false)).toBe(
+      document
+    )
+    const omitted = omitUnchangedAuthorityPages(document, graph, new Set([firstBoard.id]), true)
+    const ids = new Set(omitted.nodes.map(([id]) => id))
+    expect(omitted.retainedPageIds).toEqual([secondBoard.id])
+    expect(ids.has(firstBoard.id)).toBe(true)
+    expect(ids.has(firstNode.id)).toBe(true)
+    expect(ids.has(secondBoard.id)).toBe(false)
+    expect(ids.has(secondNode.id)).toBe(false)
+    expect(ids.has(graph.rootId)).toBe(true)
   })
 })

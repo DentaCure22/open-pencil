@@ -226,6 +226,49 @@
     return { dataUrl: snapshot, height: canvas.height, width: canvas.width }
   }
 
+  async function elementScreenshot(dataUrl, bounds) {
+    const image = new Image()
+    image.src = dataUrl
+    await image.decode()
+    const ratioX = image.naturalWidth / window.innerWidth
+    const ratioY = image.naturalHeight / window.innerHeight
+    const sourceX = clamp(bounds.x, 0, window.innerWidth)
+    const sourceY = clamp(bounds.y, 0, window.innerHeight)
+    const sourceWidth = Math.max(1, Math.min(bounds.width, window.innerWidth - sourceX))
+    const sourceHeight = Math.max(1, Math.min(bounds.height, window.innerHeight - sourceY))
+    let scale = Math.min(1, 2_048 / (sourceWidth * ratioX), 2_048 / (sourceHeight * ratioY))
+
+    function render() {
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(sourceWidth * ratioX * scale))
+      canvas.height = Math.max(1, Math.round(sourceHeight * ratioY * scale))
+      const context = canvas.getContext('2d', { alpha: false })
+      if (!context) throw new Error('Canvas capture is unavailable')
+      context.drawImage(
+        image,
+        Math.round(sourceX * ratioX),
+        Math.round(sourceY * ratioY),
+        Math.round(sourceWidth * ratioX),
+        Math.round(sourceHeight * ratioY),
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      )
+      return canvas
+    }
+
+    let canvas = render()
+    let preview = canvas.toDataURL('image/png')
+    while (preview.length > MAX_SNAPSHOT_LENGTH && scale > 0.32) {
+      scale *= 0.78
+      canvas = render()
+      preview = canvas.toDataURL('image/png')
+    }
+    if (preview.length > MAX_SNAPSHOT_LENGTH) throw new Error('Element preview is too large')
+    return { dataUrl: preview, height: canvas.height, width: canvas.width }
+  }
+
   const captureSessionId = configuredSessionId
   const captureStartedAt =
     typeof injectedConfig?.captureStartedAt === 'string'
@@ -242,6 +285,7 @@
   let recording = false
   let finished = false
   const committed = []
+  const inspectorUiSelector = '[data-openpencil-browser-inspector-ui]'
 
   const host = document.createElement('openpencil-inspector-layer')
   host.setAttribute('data-op-inspector-layer', '')
@@ -412,6 +456,7 @@
 
   function draw(element) {
     selected = element
+    outline.style.opacity = ''
     const rect = place(outline, element)
     label.textContent = `${element.tagName.toLowerCase()}${accessibleName(element) ? ` · ${accessibleName(element)}` : ''}`
     const below = rect.top < 34
@@ -451,6 +496,11 @@
     cursor.style.transform = `translate(${point.x - 6}px, ${point.y - 6}px)`
     cursor.setAttribute('data-visible', 'true')
     const candidate = document.elementFromPoint(point.x, point.y)
+    if (candidate instanceof Element && candidate.closest(inspectorUiSelector)) {
+      cursor.setAttribute('data-visible', 'false')
+      outline.style.opacity = '0'
+      return
+    }
     if (candidate instanceof Element && candidate !== host) {
       childBeforeAncestor = null
       draw(candidate)
@@ -467,6 +517,7 @@
     if (!response?.ok) throw new Error(response?.reason || 'Element capture failed')
     const bounds = element.getBoundingClientRect()
     const capturedAt = new Date().toISOString()
+    const surfacePreview = await elementScreenshot(response.dataUrl, bounds)
     const selection = {
       capturedAt,
       element: {
@@ -485,6 +536,16 @@
         title: compact(document.title, 500),
         url: window.location.href.slice(0, 4_096)
       },
+      sourceWindow: {
+        devicePixelRatio: window.devicePixelRatio,
+        innerHeight: window.innerHeight,
+        innerWidth: window.innerWidth,
+        outerHeight: window.outerHeight,
+        outerWidth: window.outerWidth,
+        screenX: window.screenX,
+        screenY: window.screenY
+      },
+      surfacePreview,
       session: { captureSessionId, captureStartedAt, frameId: 0, sequence: itemSequence, tabId: 0 },
       snapshot: await contextScreenshot(response.dataUrl, contextRect(element), itemSequence)
     }
@@ -506,7 +567,12 @@
   }
 
   function choose(event) {
-    if (event.target === host) return
+    if (
+      event.target === host ||
+      (event.target instanceof Element && event.target.closest(inspectorUiSelector))
+    ) {
+      return
+    }
     event.preventDefault()
     event.stopImmediatePropagation()
     const candidate = document.elementFromPoint(event.clientX, event.clientY)

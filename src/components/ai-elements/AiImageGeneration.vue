@@ -9,8 +9,7 @@ import {
 } from 'reka-ui'
 import { computed, ref } from 'vue'
 
-import { openAgentImageComment } from '@/app/context-comment'
-import { captureNarratedTraceDisplayEvidence } from '@/app/narrated-trace'
+import { openAgentImageAnnotation } from '@/app/context-comment'
 import { toast } from '@/app/shell/ui'
 import { useDialogUI } from '@/components/ui/dialog'
 import { transparencyCheckerboardClass } from '@/components/ui/transparency'
@@ -62,8 +61,9 @@ const activityCount = computed(() =>
   messages.reduce(
     (count, message) =>
       count +
-      messageParts(message).filter((part) => part.type === 'reasoning' || part.type === 'tool')
-        .length,
+      messageParts(message).filter(
+        (part) => part.type === 'commentary' || part.type === 'reasoning' || part.type === 'tool'
+      ).length,
     0
   )
 )
@@ -72,7 +72,7 @@ const generations = computed(() => {
   let activityIndex = 0
   const candidates = messages.flatMap((message) =>
     messageParts(message).flatMap((part, partIndex) => {
-      if (part.type !== 'reasoning' && part.type !== 'tool') return []
+      if (part.type !== 'commentary' && part.type !== 'reasoning' && part.type !== 'tool') return []
       const index = activityIndex
       activityIndex += 1
       if (part.type !== 'tool' || !isImageGenerationTool(part.name, part.input)) return []
@@ -121,29 +121,13 @@ async function annotateImage(
   if (!width || !height || annotatingImageUrl.value) return
   annotatingImageUrl.value = image.url
   try {
-    const bounds = { height, width, x: 0, y: 0 }
-    const capture = await captureNarratedTraceDisplayEvidence({
-      annotation: {
-        bounds,
-        color: '#3b82f6',
-        kind: 'focus',
-        points: [],
-        strokeWidth: 2
-      },
-      capturedAtMs: Date.now(),
-      cropBounds: bounds,
-      imageUrl: image.url,
-      maxEdge: Math.max(width, height),
-      preserveTransparency: true,
-      sessionId: `agent-image-${conversationThreadId}`,
-      sourceCropBounds: bounds
-    })
-    if (!capture) throw new Error('The generated image could not be prepared for annotation.')
-    openAgentImageComment(capture, {
+    await openAgentImageAnnotation({
       action: steer ? 'steer' : 'follow-up',
-      kind: 'agent-conversation',
+      height,
+      imageUrl: image.url,
       modelScope: modelScope || `task:${conversationThreadId}`,
-      threadId: conversationThreadId
+      threadId: conversationThreadId,
+      width
     })
   } catch (error) {
     toast.error(

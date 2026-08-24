@@ -1,23 +1,33 @@
 <script setup lang="ts">
 import { useClipboard, refAutoReset } from '@vueuse/core'
 import { computed } from 'vue'
-import { Markdown } from 'vue-stream-markdown'
-import 'vue-stream-markdown/index.css'
-
 import AiAttachments from './AiAttachments.vue'
+import AiMarkdown from './AiMarkdown.vue'
 import AiCodeBlock from './AiCodeBlock.vue'
 import AiSources from './AiSources.vue'
 import { messageParts } from './model'
 import type { AiMessage, AiMessagePart } from './types'
 
-const { message } = defineProps<{ message: AiMessage }>()
+const {
+  conversationThreadId,
+  message,
+  modelScope,
+  steer = false,
+  streaming = false
+} = defineProps<{
+  conversationThreadId?: string
+  message: AiMessage
+  modelScope?: string
+  steer?: boolean
+  streaming?: boolean
+}>()
 
 const parts = computed(() => messageParts(message))
 const contentParts = computed(() =>
   parts.value.filter(
     (part) =>
       !['attachment', 'image', 'source'].includes(part.type) &&
-      !['reasoning', 'tool'].includes(part.type)
+      !['commentary', 'reasoning', 'tool'].includes(part.type)
   )
 )
 const attachments = computed(
@@ -84,27 +94,30 @@ async function copyMessage() {
         message.role === 'user' ? 'max-w-[calc(100%_-_1rem)] items-end' : 'w-full items-start'
       "
     >
-      <AiAttachments v-if="attachments.length" :parts="attachments" />
+      <AiAttachments
+        v-if="attachments.length"
+        :conversation-thread-id="conversationThreadId"
+        :model-scope="modelScope"
+        :parts="attachments"
+        :steer="steer"
+      />
       <div
         v-if="hasMessageBody"
         data-test-id="ai-message-content"
         class="min-w-0"
         :class="[
           message.role === 'user'
-            ? 'rounded-[18px] bg-hover/90 px-3.5 py-2.5 text-surface'
+            ? 'rounded-[18px] bg-agent-user-bubble px-3.5 py-2.5 text-agent-ink'
             : message.role === 'system'
               ? 'w-full px-0 py-1 text-[12px] text-muted'
-              : 'w-full text-surface'
+              : 'w-full text-agent-ink'
         ]"
       >
         <template v-for="(part, index) in contentParts" :key="`${part.type}-${String(index)}`">
-          <Markdown
+          <AiMarkdown
             v-if="part.type === 'text' && message.role === 'assistant'"
             :content="part.text"
-            :controls="false"
-            :mermaid="false"
-            :previewers="false"
-            class="assistant-markdown"
+            :streaming="streaming"
           />
           <p v-else-if="part.type === 'text'" class="whitespace-pre-wrap">{{ part.text }}</p>
           <AiCodeBlock
@@ -149,7 +162,7 @@ async function copyMessage() {
 <style scoped>
 :deep(.assistant-markdown) {
   font: inherit;
-  color: inherit;
+  color: var(--color-agent-ink);
   overflow-wrap: anywhere;
 }
 :deep(.assistant-markdown > :first-child) {
@@ -158,7 +171,7 @@ async function copyMessage() {
 :deep(.assistant-markdown > :last-child) {
   margin-bottom: 0 !important;
 }
-:deep(.assistant-markdown [data-stream-markdown='paragraph']) {
+:deep(.assistant-markdown p) {
   margin: 0 0 0.65em !important;
   line-height: inherit !important;
 }
@@ -182,6 +195,13 @@ async function copyMessage() {
   margin: 0.1em 0 !important;
   padding: 0 !important;
   font-weight: 400;
+}
+:deep(.assistant-markdown li > p) {
+  margin: 0 !important;
+}
+:deep(.assistant-markdown li > input[type='checkbox']) {
+  margin-right: 0.4em;
+  vertical-align: middle;
 }
 :deep(.assistant-markdown strong) {
   font-weight: 600;
@@ -209,15 +229,8 @@ async function copyMessage() {
 :deep(.assistant-markdown hr) {
   margin: 0.8em 0 !important;
 }
-:deep(.assistant-markdown [data-stream-markdown='table-wrapper']) {
+:deep(.assistant-markdown .assistant-markdown-table) {
   margin: 0.7em 0 !important;
-  gap: 0 !important;
-  align-items: stretch !important;
-}
-:deep(.assistant-markdown [data-stream-markdown='table-controls']) {
-  display: none !important;
-}
-:deep(.assistant-markdown [data-stream-markdown='table-inner-wrapper']) {
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;

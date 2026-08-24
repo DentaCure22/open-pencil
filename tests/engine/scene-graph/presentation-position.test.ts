@@ -46,4 +46,39 @@ describe('SceneGraph presentation positions', () => {
     ])
     unbind()
   })
+
+  test('reuses descendant visual bounds until layout-affecting geometry changes', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const frame = graph.createNode('FRAME', page.id, {
+      clipsContent: false,
+      height: 80,
+      width: 100,
+      x: 10,
+      y: 20
+    })
+    graph.createNode('RECTANGLE', frame.id, {
+      height: 10,
+      width: 10,
+      x: 5,
+      y: 7
+    })
+
+    const first = graph.getDescendantVisualBounds(frame.id)
+    expect(first).toEqual(graph.getDescendantVisualBounds(frame.id))
+    expect(first).toMatchObject({
+      minX: 10,
+      minY: 20,
+      maxX: 110,
+      maxY: 100
+    })
+
+    graph.updateNode(frame.id, { name: 'Fill-only rename' })
+    expect(graph.getDescendantVisualBounds(frame.id)).toBe(first)
+
+    graph.updateNode(frame.id, { x: 40 })
+    const moved = graph.getDescendantVisualBounds(frame.id)
+    expect(moved).not.toBe(first)
+    expect(moved).toMatchObject({ minX: 40, minY: 20, maxX: 140, maxY: 100 })
+  })
 })

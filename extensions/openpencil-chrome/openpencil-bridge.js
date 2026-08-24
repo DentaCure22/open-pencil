@@ -3,6 +3,7 @@
   const EVENT_CONTRACT = 'openpencil-browser-element/v1'
   const COMMAND_CONTRACT = 'openpencil-browser-element-command/v1'
   const RESULT_CONTRACT = 'openpencil-browser-element-command-result/v1'
+  const COMMAND_PAYLOAD_ATTRIBUTE = 'data-openpencil-browser-element-command'
   const token = crypto.randomUUID()
 
   function rethrowUnlessContextInvalidated(error) {
@@ -31,19 +32,44 @@
     return false
   }
 
-  function receivePageMessage(event) {
+  function receivePageCommand() {
+    const payload = document.documentElement.getAttribute(COMMAND_PAYLOAD_ATTRIBUTE)
+    if (!payload) return
+    document.documentElement.removeAttribute(COMMAND_PAYLOAD_ATTRIBUTE)
+    let data
+    try {
+      data = JSON.parse(payload)
+    } catch {
+      return
+    }
     if (
       !current() ||
-      event.source !== window ||
-      event.origin !== window.location.origin ||
-      event.data?.contract !== COMMAND_CONTRACT ||
-      event.data.command?.kind !== 'activate-picker' ||
-      typeof event.data.requestId !== 'string'
+      data?.contract !== COMMAND_CONTRACT ||
+      ![
+        'activate-picker',
+        'relay-live-surface-input',
+        'start-live-surface-capture',
+        'stop-live-surface-capture'
+      ].includes(data.command?.kind) ||
+      typeof data.requestId !== 'string'
     ) {
       return
     }
+    const commandKind = data.command.kind
+    const runtimeKinds = {
+      'relay-live-surface-input': 'relay-browser-live-surface-input',
+      'start-live-surface-capture': 'start-browser-live-surface-capture',
+      'stop-live-surface-capture': 'stop-browser-live-surface-capture'
+    }
+    const message =
+      commandKind === 'activate-picker'
+        ? { kind: 'activate-browser-element-picker' }
+        : {
+            command: data.command,
+            kind: runtimeKinds[commandKind]
+          }
     void chrome.runtime
-      .sendMessage({ kind: 'activate-browser-element-picker' })
+      .sendMessage(message)
       .then((result) => {
         if (!current()) return undefined
         window.postMessage(
@@ -51,7 +77,7 @@
             contract: RESULT_CONTRACT,
             ok: Boolean(result?.ok),
             ...(typeof result?.reason === 'string' ? { reason: result.reason } : {}),
-            requestId: event.data.requestId
+            requestId: data.requestId
           },
           window.location.origin
         )
@@ -64,7 +90,7 @@
             contract: RESULT_CONTRACT,
             ok: false,
             reason: 'extension-unavailable',
-            requestId: event.data.requestId
+            requestId: data.requestId
           },
           window.location.origin
         )
@@ -73,10 +99,15 @@
   }
 
   chrome.runtime.onMessage.addListener(receiveExtensionMessage)
-  window.addEventListener('message', receivePageMessage)
+  const commandObserver = new MutationObserver(receivePageCommand)
+  commandObserver.observe(document.documentElement, {
+    attributeFilter: [COMMAND_PAYLOAD_ATTRIBUTE],
+    attributes: true
+  })
+  receivePageCommand()
   globalThis[BRIDGE_KEY] = {
     dispose() {
-      window.removeEventListener('message', receivePageMessage)
+      commandObserver.disconnect()
       try {
         chrome.runtime.onMessage.removeListener(receiveExtensionMessage)
       } catch (error) {

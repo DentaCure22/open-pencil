@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   MenubarCheckboxItem,
   MenubarContent,
@@ -32,6 +32,7 @@ import AppShortcutText from '@/components/ui/AppShortcutText.vue'
 import { useMenuUI } from '@/components/ui/menu'
 import { usePopoverUI } from '@/components/ui/popover'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
+import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
 import { useAppMenu } from '@/app/shell/menu/app-menu'
 import {
   hasMenuSubItems,
@@ -53,6 +54,10 @@ import type { Component } from 'vue'
 
 const store = useEditorStore()
 const open = ref(false)
+
+watch(modelMeterPanelOpenEpoch, () => {
+  open.value = false
+})
 
 const { topMenus } = useAppMenu()
 const { theme, setTheme } = useAppTheme()

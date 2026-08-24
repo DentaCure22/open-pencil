@@ -193,7 +193,7 @@ export function registerLiveParentTools(mcpServer: McpServer): void {
     'set_theme',
     {
       description:
-        'Set the live OpenPencil window to light, dark, or auto. Live-parent only. Never dispatch appearance changes to a worker.',
+        'Set the live OpenPencil window to light, dark, or auto. Call it directly in the Board conversation that received the appearance request; never dispatch theme-only work.',
       inputSchema: z.object({
         theme: z
           .enum(['light', 'dark', 'auto'])

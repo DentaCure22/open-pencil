@@ -12,6 +12,11 @@ const EarthSignals = lazy(() =>
     default: component
   }))
 )
+const ExternalLiveSurface = lazy(() =>
+  import('./components/ExternalLiveSurface').then(({ ExternalLiveSurface: component }) => ({
+    default: component
+  }))
+)
 const Document = lazy(() =>
   import('./components/office/Document').then(({ Document: component }) => ({ default: component }))
 )
@@ -62,6 +67,7 @@ function deferredCodeObject(node: ReactNode) {
 
 export type CodeObjectRenderContext = {
   document: CodeObjectDocument
+  frameId: string
   interactionEnabled: boolean
   onStateChange: (state: CodeObjectState) => void
   onExtractPdfPage?: (pageNumber: number, image: PdfPageImage) => void
@@ -92,6 +98,20 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
               interactionEnabled={interactionEnabled}
               onStateChange={onStateChange}
               state={document.state}
+            />
+          )
+        : null
+  }),
+  defineCodeObjectCompatibilityAdapter({
+    component: 'external-live-surface',
+    displayName: 'External live surface',
+    render: ({ document, frameId, interactionEnabled }) =>
+      document.component === 'external-live-surface'
+        ? deferredCodeObject(
+            <ExternalLiveSurface
+              document={document}
+              frameId={frameId}
+              interactionEnabled={interactionEnabled}
             />
           )
         : null

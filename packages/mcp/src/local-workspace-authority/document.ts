@@ -80,12 +80,17 @@ export type AuthorityBoardDocument = {
   source: WorkspaceDocument
 }
 
-export function readAuthorityBoardDocument(value: unknown): AuthorityBoardDocument {
+export function readAuthorityBoardDocument(
+  value: unknown,
+  options?: { hydrate?: boolean }
+): AuthorityBoardDocument {
   const source = workspaceDocument(value)
   const graph = new SceneGraph()
   graph.rootId = source.rootId
   graph.nodes = new Map(
-    source.nodes.map(([id, node]) => [id, hydrateSceneNodeDefaults(node)] as const)
+    options?.hydrate === false
+      ? source.nodes
+      : source.nodes.map(([id, node]) => [id, hydrateSceneNodeDefaults(node)] as const)
   )
   graph.images = new Map(source.images)
   graph.variables = new Map(source.variables)

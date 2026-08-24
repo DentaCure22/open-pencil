@@ -1,45 +1,46 @@
 <script setup lang="ts">
-import { shallowRef, type ComponentPublicInstance } from 'vue'
 import { useStickToBottom } from 'vue-stick-to-bottom'
 
+const { canLoadOlder = false, loadingOlder = false } = defineProps<{
+  canLoadOlder?: boolean
+  loadingOlder?: boolean
+}>()
+
+const emit = defineEmits<{
+  'load-older': []
+}>()
+
 const { contentRef, isAtBottom, scrollRef, scrollToBottom } = useStickToBottom({
-  damping: 0.7,
   initial: 'instant',
-  mass: 1.25,
-  resize: { damping: 0.7, stiffness: 0.05, mass: 1.25 },
-  stiffness: 0.05
+  resize: 'instant'
 })
-const scrollElement = shallowRef<HTMLElement | null>(null)
 
-function bindScrollRef(element: Element | ComponentPublicInstance | null) {
-  const next = element instanceof HTMLElement ? element : null
-  scrollRef.value = next
-  scrollElement.value = next
-}
-
-function bindContentRef(element: Element | ComponentPublicInstance | null) {
-  contentRef.value = element instanceof HTMLElement ? element : null
+function onTranscriptScroll() {
+  const viewport = scrollRef.value
+  if (!viewport || !canLoadOlder || loadingOlder) return
+  if (viewport.scrollTop <= 80) emit('load-older')
 }
 </script>
 
 <template>
   <div
     aria-label="Conversation transcript"
-    class="relative h-0 min-h-0 flex-1 overflow-hidden"
+    class="relative h-0 min-h-0 flex-1 overflow-clip"
     role="log"
   >
     <div
-      :ref="bindScrollRef"
+      ref="scrollRef"
       data-test-id="ai-conversation-viewport"
       tabindex="-1"
       class="h-full min-h-0 w-full touch-pan-y overflow-y-auto overscroll-y-contain outline-none"
       style="overflow-anchor: none"
+      @scroll.passive="onTranscriptScroll"
     >
-      <div :ref="bindContentRef" class="flex min-h-full flex-col">
+      <div ref="contentRef" class="flex min-h-full flex-col">
         <slot />
       </div>
     </div>
-    <slot name="overlay" :scroll-element="scrollElement" />
+    <slot name="overlay" :scroll-element="scrollRef" />
     <button
       v-if="!isAtBottom"
       type="button"

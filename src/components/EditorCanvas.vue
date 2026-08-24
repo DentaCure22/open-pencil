@@ -22,7 +22,10 @@ import {
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
 import { isCodeObjectFrame } from '@/app/code-object/model'
-import { useAgentConversationDrop } from '@/app/agent-terminal/drag'
+import {
+  isAgentConversationDragActive,
+  useAgentConversationDrop
+} from '@/app/agent-terminal/drag'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useAssetVariantDrop } from '@/app/editor/assets/drag'
 import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaboration-awareness'
@@ -30,10 +33,13 @@ import { createCanvasContextSelection } from '@/app/editor/canvas/context-select
 import { fadeOutGlobalLoader } from '@/app/editor/canvas/loader-overlay'
 import { useCanvasSurfaceEntry } from '@/app/editor/canvas/surface/entry'
 import {
+  CANVAS_GRID_POSITION,
+  CANVAS_GRID_SIZE,
   useCanvasViewportCssVariables,
   useEditorPresentationViewport
 } from '@/app/editor/presentation'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
+import { useExternalLiveSurfaceDrop } from '@/app/external-live-surface/drop'
 import { useFileIntakeDrop } from '@/app/file-intake/drop'
 import IconLucidePanelBottom from '~icons/lucide/panel-bottom'
 import IconLucidePanelLeft from '~icons/lucide/panel-left'
@@ -66,25 +72,12 @@ const canvasRetrying = ref(false)
 const presentationViewport = useEditorPresentationViewport(store)
 useCanvasViewportCssVariables(store, canvasAreaRef)
 
-const BASE_GRID_STEP = 24
-const MIN_GRID_STEP_PX = 18
-const MAX_GRID_STEP_PX = 36
-
-const canvasGridStyle = computed(() => {
-  const viewport = presentationViewport.value
-  const zoom = Math.max(viewport.zoom, 0.02)
-  let worldStep = BASE_GRID_STEP
-  while (worldStep * zoom < MIN_GRID_STEP_PX) worldStep *= 2
-  while (worldStep * zoom > MAX_GRID_STEP_PX) worldStep /= 2
-  const screenStep = worldStep * zoom
-
-  return {
-    backgroundColor: 'var(--color-canvas)',
-    backgroundImage: 'radial-gradient(circle, var(--color-canvas-grid) 0 1px, transparent 1.2px)',
-    backgroundPosition: `${viewport.panX}px ${viewport.panY}px`,
-    backgroundSize: `${screenStep}px ${screenStep}px`
-  }
-})
+const canvasGridStyle = {
+  backgroundColor: 'var(--color-canvas)',
+  backgroundImage: 'radial-gradient(circle, var(--color-canvas-grid) 0 1px, transparent 1.2px)',
+  backgroundPosition: CANVAS_GRID_POSITION,
+  backgroundSize: `${CANVAS_GRID_SIZE} ${CANVAS_GRID_SIZE}`
+}
 
 const { updateCursor } = useCanvasCollaborationAwareness(store, collab)
 const { selectAtContextPoint } = createCanvasContextSelection(canvasRef, store)
@@ -152,7 +145,8 @@ const {
   hitTestComponentLabel,
   hitTestFrameTitle,
   updateCursor,
-  editorViewportInsets
+  editorViewportInsets,
+  isAgentConversationDragActive
 )
 
 useTextEdit(canvasRef, store)
@@ -165,31 +159,41 @@ const {
   onDrop: onAssetVariantDrop
 } = useAssetVariantDrop(canvasAreaRef, store)
 const {
-  isDraggingAgentConversation,
   onDragEnter: onAgentConversationDragEnter,
   onDragLeave: onAgentConversationDragLeave,
   onDragOver: onAgentConversationDragOver,
   onDrop: onAgentConversationDrop
 } = useAgentConversationDrop(canvasAreaRef, store)
+const {
+  isDraggingExternalLiveSurface,
+  onDragEnter: onExternalLiveSurfaceDragEnter,
+  onDragLeave: onExternalLiveSurfaceDragLeave,
+  onDragOver: onExternalLiveSurfaceDragOver,
+  onDrop: onExternalLiveSurfaceDrop
+} = useExternalLiveSurfaceDrop(canvasAreaRef, store)
 
 function onCanvasDragEnter(event: DragEvent) {
   onAssetVariantDragEnter(event)
   onAgentConversationDragEnter(event)
+  onExternalLiveSurfaceDragEnter(event)
 }
 
 function onCanvasDragLeave(event: DragEvent) {
   onAssetVariantDragLeave(event)
   onAgentConversationDragLeave(event)
+  onExternalLiveSurfaceDragLeave(event)
 }
 
 function onCanvasDragOver(event: DragEvent) {
   onAssetVariantDragOver(event)
   onAgentConversationDragOver(event)
+  onExternalLiveSurfaceDragOver(event)
 }
 
 function onCanvasDrop(event: DragEvent) {
   void onAssetVariantDrop(event)
   onAgentConversationDrop(event)
+  onExternalLiveSurfaceDrop(event)
 }
 
 function keepCanvasAreaPinned(event: Event) {
@@ -283,14 +287,17 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           leave-to-class="opacity-0"
         >
           <div
-            v-if="isDraggingOver || isDraggingAssetVariant || isDraggingAgentConversation"
+            v-if="isDraggingOver || isDraggingAssetVariant || isDraggingExternalLiveSurface"
             data-test-id="canvas-drop-overlay"
             class="absolute inset-0 z-40 border-2 border-dashed border-accent/60 bg-accent/5"
             :class="
-              isDraggingAssetVariant || isDraggingAgentConversation
+              isDraggingAssetVariant || isDraggingExternalLiveSurface
                 ? 'pointer-events-auto'
                 : 'pointer-events-none'
             "
+            @dragenter="onCanvasDragEnter"
+            @dragover="onCanvasDragOver"
+            @drop="onCanvasDrop"
           />
         </Transition>
         <PopoverRoot :open="!!autoLayoutPaddingEdit">

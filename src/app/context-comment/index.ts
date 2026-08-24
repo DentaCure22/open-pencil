@@ -1,3 +1,4 @@
+export * from './agent-image'
 export * from './anchor'
 export * from './anchor-format'
 export * from './dictation'

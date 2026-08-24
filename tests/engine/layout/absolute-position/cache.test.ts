@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { SceneGraph } from '@open-pencil/core'
+import { getInverseWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 
 function pageId(graph: SceneGraph) {
   return graph.getPages()[0].id
@@ -59,6 +60,34 @@ describe('absolute position cache', () => {
     expect(graph.getAbsolutePosition(level2.id)).toEqual({ x: 40, y: 60 })
     expect(graph.getAbsolutePosition(level3.id)).toEqual({ x: 90, y: 120 })
     expect(graph.getAbsolutePosition(leaf.id)).toEqual({ x: 91, y: 122 })
+  })
+
+  test('reuses cached world matrices until a layout change', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), { name: 'F', x: 40, y: 50, rotation: 0 })
+    const child = graph.createNode('RECTANGLE', frame.id, { name: 'R', x: 10, y: 20 })
+
+    const first = graph.getAbsolutePosition(child.id)
+    const second = graph.getAbsolutePosition(child.id)
+    expect(first).toEqual({ x: 50, y: 70 })
+    expect(second).toBe(first)
+
+    graph.updateNode(frame.id, { x: 80 })
+    expect(graph.getAbsolutePosition(child.id)).toEqual({ x: 90, y: 70 })
+  })
+
+  test('reuses inverse world matrices for hover hit-testing', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      name: 'F',
+      x: 40,
+      y: 50,
+      rotation: 15
+    })
+    const first = getInverseWorldMatrix(frame, graph)
+    const second = getInverseWorldMatrix(frame, graph)
+    expect(first).toEqual(second)
+    expect(first).toBe(second)
   })
 
   test('clearAbsPosCache forces recomputation', () => {

@@ -5,7 +5,8 @@ export type CanvasRenderLayer = 'full' | 'scene' | 'overlays'
 
 export interface UseCanvasOptions {
   /**
-   * Returns true when a selected node has a product-owned selection overlay.
+   * Returns true when a node has a product-owned overlay that replaces native
+   * selection and hover chrome.
    */
   ownsSelectionChrome?: (nodeId: string) => boolean
   /**

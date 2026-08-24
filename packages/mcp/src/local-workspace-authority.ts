@@ -1,7 +1,4 @@
-export {
-  LocalWorkspaceBoardRpcError,
-  LocalWorkspaceBoardRuntime
-} from './local-workspace-authority/board-runtime'
+export { LocalWorkspaceBoardRuntime } from './local-workspace-authority/board-runtime'
 export {
   LocalWorkspaceAuthorityStore,
   LocalWorkspaceAuthorityStoreError,

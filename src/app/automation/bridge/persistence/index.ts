@@ -29,18 +29,9 @@ export type AutomationPersistenceResult = AutomationPersistenceCommit & {
   requested_scene_revision: number
 }
 
-export type AutomationPersistenceTransaction = {
-  pageId: string
-  requestId: string
-  route: 'board_build:plan/v1'
-}
-
 type AutomationPersistenceBinding = {
   owner: symbol
-  persist: (
-    requestedSceneRevision: number,
-    transaction?: AutomationPersistenceTransaction
-  ) => Promise<AutomationPersistenceCommit>
+  persist: (requestedSceneRevision: number) => Promise<AutomationPersistenceCommit>
 }
 
 const bindings = new WeakMap<EditorStore, AutomationPersistenceBinding>()
@@ -73,8 +64,7 @@ export function bindAutomationPersistence(
 export async function requestAutomationPersistence(
   store: EditorStore,
   requestedSceneRevision: number,
-  timeoutMs = AUTOMATION_PERSISTENCE_TIMEOUT_MS,
-  transaction?: AutomationPersistenceTransaction
+  timeoutMs = AUTOMATION_PERSISTENCE_TIMEOUT_MS
 ): Promise<AutomationPersistenceResult> {
   const startedAt = nowMs()
   const binding = bindings.get(store)
@@ -94,7 +84,7 @@ export async function requestAutomationPersistence(
       timeoutMs
     )
   })
-  const attempted = binding.persist(requestedSceneRevision, transaction).catch(persistenceFailure)
+  const attempted = binding.persist(requestedSceneRevision).catch(persistenceFailure)
   const result = await Promise.race([attempted, timedOut])
   if (timeout) clearTimeout(timeout)
   return {

@@ -26,8 +26,13 @@ export function agentWorkerEnv(
   env: NodeJS.ProcessEnv = process.env,
   executable?: string
 ): NodeJS.ProcessEnv {
+  const memories = path.join(homedir(), '.codex', 'memories')
+  const control = path.join(homedir(), '.pi', 'agent', 'memories')
   return {
     ...env,
-    PATH: mergeWorkerPath(env.PATH ?? '', extraWorkerBinDirs(executable))
+    PATH: mergeWorkerPath(env.PATH ?? '', extraWorkerBinDirs(executable)),
+    PI_MEMORY_INJECT: env.PI_MEMORY_INJECT ?? '0',
+    PI_MEMORIES_DIR: env.PI_MEMORIES_DIR ?? memories,
+    PI_MEMORIES_CONTROL_DIR: env.PI_MEMORIES_CONTROL_DIR ?? control
   }
 }

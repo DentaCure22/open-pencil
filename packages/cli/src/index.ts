@@ -3,7 +3,7 @@ import { defineCommand, runMain } from 'citty'
 
 import { rewriteStdinValueArgs } from './argv'
 import analyze from './commands/analyze'
-import board, { boardInternalCommand } from './commands/board'
+import board from './commands/board'
 import convert from './commands/convert'
 import evalCmd from './commands/eval'
 import exportCmd from './commands/export'
@@ -23,15 +23,12 @@ const rawArgs = applyAgentOutputMode(
 const main = defineCommand({
   meta: {
     name: 'openpencil',
-    description: 'OpenPencil CLI — build, inspect, and automate persisted and live Boards',
+    description: 'OpenPencil CLI — inspect and automate persisted and live Boards',
     version
   },
   subCommands: {
     analyze,
-    board:
-      rawArgs[0] === 'board' && (rawArgs[1] === 'connect' || rawArgs[1] === 'edit')
-        ? boardInternalCommand
-        : board,
+    board,
     convert,
     eval: evalCmd,
     export: exportCmd,

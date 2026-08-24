@@ -142,71 +142,23 @@ openpencil import card.html --tailwind "flex flex-col gap-3 w-80 p-6 rounded-xl 
 
 ## board
 
-Use the compact persisted index when a Board or object ID is unknown:
+The Board CLI is limited to live presence, navigation, and appearance:
 
 ```sh
-openpencil board search "pricing decisions" --limit 10 --json
-openpencil board get 0:35 --json
-openpencil board ls --json
-openpencil board nearby 0:35 --json
-openpencil board create --name "Agent Sandbox" --request-id "create-agent-sandbox" --json
+openpencil board where --json
+openpencil board go "Agent Sandbox" --json
+openpencil board theme dark --json
 ```
 
-| Command         | Purpose                                                        |
-| --------------- | -------------------------------------------------------------- |
-| `board search`  | Find an unknown persisted Board or object compactly            |
-| `board get`     | Print one or a few `workspace.json` nodes without dumping the file |
-| `board ls`      | List direct children of a page or frame as id/name/box rows    |
-| `board nearby`  | List the nearest sibling boxes around one object               |
-| `board create`  | Create a Board when the user explicitly requests a new one    |
-| `board build`   | Apply one complete semantic plan as one guarded transaction   |
-| `board present` | Reveal a saved result when the user requests visual placement |
+| Command       | Purpose                                            |
+| ------------- | -------------------------------------------------- |
+| `board where` | Show the Board and selection in the live editor    |
+| `board go`    | Move the live editor to an exact Board             |
+| `board theme` | Set the live editor to `light`, `dark`, or `auto`  |
 
-Use the exact target returned by `board search`, `board create`, or a previous durable receipt. Send
-one `board-build-request/v1` through `--request`:
-
-```sh
-openpencil board build --request '{
-  "contract": "board-build-request/v1",
-  "target": {
-    "workspace_id": "workspace-id",
-    "content_document_id": "content-document-id",
-    "document_id": "document-id",
-    "page_id": "board-page-id"
-  },
-  "request_id": "build-status-card",
-  "intent": "Build one status card",
-  "plan": {
-    "contract": "board-build-plan/v1",
-    "artifacts": [{
-      "alias": "status",
-      "recipe": {
-        "kind": "native_card",
-        "title": "Status",
-        "body": "Ready",
-        "placement": { "target": { "kind": "auto" } }
-      }
-    }]
-  }
-}' --release-summary --json
-```
-
-The request has exactly four top-level responsibilities: its contract, persisted target, stable
-request ID and intent, and one `board-build-plan/v1`. The plan may describe artifacts, semantic
-composition and object operations as one atomic outcome. Placement is an optional
-semantic hint, never authority.
-
-`board build` accepts exactly one of `--request` or `--request-file`. Use `--request-file` only when
-the JSON is too large for practical shell quoting. Add `--latest-gesture` or one exact
-`--gesture-id` when Trace should provide read-only context for the plan.
-
-Runtime IDs, context tokens, expected revisions, fresh-context handshakes, fingerprints, retries,
-authority preparation, persistence, and Undo are implementation details handled internally. They do
-not belong in the public request. Diagnostic and compatibility commands may remain available to
-OpenPencil itself, but they are not normal agent-facing Board UX.
-
-`board present` is optional and read-only. Use it only when the user asks to reveal the saved result
-in a connected editor; a successful `board build` receipt is the durable mutation boundary.
+There is no Board authoring CLI. Create and edit persisted Board objects through the workspace files
+with ordinary file tools. `workspace.index.jsonl` is a compact discovery aid; `workspace.json` is the
+saved Board source of truth.
 
 ## eval
 

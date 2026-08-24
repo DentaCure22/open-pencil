@@ -10,6 +10,7 @@ export type AiToolState = 'approval' | 'error' | 'pending' | 'running' | 'succes
 
 export type AiMessagePart =
   | { text: string; type: 'text' }
+  | { state?: 'complete' | 'streaming'; text: string; type: 'commentary' }
   | { state?: 'complete' | 'streaming'; text: string; type: 'reasoning' }
   | {
       approval?: { id: string; state: 'approved' | 'denied' | 'requested' }

@@ -9,9 +9,16 @@ import {
 } from '@/app/agent-chat/composer-focus'
 import { useAgentBoardConversation } from '@/app/agent-chat/board-conversation'
 import {
+  loadOlderAgentConversationTranscript,
   releaseAgentConversationTranscript,
-  retainAgentConversationTranscript
+  retainAgentConversationTranscript,
+  revealAgentConversationChapter
 } from '@/app/agent-chat/history-store'
+import {
+  cancelScheduledTranscriptHydration,
+  planBoardTranscriptRetain,
+  scheduleTranscriptHydration
+} from '@/app/agent-chat/transcript-hydration'
 import { mergeOptimisticMessages, optimisticConversation } from '@/app/agent-chat/optimistic'
 import { AiConversationSurface, conversationStatus } from '@/components/ai-elements'
 import { plainConversationPreview } from '@/app/agent-chat/presentation'
@@ -38,34 +45,87 @@ const { frameId, interactionEnabled, threadName, workerConversationId } = define
   workerConversationId?: string
 }>()
 const store = useEditorStore()
-const {
-  historyError,
-  refresh,
-  resolvedThreadId,
-  statusDotClass,
-  thread,
-  title,
-  workerThreads,
-  workingLabel
-} = useAgentBoardConversation({
-  get workerConversationId() {
-    return workerConversationId
-  },
-  get fallbackTitle() {
-    return threadName
-  }
-})
+const { historyError, refresh, resolvedThreadId, thread, title, workerThreads } =
+  useAgentBoardConversation({
+    get workerConversationId() {
+      return workerConversationId
+    },
+    get fallbackTitle() {
+      return threadName
+    }
+  })
+const loadingOlder = ref(false)
+let idleRetainId: string | null = null
+let retainIdleHandle: number | null = null
 let retainedTranscriptId: string | null = null
+async function loadOlderTranscript() {
+  const threadId = resolvedThreadId.value
+  if (!threadId || loadingOlder.value) return
+  loadingOlder.value = true
+  try {
+    await loadOlderAgentConversationTranscript(threadId)
+  } finally {
+    loadingOlder.value = false
+  }
+}
+async function revealChapter(chapterId: string) {
+  const threadId = resolvedThreadId.value
+  if (!threadId) return
+  loadingOlder.value = true
+  try {
+    await revealAgentConversationChapter(threadId, chapterId)
+  } finally {
+    loadingOlder.value = false
+  }
+}
+function cancelIdleRetain() {
+  cancelScheduledTranscriptHydration(retainIdleHandle)
+  retainIdleHandle = null
+  idleRetainId = null
+}
+function releaseRetainedTranscript() {
+  if (!retainedTranscriptId) return
+  releaseAgentConversationTranscript(retainedTranscriptId)
+  retainedTranscriptId = null
+}
+function retainTranscriptNow(threadId: string) {
+  cancelIdleRetain()
+  if (retainedTranscriptId === threadId) return
+  releaseRetainedTranscript()
+  retainedTranscriptId = threadId
+  retainAgentConversationTranscript(threadId)
+}
 function syncRetainedTranscript() {
   const next = resolvedThreadId.value || null
-  if (retainedTranscriptId === next) return
-  if (retainedTranscriptId) releaseAgentConversationTranscript(retainedTranscriptId)
-  retainedTranscriptId = next
-  if (retainedTranscriptId) retainAgentConversationTranscript(retainedTranscriptId)
+  const plan = planBoardTranscriptRetain({
+    idleForId: idleRetainId,
+    interactionEnabled,
+    nextId: next,
+    retainedId: retainedTranscriptId
+  })
+  if (plan.type === 'keep') return
+  if (plan.type === 'clear') {
+    cancelIdleRetain()
+    releaseRetainedTranscript()
+    return
+  }
+  if (plan.type === 'retain') {
+    retainTranscriptNow(plan.id)
+    return
+  }
+  cancelIdleRetain()
+  if (retainedTranscriptId && retainedTranscriptId !== plan.id) releaseRetainedTranscript()
+  idleRetainId = plan.id
+  retainIdleHandle = scheduleTranscriptHydration(() => {
+    retainIdleHandle = null
+    idleRetainId = null
+    if (resolvedThreadId.value === plan.id) retainTranscriptNow(plan.id)
+  })
 }
-watch(resolvedThreadId, syncRetainedTranscript, { immediate: true })
+watch([resolvedThreadId, () => interactionEnabled], syncRetainedTranscript, { immediate: true })
 onUnmounted(() => {
-  if (retainedTranscriptId) releaseAgentConversationTranscript(retainedTranscriptId)
+  cancelIdleRetain()
+  releaseRetainedTranscript()
 })
 const modelScope = computed(() =>
   agentConversationScope({
@@ -98,21 +158,14 @@ const uiStatus = computed(() =>
   conversationStatus({
     error: optimistic.value?.error || error.value,
     sending: optimisticSending.value,
-    state: optimistic.value?.state === 'completed' ? 'completed' : thread.value?.state
+    state:
+      thread.value?.state === 'running'
+        ? 'running'
+        : optimistic.value?.state === 'completed'
+          ? 'completed'
+          : thread.value?.state
   })
 )
-const liveStatusDotClass = computed(() => {
-  if (uiStatus.value === 'error' || uiStatus.value === 'needs_attention') return 'bg-red-400'
-  if (uiStatus.value === 'streaming') return 'bg-accent'
-  if (uiStatus.value === 'submitted') return 'bg-amber-400'
-  return statusDotClass.value
-})
-const headerStatus = computed(() => {
-  if (uiStatus.value === 'error' || uiStatus.value === 'needs_attention') return 'Needs attention'
-  if (uiStatus.value === 'streaming') return 'Working'
-  if (uiStatus.value === 'submitted') return 'Starting'
-  return ''
-})
 const statusMessage = computed(() => {
   const immediate = optimistic.value?.error || error.value || historyError.value
   if (immediate) return immediate
@@ -121,6 +174,9 @@ const statusMessage = computed(() => {
 })
 const canCompose = computed(() => Boolean(thread.value?.nativeThreadId) || isDraft.value)
 const steering = computed(() => thread.value?.state === 'running')
+const isWorking = computed(
+  () => steering.value || optimisticSending.value || uiStatus.value === 'streaming'
+)
 const canStop = computed(
   () =>
     Boolean(thread.value?.canFollowUp && thread.value.state === 'running') ||
@@ -243,7 +299,7 @@ watch(
 <template>
   <article
     ref="surface"
-    class="border-agent-border bg-agent-surface flex size-full flex-col overflow-hidden rounded-[inherit] border text-surface select-text"
+    class="border-agent-border bg-agent-surface flex size-full flex-col overflow-clip rounded-[inherit] border text-agent-ink select-text"
     :class="interactionEnabled ? '' : 'pointer-events-none'"
     :inert="!interactionEnabled"
     data-test-id="agent-chat-board-surface"
@@ -258,17 +314,23 @@ watch(
         Boolean(error && (lastMessage || lastAnnotations.length || lastAttachments.length))
       "
       :can-stop="canStop"
+      :chapter-rail-ready="interactionEnabled"
       :context-usage="thread?.contextUsage"
       :disabled="!canCompose"
       empty-title="Conversation ready"
+      :has-older="thread?.hasOlder === true"
       input-label="Task conversation input"
+      :loading-older="loadingOlder"
       :messages="conversationMessages"
       :placeholder="isDraft ? 'Describe the task…' : steering ? 'Add instructions…' : 'Follow up…'"
       :send-label="steering ? 'Steer task' : 'Send message'"
       :scope="modelScope"
       :status="uiStatus"
       :status-message="statusMessage"
-      :working-label="workingLabel"
+      :turns="thread?.turns"
+      :working-label="thread?.recentUpdate || ''"
+      @load-older="loadOlderTranscript"
+      @reveal-chapter="revealChapter"
       @retry="retry"
       @send="send"
       @stop="stop"
@@ -283,13 +345,17 @@ watch(
               {{ displayTitle }}
             </span>
             <span
-              v-if="headerStatus"
-              :aria-label="headerStatus"
-              class="size-1.5 shrink-0 rounded-full"
-              data-test-id="agent-conversation-status-dot"
+              v-if="isWorking"
+              class="flex size-3 shrink-0 items-center justify-center"
+              aria-label="Working"
+              data-test-id="agent-conversation-working"
               role="status"
-              :class="liveStatusDotClass"
-            />
+            >
+              <icon-lucide-loader-circle
+                class="size-3 animate-spin text-accent"
+                aria-hidden="true"
+              />
+            </span>
           </header>
         </AgentConversationContextMenu>
       </template>

@@ -2,16 +2,16 @@
 import type { Canvas, Path } from 'canvaskit-wasm'
 
 import type { SceneNode, SceneGraph, Fill } from '@open-pencil/scene-graph'
-import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
 import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '#core/constants'
 import { vectorNetworkToCenterlinePath } from '#core/vector'
 
-import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
+import { childNeedsParentIsolation, figmaBlendModeToSkia, needsNodeCompositingLayer } from './blend'
 import { renderBooleanOperation } from './boolean'
 import { drawLayoutGrids } from './layout-grids'
 import { renderMaskedChildIds } from './masks'
+import { acquireLiveParagraph, releaseLiveParagraph } from './paragraph-cache'
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 import { makeSmoothRRectPath, nodeHasRadius, nodeHasSmoothCorners } from './shapes'
 import {
@@ -40,20 +40,18 @@ function drawVisibleFills(
     r.fillPaint.setBlendMode(r.ck.BlendMode.SrcOver)
   }
 }
-function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number): boolean {
-  const canCull =
-    node.childIds.length === 0 ||
-    ((node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') &&
-      node.clipsContent)
-  if (!canCull) return false
-
-  const vp = r.worldViewport
-  const bw = node.width
-  const bh = node.height
-  if (node.rotation !== 0) {
-    const diag = Math.hypot(bw, bh)
-    const cx = absX + bw / 2
-    const cy = absY + bh / 2
+function rectIsOffscreen(
+  vp: SkiaRenderer['worldViewport'],
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  rotation: number
+): boolean {
+  if (rotation !== 0) {
+    const diag = Math.hypot(width, height)
+    const cx = left + width / 2
+    const cy = top + height / 2
     return (
       cx - diag / 2 > vp.x + vp.w ||
       cy - diag / 2 > vp.y + vp.h ||
@@ -61,7 +59,38 @@ function isCulled(r: SkiaRenderer, node: SceneNode, absX: number, absY: number):
       cy + diag / 2 < vp.y
     )
   }
-  return absX > vp.x + vp.w || absY > vp.y + vp.h || absX + bw < vp.x || absY + bh < vp.y
+  return left > vp.x + vp.w || top > vp.y + vp.h || left + width < vp.x || top + height < vp.y
+}
+
+function isCulled(
+  r: SkiaRenderer,
+  graph: SceneGraph,
+  node: SceneNode,
+  nodeId: string,
+  absX: number,
+  absY: number
+): boolean {
+  const vp = r.worldViewport
+  const ownOffscreen = rectIsOffscreen(vp, absX, absY, node.width, node.height, node.rotation)
+  if (!ownOffscreen) return false
+  if (
+    node.childIds.length === 0 ||
+    node.type === 'GROUP' ||
+    node.type === 'SECTION' ||
+    ((node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') &&
+      node.clipsContent)
+  ) {
+    return true
+  }
+
+  const bounds = graph.getDescendantVisualBounds(nodeId)
+  return (
+    !bounds ||
+    bounds.minX > vp.x + vp.w ||
+    bounds.minY > vp.y + vp.h ||
+    bounds.maxX < vp.x ||
+    bounds.maxY < vp.y
+  )
 }
 
 function applyNodeTransforms(
@@ -198,7 +227,7 @@ export function renderNode(
   parentAbsY = 0
 ): void {
   const node = graph.getNode(nodeId)
-  if (!node || !node.visible || node.isMask) return
+  if (!node || !node.visible || node.isMask || r.skipSceneNodeIds?.has(nodeId)) return
 
   // Hide the node being edited in node-edit mode (overlay draws it live)
   if (overlays.nodeEditState?.nodeId === nodeId) return
@@ -209,7 +238,7 @@ export function renderNode(
   const absX = parentAbsX + position.x
   const absY = parentAbsY + position.y
 
-  if (isCulled(r, node, absX, absY)) {
+  if (isCulled(r, graph, node, nodeId, absX, absY)) {
     r._culledCount++
     return
   }
@@ -217,15 +246,19 @@ export function renderNode(
   canvas.save()
   canvas.translate(position.x, position.y)
 
-  const isolatesChildren = node.childIds.length > 0 && node.blendMode === 'NORMAL'
-  const needsNodeLayer =
-    node.opacity < 1 || needsIsolatedBlendLayer(node.blendMode) || isolatesChildren
+  const isolatesChildren =
+    node.childIds.length > 0 &&
+    node.blendMode === 'NORMAL' &&
+    node.childIds.some((childId) => {
+      const child = graph.getNode(childId)
+      return child ? childNeedsParentIsolation(child) : false
+    })
+  const needsNodeLayer = needsNodeCompositingLayer(node) || isolatesChildren
   if (needsNodeLayer) {
-    const bounds = computeDescendantVisualBounds(
-      [nodeId],
-      (id) => graph.getNode(id) ?? undefined,
-      (id) => graph.getAbsolutePosition(id)
-    )
+    const bounds =
+      node.clipsContent || node.childIds.length === 0
+        ? null
+        : graph.getDescendantVisualBounds(nodeId)
     const layerBounds = bounds
       ? r.ck.LTRBRect(
           bounds.minX - absX,
@@ -645,14 +678,14 @@ function drawGradientText(
 ): boolean {
   if (!r.fontsLoaded || !r.fontProvider) return false
 
-  const paragraph = r.buildParagraph(node, r.ck.Color4f(0, 0, 0, 1))
+  const live = acquireLiveParagraph(r, node, r.ck.Color4f(0, 0, 0, 1))
   try {
     r.effectLayerPaint.setImageFilter(null)
     r.effectLayerPaint.setColorFilter(null)
     r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
     const bounds = r.ck.LTRBRect(0, paragraphY, node.width, paragraphY + node.height)
     canvas.saveLayer(r.effectLayerPaint, bounds)
-    canvas.drawParagraph(paragraph, 0, paragraphY)
+    canvas.drawParagraph(live.paragraph, 0, paragraphY)
 
     r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcIn)
     canvas.saveLayer(r.effectLayerPaint, bounds)
@@ -661,7 +694,7 @@ function drawGradientText(
     canvas.restore()
     return true
   } finally {
-    paragraph.delete()
+    releaseLiveParagraph(live)
     r.effectLayerPaint.setImageFilter(null)
     r.effectLayerPaint.setColorFilter(null)
     r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
@@ -709,9 +742,9 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
     return
   }
   if (r.fontsLoaded && r.fontProvider) {
-    const paragraph = r.buildParagraph(node, r.fillPaint.getColor())
-    canvas.drawParagraph(paragraph, 0, paragraphY)
-    paragraph.delete()
+    const live = acquireLiveParagraph(r, node, r.fillPaint.getColor())
+    canvas.drawParagraph(live.paragraph, 0, paragraphY)
+    releaseLiveParagraph(live)
   } else if (r.textFont) {
     canvas.drawText(text, 0, node.fontSize || r.DEFAULT_FONT_SIZE, r.fillPaint, r.textFont)
   }

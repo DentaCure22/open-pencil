@@ -1,9 +1,12 @@
+import { invalidateParagraphCache } from '#core/canvas/paragraph-cache'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { clearSubtreePictureCache } from '#core/canvas/renderer/state'
 import { fontManager } from '#core/text/fonts'
 
 function clearRetainedSceneState(r: SkiaRenderer): void {
   r.scenePicture?.delete()
+  r.scenePreviewBasePicture?.delete()
+  r.scenePreviewBasePicture = null
   r.sceneBacking?.image.delete()
   r.sceneBacking = null
   r.sceneBackingBuild?.surface.delete()
@@ -65,6 +68,7 @@ export function destroyRenderer(r: SkiaRenderer): void {
   r.maskFilterCache.clear()
   for (const pic of r.nodePictureCache.values()) pic?.delete()
   r.nodePictureCache.clear()
+  invalidateParagraphCache(r)
   clearSubtreePictureCache(r)
   clearRetainedSceneState(r)
   r._flashPaint?.delete()

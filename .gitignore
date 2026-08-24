@@ -74,6 +74,13 @@ components.d.ts
 
 # Agent scratch space (reviews, plans, test artifacts)
 scratch/
+.firecrawl/
+
+# Local model cache/usage meter copies
+.openpencil/model-meter/
+
+# Local Pi skill aliases (live copies stay under ~/.pi and ~/plugins)
+.pi/skills/
 /artifacts/openpencil-workflows/06-knowledge-canvas-self-test.png
 
 # OpenCode

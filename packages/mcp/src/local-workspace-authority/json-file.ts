@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { chmod, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 function errorCode(error: unknown): string | null {
@@ -8,8 +8,17 @@ function errorCode(error: unknown): string | null {
 }
 
 export async function readJsonFile(filePath: string): Promise<unknown | null> {
+  const saved = await readSerializedJsonFile(filePath)
+  return saved?.value ?? null
+}
+
+export async function readSerializedJsonFile(
+  filePath: string
+): Promise<{ serialized: string; value: unknown } | null> {
   try {
-    return JSON.parse(await readFile(filePath, 'utf8')) as unknown
+    const raw = await readFile(filePath, 'utf8')
+    const serialized = raw.endsWith('\n') ? raw.slice(0, -1) : raw
+    return { serialized, value: JSON.parse(raw) as unknown }
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return null
     throw error
@@ -22,7 +31,6 @@ async function writeFileAtomically(filePath: string, value: string | Uint8Array)
   try {
     await writeFile(temporaryPath, value, { mode: 0o600 })
     await rename(temporaryPath, filePath)
-    await chmod(filePath, 0o600)
   } catch (error) {
     await unlink(temporaryPath).catch(() => undefined)
     throw error
@@ -33,8 +41,18 @@ export async function writeBinaryFile(filePath: string, value: Uint8Array): Prom
   await writeFileAtomically(filePath, value)
 }
 
-export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await writeFileAtomically(filePath, `${JSON.stringify(value, null, 2)}\n`)
+export async function writeSerializedJsonFile(filePath: string, serialized: string): Promise<void> {
+  await writeFileAtomically(filePath, serialized.endsWith('\n') ? serialized : `${serialized}\n`)
+}
+
+export async function writeJsonFile(
+  filePath: string,
+  value: unknown,
+  options?: { space?: number }
+): Promise<void> {
+  const space = options?.space ?? 2
+  const serialized = space === 0 ? JSON.stringify(value) : JSON.stringify(value, null, space)
+  await writeSerializedJsonFile(filePath, serialized)
 }
 
 export async function jsonFileMarker(filePath: string): Promise<string> {
@@ -57,9 +75,10 @@ export async function writeJsonHistory(
   contentHash: string,
   value: unknown
 ): Promise<void> {
-  await writeFileAtomically(
+  const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+  await writeSerializedJsonFile(
     path.join(historyPath, historyFileName(revision, contentHash)),
-    `${JSON.stringify(value)}\n`
+    serialized
   )
 }
 

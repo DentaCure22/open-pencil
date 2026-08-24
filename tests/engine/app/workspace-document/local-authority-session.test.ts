@@ -29,6 +29,7 @@ function createAuthorityDocumentFixture() {
   }).id
   const document = serializeSmylrProductionDocumentForAuthority(source)
   if (!document) throw new Error('Authority fixture document missing')
+  expect(document.mermaidPresent).toBe(false)
   return { document, markerId, selectedPageId }
 }
 
@@ -63,6 +64,15 @@ describe('local workspace authority graph base', () => {
     expect(graphBase.hasDiverged('committed-hash')).toBe(false)
     graphBase.clear()
     expect(graphBase.hasDiverged('committed-hash')).toBe(true)
+  })
+})
+
+describe('local workspace authority save path', () => {
+  test('does not wait for the browser cache after an authority commit', async () => {
+    const session = await Bun.file('src/app/workspace-document/local-authority/session.ts').text()
+    expect(session).toContain('options.onLocalHeadCommitted()')
+    expect(session).toContain('void saveSmylrProductionDocument(store)')
+    expect(session).toContain('[Local workspace authority] Browser cache save failed:')
   })
 })
 

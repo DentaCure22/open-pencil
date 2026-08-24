@@ -90,6 +90,7 @@ function remainingLabel(group: string): string {
         side="top"
         :side-offset="8"
         class="z-[140] max-h-[min(620px,70vh)] w-[244px] overflow-y-auto overscroll-contain rounded-[13px] border border-border/90 bg-chrome-raised/98 p-1.5 text-surface shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-xl outline-none"
+        @close-auto-focus.prevent
       >
         <DropdownMenuLabel class="px-2.5 py-1.5 text-[11px] font-medium text-muted">
           Model

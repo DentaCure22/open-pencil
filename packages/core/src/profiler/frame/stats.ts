@@ -1,4 +1,5 @@
 const BUFFER_SIZE = 120
+export const MAX_COUNTED_FRAME_GAP_MS = 250
 
 const hasPerformance = typeof performance !== 'undefined'
 
@@ -25,7 +26,7 @@ export class FrameStats {
   culledNodes = 0
   drawCalls = 0
   scenePictureCacheHit = false
-  scenePictureMode: 'hit' | 'record' | 'volatile' | 'none' = 'none'
+  scenePictureMode: 'hit' | 'record' | 'preview' | 'volatile' | 'none' = 'none'
   scenePictureMissReason = ''
   scenePictureDrawTime = 0
   scenePictureRecordTime = 0
@@ -38,15 +39,38 @@ export class FrameStats {
   private bufferCount = 0
   private lastTimestamp = 0
 
+  reset(): void {
+    this.frameTime = 0
+    this.cpuTime = 0
+    this.gpuTime = 0
+    this.minFrameTime = Infinity
+    this.maxFrameTime = 0
+    this.avgFrameTime = 0
+    this.minCpuTime = Infinity
+    this.maxCpuTime = 0
+    this.avgCpuTime = 0
+    this.minGpuTime = Infinity
+    this.maxGpuTime = 0
+    this.avgGpuTime = 0
+    this.smoothedFps = 0
+    this.bufferIndex = 0
+    this.bufferCount = 0
+    this.lastTimestamp = 0
+    this.frameTimeBuffer.fill(0)
+    this.cpuTimeBuffer.fill(0)
+    this.gpuTimeBuffer.fill(0)
+  }
+
   recordFrame(cpuTimeMs: number): void {
     const now = hasPerformance ? performance.now() : 0
-
-    if (this.lastTimestamp > 0) {
-      this.frameTime = now - this.lastTimestamp
-    }
+    const gap = this.lastTimestamp > 0 ? now - this.lastTimestamp : 0
     this.lastTimestamp = now
-
     this.cpuTime = cpuTimeMs
+    if (gap <= 0 || gap > MAX_COUNTED_FRAME_GAP_MS) {
+      this.frameTime = cpuTimeMs
+      return
+    }
+    this.frameTime = gap
 
     const i = this.bufferIndex
     this.frameTimeBuffer[i] = this.frameTime

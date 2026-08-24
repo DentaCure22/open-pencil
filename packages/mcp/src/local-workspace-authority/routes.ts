@@ -13,7 +13,6 @@ import {
   type InitializeLocalWorkspaceRequest,
   type LocalWorkspaceAuthorityStatus,
   type LocalWorkspaceCommitReceipt,
-  type LocalWorkspaceCommitTransaction,
   type QueueResolvedLocalWorkspaceNavigationRequest,
   type RecordLocalWorkspacePresenceRequest,
   type RecordLocalWorkspaceThemeRequest
@@ -51,7 +50,6 @@ type AuthorityRequestBody = {
   spokenTurns?: unknown
   summary?: unknown
   theme?: unknown
-  transaction?: unknown
   workspaceId?: unknown
 }
 
@@ -425,28 +423,6 @@ function initializeRequest(body: AuthorityRequestBody): InitializeLocalWorkspace
   }
 }
 
-function commitTransaction(value: unknown): LocalWorkspaceCommitTransaction | undefined {
-  if (value === undefined) return undefined
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError('Commit transaction requires pageId, requestId, and a supported route')
-  }
-  const candidate = value as Partial<LocalWorkspaceCommitTransaction>
-  if (
-    typeof candidate.pageId !== 'string' ||
-    !candidate.pageId ||
-    typeof candidate.requestId !== 'string' ||
-    !candidate.requestId ||
-    candidate.route !== 'board_build:plan/v1'
-  ) {
-    throw new TypeError('Commit transaction requires pageId, requestId, and a supported route')
-  }
-  return {
-    pageId: candidate.pageId,
-    requestId: candidate.requestId,
-    route: candidate.route
-  }
-}
-
 function commitRequest(body: AuthorityRequestBody): CommitLocalWorkspaceRequest {
   if (
     typeof body.requestId !== 'string' ||
@@ -464,13 +440,11 @@ function commitRequest(body: AuthorityRequestBody): CommitLocalWorkspaceRequest 
       'Commit requires workspaceId, expectedRevision, expectedContentHash, requestId, and a document payload'
     )
   }
-  const transaction = commitTransaction(body.transaction)
   return {
     document: body.document,
     expectedContentHash: body.expectedContentHash,
     expectedRevision: body.expectedRevision,
     requestId: body.requestId,
-    ...(transaction ? { transaction } : {}),
     workspaceId: body.workspaceId
   }
 }

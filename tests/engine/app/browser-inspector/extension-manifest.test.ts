@@ -14,6 +14,14 @@ const offscreenPath = new URL(
   '../../../../extensions/openpencil-chrome/offscreen.js',
   import.meta.url
 )
+const externalSurfaceRelayPath = new URL(
+  '../../../../extensions/openpencil-chrome/external-surface-relay.js',
+  import.meta.url
+)
+const externalSurfaceServicePath = new URL(
+  '../../../../extensions/openpencil-chrome/external-surface-service.js',
+  import.meta.url
+)
 
 describe('OpenPencil Chrome extension manifest', () => {
   test('has the page access required for rail-initiated screenshot capture', async () => {
@@ -79,11 +87,38 @@ describe('OpenPencil Chrome extension manifest', () => {
     expect(serviceWorker).not.toContain('chrome.tabs.update')
     expect(serviceWorker).toContain('return injectPicker(tabId, session)')
     expect(serviceWorker).toContain(
-      "'activate-browser-element-picker': () => armPickerFromOpenPencil()"
+      "'activate-browser-element-picker': (_message, sender) => armPickerFromOpenPencil(sender)"
     )
+    expect(serviceWorker).not.toContain('!page || isOpenPencilPage(tab.url)')
+    expect(serviceWorker).not.toContain('isWebPage(tab.url) && !isOpenPencilPage(tab.url)')
+    expect(serviceWorker).toContain('const result = await injectPicker(tabId, session)')
     expect(serviceWorker).toContain(
       "'reserve-browser-element-sequence': (message) => reserveCaptureSequence(message)"
     )
     expect(serviceWorker).toContain("files: ['openpencil-bridge.js']")
+  })
+
+  test('relays live-surface input without copying destination UI', async () => {
+    const picker = await readFile(pickerPath, 'utf8')
+    const offscreen = await readFile(offscreenPath, 'utf8')
+    const serviceWorker = await readFile(serviceWorkerPath, 'utf8')
+    const relay = await readFile(externalSurfaceRelayPath, 'utf8')
+    const service = await readFile(externalSurfaceServicePath, 'utf8')
+    expect(picker).toContain('surfacePreview')
+    expect(picker).toContain('sourceWindow')
+    expect(serviceWorker).toContain("'relay-browser-live-surface-input'")
+    expect(serviceWorker).toContain('measureBrowserLiveSurface(source)')
+    expect(service).toContain("files: ['external-surface-relay.js']")
+    expect(service).toContain('browser-live-surface-measure')
+    expect(relay).toContain('message?.kind !== MESSAGE_KIND')
+    expect(relay).toContain('element.getBoundingClientRect()')
+    expect(relay).toContain('new PointerEvent(pointerType')
+    expect(relay).toContain("new WheelEvent('wheel'")
+    expect(relay).toContain("new InputEvent('input'")
+    expect(offscreen).toContain('new MediaStreamTrackProcessor')
+    expect(offscreen).toContain('capture.imageCapture.grabFrame()')
+    expect(offscreen).toContain('video.requestVideoFrameCallback')
+    expect(offscreen).toContain('fallbackIntervalId = setInterval')
+    expect(relay).not.toContain('data-attune-component-smuggle')
   })
 })

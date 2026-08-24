@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   browserCaptureAttachmentAgentContext,
+  browserCaptureAttachmentPreview,
   browserCaptureAttachmentSummary,
   createBrowserCaptureAttachment,
   resolveBrowserCaptureAttachments
@@ -59,6 +60,12 @@ describe('browser capture chat attachment', () => {
       title: session.title,
       traceLinked: true
     })
+    expect(browserCaptureAttachmentPreview(attachment)).toEqual({
+      height: selection.snapshot.height,
+      imageUrl: selection.snapshot.dataUrl,
+      title: session.title,
+      width: selection.snapshot.width
+    })
     expect(browserCaptureAttachmentAgentContext(attachment)).toContain('Trace session: trace-1')
 
     const resolved = await resolveBrowserCaptureAttachments([attachment])
@@ -94,6 +101,7 @@ describe('browser capture chat attachment', () => {
     expect(attachment).not.toBeNull()
     if (!attachment) return
     expect(browserCaptureAttachmentSummary(attachment)?.recordingCount).toBe(1)
+    expect(browserCaptureAttachmentPreview(attachment)).toBeNull()
     const resolved = await resolveBrowserCaptureAttachments([attachment])
     expect(resolved.attachments).toHaveLength(1)
     expect(resolved.attachments[0]?.type).toBe('video/webm')

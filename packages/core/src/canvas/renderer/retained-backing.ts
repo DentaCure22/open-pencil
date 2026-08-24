@@ -1,7 +1,6 @@
 import type { Canvas, Image as CKImage, Surface } from 'canvaskit-wasm'
 
 import type { SceneGraph } from '@open-pencil/scene-graph'
-import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 import type { VisualBounds } from '@open-pencil/scene-graph/geometry'
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
@@ -66,18 +65,9 @@ export function updateSceneBackingPreviewState(r: SkiaRenderer, layer: RenderLay
   }
 }
 
-function backingMetadataMatches(
-  r: SkiaRenderer,
-  sceneVersion: number,
-  positionPreviewVersion: number
-): boolean {
+function backingMetadataMatches(r: SkiaRenderer, sceneVersion: number): boolean {
   const backing = r.sceneBacking
-  return !!(
-    backing &&
-    backing.pageId === r.pageId &&
-    backing.sceneVersion === sceneVersion &&
-    backing.positionPreviewVersion === positionPreviewVersion
-  )
+  return !!(backing && backing.pageId === r.pageId && backing.sceneVersion === sceneVersion)
 }
 
 function backingScreenCoverageContainsViewport(r: SkiaRenderer): boolean {
@@ -116,10 +106,9 @@ function backingZoomMatchesLiveViewport(r: SkiaRenderer): boolean {
 function backingCoverageContainsLiveViewport(
   r: SkiaRenderer,
   sceneVersion: number,
-  allowStaleZoom: boolean,
-  positionPreviewVersion: number
+  allowStaleZoom: boolean
 ): boolean {
-  if (!backingMetadataMatches(r, sceneVersion, positionPreviewVersion)) return false
+  if (!backingMetadataMatches(r, sceneVersion)) return false
   const crispZoom = backingZoomMatchesLiveViewport(r)
   if (allowStaleZoom && backingScreenCoverageContainsViewport(r)) return true
   return crispZoom && backingWorldCoverageContainsLiveViewport(r)
@@ -129,14 +118,10 @@ function drawSceneBacking(
   r: SkiaRenderer,
   canvas: Canvas,
   sceneVersion: number,
-  allowStaleZoom: boolean,
-  positionPreviewVersion: number
+  allowStaleZoom: boolean
 ): boolean {
   const backing = r.sceneBacking
-  if (
-    !backing ||
-    !backingCoverageContainsLiveViewport(r, sceneVersion, allowStaleZoom, positionPreviewVersion)
-  ) {
+  if (!backing || !backingCoverageContainsLiveViewport(r, sceneVersion, allowStaleZoom)) {
     return false
   }
 
@@ -293,11 +278,7 @@ function renderBackingChild(
     w: backing.worldWidth,
     h: backing.worldHeight
   }
-  const bounds = computeDescendantVisualBounds(
-    [childId],
-    (id) => graph.getNode(id),
-    (id) => graph.getAbsolutePosition(id)
-  )
+  const bounds = graph.getDescendantVisualBounds(childId)
   if (bounds && !visualBoundsIntersectBacking(bounds, backing)) {
     r.worldViewport = prevViewport
     return
@@ -349,6 +330,34 @@ function installSceneBackingImage(
   r.scenePicturePositionPreviewVersion = positionPreviewVersion
   r.scenePicturePageId = r.pageId
   r.sceneBackingNeedsCrispRender = false
+}
+
+function liveRenderVisibleScene(r: SkiaRenderer, canvas: Canvas, graph: SceneGraph): void {
+  const pageNode = graph.getNode(r.pageId ?? graph.rootId)
+  if (!pageNode) return
+  canvas.save()
+  canvas.translate(r.panX, r.panY)
+  canvas.scale(r.zoom, r.zoom)
+  const previousViewport = r.worldViewport
+  r.worldViewport = {
+    x: -r.panX / r.zoom,
+    y: -r.panY / r.zoom,
+    w: r.viewportWidth / r.zoom,
+    h: r.viewportHeight / r.zoom
+  }
+  for (const childId of pageNode.childIds) {
+    r.renderNode(canvas, graph, childId, {})
+  }
+  r.worldViewport = previousViewport
+  canvas.restore()
+}
+
+function continueSceneBackingBuild(r: SkiaRenderer, graph: SceneGraph, sceneVersion: number): void {
+  if (!sceneBackingBuildMatches(r, sceneVersion)) {
+    cancelSceneBackingBuild(r)
+    startSceneBackingBuild(r, graph, sceneVersion)
+  }
+  stepSceneBackingBuild(r, sceneVersion)
 }
 
 function cancelSceneBackingBuild(r: SkiaRenderer): void {
@@ -437,66 +446,25 @@ function stepSceneBackingBuild(r: SkiaRenderer, sceneVersion: number): boolean {
   return true
 }
 
-function recordSceneBacking(r: SkiaRenderer, graph: SceneGraph, sceneVersion: number): void {
-  const startedAt = now()
-  const backing = sceneBackingGeometry(r)
-  const surface = createSceneBackingSurface(r, backing.width, backing.height, backing.dpr)
-  if (!surface) return
-  const canvas = surface.getCanvas()
-  canvas.clear(r.ck.Color4f(0, 0, 0, 0))
-  const pageNode = graph.getNode(r.pageId ?? graph.rootId)
-  if (pageNode) {
-    for (const childId of pageNode.childIds) {
-      renderBackingChild(r, graph, surface, childId, backing, sceneVersion)
-    }
-  }
-  surface.flush()
-  const image = surface.makeImageSnapshot()
-  surface.delete()
-  installSceneBackingImage(r, image, sceneVersion, graph.positionPreviewVersion, backing)
-  r.sceneBackingAverageRecordMs = smoothAverage(
-    r.sceneBackingAverageRecordMs,
-    clamp(now() - startedAt, 1, 1_000)
-  )
-}
-
 export function renderSceneBacking(
   r: SkiaRenderer,
   canvas: Canvas,
   graph: SceneGraph,
   sceneVersion: number
 ): boolean {
-  const positionPreviewVersion = graph.positionPreviewVersion
   const allowStaleZoom = now() < r.sceneBackingPreviewUntil
-  const hasCoverage = backingCoverageContainsLiveViewport(
-    r,
-    sceneVersion,
-    allowStaleZoom,
-    positionPreviewVersion
-  )
+  const hasCoverage = backingCoverageContainsLiveViewport(r, sceneVersion, allowStaleZoom)
   if (!hasCoverage) {
-    if (
-      !r.sceneBacking ||
-      !backingMetadataMatches(r, sceneVersion, positionPreviewVersion) ||
-      !backingScreenCoverageContainsViewport(r)
-    ) {
-      cancelSceneBackingBuild(r)
-      recordSceneBacking(r, graph, sceneVersion)
-    } else {
-      if (!sceneBackingBuildMatches(r, sceneVersion)) startSceneBackingBuild(r, graph, sceneVersion)
-      stepSceneBackingBuild(r, sceneVersion)
-    }
+    continueSceneBackingBuild(r, graph, sceneVersion)
   } else if (r.sceneBackingBuild) {
     stepSceneBackingBuild(r, sceneVersion)
   }
 
   const crisp = Math.abs((r.sceneBacking?.zoom ?? r.zoom) - r.zoom) <= 0.0001
   r.sceneBackingNeedsCrispRender = !crisp || !!r.sceneBackingBuild
-  return drawSceneBacking(
-    r,
-    canvas,
-    sceneVersion,
-    allowStaleZoom || !!r.sceneBackingBuild,
-    positionPreviewVersion
-  )
+  const drew = drawSceneBacking(r, canvas, sceneVersion, allowStaleZoom || !!r.sceneBackingBuild)
+  if (drew) return true
+  if (!r.sceneBackingBuild || graph.hasNodePositionPresentations()) return false
+  liveRenderVisibleScene(r, canvas, graph)
+  return true
 }

@@ -1,11 +1,18 @@
 import type { AgentConversationHistory, AgentConversationThread } from './client'
+import { boundLoadedTranscript } from './replay-buffer'
 import type { AiMessage, AiMessagePart } from './types'
 
-function sameReasoningPart(
-  previous: Extract<AiMessagePart, { type: 'reasoning' }>,
-  next: Extract<AiMessagePart, { type: 'reasoning' }>
+function sameProgressPart(
+  previous: Extract<AiMessagePart, { type: 'commentary' | 'reasoning' }>,
+  next: Extract<AiMessagePart, { type: 'commentary' | 'reasoning' }>
 ) {
   return previous.state === next.state && previous.text === next.text
+}
+
+function isProgressPart(
+  part: AiMessagePart
+): part is Extract<AiMessagePart, { type: 'commentary' | 'reasoning' }> {
+  return part.type === 'commentary' || part.type === 'reasoning'
 }
 
 function sameToolPart(
@@ -78,8 +85,8 @@ function sameAttachmentPart(
 function samePart(previous: AiMessagePart, next: AiMessagePart): boolean {
   if (previous.type !== next.type) return false
   if (previous.type === 'text' && next.type === 'text') return previous.text === next.text
-  if (previous.type === 'reasoning' && next.type === 'reasoning') {
-    return sameReasoningPart(previous, next)
+  if (isProgressPart(previous) && isProgressPart(next)) {
+    return sameProgressPart(previous, next)
   }
   if (previous.type === 'tool' && next.type === 'tool') {
     return sameToolPart(previous, next)
@@ -147,19 +154,48 @@ function sameThread(previous: AgentConversationThread, next: AgentConversationTh
 
 function reconcileMessages(previous: AiMessage[], next: AiMessage[]): AiMessage[] {
   const previousById = new Map(previous.map((message) => [message.id, message]))
-  return next.map((message) => {
+  const messages = next.map((message) => {
     const current = previousById.get(message.id)
     return current && sameMessage(current, message) ? current : message
   })
+  if (
+    messages.length === previous.length &&
+    messages.every((message, index) => message === previous[index])
+  ) {
+    return previous
+  }
+  return messages
+}
+
+export function sameAgentConversationHistory(
+  previous: AgentConversationHistory | null,
+  next: AgentConversationHistory
+): boolean {
+  if (!previous) return false
+  return (
+    previous.threads.length === next.threads.length &&
+    previous.threads.every((thread, index) => thread === next.threads[index])
+  )
 }
 
 function messageHasActivityParts(message: AiMessage): boolean {
-  return Boolean(message.parts?.some((part) => part.type === 'tool' || part.type === 'reasoning'))
+  return Boolean(
+    message.parts?.some(
+      (part) => part.type === 'commentary' || part.type === 'reasoning' || part.type === 'tool'
+    )
+  )
 }
 
 function preferRetainedMessage(previous: AiMessage, preview: AiMessage): AiMessage {
   if (sameMessage(previous, preview)) return previous
-  if (messageHasActivityParts(previous) && !messageHasActivityParts(preview)) return previous
+  if (messageHasActivityParts(previous) && !messageHasActivityParts(preview)) {
+    if (!preview.text.trim()) return previous
+    return {
+      ...previous,
+      ...(preview.completedAt ? { completedAt: preview.completedAt } : {}),
+      text: preview.text
+    }
+  }
   return preview
 }
 
@@ -172,6 +208,63 @@ export function retainedTranscriptNeedsHydrate(input: {
   if (input.hydratedUpdatedAt !== input.updatedAt) return true
   if (input.hydratedMessageCount === undefined) return true
   return input.retainedMessageCount < input.hydratedMessageCount
+}
+
+export function applyConversationPreviewMetadata(
+  current: AgentConversationThread,
+  preview: AgentConversationThread
+): AgentConversationThread {
+  return {
+    ...preview,
+    messages: current.messages,
+    ...(current.contextUsage && !preview.contextUsage
+      ? { contextUsage: current.contextUsage }
+      : {}),
+    ...(current.hasOlder === undefined ? {} : { hasOlder: current.hasOlder }),
+    ...(current.hasNewer === undefined ? {} : { hasNewer: current.hasNewer }),
+    ...(current.messageTotal === undefined ? {} : { messageTotal: current.messageTotal }),
+    ...(current.newerAfter === undefined ? {} : { newerAfter: current.newerAfter }),
+    ...(current.olderBefore === undefined ? {} : { olderBefore: current.olderBefore }),
+    ...(current.turns ? { turns: current.turns } : {})
+  }
+}
+
+function messageOrder(left: AiMessage, right: AiMessage): number {
+  const byCreated = left.createdAt.localeCompare(right.createdAt)
+  if (byCreated) return byCreated
+  return left.id.localeCompare(right.id)
+}
+
+export function mergeConversationPageMessages(
+  current: AiMessage[],
+  page: AiMessage[]
+): AiMessage[] {
+  const merged = new Map<string, AiMessage>()
+  for (const message of current) merged.set(message.id, message)
+  for (const message of page) {
+    const existing = merged.get(message.id)
+    merged.set(message.id, existing && sameMessage(existing, message) ? existing : message)
+  }
+  return [...merged.values()].sort(messageOrder)
+}
+
+export function applyConversationPage(
+  current: AgentConversationThread,
+  page: AgentConversationThread,
+  mode: 'delta' | 'older' | 'tail'
+): AgentConversationThread {
+  const messages = boundLoadedTranscript(
+    mergeConversationPageMessages(current.messages, page.messages)
+  )
+  return {
+    ...page,
+    hasNewer: page.hasNewer === true,
+    hasOlder: mode === 'delta' ? current.hasOlder : page.hasOlder,
+    messages,
+    newerAfter: page.newerAfter ?? current.newerAfter,
+    olderBefore: mode === 'delta' ? current.olderBefore : page.olderBefore,
+    ...(page.turns?.length ? { turns: page.turns } : current.turns ? { turns: current.turns } : {})
+  }
 }
 
 export function reconcileRetainedConversationMessages(
@@ -215,6 +308,21 @@ export function mapAgentConversationHistory(
     ...next,
     threads: next.threads.map((thread) => mapThread(previousById.get(thread.id), thread))
   }
+}
+
+export function retainMissingOpenTranscripts(
+  previous: AgentConversationHistory | null,
+  next: AgentConversationHistory,
+  openThreadIds: Iterable<string>
+): AgentConversationHistory {
+  if (!previous) return next
+  const open = new Set(openThreadIds)
+  if (open.size === 0) return next
+  const nextIds = new Set(next.threads.map((thread) => thread.id))
+  const retained = previous.threads.filter(
+    (thread) => open.has(thread.id) && !nextIds.has(thread.id)
+  )
+  return retained.length ? { ...next, threads: [...next.threads, ...retained] } : next
 }
 
 export function reconcileAgentConversationHistory(

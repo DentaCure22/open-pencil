@@ -11,7 +11,6 @@ import {
 } from '@/app/agent-chat/approval'
 import { threadLiveWorkingLabel } from '@/app/agent-chat/board-conversation'
 import {
-  type AgentConversationState,
   type AgentConversationThread,
   type AgentExtensionUiResponse,
   respondToAgentUiRequest
@@ -24,20 +23,35 @@ import {
   type AgentPromptSubmission
 } from '@/app/agent-chat/models'
 import {
+  loadOlderAgentConversationTranscript,
   releaseAgentConversationTranscript,
   retainAgentConversationTranscript,
+  revealAgentConversationChapter,
   useAgentConversationHistory
 } from '@/app/agent-chat/history-store'
-import { mergeOptimisticMessages, optimisticConversation } from '@/app/agent-chat/optimistic'
+import {
+  agentChatsPanelCreating,
+  agentChatsPanelPendingThreadId,
+  agentChatsPanelSelectedId,
+  agentChatsPanelView
+} from '@/app/agent-chat/panel'
+import {
+  clearOptimisticConversation,
+  mergeOptimisticMessages,
+  optimisticConversation
+} from '@/app/agent-chat/optimistic'
 import { plainConversationPreview } from '@/app/agent-chat/presentation'
 import {
   agentConversationDisplayTitle,
+  agentConversationLastUserMessageAt,
   isAgentConversationArchived,
   isAgentConversationPinned,
   isAgentConversationUnread,
+  setAgentConversationTitle,
   setAgentConversationUnread,
   sortAgentConversationThreads
 } from '@/app/agent-chat/thread-preferences'
+import { toast } from '@/app/shell/ui'
 import {
   browserCaptureAttachmentFromDrag,
   browserCaptureAttachmentKey,
@@ -46,8 +60,12 @@ import {
 } from '@/app/browser-inspector/attachment'
 import { hasBrowserCaptureDrag, readBrowserCaptureDrag } from '@/app/browser-inspector/drag'
 import {
+  armAgentConversationPointerDrag,
+  newAgentConversationDragPayload,
+  shouldSuppressAgentConversationClick,
   writeAgentConversationDrag,
-  writeNewAgentConversationDrag
+  writeNewAgentConversationDrag,
+  type AgentConversationDragPayload
 } from '@/app/agent-terminal/drag'
 import { AiConversationSurface, conversationStatus } from '@/components/ai-elements'
 import AgentConversationApproval from '@/components/agent-chat/AgentConversationApproval.vue'
@@ -57,28 +75,40 @@ import Tip from '@/components/ui/Tip.vue'
 const { error: historyError, history, refresh } = useAgentConversationHistory()
 const now = useNow({ interval: 1_000 })
 const search = ref('')
-const selectedId = ref<string | null>(null)
-const creating = ref(false)
-const pendingThreadId = ref<string | null>(null)
+const selectedId = agentChatsPanelSelectedId
+const creating = agentChatsPanelCreating
+const pendingThreadId = agentChatsPanelPendingThreadId
 const followUp = ref('')
 const annotations = ref<AgentPromptAnnotation[]>([])
 const attachments = ref<File[]>([])
 const submitting = ref(false)
 const error = ref('')
 const respondingUiRequests = ref<string[]>([])
-const messageApprovalFeedback = ref<{
+type MessageApprovalFeedback = {
   preview: MessageApprovalPreview
+  requestId: string
+  requestedAt: string
   state: Exclude<MessageApprovalState, 'pending'>
-} | null>(null)
+  threadId: string
+}
+type MessageApprovalCard = {
+  key: string
+  preview: MessageApprovalPreview
+  request?: AgentConversationThread['pendingUiRequests'][number]
+  runId: string
+  state: MessageApprovalState
+}
+const messageApprovalFeedback = ref<MessageApprovalFeedback[]>([])
 const lastFollowUp = ref('')
 const lastAnnotations = ref<AgentPromptAnnotation[]>([])
 const lastAttachments = ref<File[]>([])
 const panel = ref<HTMLElement | null>(null)
-const view = ref<'conversation' | 'list'>('list')
+const view = agentChatsPanelView
 const showArchived = ref(false)
 const captureDropTargetId = ref<string | null>(null)
 const transcriptScrollTop = new Map<string, number>()
 const browserCaptureDrafts = new Map<string, File[]>()
+const newConversationEpoch = ref(0)
 
 const selectedThread = computed(
   () => history.value?.threads.find((thread) => thread.id === selectedId.value) ?? null
@@ -119,24 +149,18 @@ const optimisticSending = computed(
     optimistic.value?.state === 'submitted' ||
     (optimistic.value?.state === 'thinking' && selectedThread.value?.state !== 'running')
 )
-const hasPendingApproval = computed(() => Boolean(selectedThread.value?.pendingUiRequests.length))
-const hasApprovalSurface = computed(
-  () => hasPendingApproval.value || Boolean(messageApprovalFeedback.value)
-)
 const uiStatus = computed(() =>
   conversationStatus({
     error: optimistic.value?.error || error.value,
     sending: optimisticSending.value,
-    state: optimistic.value?.state === 'completed' ? 'completed' : selectedThread.value?.state
+    state:
+      selectedThread.value?.state === 'running'
+        ? 'running'
+        : optimistic.value?.state === 'completed'
+          ? 'completed'
+          : selectedThread.value?.state
   })
 )
-const selectedStatusMessage = computed(() => {
-  const immediate = optimistic.value?.error || error.value || historyError.value
-  if (immediate) return immediate
-  if (hasApprovalSurface.value) return undefined
-  if (selectedThread.value?.state !== 'needs_attention') return undefined
-  return plainConversationPreview(selectedThread.value.recentUpdate, 140) || undefined
-})
 const canStopSelected = computed(
   () =>
     Boolean(
@@ -152,10 +176,10 @@ const canStopSelected = computed(
 const visibleMessages = computed(() =>
   mergeOptimisticMessages(conversationThreadId.value, selectedThread.value?.messages ?? [])
 )
-const messageApprovalCard = computed(() => {
-  const feedback = messageApprovalFeedback.value
-  if (!feedback) return null
-  if (feedback.state !== 'sending') return feedback
+function feedbackState(
+  feedback: MessageApprovalFeedback
+): Exclude<MessageApprovalState, 'pending'> {
+  if (feedback.state !== 'sending') return feedback.state
   for (const message of [...(selectedThread.value?.messages ?? [])].reverse()) {
     for (const part of [...(message.parts ?? [])].reverse()) {
       if (part.type !== 'tool') continue
@@ -163,26 +187,107 @@ const messageApprovalCard = computed(() => {
       if (
         !preview ||
         preview.recipient !== feedback.preview.recipient ||
-        preview.text !== feedback.preview.text
+        preview.texts.length !== feedback.preview.texts.length ||
+        preview.texts.some((text, index) => text !== feedback.preview.texts[index])
       ) {
         continue
       }
-      if (part.state === 'success') return { preview, state: 'sent' as const }
-      if (part.state === 'error') return { preview, state: 'failed' as const }
-      return feedback
+      if (part.state === 'success') return 'sent'
+      if (part.state === 'error') return 'failed'
+      return feedback.state
     }
   }
-  return feedback
-})
-
-function stateTone(state: AgentConversationState): string {
-  if (state === 'needs_attention') return 'bg-red-400'
-  if (state === 'running') return 'bg-accent'
-  return 'bg-muted/60'
+  return feedback.state
 }
 
-function showStateDot(state: AgentConversationState): boolean {
-  return state === 'needs_attention' || state === 'running'
+function approvalRunId(requestedAt: string): string {
+  const requestedTime = Date.parse(requestedAt)
+  const first = visibleMessages.value[0]
+  let runId = first ? (first.role === 'user' ? first.id : `run:${first.id}`) : 'unattached'
+  for (const message of visibleMessages.value) {
+    if (message.role !== 'user') continue
+    if (Number.isFinite(requestedTime) && Date.parse(message.createdAt) > requestedTime) break
+    runId = message.id
+  }
+  return runId
+}
+
+function hasNewerUserMessage(requestedAt: string): boolean {
+  const requestedTime = Date.parse(requestedAt)
+  if (!Number.isFinite(requestedTime)) return false
+  return visibleMessages.value.some(
+    (message) => message.role === 'user' && Date.parse(message.createdAt) > requestedTime
+  )
+}
+
+const messageApprovalCards = computed<MessageApprovalCard[]>(() => {
+  const thread = selectedThread.value
+  if (!thread) return []
+  const feedback = messageApprovalFeedback.value.filter((item) => item.threadId === thread.id)
+  const cards: MessageApprovalCard[] = feedback.map((item) => ({
+    key: `feedback:${item.requestId}`,
+    preview: item.preview,
+    runId: approvalRunId(item.requestedAt),
+    state: feedbackState(item)
+  }))
+  const feedbackIds = new Set(feedback.map((item) => item.requestId))
+  for (const request of thread.pendingUiRequests) {
+    if (feedbackIds.has(request.id)) continue
+    const preview = messageApprovalPreview(request)
+    if (!preview) continue
+    const superseded = hasNewerUserMessage(request.requestedAt)
+    cards.push({
+      key: `request:${request.id}`,
+      preview,
+      ...(superseded ? {} : { request }),
+      runId: approvalRunId(request.requestedAt),
+      state: superseded ? 'cancelled' : 'pending'
+    })
+  }
+  return cards
+})
+const latestConversationRunId = computed(() => {
+  const latestUser = [...visibleMessages.value].reverse().find((message) => message.role === 'user')
+  if (latestUser) return latestUser.id
+  const first = visibleMessages.value[0]
+  return first ? `run:${first.id}` : 'unattached'
+})
+const hasApprovalSurface = computed(() =>
+  messageApprovalCards.value.some((card) => card.runId === latestConversationRunId.value)
+)
+const selectedStatusMessage = computed(() => {
+  const immediate = optimistic.value?.error || error.value || historyError.value
+  if (immediate) return immediate
+  if (hasApprovalSurface.value) return undefined
+  if (selectedThread.value?.state !== 'needs_attention') return undefined
+  return plainConversationPreview(selectedThread.value.recentUpdate, 140) || undefined
+})
+
+function messageApprovalCardsForRun(runId: string): MessageApprovalCard[] {
+  return messageApprovalCards.value.filter((card) => card.runId === runId)
+}
+
+function setMessageApprovalFeedback(feedback: MessageApprovalFeedback) {
+  const index = messageApprovalFeedback.value.findIndex(
+    (item) => item.threadId === feedback.threadId && item.requestId === feedback.requestId
+  )
+  if (index === -1) {
+    messageApprovalFeedback.value = [...messageApprovalFeedback.value, feedback]
+    return
+  }
+  messageApprovalFeedback.value = messageApprovalFeedback.value.map((item, itemIndex) =>
+    itemIndex === index ? feedback : item
+  )
+}
+
+function removeMessageApprovalFeedback(threadId: string, requestId: string) {
+  messageApprovalFeedback.value = messageApprovalFeedback.value.filter(
+    (item) => item.threadId !== threadId || item.requestId !== requestId
+  )
+}
+
+function isThreadWorking(thread: AgentConversationThread): boolean {
+  return thread.state === 'running'
 }
 
 function showThreadPreview(thread: AgentConversationThread): boolean {
@@ -194,16 +299,75 @@ function threadPreview(thread: AgentConversationThread): string {
   return plainConversationPreview(preview) || 'No response yet'
 }
 
-function beginThreadDrag(event: DragEvent, thread: AgentConversationThread) {
-  writeAgentConversationDrag(event, {
+function threadDragPayload(thread: AgentConversationThread): AgentConversationDragPayload {
+  return {
     conversationId: thread.nativeThreadId,
     threadId: thread.id,
     title: agentConversationDisplayTitle(thread)
-  })
+  }
+}
+
+function beginThreadDrag(event: DragEvent, thread: AgentConversationThread) {
+  writeAgentConversationDrag(event, threadDragPayload(thread))
 }
 
 function beginNewThreadDrag(event: DragEvent) {
   writeNewAgentConversationDrag(event)
+}
+
+function beginSelectedThreadDrag(event: DragEvent) {
+  if (selectedThread.value) {
+    beginThreadDrag(event, selectedThread.value)
+    return
+  }
+  if (creating.value) {
+    beginNewThreadDrag(event)
+  }
+}
+
+function armThreadPointerDrag(event: PointerEvent, thread: AgentConversationThread) {
+  armAgentConversationPointerDrag(event, threadDragPayload(thread))
+}
+
+function armNewThreadPointerDrag(event: PointerEvent) {
+  armAgentConversationPointerDrag(event, newAgentConversationDragPayload())
+}
+
+function armSelectedThreadPointerDrag(event: PointerEvent) {
+  if (selectedThread.value) {
+    armThreadPointerDrag(event, selectedThread.value)
+    return
+  }
+  if (creating.value) armNewThreadPointerDrag(event)
+}
+
+const renamingTitle = ref(false)
+const renamingTitleDraft = ref('')
+const titleRenameInput = ref<HTMLInputElement | null>(null)
+
+function beginTitleRename() {
+  if (!selectedThread.value) return
+  renamingTitleDraft.value = agentConversationDisplayTitle(selectedThread.value)
+  renamingTitle.value = true
+  void nextTick(() => {
+    titleRenameInput.value?.focus()
+    titleRenameInput.value?.select()
+  })
+}
+
+function commitTitleRename() {
+  if (!renamingTitle.value) return
+  const thread = selectedThread.value
+  const next = renamingTitleDraft.value.trim()
+  if (thread && next && next !== agentConversationDisplayTitle(thread)) {
+    setAgentConversationTitle(thread, next)
+    toast.info('Task renamed')
+  }
+  renamingTitle.value = false
+}
+
+function cancelTitleRename() {
+  renamingTitle.value = false
 }
 
 function conversationViewport(): HTMLElement | null {
@@ -231,6 +395,8 @@ async function restoreTranscriptScroll(id: string) {
 }
 
 async function selectThread(thread: AgentConversationThread) {
+  if (shouldSuppressAgentConversationClick()) return
+  renamingTitle.value = false
   if (selectedId.value !== thread.id) {
     const previousDraftId = conversationThreadId.value
     if (previousDraftId) {
@@ -241,7 +407,6 @@ async function selectThread(thread: AgentConversationThread) {
     }
     annotations.value = []
     attachments.value = [...(browserCaptureDrafts.get(thread.id) ?? [])]
-    messageApprovalFeedback.value = null
   }
   creating.value = false
   pendingThreadId.value = null
@@ -291,35 +456,51 @@ async function dropBrowserCaptureOnThread(event: DragEvent, thread: AgentConvers
 }
 
 async function showThreadList() {
+  renamingTitle.value = false
   retainTranscriptScroll()
+  if (creating.value) {
+    creating.value = false
+    pendingThreadId.value = null
+  }
   view.value = 'list'
   await nextTick()
   panel.value
     ?.querySelector<HTMLElement>(`[data-agent-thread-id="${CSS.escape(selectedId.value ?? '')}"]`)
-    ?.focus()
+    ?.focus({ preventScroll: true })
+}
+
+function resetNewConversationComposer() {
+  clearOptimisticConversation('new-task')
+  browserCaptureDrafts.delete('new-task')
+  followUp.value = ''
+  annotations.value = []
+  attachments.value = []
+  lastFollowUp.value = ''
+  lastAnnotations.value = []
+  lastAttachments.value = []
+  error.value = ''
 }
 
 async function startNewConversation() {
+  if (shouldSuppressAgentConversationClick()) return
+  renamingTitle.value = false
   retainTranscriptScroll()
   const previousDraftId = conversationThreadId.value
-  if (previousDraftId) {
+  if (previousDraftId && previousDraftId !== 'new-task') {
     browserCaptureDrafts.set(previousDraftId, attachments.value.filter(isBrowserCaptureAttachment))
   }
   creating.value = true
   pendingThreadId.value = null
   selectedId.value = null
-  messageApprovalFeedback.value = null
   view.value = 'conversation'
-  followUp.value = ''
-  annotations.value = []
-  attachments.value = [...(browserCaptureDrafts.get('new-task') ?? [])]
-  error.value = ''
+  newConversationEpoch.value += 1
+  resetNewConversationComposer()
   search.value = ''
   await nextTick()
   const input = panel.value?.querySelector<HTMLTextAreaElement>(
     '[data-test-id="ai-prompt-input"] textarea'
   )
-  input?.focus()
+  input?.focus({ preventScroll: true })
 }
 
 function relativeTime(value: string): string {
@@ -339,7 +520,28 @@ function containScrollKey(event: KeyboardEvent) {
   event.stopPropagation()
 }
 
+const loadingOlder = ref(false)
 let retainedTranscriptId: string | null = null
+async function loadOlderSelectedTranscript() {
+  const threadId = selectedId.value
+  if (!threadId || loadingOlder.value) return
+  loadingOlder.value = true
+  try {
+    await loadOlderAgentConversationTranscript(threadId)
+  } finally {
+    loadingOlder.value = false
+  }
+}
+async function revealSelectedChapter(chapterId: string) {
+  const threadId = selectedId.value
+  if (!threadId) return
+  loadingOlder.value = true
+  try {
+    await revealAgentConversationChapter(threadId, chapterId)
+  } finally {
+    loadingOlder.value = false
+  }
+}
 function syncRetainedTranscript(threadId: string | null) {
   if (retainedTranscriptId === threadId) return
   if (retainedTranscriptId) releaseAgentConversationTranscript(retainedTranscriptId)
@@ -370,6 +572,7 @@ watch(
     if (creating.value && pendingThreadId.value) {
       const pending = nextHistory?.threads.find((thread) => thread.id === pendingThreadId.value)
       if (pending) {
+        clearOptimisticConversation('new-task')
         selectedId.value = pending.id
         pendingThreadId.value = null
         creating.value = false
@@ -377,15 +580,30 @@ watch(
       return
     }
     if (creating.value) return
-    if (
-      nextHistory &&
-      (!selectedId.value || !nextHistory.threads.some((thread) => thread.id === selectedId.value))
-    ) {
+    if (view.value === 'conversation' && selectedId.value) return
+    if (nextHistory && !selectedId.value) {
       selectedId.value = nextHistory.threads[0]?.id ?? null
     }
   },
   { immediate: true }
 )
+
+function supersedePendingMessageApprovals(thread: AgentConversationThread): string[] {
+  const requestIds: string[] = []
+  for (const request of thread.pendingUiRequests) {
+    const preview = messageApprovalPreview(request)
+    if (!preview) continue
+    requestIds.push(request.id)
+    setMessageApprovalFeedback({
+      preview,
+      requestId: request.id,
+      requestedAt: request.requestedAt,
+      state: 'cancelled',
+      threadId: thread.id
+    })
+  }
+  return requestIds
+}
 
 async function submitFollowUp(
   submission: AgentPromptSubmission = {
@@ -410,6 +628,7 @@ async function submitFollowUp(
     ...submission,
     attachments: captureResolution.attachments
   }
+  const supersededRequestIds = thread ? supersedePendingMessageApprovals(thread) : []
   lastFollowUp.value = message
   lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
   lastAttachments.value = [...submission.attachments]
@@ -434,6 +653,9 @@ async function submitFollowUp(
       await refresh(true)
     }
   } catch (cause) {
+    for (const requestId of supersededRequestIds) {
+      removeMessageApprovalFeedback(thread?.id ?? '', requestId)
+    }
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     submitting.value = false
@@ -470,10 +692,13 @@ async function respondToApproval(requestId: string, response: AgentExtensionUiRe
   const preview = request ? messageApprovalPreview(request) : null
   if (preview) {
     const approved = response.confirmed === true || /^allow once$/i.test(response.value ?? '')
-    messageApprovalFeedback.value = {
+    setMessageApprovalFeedback({
       preview,
-      state: approved ? 'sending' : 'cancelled'
-    }
+      requestId,
+      requestedAt: request?.requestedAt ?? new Date().toISOString(),
+      state: approved ? 'sending' : 'cancelled',
+      threadId: thread.id
+    })
   }
   error.value = ''
   respondingUiRequests.value = [...respondingUiRequests.value, requestId]
@@ -481,7 +706,7 @@ async function respondToApproval(requestId: string, response: AgentExtensionUiRe
     await respondToAgentUiRequest(thread.nativeThreadId, requestId, response)
     await refresh(true)
   } catch (cause) {
-    if (preview) messageApprovalFeedback.value = null
+    if (preview) removeMessageApprovalFeedback(thread.id, requestId)
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     respondingUiRequests.value = respondingUiRequests.value.filter((id) => id !== requestId)
@@ -504,18 +729,18 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
   <section
     ref="panel"
     data-test-id="agent-chats-panel"
-    class="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain select-text"
+    class="flex min-h-0 flex-1 flex-col overflow-clip overscroll-contain select-text"
     @keydown="containScrollKey"
     @touchstart.stop
     @touchmove.stop
     @wheel="containWheel"
   >
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden" data-test-id="agent-chat-stage">
+    <div class="flex min-h-0 flex-1 flex-col overflow-clip" data-test-id="agent-chat-stage">
       <div
         v-show="view === 'list'"
         data-test-id="agent-thread-selector"
         :aria-hidden="view !== 'list'"
-        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+        class="flex min-h-0 flex-1 flex-col overflow-clip"
       >
         <div class="flex shrink-0 items-center gap-1.5 px-2.5 pt-2.5 pb-2">
           <label
@@ -559,11 +784,11 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
           <Tip label="New task">
             <button
               type="button"
-              draggable="true"
               data-test-id="agent-thread-new"
               aria-label="New task"
               aria-description="Drag to place on the Board"
               class="flex size-8 shrink-0 cursor-grab items-center justify-center rounded-[8px] text-muted hover:bg-hover hover:text-surface active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+              @pointerdown="armNewThreadPointerDrag"
               @dragstart="beginNewThreadDrag"
               @click="startNewConversation"
             >
@@ -583,7 +808,6 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
           >
             <button
               type="button"
-              draggable="true"
               :data-agent-thread-id="thread.id"
               :data-test-id="`agent-chat-thread-${thread.id}`"
               :aria-current="selectedId === thread.id ? 'true' : undefined"
@@ -591,12 +815,12 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
               class="relative mb-0.5 flex w-full cursor-grab flex-col justify-center overflow-hidden rounded-[8px] border border-transparent px-2.5 text-left hover:bg-hover active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-component/35"
               :class="[
                 showThreadPreview(thread) ? 'min-h-[48px] py-1.5' : 'h-10',
-                selectedId === thread.id ? 'border-border/70 bg-chrome-detail' : '',
                 captureDropTargetId === thread.id ? 'border-accent/60 bg-accent/10' : ''
               ]"
               @dragenter="browserCaptureDragEnter($event, thread)"
               @dragleave="browserCaptureDragLeave($event, thread)"
               @dragover="browserCaptureDragEnter($event, thread)"
+              @pointerdown="armThreadPointerDrag($event, thread)"
               @dragstart="beginThreadDrag($event, thread)"
               @drop="dropBrowserCaptureOnThread($event, thread)"
               @click="selectThread(thread)"
@@ -624,7 +848,7 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
                   {{ agentConversationDisplayTitle(thread) }}
                 </span>
                 <span class="shrink-0 text-[9.5px] tabular-nums text-muted/80">
-                  {{ relativeTime(thread.updatedAt) }}
+                  {{ relativeTime(agentConversationLastUserMessageAt(thread)) }}
                 </span>
               </span>
               <span
@@ -632,11 +856,16 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
                 class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-muted"
               >
                 <span
-                  v-if="showStateDot(thread.state)"
-                  class="size-1.5 shrink-0 rounded-full"
-                  :class="stateTone(thread.state)"
-                  aria-hidden="true"
-                />
+                  v-if="isThreadWorking(thread)"
+                  class="flex size-3 shrink-0 items-center justify-center"
+                  aria-label="Working"
+                  role="status"
+                >
+                  <icon-lucide-loader-circle
+                    class="size-3 animate-spin text-accent"
+                    aria-hidden="true"
+                  />
+                </span>
                 <span class="truncate">{{ threadPreview(thread) }}</span>
               </span>
             </button>
@@ -650,7 +879,9 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
                 ? 'No matching tasks'
                 : showArchived
                   ? 'No archived tasks'
-                  : 'No tasks yet'
+                  : historyError
+                    ? 'Chats are unavailable'
+                    : 'No tasks yet'
             }}
           </div>
         </nav>
@@ -664,6 +895,9 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
       >
         <template v-if="selectedThread || creating">
           <AiConversationSurface
+            :key="
+              creating ? `new-task:${String(newConversationEpoch)}` : selectedId || 'conversation'
+            "
             v-model="followUp"
             v-model:annotations="annotations"
             v-model:attachments="attachments"
@@ -676,16 +910,19 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
             :disabled="!creating && !selectedThread?.nativeThreadId"
             :empty-description="creating ? 'Describe what you want done.' : undefined"
             :empty-title="creating ? 'What do you want to work on?' : 'Conversation ready'"
+            :has-older="selectedThread?.hasOlder === true"
             :input-label="creating ? 'New task' : 'Follow up'"
+            :loading-older="loadingOlder"
             :messages="visibleMessages"
             :placeholder="composerPlaceholder"
             :send-label="steeringSelectedThread ? 'Steer task' : 'Send message'"
             :scope="selectedModelScope"
-            :status="uiStatus"
+            :status="hasApprovalSurface ? 'ready' : uiStatus"
             :status-message="selectedStatusMessage"
-            :working-label="
-              selectedThread ? threadLiveWorkingLabel(selectedThread, now.getTime()) : ''
-            "
+            :turns="selectedThread?.turns"
+            :working-label="selectedThread?.recentUpdate || ''"
+            @load-older="loadOlderSelectedTranscript"
+            @reveal-chapter="revealSelectedChapter"
             @retry="retryFollowUp"
             @send="submitFollowUp"
             @stop="stopConversation"
@@ -707,42 +944,90 @@ useEventListener(window, 'openpencil:context-comment-dispatched', async (event: 
                       <icon-lucide-arrow-left class="size-3.5 stroke-[1.6]" />
                     </button>
                   </Tip>
-                  <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-surface">
-                    {{
+                  <div
+                    v-if="!renamingTitle"
+                    data-test-id="agent-selected-header-title"
+                    aria-description="Drag to place on the Board"
+                    :aria-label="
                       creating
-                        ? 'New task'
+                        ? 'New task; drag to place on the Board'
                         : selectedThread
-                          ? agentConversationDisplayTitle(selectedThread)
-                          : 'Task'
-                    }}
-                  </span>
-                  <span
-                    v-if="selectedThread && showStateDot(selectedThread.state)"
-                    :aria-label="selectedThread.state.replace('_', ' ')"
-                    class="size-1.5 shrink-0 rounded-full"
-                    :class="stateTone(selectedThread.state)"
-                    role="status"
-                  />
+                          ? `${agentConversationDisplayTitle(selectedThread)}; drag to place on the Board`
+                          : undefined
+                    "
+                    class="flex h-7 min-w-0 flex-1 cursor-grab items-center gap-1.5 rounded-[8px] px-2 transition-colors hover:bg-hover active:cursor-grabbing select-none"
+                    @pointerdown="armSelectedThreadPointerDrag"
+                    @dragstart="beginSelectedThreadDrag"
+                    @dblclick="beginTitleRename"
+                  >
+                    <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-surface">
+                      {{
+                        creating
+                          ? 'New task'
+                          : selectedThread
+                            ? agentConversationDisplayTitle(selectedThread)
+                            : 'Task'
+                      }}
+                    </span>
+                    <span
+                      v-if="selectedThread && isThreadWorking(selectedThread)"
+                      class="flex size-3 shrink-0 items-center justify-center"
+                      aria-label="Working"
+                      role="status"
+                    >
+                      <icon-lucide-loader-circle
+                        class="size-3 animate-spin text-accent"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </div>
+                  <form
+                    v-else
+                    class="flex h-7 min-w-0 flex-1 items-center"
+                    @submit.prevent="commitTitleRename"
+                  >
+                    <input
+                      ref="titleRenameInput"
+                      v-model="renamingTitleDraft"
+                      data-test-id="agent-selected-header-rename-input"
+                      aria-label="Task name"
+                      class="border-chrome-control-border bg-chrome-control h-7 min-w-0 flex-1 rounded-[6px] border px-1.5 text-[11px] font-medium text-surface outline-none focus:border-component/35"
+                      @blur="commitTitleRename"
+                      @keydown.escape.prevent="cancelTitleRename"
+                    />
+                  </form>
+                  <Tip v-if="!creating" label="New task">
+                    <button
+                      type="button"
+                      data-test-id="agent-selected-new"
+                      aria-label="New task"
+                      aria-description="Drag to place on the Board"
+                      class="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-[7px] text-muted hover:bg-hover hover:text-surface active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+                      @pointerdown="armNewThreadPointerDrag"
+                      @dragstart.stop="beginNewThreadDrag"
+                      @click.stop="startNewConversation"
+                    >
+                      <icon-lucide-square-pen class="size-3.5 stroke-[1.6]" />
+                    </button>
+                  </Tip>
                 </div>
               </AgentConversationContextMenu>
             </template>
-            <template #approval>
+            <template #approval="{ runId }">
               <div
-                v-if="selectedThread?.pendingUiRequests.length || messageApprovalCard"
-                class="agent-conversation-column flex flex-col gap-2 pb-3"
+                v-if="messageApprovalCardsForRun(runId).length"
+                class="flex flex-col gap-2"
                 data-test-id="agent-approval-column"
+                :data-run-id="runId"
               >
                 <AgentConversationApproval
-                  v-for="request in selectedThread?.pendingUiRequests ?? []"
-                  :key="request.id"
-                  :busy="respondingUiRequests.includes(request.id)"
-                  :request="request"
+                  v-for="card in messageApprovalCardsForRun(runId)"
+                  :key="card.key"
+                  :busy="Boolean(card.request && respondingUiRequests.includes(card.request.id))"
+                  :preview="card.preview"
+                  :request="card.request"
+                  :state="card.state"
                   @respond="respondToApproval"
-                />
-                <AgentConversationApproval
-                  v-if="!selectedThread?.pendingUiRequests.length && messageApprovalCard"
-                  :preview="messageApprovalCard.preview"
-                  :state="messageApprovalCard.state"
                 />
               </div>
             </template>

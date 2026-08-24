@@ -1,0 +1,10 @@
+{
+  "name": "@open-pencil/pi-grok-eval",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "bun src/run.ts",
+    "run:sol": "bun src/run.ts sol",
+    "test": "bun test tests"
+  }
+}

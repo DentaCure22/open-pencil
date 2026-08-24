@@ -57,8 +57,9 @@ export const CODE_OBJECT_RESIZE_HANDLE_STYLE = {
 export const CODE_OBJECT_ROTATE_HANDLE_STYLE = { height: '18px', width: '18px' } as const
 
 /**
- * Live iframes cannot sit in a paint-contained, will-change transform layer.
- * Chromium keeps a stale bitmap of the iframe after the document reloads.
+ * Live DOM Board surfaces cannot sit in a paint-contained, will-change
+ * transform layer. Chromium keeps a stale bitmap of the host after a move
+ * or document reload, which shows up as a leftover grey card.
  */
 export function liveIframeHostStyle<T extends CSSProperties>(style: T): T {
   return {

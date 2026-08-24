@@ -31,7 +31,12 @@ export * from './types'
 
 import type { Emitter } from 'nanoevents'
 
-import { getAbsolutePosition, getAuthoritativeAbsolutePosition } from './coordinate'
+import {
+  clearWorldMatrixCache,
+  getAbsolutePosition,
+  getAuthoritativeAbsolutePosition
+} from './coordinate'
+import { computeDescendantVisualBounds, type VisualBounds } from './geometry'
 import type { Color, Rect, Vector } from './primitives'
 import type {
   DocumentColorSpace,
@@ -86,6 +91,7 @@ export class SceneGraph {
   documentColorSpace: DocumentColorSpace = 'display-p3'
   readonly emitter: Emitter<SceneGraphEvents> = createNanoEvents()
   private absPosCache = new Map<string, Vector>()
+  private descendantVisualBoundsCache = new Map<string, VisualBounds | null>()
   private presentationPositions = new Map<string, Vector>()
   private previewMutationDepth = 0
   private sourceMetadataPreservationDepth = 0
@@ -238,6 +244,8 @@ export class SceneGraph {
 
   clearAbsPosCache(): void {
     this.absPosCache.clear()
+    this.descendantVisualBoundsCache.clear()
+    clearWorldMatrixCache(this)
   }
 
   getPresentedNodePosition(id: string): Vector {
@@ -249,6 +257,10 @@ export class SceneGraph {
 
   hasNodePositionPresentations(): boolean {
     return this.presentationPositions.size > 0
+  }
+
+  presentedNodeIds(): readonly string[] {
+    return [...this.presentationPositions.keys()]
   }
 
   setNodePositionPresentation(id: string, position: Vector): void {
@@ -313,6 +325,18 @@ export class SceneGraph {
       width: node?.width ?? 0,
       height: node?.height ?? 0
     }
+  }
+
+  getDescendantVisualBounds(id: string): VisualBounds | null {
+    const cached = this.descendantVisualBoundsCache.get(id)
+    if (cached !== undefined) return cached
+    const bounds = computeDescendantVisualBounds(
+      [id],
+      (nodeId) => this.getNode(nodeId) ?? undefined,
+      (nodeId) => this.getAbsolutePosition(nodeId)
+    )
+    this.descendantVisualBoundsCache.set(id, bounds)
+    return bounds
   }
   private generateNodeId(): string {
     let id = generateId()
@@ -431,7 +455,7 @@ export class SceneGraph {
     // Only clear absPosCache when layout-affecting properties change.
     // Fills, strokes, effects, plugin data changes do NOT affect absolute position.
     const affectsLayout = Object.keys(changes).some((k) => SceneGraph.LAYOUT_AFFECTING_KEYS.has(k))
-    if (affectsLayout) this.absPosCache.clear()
+    if (affectsLayout) this.clearAbsPosCache()
     if (
       node.type === 'INSTANCE' &&
       'componentId' in changes &&
@@ -479,7 +503,7 @@ export class SceneGraph {
     if (node.parentId === newParentId) return
 
     const oldParentId = node.parentId
-    this.absPosCache.clear()
+    this.clearAbsPosCache()
 
     const absPos = this.getAuthoritativeAbsolutePosition(nodeId)
     const newParentNode = this.nodes.get(newParentId)

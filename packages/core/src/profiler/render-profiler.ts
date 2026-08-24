@@ -37,6 +37,7 @@ export class RenderProfiler {
     this.hudVisible = visible
     this.enabled = visible
     this.phases.enabled = this.enabled
+    if (visible) this.stats.reset()
     this.syncInstrumentation()
   }
 
@@ -87,7 +88,7 @@ export class RenderProfiler {
     if (hit) this.stats.scenePictureMissReason = ''
   }
 
-  setScenePictureMode(mode: 'hit' | 'record' | 'volatile' | 'none', reason = ''): void {
+  setScenePictureMode(mode: 'hit' | 'record' | 'preview' | 'volatile' | 'none', reason = ''): void {
     this.stats.scenePictureCacheHit = mode === 'hit'
     this.stats.scenePictureMode = mode
     this.stats.scenePictureMissReason = reason

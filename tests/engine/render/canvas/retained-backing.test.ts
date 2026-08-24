@@ -59,7 +59,11 @@ function createRenderer(surfaceFactory: () => Surface | null) {
 function createCanvas() {
   const canvas: Partial<Canvas> = {
     drawImageRect: mock(),
-    drawImageRectOptions: mock()
+    drawImageRectOptions: mock(),
+    restore: mock(),
+    save: mock(),
+    scale: mock(),
+    translate: mock()
   }
   return canvas as Canvas
 }
@@ -180,7 +184,7 @@ test('retained scene backing allows same-zoom previews while panning', () => {
   expect(canvas.drawImageRectOptions).toHaveBeenCalled()
 })
 
-test('retained scene backing invalidates stale position-preview metadata', () => {
+test('retained scene backing stays reusable while a position preview is active', () => {
   const r = createRenderer(() => null)
   r.sceneBacking = {
     image: { delete: mock() } as CKImage,
@@ -202,8 +206,8 @@ test('retained scene backing invalidates stale position-preview metadata', () =>
   const canvas = createCanvas()
   const graph = createGraph(2)
 
-  expect(renderSceneBacking(r, canvas, graph, 1)).toBe(false)
-  expect(canvas.drawImageRectOptions).not.toHaveBeenCalled()
+  expect(renderSceneBacking(r, canvas, graph, 1)).toBe(true)
+  expect(canvas.drawImageRectOptions).toHaveBeenCalled()
 })
 
 test('retained scene backing skips recording top-level subtrees outside its world coverage', () => {
@@ -226,6 +230,12 @@ test('retained scene backing skips recording top-level subtrees outside its worl
   const canvas = createCanvas()
   const graph = {
     getAbsolutePosition: mock(() => ({ x: 10_000, y: 10_000 })),
+    getDescendantVisualBounds: mock(() => ({
+      maxX: 10_100,
+      maxY: 10_100,
+      minX: 10_000,
+      minY: 10_000
+    })),
     getNode: mock((id: string) => {
       if (id === 'page') return { childIds: ['offscreen'], id: 'page', type: 'CANVAS' }
       if (id === 'offscreen') {

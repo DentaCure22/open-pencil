@@ -8,7 +8,7 @@ describe('Pi RPC arguments', () => {
       piRpcArguments({
         effort: 'high',
         mode: 'new',
-        model: 'xai/grok-4.6',
+        model: 'xai-auth/grok-4.6',
         sessionDir: '/tmp/pi-sessions',
         sessionId: 'thread-1'
       })
@@ -16,7 +16,7 @@ describe('Pi RPC arguments', () => {
       '--mode',
       'rpc',
       '--provider',
-      'xai',
+      'xai-auth',
       '--model',
       'grok-4.6',
       '--thinking',
@@ -27,6 +27,17 @@ describe('Pi RPC arguments', () => {
       '--session-dir',
       '/tmp/pi-sessions'
     ])
+  })
+
+  test('does not append a launch system prompt', () => {
+    const args = piRpcArguments({
+      effort: 'high',
+      mode: 'new',
+      model: 'xai-auth/grok-4.6',
+      sessionId: 'thread-1'
+    })
+    expect(args).not.toContain('--append-system-prompt')
+    expect(args.join(' ')).not.toContain('meaningful milestones')
   })
 
   test('forks from the source session into a new session id', () => {
@@ -42,16 +53,37 @@ describe('Pi RPC arguments', () => {
       model: 'gpt-5.6-luna',
       provider: 'openai-codex'
     })
+    expect(parsePiModelId('xai/grok-4.6')).toEqual({
+      model: 'grok-4.6',
+      provider: 'xai-auth'
+    })
+    expect(parsePiModelId('grok-4.6')).toEqual({
+      model: 'grok-4.6',
+      provider: 'xai-auth'
+    })
   })
 
   test('keeps normal Pi tools available', () => {
     const args = piRpcArguments({
       effort: 'high',
       mode: 'new',
-      model: 'xai/grok-4.6',
+      model: 'xai-auth/grok-4.6',
       sessionId: 'thread-1'
     })
 
+    expect(args).not.toContain('--exclude-tools')
+    expect(args).not.toContain('--mcp-config')
+  })
+
+  test('points Board workers at a lazy MCP config when one is prepared', () => {
+    const args = piRpcArguments({
+      effort: 'high',
+      mcpConfigPath: '/tmp/board-worker.mcp.json',
+      mode: 'new',
+      model: 'xai-auth/grok-4.6',
+      sessionId: 'thread-1'
+    })
+    expect(args).toEqual(expect.arrayContaining(['--mcp-config', '/tmp/board-worker.mcp.json']))
     expect(args).not.toContain('--exclude-tools')
   })
 
@@ -61,7 +93,7 @@ describe('Pi RPC arguments', () => {
       piRpcArguments({
         effort: 'high',
         mode: 'new',
-        model: 'xai/grok-4.6',
+        model: 'xai-auth/grok-4.6',
         sessionId: 'thread-1'
       })
     ).not.toContain('/tmp/trace.png')

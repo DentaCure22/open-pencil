@@ -2,6 +2,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
 
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAJUlEQVR4nGN44zHzPwxbN32DY1ziDLTXQIwiZHE6aBgNJSI0AADJD4uAEjcaUwAAAABJRU5ErkJggg=='
+
 async function dragSelectText(page: Page, target: Locator) {
   const points = await target.evaluate((element) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
@@ -46,6 +49,12 @@ const THREAD = {
       id: 'annotation-message',
       role: 'assistant',
       text: 'A concrete sentence to annotate.'
+    },
+    {
+      createdAt: '2026-08-21T20:00:01.000Z',
+      id: 'annotation-message-2',
+      role: 'assistant',
+      text: 'A second sentence to include in a copied selection.'
     }
   ],
   model: 'xai-auth/grok-4.6',
@@ -55,6 +64,50 @@ const THREAD = {
   updatedAt: '2026-08-21T20:00:00.000Z',
   workerId: 'worker-annotation'
 }
+
+test('copies a selection spanning multiple transcript messages', async ({ page }) => {
+  await mockAnnotationThread(page)
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Annotation interaction').click()
+
+  const first = page.getByTestId('ai-message-content').filter({ hasText: THREAD.messages[0].text })
+  const last = page.getByTestId('ai-message-content').filter({ hasText: THREAD.messages[1].text })
+  const lastHandle = await last.elementHandle()
+  if (!lastHandle) throw new Error('Last cross-message selection target is unavailable')
+  await first.evaluate((firstElement, lastElement) => {
+    if (!(lastElement instanceof HTMLElement)) {
+      throw new Error('Cross-message selection targets are unavailable')
+    }
+    const range = document.createRange()
+    range.setStart(firstElement, 0)
+    range.setEnd(lastElement, lastElement.childNodes.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+  }, lastHandle)
+
+  const actions = page.getByTestId('ai-selection-actions')
+  await expect(actions).toBeVisible()
+  await expect(actions.getByRole('button', { name: 'Add to chat' })).toHaveCount(0)
+  const nativeCopyWasIntercepted = await page.evaluate(() => {
+    const event = new ClipboardEvent('copy', { bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  })
+  expect(nativeCopyWasIntercepted).toBe(false)
+  await actions.getByRole('button', { name: 'Copy selection' }).click()
+  await expect(actions.getByRole('button', { name: 'Selection copied' })).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain(THREAD.messages[0].text)
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain(THREAD.messages[1].text)
+})
 
 async function mockAnnotationThread(page: Page) {
   await Promise.all([
@@ -113,6 +166,11 @@ test('creates, reopens, and submits a compact transcript annotation', async ({ p
     .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
     .toBe(THREAD.messages[0].text)
   const actions = page.getByTestId('ai-selection-actions')
+  await expect(actions).toBeVisible()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await expect(actions).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('')
+  await dragSelectText(page, message.locator('[data-stream-markdown="paragraph"]'))
   await expect(actions).toBeVisible()
   await actions.getByRole('button', { name: 'Add to chat' }).click()
   const composer = conversation.getByRole('textbox', { name: 'Follow up' })
@@ -193,6 +251,12 @@ test('drops files, accepts video, and atomically sends the draft with attachment
       status: 201
     })
   })
+  await page.route(/\/local-workspace\/v1\/trace\/evidence$/, (route) =>
+    route.fulfill({
+      body: '{"persisted":true}',
+      contentType: 'application/json'
+    })
+  )
   await page.route(
     /\/agent-router\/v1\/pi\/conversations\/annotation-thread\/steer$/,
     async (route) => {
@@ -217,7 +281,7 @@ test('drops files, accepts video, and atomically sends the draft with attachment
 
   const conversation = page.getByTestId('agent-selected-conversation')
   const composer = conversation.getByTestId('ai-prompt-input')
-  const fileInput = composer.locator('input[type="file"]')
+  const fileInput = composer.getByTestId('ai-prompt-file-input')
   await expect(fileInput).not.toHaveAttribute('accept')
   await fileInput.setInputFiles([
     { buffer: Buffer.from('video bytes'), mimeType: 'video/mp4', name: 'walkthrough.mp4' },
@@ -227,24 +291,40 @@ test('drops files, accepts video, and atomically sends the draft with attachment
   await expect(composer.getByText('MP4', { exact: true })).toBeVisible()
   await expect(composer.getByText('TS', { exact: true })).toBeVisible()
 
-  await composer.evaluate((element) => {
+  await composer.evaluate((element, imageBase64) => {
+    const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
     const transfer = new DataTransfer()
-    transfer.items.add(new File(['image bytes'], 'dropped.png', { type: 'image/png' }))
+    transfer.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
     element.dispatchEvent(
       new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: transfer })
     )
-  })
+  }, TINY_PNG_BASE64)
   await expect(composer).toHaveAttribute('data-drag-active', 'true')
   await expect(composer.getByText('Drop files to attach')).toBeVisible()
-  await composer.evaluate((element) => {
+  await composer.evaluate((element, imageBase64) => {
+    const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
     const transfer = new DataTransfer()
-    transfer.items.add(new File(['image bytes'], 'dropped.png', { type: 'image/png' }))
+    transfer.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
     element.dispatchEvent(
       new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })
     )
-  })
+  }, TINY_PNG_BASE64)
   await expect(composer).toHaveAttribute('data-drag-active', 'false')
   await expect(composer.getByTestId('ai-prompt-attachment')).toHaveCount(3)
+  const draftImage = composer.getByRole('button', { name: 'Annotate dropped.png' })
+  const draftThumbnail = draftImage.getByRole('img', { name: 'Preview dropped.png' })
+  await expect(draftThumbnail).toBeVisible()
+  await expect
+    .poll(() => draftThumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(12)
+  await draftImage.scrollIntoViewIfNeeded()
+  await expect(composer).toHaveScreenshot('agent-image-attachment-preview.png')
+  await draftImage.click()
+  const imageEditor = page.getByTestId('context-comment-screenshot-editor')
+  await expect(imageEditor).toBeVisible()
+  await expect(imageEditor.getByAltText('Generated image being annotated')).toBeVisible()
+  await imageEditor.getByTestId('context-comment-remove-capture').click()
+  await expect(imageEditor).toHaveCount(0)
 
   const attachmentRow = composer.getByTestId('ai-prompt-attachments')
   await expect(attachmentRow).toHaveCSS('flex-wrap', 'nowrap')
@@ -276,6 +356,12 @@ test('drops files, accepts video, and atomically sends the draft with attachment
   const pendingTurn = conversation.getByTestId('ai-message').last()
   await expect(pendingTurn).toHaveAttribute('data-role', 'user')
   await expect(pendingTurn.getByRole('img', { name: 'dropped.png' })).toHaveCount(1)
+  const sentImage = pendingTurn.getByRole('button', { name: 'Annotate dropped.png' })
+  await sentImage.click()
+  await expect(imageEditor).toBeVisible()
+  await expect(imageEditor.getByAltText('Generated image being annotated')).toBeVisible()
+  await imageEditor.getByTestId('context-comment-remove-capture').click()
+  await expect(imageEditor).toHaveCount(0)
   await expect(pendingTurn.getByText('walkthrough.mp4')).toBeVisible()
   await expect(pendingTurn.getByText("What's going on here?")).toBeVisible()
   const sentAttachments = pendingTurn.getByTestId('ai-attachments')
