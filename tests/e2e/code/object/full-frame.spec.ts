@@ -39,59 +39,33 @@ test('opens a trusted iframe in Full Frame without replacing its runtime', async
 
   const shell = editor.page.getByTestId('layers-shell-motion')
   const toolbar = editor.page.getByTestId('toolbar-motion')
-  await expect(toolbar).toHaveAttribute('data-sidebar-integrated', 'true')
+  const sidebarToggle = editor.page.getByTestId('sidebar-toggle-motion')
+  await expect(toolbar).toHaveAttribute('data-sidebar-integrated', 'false')
+  await expect(sidebarToggle).toHaveAttribute('data-sidebar-integrated', 'true')
   await editor.page.getByTestId('close-layers-panel').click()
   await expect(shell).toHaveAttribute('data-sidebar-open', 'false')
   await expect(shell).toHaveAttribute('data-full-frame', 'true')
-  await expect(toolbar).toHaveAttribute('data-sidebar-tab-only', 'true')
-  await expect(editor.page.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0)
+  await expect(sidebarToggle).toHaveAttribute('data-sidebar-tab-only', 'true')
+  await expect(editor.page.getByRole('button', { name: 'Move', exact: true })).toBeVisible()
   await expect(editor.page.getByTestId('open-layers-panel')).toBeVisible()
   await expect
     .poll(async () => {
       const bounds = await shell.boundingBox()
-      return bounds ? { height: Math.round(bounds.height), width: Math.round(bounds.width) } : null
+      return bounds
+        ? {
+            height: Math.round(bounds.height),
+            width: Math.round(bounds.width),
+            x: Math.round(bounds.x)
+          }
+        : null
     })
-    .toEqual({ height: 44, width: 44 })
-
-  const dragHandle = editor.page.getByTestId('sidebar-compact-tab-drag-handle')
-  const [tabBeforeDrag, handleBounds] = await Promise.all([
-    shell.boundingBox(),
-    dragHandle.boundingBox()
-  ])
-  if (!tabBeforeDrag || !handleBounds) throw new Error('Compact sidebar tab bounds unavailable')
-  const canvasBounds = await editor.page.getByTestId('canvas-area').boundingBox()
-  if (!canvasBounds) throw new Error('Canvas bounds unavailable')
-  const dragDelta = tabBeforeDrag.y > canvasBounds.y + canvasBounds.height / 2 ? -90 : 90
-  await editor.page.mouse.move(
-    handleBounds.x + handleBounds.width / 2,
-    handleBounds.y + handleBounds.height / 2
-  )
-  await editor.page.mouse.down()
-  await expect(shell).toHaveAttribute('data-compact-tab-dragging', 'true')
-  await editor.page.mouse.move(
-    handleBounds.x + handleBounds.width / 2,
-    handleBounds.y + handleBounds.height / 2 + dragDelta,
-    { steps: 6 }
-  )
-  await editor.page.mouse.up()
-  await expect(shell).toHaveAttribute('data-compact-tab-dragging', 'false')
-  await expect
-    .poll(async () => {
-      const moved = await shell.boundingBox()
-      if (!moved) return null
-      const deltaX = Math.round(moved.x - tabBeforeDrag.x)
-      const deltaY = Math.round(moved.y - tabBeforeDrag.y)
-      return {
-        movedInRequestedDirection:
-          Math.sign(deltaY) === Math.sign(dragDelta) && Math.abs(deltaY) >= 60,
-        x: deltaX
-      }
-    })
-    .toEqual({ movedInRequestedDirection: true, x: 0 })
+    .toEqual({ height: 44, width: 28, x: 0 })
+  await expect(editor.page.getByTestId('sidebar-compact-tab-drag-handle')).toHaveCount(0)
+  await expect(editor.page.getByRole('toolbar', { name: 'Sidebar' })).toBeVisible()
 
   await editor.page.getByTestId('open-layers-panel').click()
   await expect(shell).toHaveAttribute('data-sidebar-open', 'true')
-  await expect(toolbar).toHaveAttribute('data-sidebar-tab-only', 'false')
+  await expect(sidebarToggle).toHaveAttribute('data-sidebar-tab-only', 'true')
   await editor.page.getByTestId('selection-context-trigger').hover()
   await editor.page.getByTestId('code-object-full-frame').click()
 

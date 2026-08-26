@@ -34,13 +34,13 @@ test('the sidebar header is removed and Settings owns the application menu', asy
   const settingsMenu = editor.page.getByTestId('app-settings-menu')
   await expect(settingsMenu).toBeVisible()
 
-  const [menuBounds, shellBounds] = await Promise.all([
+  const [menuBounds, toolbarBounds] = await Promise.all([
     settingsMenu.boundingBox(),
-    editor.page.getByTestId('layers-shell-motion').boundingBox()
+    editor.page.getByTestId('toolbar').boundingBox()
   ])
-  if (!menuBounds || !shellBounds) throw new Error('Expected Settings and sidebar shell bounds')
+  if (!menuBounds || !toolbarBounds) throw new Error('Expected Settings and toolbar bounds')
   expect(menuBounds.width).toBeCloseTo(280, 0)
-  expect(menuBounds.y + menuBounds.height).toBeCloseTo(shellBounds.y + shellBounds.height, 0)
+  expect(toolbarBounds.y - (menuBounds.y + menuBounds.height)).toBeCloseTo(10, 0)
 })
 
 test('Settings keeps only application-level menu groups', async () => {
@@ -57,9 +57,19 @@ test('Settings menu keeps app preferences together', async () => {
   const items = await menu.locator('[role="menuitem"]').allTextContents()
   expect(items.some((text) => text.includes('Theme'))).toBe(true)
   expect(items.some((text) => text.includes('Language'))).toBe(true)
+  await expect(menu.getByRole('menuitem', { name: 'Cache', exact: true })).toBeVisible()
   await expect(menu.getByRole('menuitemcheckbox', { name: /profiler/i })).toBeVisible()
 
   await editor.page.keyboard.press('Escape')
+})
+
+test('Cache opens from Settings without occupying a sidebar tab', async () => {
+  await expect(editor.page.getByTestId('left-panel-cache-tab')).toHaveCount(0)
+
+  await editor.page.getByTestId('menubar-settings').click()
+  await editor.page.getByRole('menuitem', { name: 'Cache', exact: true }).click()
+
+  await expect(editor.page.getByTestId('model-meter-panel')).toBeVisible()
 })
 
 test('appearance exposes clean Light, Dark, and System choices', async () => {

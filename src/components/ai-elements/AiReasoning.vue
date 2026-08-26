@@ -1,32 +1,28 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { useStreamedText } from './streamed-text'
+import AiMarkdown from './AiMarkdown.vue'
 
 const { state = 'complete', text } = defineProps<{
   state?: 'complete' | 'stopped' | 'streaming'
   text: string
 }>()
 
-const displayed = useStreamedText(
-  () => text,
-  () => state === 'streaming'
-)
 const summary = computed(() => {
   const incoming = text.trim()
   if (!incoming || ['thinking', 'thought'].includes(incoming.toLowerCase())) return ''
-  return displayed.value.trim()
+  return incoming
 })
 </script>
 
 <template>
-  <p
+  <div
     v-if="summary"
     data-test-id="ai-reasoning"
     :data-state="state"
-    class="my-1 whitespace-pre-wrap font-sans text-[13px] leading-5"
-    :class="state === 'streaming' ? 'agent-thought-shimmer' : 'text-muted'"
+    class="my-1 min-w-0 font-sans text-[13px] leading-5 font-normal"
+    :class="state === 'streaming' ? 'agent-thought-shimmer' : 'text-surface'"
   >
-    {{ summary }}
-  </p>
+    <AiMarkdown :content="summary" :streaming="state === 'streaming'" variant="activity" />
+  </div>
 </template>

@@ -15,6 +15,7 @@ const PERSISTED_ONLY_COMMANDS = new Set([
 ])
 
 const AUTHORITY_DEFAULT_COMMANDS = new Set([
+  'board_apply',
   'board_context',
   'board_open',
   'board_read'

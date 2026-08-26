@@ -24,7 +24,7 @@ const layoutModes: { mode: LayoutMode; test: string }[] = [
       data-test-id="layout-add-auto"
       @click="ctx.editor.setLayoutMode(ctx.node.id, 'VERTICAL')"
     >
-      <icon-lucide-plus class="size-3.5" />
+      <IconlyIcon name="plus" class="size-3.5" />
     </IconButton>
     <IconButton
       v-else

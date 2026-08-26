@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  liveTranscriptAfterCursor,
   liveStreamingThreadIds,
   nextTranscriptHydrationBatch,
   planBoardTranscriptRetain,
@@ -45,6 +46,23 @@ describe('live transcript streaming', () => {
         retained: false
       })
     ).toBeUndefined()
+  })
+
+  test('polls only after the last stable message before the changing tail', () => {
+    expect(
+      liveTranscriptAfterCursor([
+        { completedAt: '2026-08-24T12:00:01.000Z', id: 'prompt', role: 'user' },
+        { completedAt: '2026-08-24T12:00:02.000Z', id: 'commentary', role: 'assistant' },
+        { id: 'live-answer', role: 'assistant' }
+      ])
+    ).toBe('commentary')
+    expect(
+      liveTranscriptAfterCursor([
+        { completedAt: '2026-08-24T12:00:01.000Z', id: 'prompt', role: 'user' },
+        { completedAt: '2026-08-24T12:00:02.000Z', id: 'answer', role: 'assistant' }
+      ])
+    ).toBe('answer')
+    expect(liveTranscriptAfterCursor([{ id: 'fresh-prompt', role: 'user' }])).toBe('fresh-prompt')
   })
 })
 

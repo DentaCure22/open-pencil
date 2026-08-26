@@ -1,8 +1,0 @@
-{
-  "finalText": "Done — added an interactive Code Object risk tuner beside “Release readiness.”\n\n- Low / Medium / High choices\n- Starts and resets to Medium\n- Positioned with 63 px clearance; no dashboard overlap\n- Owner: `0:369`\n- Applied, visibly presented, and durably persisted on the exact requested Board\n\nLimitation: I did not manually click-test each control in the UI.\n\n### Recap\n\n- Risk tuner created at `(1575, 722)`, size `300 × 160`\n- Exact target verified; receipt `risk-tuner-20260729-v1`\n\n",
-  "generatedAtMs": 1785369510270,
-  "originalProofDeadlineAtMs": 1785372210416,
-  "releasedAfterOriginalDeadlineMs": 0,
-  "releasedAtMs": 1785369911282,
-  "safetyTimeoutMs": 2700000
-}

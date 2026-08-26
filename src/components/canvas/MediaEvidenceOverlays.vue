@@ -215,7 +215,8 @@ function viewerStateMessage(item: MediaEvidenceItem): string {
           aria-live="polite"
           class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#111218]/92 px-6 text-center text-[11px] text-[#d7d4e2]"
         >
-          <icon-lucide-circle-alert
+          <IconlyIcon
+            name="danger"
             v-if="viewerState(item.node.id) === 'error'"
             class="size-5 text-[#f0a7a7]"
           />

@@ -37,7 +37,7 @@ function onInteractOutside(e: Event) {
           data-test-id="provider-settings-trigger"
           class="rounded p-0.5 text-muted hover:bg-hover hover:text-surface"
         >
-          <icon-lucide-settings class="size-3" />
+          <IconlyIcon name="setting" class="size-3" />
         </button>
       </PopoverTrigger>
     </Tip>

@@ -992,8 +992,8 @@ export async function refreshSmylrFoundationsBoardsInPlace(
       .map((n) => n.id)
     try {
       await fitDesignBoardsToViewport(store, boards)
-    } catch {
-      /* ignore */
+    } catch (error) {
+      console.warn('[refreshSmylrFoundationsBoardsInPlace] viewport fit skipped', error)
     }
   }
 
@@ -1046,8 +1046,8 @@ export async function openSmylrProductionWorkspace(
     console.warn('[openSmylrProductionWorkspace] viewport fit skipped', err)
     try {
       await store.fitCurrentPageToViewport()
-    } catch {
-      /* ignore */
+    } catch (fallbackError) {
+      console.warn('[openSmylrProductionWorkspace] fallback viewport fit skipped', fallbackError)
     }
   }
   return workspace

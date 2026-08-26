@@ -19,8 +19,7 @@ describe('UndoManager idle-timer batching', () => {
     for (let i = 1; i <= 10; i++) {
       const prev = value
       const next = i
-      undo.push(undoEntry(`step ${i}`, assignValue(setValue, next), assignValue(setValue, prev)))
-      value = next
+      undo.apply(undoEntry(`step ${i}`, assignValue(setValue, next), assignValue(setValue, prev)))
     }
     undo.commitBatch()
 
@@ -38,7 +37,7 @@ describe('UndoManager idle-timer batching', () => {
     let b = 0
 
     undo.beginBatch('batch A')
-    undo.push(
+    undo.apply(
       undoEntry(
         'a1',
         () => {
@@ -49,8 +48,7 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    a = 1
-    undo.push(
+    undo.apply(
       undoEntry(
         'a2',
         () => {
@@ -61,11 +59,10 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    a = 2
     undo.commitBatch()
 
     undo.beginBatch('batch B')
-    undo.push(
+    undo.apply(
       undoEntry(
         'b1',
         () => {
@@ -76,7 +73,6 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    b = 10
     undo.commitBatch()
 
     expect(undo.undoLabel).toBe('batch B')
@@ -93,7 +89,7 @@ describe('UndoManager idle-timer batching', () => {
     let v = 0
 
     undo.beginBatch('drag')
-    undo.push(
+    undo.apply(
       undoEntry(
         'd1',
         () => {
@@ -104,8 +100,7 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    v = 1
-    undo.push(
+    undo.apply(
       undoEntry(
         'd2',
         () => {
@@ -116,10 +111,9 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    v = 2
     undo.commitBatch()
 
-    undo.push(
+    undo.apply(
       undoEntry(
         'add fill',
         () => {
@@ -130,7 +124,6 @@ describe('UndoManager idle-timer batching', () => {
         }
       )
     )
-    v = 100
 
     undo.undo()
     expect(v).toBe(2)

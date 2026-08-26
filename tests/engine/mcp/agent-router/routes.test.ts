@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -12,6 +12,8 @@ import type {
   AgentDispatchRequest
 } from '#mcp/agent-router/contracts'
 import { registerAgentRoutes } from '#mcp/agent-router/routes'
+import { WorkMapStore } from '#mcp/agent-router/work-map'
+import { localWorkspaceTraceEvidencePath } from '#mcp/local-workspace-authority/agent-context'
 import type { LocalWorkspaceTraceEvidencePinResult } from '#mcp/local-workspace-authority/trace-file-store'
 
 const AUTH_TOKEN = 'trace-retention-test-token'
@@ -29,8 +31,12 @@ function agentRouter(overrides: Partial<AgentConversationRouter> = {}): AgentCon
     conversation: () => null,
     conversationPreviews: () => [],
     conversations: () => [],
+    createTodoDraft: () => {
+      throw new Error('Unexpected Todo draft creation')
+    },
     delete: () => true,
     dispatch: async () => receipt,
+    ensureTitle: () => false,
     followUp: async () => receipt,
     fork: async () => receipt,
     job: () => null,
@@ -73,7 +79,11 @@ class TraceEvidencePins {
 function appWithRoutes(
   router: AgentConversationRouter,
   traceEvidence: TraceEvidencePins,
-  options: { attachmentStore?: AgentAttachmentStore; authorityRoot?: string } = {}
+  options: {
+    attachmentStore?: AgentAttachmentStore
+    authorityRoot?: string
+    workMap?: WorkMapStore
+  } = {}
 ): Hono {
   const app = new Hono()
   registerAgentRoutes(app, {
@@ -81,12 +91,154 @@ function appWithRoutes(
     authorityRoot: options.authorityRoot ?? '/tmp/openpencil-trace-retention-test',
     getAuthToken: () => AUTH_TOKEN,
     router,
-    traceEvidence
+    traceEvidence,
+    ...(options.workMap ? { workMap: options.workMap } : {})
   })
   return app
 }
 
 describe('agent Trace evidence retention', () => {
+  test('creates a prepared Todo chat without dispatching a worker', async () => {
+    const workMap = new WorkMapStore()
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [{ name: 'Dental Chart', op: 'create_project', project_id: 'project:dental' }]
+    })
+    let draft: AgentConversationThread | null = null
+    const app = appWithRoutes(
+      agentRouter({
+        conversation: (threadId) => (draft?.id === threadId ? draft : null),
+        createTodoDraft: (request) => {
+          draft = {
+            canFollowUp: true,
+            createdAt: '2026-08-25T12:00:00.000Z',
+            effort: request.effort || 'high',
+            id: request.threadId || 'thread:todo',
+            messages: [],
+            model: request.model || 'xai-auth/grok-4.6',
+            recentUpdate: 'Ready to plan.',
+            sessionId: null,
+            state: 'completed',
+            task: request.brief.goal,
+            title: request.title,
+            todoDraft: {
+              brief: request.brief,
+              kind: 'todo',
+              projectId: request.projectId,
+              todoId: request.todoId
+            },
+            updatedAt: '2026-08-25T12:00:00.000Z',
+            workerId: 'worker:todo'
+          }
+          return draft
+        }
+      }),
+      new TraceEvidencePins(),
+      { workMap }
+    )
+
+    const response = await app.request('/agent-router/v1/pi/work-map/todo-chats', {
+      body: JSON.stringify({
+        brief: {
+          goal: 'Shape patient history shortcuts',
+          knownFacts: ['The chart stays visible while history opens.']
+        },
+        effort: 'high',
+        expectedRevision: 1,
+        model: 'xai-auth/grok-4.6',
+        projectId: 'project:dental',
+        requestId: 'request:patient-history',
+        title: 'Add patient history shortcuts'
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+    const payload = (await response.json()) as {
+      thread: AgentConversationThread
+      todo: { status: string; threadId: string }
+    }
+
+    expect(response.status).toBe(201)
+    expect(payload.thread).toMatchObject({
+      messages: [],
+      sessionId: null,
+      title: 'Add patient history shortcuts',
+      todoDraft: { brief: { goal: 'Shape patient history shortcuts' } }
+    })
+    expect(payload.todo).toMatchObject({ status: 'todo', threadId: payload.thread.id })
+
+    const startResponse = await app.request(
+      `/agent-router/v1/pi/conversations/${encodeURIComponent(payload.thread.id)}/follow-up`,
+      {
+        body: JSON.stringify({ message: 'Start with the interaction states.' }),
+        headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+        method: 'POST'
+      }
+    )
+    expect(startResponse.status).toBe(202)
+    expect(workMap.snapshot().todos[0]).toMatchObject({ status: 'in_motion' })
+  })
+
+  test('persists agent self-placement and user Work Map edits through one authority', async () => {
+    const workMap = new WorkMapStore()
+    const thread: AgentConversationThread = {
+      canFollowUp: true,
+      createdAt: '2026-08-25T12:00:00.000Z',
+      effort: 'high',
+      id: 'thread:work-map',
+      messages: [],
+      model: 'xai-auth/grok-4.6',
+      recentUpdate: 'Working.',
+      sessionId: 'session:work-map',
+      state: 'running',
+      task: 'Organize this chat',
+      updatedAt: '2026-08-25T12:00:00.000Z',
+      workerId: 'worker:work-map'
+    }
+    const app = appWithRoutes(
+      agentRouter({ conversation: (threadId) => (threadId === thread.id ? thread : null) }),
+      new TraceEvidencePins(),
+      { workMap }
+    )
+
+    const agentResponse = await app.request('/agent-router/v1/pi/work-map/agent', {
+      body: JSON.stringify({
+        currentThreadId: thread.id,
+        expectedRevision: 0,
+        operations: [
+          { name: 'Treatment plan', op: 'create_project', project_id: 'project:treatment' },
+          { op: 'place_chat', project_id: 'project:treatment', thread_id: thread.id }
+        ]
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+    expect(agentResponse.status).toBe(200)
+    expect(await agentResponse.json()).toMatchObject({
+      receipt: { previousRevision: 0, revision: 1 },
+      revision: 1
+    })
+
+    const userResponse = await app.request('/agent-router/v1/pi/work-map/apply', {
+      body: JSON.stringify({
+        expectedRevision: 1,
+        operations: [{ op: 'place_chat', project_id: 'project:treatment', thread_id: thread.id }]
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+    expect(userResponse.status).toBe(200)
+
+    const snapshotResponse = await app.request('/agent-router/v1/pi/work-map', {
+      headers: AUTHORIZATION
+    })
+    expect(await snapshotResponse.json()).toMatchObject({
+      placements: [{ manual: true, projectId: 'project:treatment', threadId: thread.id }],
+      revision: 2
+    })
+  })
+
   test('forwards a bounded visible approval response to the resident Pi task', async () => {
     const traceEvidence = new TraceEvidencePins()
     let observed: unknown = null
@@ -176,6 +328,90 @@ describe('agent Trace evidence retention', () => {
     ])
     expect(payload.lastUserMessageAt).toBe('2026-08-22T11:00:07.000Z')
     expect(JSON.stringify(payload)).not.toContain('hidden tool output')
+  })
+
+  test('requests a generated title for an existing conversation', async () => {
+    const traceEvidence = new TraceEvidencePins()
+    let requestedThreadId = ''
+    const thread: AgentConversationThread = {
+      canFollowUp: true,
+      createdAt: '2026-08-22T11:00:00.000Z',
+      effort: 'high',
+      id: 'thread:title',
+      messages: [],
+      model: 'xai-auth/grok-4.6',
+      recentUpdate: 'Completed.',
+      sessionId: 'session:title',
+      state: 'completed',
+      task: 'Summarize this existing conversation',
+      updatedAt: '2026-08-22T11:01:00.000Z',
+      workerId: 'worker:title'
+    }
+    const app = appWithRoutes(
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null),
+        ensureTitle(threadId) {
+          requestedThreadId = threadId
+          return true
+        }
+      }),
+      traceEvidence
+    )
+
+    const response = await app.request('/agent-router/v1/pi/conversations/thread%3Atitle/title', {
+      headers: AUTHORIZATION,
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ accepted: true, title: null })
+    expect(requestedThreadId).toBe(thread.id)
+  })
+
+  test('returns ranked workspace files for composer mentions', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'openpencil-composer-files-'))
+    await mkdir(path.join(workspaceRoot, 'src'), { recursive: true })
+    await writeFile(path.join(workspaceRoot, 'src', 'ChatComposer.vue'), '<template />')
+    const app = appWithRoutes(
+      agentRouter({
+        status: async () => ({ active: 0, available: true, workspaceRoot })
+      }),
+      new TraceEvidencePins()
+    )
+    try {
+      const response = await app.request('/agent-router/v1/pi/workspace-files?query=chat&limit=4', {
+        headers: AUTHORIZATION
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ files: [{ path: 'src/ChatComposer.vue' }] })
+    } finally {
+      await rm(workspaceRoot, { force: true, recursive: true })
+    }
+  })
+
+  test('reads a real workspace file for the Files surface', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'openpencil-files-surface-'))
+    await mkdir(path.join(workspaceRoot, 'src'), { recursive: true })
+    await writeFile(path.join(workspaceRoot, 'src', 'panel.ts'), 'export const panel = true\n')
+    const app = appWithRoutes(
+      agentRouter({
+        status: async () => ({ active: 0, available: true, workspaceRoot })
+      }),
+      new TraceEvidencePins()
+    )
+    try {
+      const response = await app.request('/agent-router/v1/pi/workspace-file?path=src%2Fpanel.ts', {
+        headers: AUTHORIZATION
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        content: 'export const panel = true\n',
+        path: 'src/panel.ts',
+        truncated: false
+      })
+    } finally {
+      await rm(workspaceRoot, { force: true, recursive: true })
+    }
   })
 
   test('pages a conversation tail without returning the full transcript', async () => {
@@ -310,6 +546,57 @@ describe('agent Trace evidence retention', () => {
       request: { historyScope: 'full', prompt: 'Keep the whole parent.' },
       sourceThreadId: 'thread:source'
     })
+  })
+
+  test('keeps an annotation evidence image on the visible conversation turn', async () => {
+    const authorityRoot = await mkdtemp(path.join(tmpdir(), 'openpencil-visible-evidence-'))
+    const evidenceId = 'evidence:annotated-image'
+    const evidencePath = localWorkspaceTraceEvidencePath(authorityRoot, evidenceId)
+    await mkdir(path.dirname(evidencePath), { recursive: true })
+    await writeFile(evidencePath, 'source image')
+    let observedSelection: Parameters<AgentConversationRouter['followUp']>[2]
+    const app = appWithRoutes(
+      agentRouter({
+        followUp: async (_threadId, _prompt, selection) => {
+          observedSelection = selection
+          return {
+            dispatchedAt: '2026-08-22T12:00:00.000Z',
+            jobId: 'job:image-edit',
+            state: 'running',
+            threadId: 'thread:image-edit'
+          }
+        }
+      }),
+      new TraceEvidencePins(),
+      { authorityRoot }
+    )
+
+    try {
+      const response = await app.request(
+        '/agent-router/v1/pi/conversations/thread%3Aimage-edit/follow-up',
+        {
+          body: JSON.stringify({
+            evidenceAlt: 'Image being edited',
+            evidenceId,
+            message: 'Apply the numbered annotations.'
+          }),
+          headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+          method: 'POST'
+        }
+      )
+
+      expect(response.status).toBe(202)
+      expect(observedSelection?.evidencePath).toBe(evidencePath)
+      expect(observedSelection?.attachments).toEqual([
+        {
+          alt: 'Image being edited',
+          type: 'image',
+          url: `data:image/png;base64,${Buffer.from('source image').toString('base64')}`
+        }
+      ])
+    } finally {
+      await rm(authorityRoot, { force: true, recursive: true })
+    }
   })
 
   test('transfers a dispatch pin to its task and releases it when the task is deleted', async () => {

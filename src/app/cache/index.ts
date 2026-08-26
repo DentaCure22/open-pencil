@@ -1,108 +1,32 @@
-import { IS_BROWSER, IS_TAURI } from '@open-pencil/core/constants'
+import {
+  isIndexedDbAvailable,
+  readIndexedDbValue,
+  removeIndexedDbEntry,
+  removeIndexedDbPrefix,
+  writeIndexedDbValue
+} from '@/app/cache/indexed-db'
+import {
+  coerceIndexedDbJsonValue,
+  parseJsonEnvelope,
+  type JsonCacheEnvelope
+} from '@/app/cache/json-envelope'
 
 const APP_CACHE_DIR = 'cache/v1'
 const STORAGE_PREFIX = 'open-pencil:cache:v1:'
-const BINARY_CACHE_DB = 'open-pencil-cache-v1'
-const BINARY_CACHE_STORE = 'binary-entries'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 function isTauriRuntime() {
-  return IS_TAURI || ('window' in globalThis && '__TAURI_INTERNALS__' in window)
+  return 'window' in globalThis && '__TAURI_INTERNALS__' in window
 }
 
 function isStorageAvailable() {
   return 'window' in globalThis && !!window.localStorage
 }
 
-function isIndexedDbAvailable() {
-  return 'window' in globalThis && !!window.indexedDB
-}
-
-function openBinaryCacheDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(BINARY_CACHE_DB, 1)
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(BINARY_CACHE_STORE)) {
-        request.result.createObjectStore(BINARY_CACHE_STORE)
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
-  })
-}
-
-async function readIndexedDbValue<T>(key: string): Promise<T | null> {
-  const db = await openBinaryCacheDb()
-  try {
-    return await new Promise((resolve, reject) => {
-      const request = db
-        .transaction(BINARY_CACHE_STORE, 'readonly')
-        .objectStore(BINARY_CACHE_STORE)
-        .get(key)
-      request.onsuccess = () => resolve((request.result as T | undefined) ?? null)
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'))
-    })
-  } finally {
-    db.close()
-  }
-}
-
-async function writeIndexedDbValue(key: string, value: unknown): Promise<void> {
-  const db = await openBinaryCacheDb()
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const request = db
-        .transaction(BINARY_CACHE_STORE, 'readwrite')
-        .objectStore(BINARY_CACHE_STORE)
-        .put(value, key)
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB write failed'))
-    })
-  } finally {
-    db.close()
-  }
-}
-
-async function removeIndexedDbEntry(key: string): Promise<void> {
-  const db = await openBinaryCacheDb()
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const request = db
-        .transaction(BINARY_CACHE_STORE, 'readwrite')
-        .objectStore(BINARY_CACHE_STORE)
-        .delete(key)
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB delete failed'))
-    })
-  } finally {
-    db.close()
-  }
-}
-
-async function removeIndexedDbPrefix(prefix: string): Promise<void> {
-  const db = await openBinaryCacheDb()
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const request = db
-        .transaction(BINARY_CACHE_STORE, 'readwrite')
-        .objectStore(BINARY_CACHE_STORE)
-        .openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (!cursor) {
-          resolve()
-          return
-        }
-        if (typeof cursor.key === 'string' && cursor.key.startsWith(prefix)) cursor.delete()
-        cursor.continue()
-      }
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB cursor failed'))
-    })
-  } finally {
-    db.close()
-  }
+function isSessionStorageAvailable() {
+  return 'window' in globalThis && !!window.sessionStorage
 }
 
 function cachePath(key: string) {
@@ -114,7 +38,7 @@ function storageKey(key: string) {
 }
 
 export function readSessionCacheText(key: string): string | null {
-  if (!IS_BROWSER) return null
+  if (!isSessionStorageAvailable()) return null
   try {
     return window.sessionStorage.getItem(storageKey(key))
   } catch {
@@ -123,7 +47,7 @@ export function readSessionCacheText(key: string): string | null {
 }
 
 export function writeSessionCacheText(key: string, value: string): boolean {
-  if (!IS_BROWSER) return false
+  if (!isSessionStorageAvailable()) return false
   try {
     window.sessionStorage.setItem(storageKey(key), value)
     return true
@@ -318,41 +242,6 @@ export async function removeCachePrefix(prefix: string): Promise<void> {
       console.warn(`Cache prefix delete skipped for "${prefix}":`, error)
     }
   }
-}
-
-type JsonCacheEnvelope<T> = {
-  updatedAt: number
-  value: T
-}
-
-function parseJsonEnvelope<T>(raw: string, maxAgeMs?: number): JsonCacheEnvelope<T> | null {
-  try {
-    const envelope = JSON.parse(raw) as Partial<JsonCacheEnvelope<T>>
-    if (typeof envelope.updatedAt !== 'number' || !('value' in envelope)) return null
-    if (maxAgeMs !== undefined && Date.now() - envelope.updatedAt > maxAgeMs) return null
-    return { updatedAt: envelope.updatedAt, value: envelope.value as T }
-  } catch {
-    return null
-  }
-}
-
-function coerceIndexedDbJsonValue<T>(
-  stored: unknown,
-  maxAgeMs?: number
-): JsonCacheEnvelope<T> | null {
-  // Envelope written by writeCacheJson / migrate helpers.
-  if (stored && typeof stored === 'object' && 'value' in stored) {
-    const envelope = stored as Partial<JsonCacheEnvelope<T>>
-    if (typeof envelope.updatedAt === 'number') {
-      if (maxAgeMs !== undefined && Date.now() - envelope.updatedAt > maxAgeMs) return null
-      return { updatedAt: envelope.updatedAt, value: envelope.value as T }
-    }
-    // Partial / legacy object that still carries the value.
-    return { updatedAt: 0, value: envelope.value as T }
-  }
-  // Raw data URL string written by some snapshot paths.
-  if (typeof stored === 'string') return { updatedAt: 0, value: stored as T }
-  return null
 }
 
 async function readIndexedDbJsonEnvelope<T>(

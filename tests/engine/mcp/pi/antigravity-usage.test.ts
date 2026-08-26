@@ -8,7 +8,7 @@ import {
   parseAntigravityGenerationMetadata,
   readAntigravityTurnUsage,
   type AntigravitySqlDatabase
-} from '#mcp/pi/antigravity-usage'
+} from '#mcp/pi/providers/antigravity/usage'
 
 function encodeVarint(value: number): number[] {
   const bytes: number[] = []

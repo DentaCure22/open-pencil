@@ -19,12 +19,12 @@ import type { OkHCLColor, OkHCLPayload } from '#core/color/okhcl'
 
 import { installBasicNodeProxyAccessors } from './accessors/basic'
 import { installLayoutNodeProxyAccessors } from './accessors/layout'
+import { installStrokeNodeProxyAccessors } from './accessors/stroke'
+import { installTextNodeProxyAccessors } from './accessors/text'
 import { installVisualNodeProxyAccessors } from './accessors/visual'
 import type { FigmaFontName } from './fonts'
 import * as PluginData from './plugin-data'
 import { nodeProxyToJSON } from './serialization'
-import { setFirstStrokeAlign, setFirstStrokeWeight, setIndependentStrokeWeight } from './strokes'
-import * as TextProxy from './text'
 import * as Traversal from './traversal'
 
 const MIXED = Symbol('mixed')
@@ -77,6 +77,35 @@ export class FigmaNodeProxy {
   declare bottomRightRadius: number
   declare cornerSmoothing: number
 
+  declare strokeWeight: number
+  declare strokeAlign: string
+  declare dashPattern: readonly number[]
+  declare strokeCap: string
+  declare strokeJoin: string
+  declare strokeMiterLimit: number
+  declare strokeTopWeight: number
+  declare strokeBottomWeight: number
+  declare strokeLeftWeight: number
+  declare strokeRightWeight: number
+
+  declare characters: string
+  declare fontSize: number
+  declare fontName: FigmaFontName
+  declare fontWeight: number
+  declare textAlignHorizontal: string
+  declare textDirection: string
+  declare textAlignVertical: string
+  declare textAutoResize: string
+  declare letterSpacing: number
+  declare lineHeight: number | null
+  declare textCase: string
+  declare textDecoration: string
+  declare maxLines: number | null
+  declare textTruncation: string
+  declare autoRename: boolean
+  declare insertCharacters: (start: number, characters: string) => void
+  declare deleteCharacters: (start: number, end: number) => void
+
   declare layoutMode: LayoutMode
   declare layoutDirection: string
   declare primaryAxisAlignItems: string
@@ -114,232 +143,6 @@ export class FigmaNodeProxy {
     const n = this[INTERNAL_GRAPH].getNode(this[INTERNAL_ID])
     if (!n) throw new Error(`Node ${this[INTERNAL_ID]} has been removed`)
     return n
-  }
-
-  // --- Stroke details ---
-
-  get strokeWeight(): number {
-    const s = this._raw().strokes
-    return s.length > 0 ? s[0].weight : 0
-  }
-
-  set strokeWeight(v: number) {
-    setFirstStrokeWeight(this[INTERNAL_GRAPH], this._raw(), v)
-  }
-
-  get strokeAlign(): string {
-    const s = this._raw().strokes
-    return s.length > 0 ? s[0].align : 'INSIDE'
-  }
-
-  set strokeAlign(v: string) {
-    setFirstStrokeAlign(this[INTERNAL_GRAPH], this._raw(), v)
-  }
-
-  get dashPattern(): readonly number[] {
-    return Object.freeze([...this._raw().dashPattern])
-  }
-
-  set dashPattern(v: readonly number[]) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { dashPattern: [...v] })
-  }
-
-  get strokeCap(): string {
-    return this._raw().strokeCap
-  }
-
-  set strokeCap(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { strokeCap: v as SceneNode['strokeCap'] })
-  }
-
-  get strokeJoin(): string {
-    return this._raw().strokeJoin
-  }
-
-  set strokeJoin(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { strokeJoin: v as SceneNode['strokeJoin'] })
-  }
-
-  get strokeMiterLimit(): number {
-    return this._raw().strokeMiterLimit
-  }
-
-  set strokeMiterLimit(v: number) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { strokeMiterLimit: v })
-  }
-
-  get strokeTopWeight(): number {
-    return this._raw().borderTopWeight
-  }
-
-  set strokeTopWeight(v: number) {
-    setIndependentStrokeWeight(this[INTERNAL_GRAPH], this[INTERNAL_ID], 'borderTopWeight', v)
-  }
-
-  get strokeBottomWeight(): number {
-    return this._raw().borderBottomWeight
-  }
-
-  set strokeBottomWeight(v: number) {
-    setIndependentStrokeWeight(this[INTERNAL_GRAPH], this[INTERNAL_ID], 'borderBottomWeight', v)
-  }
-
-  get strokeLeftWeight(): number {
-    return this._raw().borderLeftWeight
-  }
-
-  set strokeLeftWeight(v: number) {
-    setIndependentStrokeWeight(this[INTERNAL_GRAPH], this[INTERNAL_ID], 'borderLeftWeight', v)
-  }
-
-  get strokeRightWeight(): number {
-    return this._raw().borderRightWeight
-  }
-
-  set strokeRightWeight(v: number) {
-    setIndependentStrokeWeight(this[INTERNAL_GRAPH], this[INTERNAL_ID], 'borderRightWeight', v)
-  }
-
-  // --- Text ---
-
-  get characters(): string {
-    return this._raw().text
-  }
-
-  set characters(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { text: v })
-  }
-
-  get fontSize(): number {
-    return this._raw().fontSize
-  }
-
-  set fontSize(v: number) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { fontSize: v })
-  }
-
-  get fontName(): FigmaFontName {
-    return TextProxy.getFontName(this._raw())
-  }
-
-  set fontName(v: FigmaFontName) {
-    TextProxy.setFontName(this[INTERNAL_GRAPH], this[INTERNAL_ID], v)
-  }
-
-  get fontWeight(): number {
-    return this._raw().fontWeight
-  }
-
-  set fontWeight(v: number) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { fontWeight: v })
-  }
-
-  get textAlignHorizontal(): string {
-    return this._raw().textAlignHorizontal
-  }
-
-  set textAlignHorizontal(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textAlignHorizontal: v as SceneNode['textAlignHorizontal']
-    })
-  }
-
-  get textDirection(): string {
-    return this._raw().textDirection
-  }
-
-  set textDirection(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textDirection: v as SceneNode['textDirection']
-    })
-  }
-
-  get textAlignVertical(): string {
-    return this._raw().textAlignVertical
-  }
-
-  set textAlignVertical(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textAlignVertical: v as SceneNode['textAlignVertical']
-    })
-  }
-
-  get textAutoResize(): string {
-    return this._raw().textAutoResize
-  }
-
-  set textAutoResize(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textAutoResize: v as SceneNode['textAutoResize']
-    })
-  }
-
-  get letterSpacing(): number {
-    return this._raw().letterSpacing
-  }
-
-  set letterSpacing(v: number) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { letterSpacing: v })
-  }
-
-  get lineHeight(): number | null {
-    return this._raw().lineHeight
-  }
-
-  set lineHeight(v: number | null) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { lineHeight: v })
-  }
-
-  get textCase(): string {
-    return this._raw().textCase
-  }
-
-  set textCase(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { textCase: v as SceneNode['textCase'] })
-  }
-
-  get textDecoration(): string {
-    return this._raw().textDecoration
-  }
-
-  set textDecoration(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textDecoration: v as SceneNode['textDecoration']
-    })
-  }
-
-  get maxLines(): number | null {
-    return this._raw().maxLines
-  }
-
-  set maxLines(v: number | null) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { maxLines: v })
-  }
-
-  get textTruncation(): string {
-    return this._raw().textTruncation
-  }
-
-  set textTruncation(v: string) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], {
-      textTruncation: v as SceneNode['textTruncation']
-    })
-  }
-
-  get autoRename(): boolean {
-    return this._raw().autoRename
-  }
-
-  set autoRename(v: boolean) {
-    this[INTERNAL_GRAPH].updateNode(this[INTERNAL_ID], { autoRename: v })
-  }
-
-  insertCharacters(start: number, characters: string): void {
-    TextProxy.insertCharacters(this[INTERNAL_GRAPH], this._raw(), start, characters)
-  }
-
-  deleteCharacters(start: number, end: number): void {
-    TextProxy.deleteCharacters(this[INTERNAL_GRAPH], this._raw(), start, end)
   }
 
   get isMask(): boolean {
@@ -537,6 +340,18 @@ installVisualNodeProxyAccessors(
 )
 
 installLayoutNodeProxyAccessors(FigmaNodeProxy.prototype, {
+  id: INTERNAL_ID,
+  graph: INTERNAL_GRAPH,
+  api: INTERNAL_API
+})
+
+installStrokeNodeProxyAccessors(FigmaNodeProxy.prototype, {
+  id: INTERNAL_ID,
+  graph: INTERNAL_GRAPH,
+  api: INTERNAL_API
+})
+
+installTextNodeProxyAccessors(FigmaNodeProxy.prototype, {
   id: INTERNAL_ID,
   graph: INTERNAL_GRAPH,
   api: INTERNAL_API

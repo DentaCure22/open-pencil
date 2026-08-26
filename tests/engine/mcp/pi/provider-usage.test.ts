@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parsePiProviderUsageNotification } from '#mcp/pi/provider-usage'
+import { parseXaiProviderUsageNotification } from '#mcp/pi/providers/xai/usage'
 
 describe('Pi provider usage', () => {
   test('keeps only the bounded subscription summary needed by the model picker', () => {
     expect(
-      parsePiProviderUsageNotification(
-        'xAI',
+      parseXaiProviderUsageNotification(
         [
           'xAI usage (unofficial, revision-pinned):',
           'Subscription: SuperGrok',
@@ -27,7 +26,7 @@ describe('Pi provider usage', () => {
   })
 
   test('rejects missing or out-of-range percentages', () => {
-    expect(parsePiProviderUsageNotification('xAI', 'Subscription: SuperGrok')).toBeNull()
-    expect(parsePiProviderUsageNotification('xAI', 'Included usage: 101%')).toBeNull()
+    expect(parseXaiProviderUsageNotification('Subscription: SuperGrok')).toBeNull()
+    expect(parseXaiProviderUsageNotification('Included usage: 101%')).toBeNull()
   })
 })

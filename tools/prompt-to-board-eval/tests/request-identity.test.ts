@@ -44,7 +44,7 @@ describe('campaign Board request identity', () => {
   })
 
   test('rejects malformed request scopes before hashing', () => {
-    expect(() => campaignBoardRequestId(undefined as unknown as string, target('page-A'))).toThrow(
+    expect(() => campaignBoardRequestId(undefined, target('page-A'))).toThrow(
       'request scope run_id must be path-safe'
     )
     expect(() => campaignBoardRequestId('', target('page-A'))).toThrow(

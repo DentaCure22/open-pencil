@@ -9,7 +9,7 @@ import {
   antigravityResolvedOutput,
   antigravityThoughtText,
   antigravityToolImages
-} from '#mcp/pi/antigravity-activity'
+} from '#mcp/pi/providers/antigravity/activity'
 
 describe('Antigravity thought text', () => {
   test('keeps leftover thinking after stripping tool markers and incomplete tails', () => {
@@ -95,6 +95,41 @@ describe('Antigravity thought text', () => {
 })
 
 describe('Antigravity image activity', () => {
+  test('unwraps image tools invoked through the Antigravity MCP bridge', () => {
+    const input = JSON.stringify({
+      args: { prompt: 'A transparent bird' },
+      tool: 'ima2-media_generate_image',
+      toolAction: 'Generate bird image',
+      toolSummary: 'Generate bird image'
+    })
+    const output = JSON.stringify({
+      result: { images: [{ path: resolve('packages/demos/videos/toolbar.png') }] },
+      status: 'completed'
+    })
+    const activities = antigravityActivities(
+      [
+        '[agy tool: mcp]',
+        '[agy input]',
+        input,
+        '[/agy input]',
+        '[agy output]',
+        'Step is still running.',
+        '[/agy output]',
+        '[agy tool: mcp_pi-antigravity-bridge_mcp]',
+        '[agy input]',
+        input,
+        '[/agy input]',
+        '[agy output]',
+        output,
+        '[/agy output]'
+      ].join('\n'),
+      (value) => (typeof value === 'string' ? value : '')
+    )
+
+    expect(activities).toEqual([{ input, name: 'ima2-media_generate_image', output, type: 'tool' }])
+    expect(antigravityToolImages('ima2-media_generate_image', output)).toHaveLength(1)
+  })
+
   test('attaches an edited image returned as a singular result path', () => {
     const imagePath = resolve('packages/demos/videos/toolbar.png')
     const images = antigravityToolImages(

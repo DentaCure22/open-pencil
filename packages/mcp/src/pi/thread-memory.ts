@@ -38,9 +38,100 @@ function stampCompletedAt(message: AgentConversationMessage, completedAt?: strin
   if (next) message.completedAt = next
 }
 
+type TurnCollapseState = {
+  answers: Map<string, AgentConversationMessage>
+  commentaries: Map<string, AgentConversationMessage>
+}
+
+function commentaryKeys(message: AgentConversationMessage): string[] {
+  return (message.parts ?? []).flatMap((part) =>
+    part.type === 'commentary' ? [normalizedThreadText(part.text)].filter(Boolean) : []
+  )
+}
+
+function collapseAssistantAnswer(
+  message: AgentConversationMessage,
+  answer: string,
+  keys: string[],
+  state: TurnCollapseState
+): AgentConversationMessage | null {
+  if (!answer) return message
+
+  const keeper = state.answers.get(answer)
+  if (!keeper) {
+    state.answers.set(answer, message)
+    return message
+  }
+
+  stampCompletedAt(keeper, message.completedAt)
+  const hasTools = Boolean(message.parts?.some((part) => part.type === 'tool'))
+  const hasOtherParts = Boolean(
+    message.parts?.some((part) => part.type !== 'commentary' && part.type !== 'tool')
+  )
+  const commentaryAlreadyKept = keys.every((text) => state.commentaries.has(text))
+  if (!hasTools && !hasOtherParts && (keys.length === 0 || commentaryAlreadyKept)) return null
+  return { ...message, text: '' }
+}
+
+function collapseAssistantCommentaries(
+  message: AgentConversationMessage,
+  state: TurnCollapseState
+): AgentConversationMessage | null {
+  if (!message.parts?.some((part) => part.type === 'commentary')) return message
+
+  const parts: NonNullable<AgentConversationMessage['parts']> = []
+  for (const part of message.parts) {
+    if (part.type !== 'commentary') {
+      parts.push(part)
+      continue
+    }
+    const key = normalizedThreadText(part.text)
+    if (!key) continue
+    const keeper = state.commentaries.get(key)
+    if (keeper) {
+      stampCompletedAt(keeper, message.completedAt)
+      continue
+    }
+    state.commentaries.set(key, message)
+    parts.push(part)
+  }
+
+  if (parts.length === message.parts.length) return message
+  const next = parts.length ? { ...message, parts } : { ...message, parts: undefined }
+  for (const [key, keeper] of state.commentaries) {
+    if (keeper === message) state.commentaries.set(key, next)
+  }
+  if (!normalizedThreadText(next.text) && !next.parts?.length) return null
+  return next
+}
+
+function collapseAssistantMessage(
+  message: AgentConversationMessage,
+  state: TurnCollapseState
+): AgentConversationMessage | null {
+  const answer = normalizedThreadText(message.text)
+  const keys = commentaryKeys(message)
+  const withoutDuplicateAnswer = collapseAssistantAnswer(message, answer, keys, state)
+  if (!withoutDuplicateAnswer) return null
+
+  const next = collapseAssistantCommentaries(withoutDuplicateAnswer, state)
+  if (!next) return null
+  if (!next.parts?.some((part) => part.type === 'commentary')) {
+    for (const key of keys) {
+      if (!state.commentaries.has(key)) state.commentaries.set(key, next)
+    }
+  }
+  if (answer && state.answers.get(answer) === message && next !== message) {
+    state.answers.set(answer, next)
+  }
+  return next
+}
+
 function collapseTurnMessages(messages: AgentConversationMessage[]): AgentConversationMessage[] {
-  const answers = new Map<string, AgentConversationMessage>()
-  const commentaries = new Map<string, AgentConversationMessage>()
+  const state: TurnCollapseState = {
+    answers: new Map(),
+    commentaries: new Map()
+  }
   const kept: AgentConversationMessage[] = []
 
   for (const message of messages) {
@@ -48,70 +139,8 @@ function collapseTurnMessages(messages: AgentConversationMessage[]): AgentConver
       kept.push(message)
       continue
     }
-
-    const answer = normalizedThreadText(message.text)
-    const commentaryKeys = (message.parts ?? []).flatMap((part) =>
-      part.type === 'commentary' ? [normalizedThreadText(part.text)].filter(Boolean) : []
-    )
-    const hasTools = Boolean(message.parts?.some((part) => part.type === 'tool'))
-    const otherParts = (message.parts ?? []).filter(
-      (part) => part.type !== 'commentary' && part.type !== 'tool'
-    )
-    let next = message
-
-    if (answer) {
-      const keeper = answers.get(answer)
-      if (keeper) {
-        stampCompletedAt(keeper, message.completedAt)
-        const commentaryAlreadyKept = commentaryKeys.every((text) => commentaries.has(text))
-        if (
-          !hasTools &&
-          otherParts.length === 0 &&
-          (commentaryKeys.length === 0 || commentaryAlreadyKept)
-        ) {
-          continue
-        }
-        next = { ...message, text: '' }
-      } else {
-        answers.set(answer, message)
-      }
-    }
-
-    if (next.parts?.some((part) => part.type === 'commentary')) {
-      const parts: NonNullable<AgentConversationMessage['parts']> = []
-      for (const part of next.parts) {
-        if (part.type !== 'commentary') {
-          parts.push(part)
-          continue
-        }
-        const key = normalizedThreadText(part.text)
-        if (!key) continue
-        const keeper = commentaries.get(key)
-        if (keeper) {
-          stampCompletedAt(keeper, next.completedAt)
-          continue
-        }
-        commentaries.set(key, next)
-        parts.push(part)
-      }
-      if (parts.length !== next.parts.length) {
-        const previous = next
-        next = parts.length ? { ...next, parts } : { ...next, parts: undefined }
-        for (const [key, keeper] of commentaries) {
-          if (keeper === previous) commentaries.set(key, next)
-        }
-      }
-      if (!normalizedThreadText(next.text) && !next.parts?.length) continue
-    } else {
-      for (const key of commentaryKeys) {
-        if (!commentaries.has(key)) commentaries.set(key, next)
-      }
-    }
-
-    if (answer && answers.get(answer) === message && next !== message) {
-      answers.set(answer, next)
-    }
-    kept.push(next)
+    const next = collapseAssistantMessage(message, state)
+    if (next) kept.push(next)
   }
 
   return kept

@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: './src/index.ts',
     'local-workspace-authority': './src/local-workspace-authority.ts',
+    'usage-ledger-schema': './src/usage-ledger-schema.ts',
     server: './src/server.ts',
     stdio: './src/stdio.ts',
     'dispatch-stdio': './src/dispatch-stdio.ts'

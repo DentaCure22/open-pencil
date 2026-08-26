@@ -253,10 +253,12 @@ function numberData(event: EvalEvent | undefined, key: string): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
-function recordData(event: EvalEvent | undefined, key: string): Record<string, unknown> | null {
+type EvalRecordData = { [key: string]: unknown }
+
+function recordData(event: EvalEvent | undefined, key: string): EvalRecordData | null {
   const value = event?.data[key]
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? (value as EvalRecordData)
     : null
 }
 

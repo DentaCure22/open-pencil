@@ -127,7 +127,7 @@ function handleSubmit(e: Event) {
             "
             :disabled="!input.trim()"
           >
-            <icon-lucide-send class="size-3" />
+            <IconlyIcon name="send" class="size-3" />
           </button>
         </Tip>
       </form>

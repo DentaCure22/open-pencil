@@ -11,6 +11,55 @@ const pageErrors: Error[] = []
 
 test.describe.configure({ mode: 'serial' })
 
+async function readFocusAnchorProof(targetPage: Page) {
+  return targetPage.evaluate(async () => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    const { narratedTraceScopeForStore } = await import('/src/app/narrated-trace/scope.ts')
+    const { getNarratedTraceGesture } = await import('/src/app/narrated-trace/gesture.ts')
+    const { queryNarratedTraceHistory } = await import('/src/app/narrated-trace/query.ts')
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250)
+    })
+    const result = await queryNarratedTraceHistory({
+      query: 'Highlighted Rectangle',
+      scope: narratedTraceScopeForStore(store)
+    })
+    const focusEvent = result.matches
+      .flatMap((match) => match.events)
+      .find((event) => event.kind === 'screenshot')
+    const gesture = await getNarratedTraceGesture({ includeImage: false, latest: true })
+    return {
+      anchor: focusEvent?.anchor,
+      expectedPoint: store.screenToCanvas(370, 250),
+      gesture: gesture.gesture,
+      gestureStatus: gesture.status,
+      status: result.status
+    }
+  })
+}
+
+type FocusAnchorProof = Awaited<ReturnType<typeof readFocusAnchorProof>>
+
+function expectFocusAnchorProof(proof: FocusAnchorProof): void {
+  expect(proof.status).toBe('matched')
+  expect(proof.anchor?.pagePoint.x).toBeCloseTo(proof.expectedPoint.x, 4)
+  expect(proof.anchor?.pagePoint.y).toBeCloseTo(proof.expectedPoint.y, 4)
+  expect(proof.anchor?.pageRegion.width).toBeGreaterThan(0)
+  expect(proof.anchor?.pageRegion.height).toBeGreaterThan(0)
+  expect(proof.anchor?.targetRelativePoint?.x).toBeCloseTo(0.5, 1)
+  expect(proof.anchor?.targetRelativePoint?.y).toBeCloseTo(0.5, 1)
+  expect(proof.anchor?.viewport.zoom).toBeGreaterThan(0)
+  expect(proof.gestureStatus).toBe('matched')
+  expect(proof.gesture?.boardOrigin.documentId).toBeTruthy()
+  expect(proof.gesture?.boardOrigin.runtimeInstanceId).toBeTruthy()
+  expect(proof.gesture?.candidates.items).toContainEqual(
+    expect.objectContaining({ stableId: proof.gesture?.target?.stableId })
+  )
+  expect(proof.gesture?.geometry.pageRegion).toEqual(proof.anchor?.pageRegion)
+  expect(proof.gesture?.evidence?.cropBounds.width).toBeLessThan(140)
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await browser.newPage()
   page.on('pageerror', (error) => pageErrors.push(error))
@@ -117,47 +166,8 @@ test('keeps Focus active and adds one completed gesture to the unified History f
   await expect(
     page.getByTestId('narrated-trace-row-screenshot').getByTestId('narrated-trace-evidence-status')
   ).toHaveCount(0)
-  const anchorProof = await page.evaluate(async () => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('OpenPencil store not initialized')
-    const { narratedTraceScopeForStore } = await import('/src/app/narrated-trace/scope.ts')
-    const { getNarratedTraceGesture } = await import('/src/app/narrated-trace/gesture.ts')
-    const { queryNarratedTraceHistory } = await import('/src/app/narrated-trace/query.ts')
-    await new Promise((resolve) => {
-      setTimeout(resolve, 250)
-    })
-    const result = await queryNarratedTraceHistory({
-      query: 'Highlighted Rectangle',
-      scope: narratedTraceScopeForStore(store)
-    })
-    const focusEvent = result.matches
-      .flatMap((match) => match.events)
-      .find((event) => event.kind === 'screenshot')
-    const gesture = await getNarratedTraceGesture({ includeImage: false, latest: true })
-    return {
-      anchor: focusEvent?.anchor,
-      expectedPoint: store.screenToCanvas(370, 250),
-      gesture: gesture.gesture,
-      gestureStatus: gesture.status,
-      status: result.status
-    }
-  })
-  expect(anchorProof.status).toBe('matched')
-  expect(anchorProof.anchor?.pagePoint.x).toBeCloseTo(anchorProof.expectedPoint.x, 4)
-  expect(anchorProof.anchor?.pagePoint.y).toBeCloseTo(anchorProof.expectedPoint.y, 4)
-  expect(anchorProof.anchor?.pageRegion.width).toBeGreaterThan(0)
-  expect(anchorProof.anchor?.pageRegion.height).toBeGreaterThan(0)
-  expect(anchorProof.anchor?.targetRelativePoint?.x).toBeCloseTo(0.5, 1)
-  expect(anchorProof.anchor?.targetRelativePoint?.y).toBeCloseTo(0.5, 1)
-  expect(anchorProof.anchor?.viewport.zoom).toBeGreaterThan(0)
-  expect(anchorProof.gestureStatus).toBe('matched')
-  expect(anchorProof.gesture?.boardOrigin.documentId).toBeTruthy()
-  expect(anchorProof.gesture?.boardOrigin.runtimeInstanceId).toBeTruthy()
-  expect(anchorProof.gesture?.candidates.items).toContainEqual(
-    expect.objectContaining({ stableId: anchorProof.gesture?.target?.stableId })
-  )
-  expect(anchorProof.gesture?.geometry.pageRegion).toEqual(anchorProof.anchor?.pageRegion)
-  expect(anchorProof.gesture?.evidence?.cropBounds.width).toBeLessThan(140)
+  const anchorProof = await readFocusAnchorProof(page)
+  expectFocusAnchorProof(anchorProof)
   await expect(page.getByTestId('narrated-trace-history-toggle')).toHaveCount(0)
   await expect(page.getByTestId('narrated-trace-timeline')).toHaveCount(0)
   await expect(page.getByTestId('narrated-trace-annotation-overlay')).toHaveAttribute(

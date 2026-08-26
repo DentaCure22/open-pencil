@@ -2,9 +2,10 @@
 import { AnimatePresence, motion } from 'motion-v'
 import { ToolbarRoot as RekaToolbarRoot } from 'reka-ui'
 
-import IconChevronLeft from '~icons/lucide/chevron-left'
-import IconChevronRight from '~icons/lucide/chevron-right'
-
+import {
+  IconlyArrowLeft as IconChevronLeft,
+  IconlyArrowRight as IconChevronRight
+} from '@/components/icons/iconly'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import ToolFlyout from '@/components/Toolbar/ToolFlyout.vue'
 import ToolbarActionGroup from '@/components/Toolbar/ToolbarActionGroup.vue'

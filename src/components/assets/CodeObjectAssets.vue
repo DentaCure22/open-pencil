@@ -54,12 +54,13 @@ function insertPreset(id: CodeObjectPresetId) {
       class="text-muted hover:text-surface flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[9.5px] font-semibold tracking-wide uppercase"
       @click="toggleFolder"
     >
-      <icon-lucide-chevron-right
+      <IconlyIcon
+        name="arrow-right"
         class="size-3 transition-transform"
         :class="folderIsOpen ? 'rotate-90' : ''"
       />
       <icon-lucide-folder-open v-if="folderIsOpen" class="text-component size-3" />
-      <icon-lucide-folder v-else class="text-component size-3" />
+      <IconlyIcon name="folder" v-else class="text-component size-3" />
       <span class="flex-1">Code Object presets</span>
       <span class="font-normal tracking-normal text-muted/70">{{ presets.length }}</span>
     </button>
@@ -80,7 +81,11 @@ function insertPreset(id: CodeObjectPresetId) {
           <icon-lucide-globe-2 v-else-if="preset.id === 'earth-signals'" class="size-3.5" />
           <icon-lucide-orbit v-else-if="preset.id === 'orbit-lab'" class="size-3.5" />
           <icon-lucide-flower-2 v-else-if="preset.id === 'signal-bloom'" class="size-3.5" />
-          <icon-lucide-file-text v-else-if="preset.id === 'office-document'" class="size-3.5" />
+          <IconlyIcon
+            name="document"
+            v-else-if="preset.id === 'office-document'"
+            class="size-3.5"
+          />
           <icon-lucide-table-2 v-else-if="preset.id === 'office-spreadsheet'" class="size-3.5" />
           <icon-lucide-chart-no-axes-column-increasing
             v-else-if="preset.id === 'analytics-chart'"

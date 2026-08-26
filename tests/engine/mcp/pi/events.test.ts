@@ -959,7 +959,7 @@ describe('Pi JSON events', () => {
     expect(JSON.stringify(next.messages)).not.toContain('dont-store-this')
   })
 
-  test('projects Antigravity leftover thinking as commentary and fills in file reads', () => {
+  test('projects Antigravity leftover thinking as reasoning and fills in file reads', () => {
     const next = thread()
     next.model = 'antigravity/gemini-3-7-flash'
     const read = [
@@ -993,11 +993,11 @@ describe('Pi JSON events', () => {
       'turn-1'
     )
     expect(
-      next.messages.find((message) => message.parts?.some((part) => part.type === 'commentary'))
+      next.messages.find((message) => message.parts?.some((part) => part.type === 'reasoning'))
         ?.parts?.[0]
     ).toMatchObject({
       text: '**Analyzing Chat Data**\n\nI found the target file.',
-      type: 'commentary'
+      type: 'reasoning'
     })
     expect(
       next.messages.find((message) => message.parts?.some((part) => part.type === 'tool'))
@@ -1045,13 +1045,57 @@ describe('Pi JSON events', () => {
       }
     ])
     expect(
-      next.messages.find((message) => message.parts?.some((part) => part.type === 'commentary'))
+      next.messages.find((message) => message.parts?.some((part) => part.type === 'reasoning'))
         ?.parts?.[0]
     ).toMatchObject({
       state: 'complete',
       text: '**Analyzing Chat Data**\n\nI found the target file.',
-      type: 'commentary'
+      type: 'reasoning'
     })
+  })
+
+  test('keeps Antigravity thinking and tools in separate chronological blocks', () => {
+    const next = thread()
+    next.model = 'antigravity/gemini-3-7-flash'
+    const emitBlock = (thought: string, path: string) => {
+      const thinking = [
+        thought,
+        '[agy tool: view_file]',
+        '[agy input]',
+        JSON.stringify({ AbsolutePath: path }),
+        '[/agy input]',
+        '[agy output]',
+        `${path} contents`,
+        '[/agy output]'
+      ].join('\n')
+      for (const assistantMessageEvent of [
+        { contentIndex: 0, type: 'thinking_start' },
+        { contentIndex: 0, delta: thinking, type: 'thinking_delta' },
+        { content: thinking, contentIndex: 0, type: 'thinking_end' }
+      ]) {
+        applyPiJsonEvent(
+          next,
+          JSON.stringify({ assistantMessageEvent, type: 'message_update' }),
+          'turn-1'
+        )
+      }
+    }
+
+    emitBlock('Inspecting the renderer.', 'activity.ts')
+    emitBlock('Verifying the browser state.', 'activity.spec.ts')
+
+    expect(next.messages.map((message) => message.parts?.[0]?.type)).toEqual([
+      'reasoning',
+      'tool',
+      'reasoning',
+      'tool'
+    ])
+    expect(next.messages.map((message) => message.parts?.[0])).toEqual([
+      expect.objectContaining({ text: 'Inspecting the renderer.', type: 'reasoning' }),
+      expect.objectContaining({ name: 'view_file', type: 'tool' }),
+      expect.objectContaining({ text: 'Verifying the browser state.', type: 'reasoning' }),
+      expect.objectContaining({ name: 'view_file', type: 'tool' })
+    ])
   })
 
   test('deduplicates a completed Antigravity transcript replayed under a fallback turn key', () => {
@@ -1100,13 +1144,13 @@ describe('Pi JSON events', () => {
     const toolRows = next.messages.filter((message) =>
       message.parts?.some((part) => part.type === 'tool')
     )
-    const commentaryRows = next.messages.filter((message) =>
-      message.parts?.some((part) => part.type === 'commentary')
+    const reasoningRows = next.messages.filter((message) =>
+      message.parts?.some((part) => part.type === 'reasoning')
     )
     expect(toolRows).toHaveLength(1)
     expect(toolRows[0]?.id).toBe('pi-agy-tool:job-1:0:0')
-    expect(commentaryRows).toHaveLength(1)
-    expect(commentaryRows[0]?.id).toBe('pi-agy-thought:job-1:0')
+    expect(reasoningRows).toHaveLength(1)
+    expect(reasoningRows[0]?.id).toBe('pi-agy-thought:job-1:0')
   })
 
   test('attaches completed Antigravity image tool output to the generated-image part', () => {
@@ -1179,6 +1223,75 @@ describe('Pi JSON events', () => {
     expect(imagePart?.type === 'tool' ? imagePart.images?.[0]?.url : '').toStartWith(
       'data:image/png;base64,'
     )
+  })
+
+  test('keeps a bridge heartbeat running until the matching final tool output arrives', () => {
+    const next = thread()
+    next.model = 'antigravity/gemini-3-7-flash'
+    const activityInput = [
+      '[agy tool: call_mcp_tool]',
+      '[agy input]',
+      '{"Arguments":{},"ToolName":"openpencil_board_where"}',
+      '[/agy input]'
+    ]
+    const pending = [
+      ...activityInput,
+      '[agy output]',
+      'Step is still running.',
+      '[/agy output]'
+    ].join('\n')
+    const completed = [
+      ...activityInput,
+      '[agy output]',
+      '{"presence":{"pageId":"0:53"}}',
+      '[/agy output]'
+    ].join('\n')
+
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        assistantMessageEvent: { content: pending, contentIndex: 0, type: 'thinking_end' },
+        type: 'message_update'
+      }),
+      'turn-heartbeat'
+    )
+
+    let toolRows = next.messages.filter((message) =>
+      message.parts?.some((part) => part.type === 'tool')
+    )
+    expect(toolRows).toHaveLength(1)
+    expect(toolRows[0]).not.toHaveProperty('completedAt')
+    expect(toolRows[0]?.parts?.[0]).toMatchObject({
+      name: 'openpencil_board_where',
+      output: 'Step is still running.',
+      state: 'running',
+      type: 'tool'
+    })
+
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        assistantMessageEvent: {
+          content: `${pending}\n${completed}`,
+          contentIndex: 0,
+          type: 'thinking_end'
+        },
+        type: 'message_update'
+      }),
+      'turn-heartbeat'
+    )
+
+    toolRows = next.messages.filter((message) =>
+      message.parts?.some((part) => part.type === 'tool')
+    )
+    expect(toolRows).toHaveLength(1)
+    expect(toolRows[0]).toHaveProperty('completedAt')
+    expect(toolRows[0]?.parts?.[0]).toMatchObject({
+      name: 'openpencil_board_where',
+      output: '{"presence":{"pageId":"0:53"}}',
+      state: 'success',
+      type: 'tool'
+    })
   })
 
   test('stores provider reasoning separately from the visible answer', () => {
@@ -1350,6 +1463,76 @@ describe('Pi JSON events', () => {
     ).toBe(false)
   })
 
+  test('keeps each reasoning summary on its side of the tool boundary', () => {
+    const next = thread()
+    const emitThinking = (text: string) => {
+      for (const assistantMessageEvent of [
+        { contentIndex: 0, type: 'thinking_start' },
+        { contentIndex: 0, delta: text, type: 'thinking_delta' },
+        { content: text, contentIndex: 0, type: 'thinking_end' }
+      ]) {
+        applyPiJsonEvent(
+          next,
+          JSON.stringify({ assistantMessageEvent, type: 'message_update' }),
+          'turn-1'
+        )
+      }
+      applyPiJsonEvent(
+        next,
+        JSON.stringify({
+          message: {
+            content: [
+              { thinking: text, type: 'thinking' },
+              { id: `call-${text}`, name: 'read', type: 'toolCall' }
+            ],
+            responseId: `response-${text}`,
+            role: 'assistant',
+            stopReason: 'toolUse'
+          },
+          type: 'message_end'
+        }),
+        'turn-1'
+      )
+    }
+
+    emitThinking('Inspecting the implementation.')
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        args: { path: 'activity.ts' },
+        toolCallId: 'call-read',
+        toolName: 'read',
+        type: 'tool_execution_start'
+      }),
+      'turn-1'
+    )
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        result: 'File contents',
+        toolCallId: 'call-read',
+        toolName: 'read',
+        type: 'tool_execution_end'
+      }),
+      'turn-1'
+    )
+    emitThinking('Verifying the focused tests.')
+
+    expect(next.messages.map((message) => message.parts?.[0]?.type).filter(Boolean)).toEqual([
+      'reasoning',
+      'tool',
+      'reasoning'
+    ])
+    expect(
+      next.messages
+        .filter((message) => message.parts?.[0]?.type === 'reasoning')
+        .map((message) => message.parts?.[0])
+    ).toEqual([
+      expect.objectContaining({ text: 'Inspecting the implementation.', type: 'reasoning' }),
+      expect.objectContaining({ text: 'Verifying the focused tests.', type: 'reasoning' })
+    ])
+  })
+
   test('uses OpenAI commentary phase text as the visible progress lane', () => {
     const next = thread()
     const textSignature = JSON.stringify({ id: 'msg-commentary', phase: 'commentary', v: 1 })
@@ -1422,6 +1605,79 @@ describe('Pi JSON events', () => {
         ],
         text: ''
       })
+    ])
+  })
+
+  test('keeps OpenAI commentary on both sides of a tool boundary', () => {
+    const next = thread()
+    const emitCommentary = (text: string, signatureId: string) => {
+      const textSignature = JSON.stringify({ id: signatureId, phase: 'commentary', v: 1 })
+      applyPiJsonEvent(
+        next,
+        JSON.stringify({
+          assistantMessageEvent: {
+            contentIndex: 0,
+            delta: text,
+            partial: { content: [{ text, textSignature, type: 'text' }] },
+            type: 'text_delta'
+          },
+          type: 'message_update'
+        }),
+        'turn-1'
+      )
+      applyPiJsonEvent(
+        next,
+        JSON.stringify({
+          message: {
+            content: [
+              { text, textSignature, type: 'text' },
+              { id: `call-${signatureId}`, name: 'read', type: 'toolCall' }
+            ],
+            responseId: `response-${signatureId}`,
+            role: 'assistant',
+            stopReason: 'toolUse'
+          },
+          type: 'message_end'
+        }),
+        'turn-1'
+      )
+    }
+
+    emitCommentary('Inspecting the implementation.', 'commentary-1')
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        args: { path: 'activity.ts' },
+        toolCallId: 'call-read',
+        toolName: 'read',
+        type: 'tool_execution_start'
+      }),
+      'turn-1'
+    )
+    applyPiJsonEvent(
+      next,
+      JSON.stringify({
+        result: 'File contents',
+        toolCallId: 'call-read',
+        toolName: 'read',
+        type: 'tool_execution_end'
+      }),
+      'turn-1'
+    )
+    emitCommentary('Verifying the focused tests.', 'commentary-2')
+
+    expect(next.messages.map((message) => message.parts?.[0]?.type).filter(Boolean)).toEqual([
+      'commentary',
+      'tool',
+      'commentary'
+    ])
+    expect(
+      next.messages
+        .filter((message) => message.parts?.[0]?.type === 'commentary')
+        .map((message) => message.parts?.[0])
+    ).toEqual([
+      expect.objectContaining({ text: 'Inspecting the implementation.', type: 'commentary' }),
+      expect.objectContaining({ text: 'Verifying the focused tests.', type: 'commentary' })
     ])
   })
 

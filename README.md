@@ -23,10 +23,10 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 - **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
 - **AI builds designs** — describe what you want in chat; agents can retrieve prior Boards, place exact reusable objects, and fork Board-specific variants before 90+ tools create or modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints
 - **Agentic viewing** — the Board stays primary while Activity turns human actions, agent mutation receipts, exact targets, and evidence into one quiet spatial story. Reveal jumps back to the objects an agent changed instead of sending work to a separate dashboard
-- **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist history as rotated append-only JSONL, and publish only the latest exact Board targets, region, speech, expiry, and PNG path to a bounded `trace-context.json` for routine agent follow-ups
+- **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist Board, Inspect Chrome, and voice episodes as rotated append-only JSONL, and give each session an editable short tag that agents can resolve exactly from any chat. Only the latest exact Board targets, region, speech, expiry, and PNG path are published to a bounded `trace-context.json` for routine agent follow-ups
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
 - **Board-native agent chats** — place worker conversations as persistent, transformable cards that move and zoom with the Board. Sidebar and Board chats share streaming Markdown, safe tool/activity timelines, code, attachments, sources, errors, and prompt controls adapted from AI Elements Vue
-- **Agent task history** — browse worker tasks in a stable half-panel selector and follow up through the same authenticated conversation route
+- **Agent Work Map** — organize live chats and linked todos into projects and one-level subprojects. Board workers place their own chats from current Board context, manual placement wins, and linked work moves cleanly from Todo through In motion to Finished
 - **Spatial workspace** — compose native objects, Code Objects, workflows, documents, media, and evidence directly across persistent Boards without parallel projection systems
 - **Flexible Pages and Boards** — group unlimited canvas Boards inside nested Pages, search and rename them inline, and reorganize the workspace with drag and drop
 - **Mermaid diagrams** — paste source to place Mermaid 11.16 diagrams as one theme-aware SVG-backed Board frame; move or resize the frame normally, then update its retained source to redraw it in place without generated child layers
@@ -122,6 +122,9 @@ native auth, router, portals, and scrolling. Trusted web-app runtimes are bounde
 OpenPencil keeps the selected frame plus recent comparison frames resident, while the source app
 owns each frame's session-local last view. Runtime routes and scroll positions never become Board
 JSON or Undo entries. External or untrusted websites use a sandboxed embed.
+
+Plain generated raster images stay native Board media. Board workers can import a completed local
+PNG, JPEG, WebP, or GIF path directly instead of embedding base64 in an authored Code Object.
 
 The same plan can place a `canonical_object` artifact from an exact `source_object_id`, or run
 `canonical_object.fork` before a Board-specific semantic edit. This is the sole reuse and divergence

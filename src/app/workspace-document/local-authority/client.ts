@@ -109,6 +109,33 @@ export type LocalWorkspaceNavigationIntent = {
   workspaceId: string
 }
 
+export type LocalWorkspaceScreenshotIntent = {
+  authorityId: string
+  contentDocumentId: string
+  createdAt: string
+  expiresAt: string
+  objectIds: string[]
+  pageId: string
+  requestId: string
+  sequence: number
+  version: 1
+  workspaceId: string
+}
+
+export type LocalWorkspaceScreenshotCompletion = {
+  base64?: string
+  bounds?: Rect
+  byteLength?: number
+  error?: string
+  mimeType?: 'image/png'
+  objectIds: string[]
+  pixelHeight?: number
+  pixelWidth?: number
+  requestId: string
+  source?: 'live_board'
+  status: 'completed' | 'failed'
+}
+
 export type LocalWorkspaceThemeSetting = 'auto' | 'dark' | 'light'
 
 export type LocalWorkspaceThemeIntent = {
@@ -144,12 +171,14 @@ type LocalWorkspaceAuthorityChange =
       changed: false
       navigationSequence?: number
       revision: number
+      screenshotSequence?: number
       themeSequence?: number
     }
 
 export type LocalWorkspaceAuthorityChangeListeners = {
   onHeadCommitted(): void
   onNavigationQueued(): void
+  onScreenshotQueued(): void
   onThemeQueued(): void
 }
 
@@ -302,6 +331,10 @@ function parseStatus(value: unknown): LocalWorkspaceAuthorityStatus {
   return candidate as LocalWorkspaceAuthorityStatus
 }
 
+function isOptionalSequence(value: unknown): value is number | undefined {
+  return value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 0)
+}
+
 function parseAuthorityChange(value: unknown): LocalWorkspaceAuthorityChange {
   if (!isRecord(value) || typeof value.changed !== 'boolean') {
     throw new TypeError('Local workspace authority returned an invalid change')
@@ -309,14 +342,9 @@ function parseAuthorityChange(value: unknown): LocalWorkspaceAuthorityChange {
   if (
     !value.changed &&
     typeof value.revision === 'number' &&
-    (value.navigationSequence === undefined ||
-      (typeof value.navigationSequence === 'number' &&
-        Number.isInteger(value.navigationSequence) &&
-        value.navigationSequence >= 0)) &&
-    (value.themeSequence === undefined ||
-      (typeof value.themeSequence === 'number' &&
-        Number.isInteger(value.themeSequence) &&
-        value.themeSequence >= 0))
+    isOptionalSequence(value.navigationSequence) &&
+    isOptionalSequence(value.screenshotSequence) &&
+    isOptionalSequence(value.themeSequence)
   ) {
     return {
       changed: false,
@@ -324,6 +352,9 @@ function parseAuthorityChange(value: unknown): LocalWorkspaceAuthorityChange {
         ? { navigationSequence: value.navigationSequence }
         : {}),
       revision: value.revision,
+      ...(typeof value.screenshotSequence === 'number'
+        ? { screenshotSequence: value.screenshotSequence }
+        : {}),
       ...(typeof value.themeSequence === 'number' ? { themeSequence: value.themeSequence } : {})
     }
   }
@@ -503,6 +534,7 @@ export function subscribeLocalWorkspaceAuthorityChanges(
   const controller = new AbortController()
   changeSubscriptionState.controller = controller
   let observedNavigationSequence = 0
+  let observedScreenshotSequence = 0
   let observedThemeSequence = 0
   let observedRevision = latestStatus?.revision ?? 0
 
@@ -515,15 +547,20 @@ export function subscribeLocalWorkspaceAuthorityChanges(
         ])
         const change = parseAuthorityChange(
           await authorityRequest(
-            `/changes?after_revision=${String(observedRevision)}&after_navigation_sequence=${String(observedNavigationSequence)}&after_theme_sequence=${String(observedThemeSequence)}&timeout_ms=${String(AUTHORITY_CHANGE_WAIT_MS)}`,
+            `/changes?after_revision=${String(observedRevision)}&after_navigation_sequence=${String(observedNavigationSequence)}&after_screenshot_sequence=${String(observedScreenshotSequence)}&after_theme_sequence=${String(observedThemeSequence)}&timeout_ms=${String(AUTHORITY_CHANGE_WAIT_MS)}`,
             { signal }
           )
         )
         const navigationSequence = change.changed ? undefined : change.navigationSequence
+        const screenshotSequence = change.changed ? undefined : change.screenshotSequence
         const themeSequence = change.changed ? undefined : change.themeSequence
         if (navigationSequence !== undefined && navigationSequence > observedNavigationSequence) {
           observedNavigationSequence = navigationSequence
           listeners.onNavigationQueued()
+        }
+        if (screenshotSequence !== undefined && screenshotSequence > observedScreenshotSequence) {
+          observedScreenshotSequence = screenshotSequence
+          listeners.onScreenshotQueued()
         }
         if (themeSequence !== undefined && themeSequence > observedThemeSequence) {
           observedThemeSequence = themeSequence
@@ -614,6 +651,50 @@ export async function consumeLocalWorkspaceNavigationIntent(intentId: string): P
     throw new TypeError('Local workspace authority returned an invalid navigation receipt')
   }
   return payload.consumed
+}
+
+function parseScreenshotIntent(value: unknown): LocalWorkspaceScreenshotIntent | null {
+  if (value === null) return null
+  if (!isRecord(value)) {
+    throw new TypeError('Local workspace authority returned an invalid screenshot intent')
+  }
+  const candidate = value as Partial<LocalWorkspaceScreenshotIntent>
+  if (
+    candidate.version !== 1 ||
+    typeof candidate.authorityId !== 'string' ||
+    typeof candidate.contentDocumentId !== 'string' ||
+    typeof candidate.createdAt !== 'string' ||
+    typeof candidate.expiresAt !== 'string' ||
+    !Array.isArray(candidate.objectIds) ||
+    candidate.objectIds.length === 0 ||
+    candidate.objectIds.length > 8 ||
+    candidate.objectIds.some((id) => typeof id !== 'string' || !id) ||
+    typeof candidate.pageId !== 'string' ||
+    typeof candidate.requestId !== 'string' ||
+    typeof candidate.sequence !== 'number' ||
+    !Number.isInteger(candidate.sequence) ||
+    candidate.sequence < 1 ||
+    typeof candidate.workspaceId !== 'string'
+  ) {
+    throw new TypeError('Local workspace authority returned an invalid screenshot intent')
+  }
+  return candidate as LocalWorkspaceScreenshotIntent
+}
+
+export async function readLocalWorkspaceScreenshotIntent(): Promise<LocalWorkspaceScreenshotIntent | null> {
+  if (!IS_BROWSER) return null
+  const payload = await authorityRequest('/screenshot')
+  if (!isRecord(payload) || !Object.hasOwn(payload, 'intent')) {
+    throw new TypeError('Local workspace authority returned an invalid screenshot response')
+  }
+  return parseScreenshotIntent(payload.intent)
+}
+
+export async function completeLocalWorkspaceScreenshot(
+  completion: LocalWorkspaceScreenshotCompletion
+): Promise<void> {
+  if (!IS_BROWSER) return
+  await authorityRequest('/screenshot/complete', { body: completion, method: 'POST' })
 }
 
 function parseThemeIntent(value: unknown): LocalWorkspaceThemeIntent | null {

@@ -4,18 +4,31 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { resolveBrowserAssetPath } from '#core/browser-assets'
 import { DEFAULT_FONT_FAMILY, IS_BROWSER } from '#core/constants'
-import { fontFaceRenderFamily, parseFontStyle } from '#core/text/face'
+import { fontFaceRenderFamily } from '#core/text/face'
 import { fontFallbackEntry } from '#core/text/fallbacks'
 import type { FontFallbackScript } from '#core/text/fallbacks'
+import {
+  chooseLocalFontMatch,
+  isVariableFont,
+  normalizeFontFamily,
+  styleToWeight,
+  weightToStyle
+} from '#core/text/font-policy'
+import type { FontInfo } from '#core/text/font-policy'
 import { WebFontResolver } from '#core/text/web-fonts'
 import type { WebFontFetch, WebFontProviderId } from '#core/text/web-fonts'
 
-export interface FontInfo {
-  family: string
-  fullName: string
-  style: string
-  postscriptName: string
-}
+export {
+  FONT_WEIGHT_NAMES,
+  chooseLocalFontMatch,
+  isVariableFont,
+  normalizeFontFamily,
+  styleToVariant,
+  styleToWeight,
+  weightToFigmaStyle,
+  weightToStyle
+} from '#core/text/font-policy'
+export type { FontInfo } from '#core/text/font-policy'
 
 export type LocalFontAccessState = 'unsupported' | 'prompt' | 'granted' | 'denied'
 export type FontFamilySource = 'local' | 'bundled' | 'fallback' | WebFontProviderId
@@ -34,40 +47,6 @@ export type HostFontLoader = (family: string, style: string) => Promise<ArrayBuf
 
 type FindLocalFontOptions = { allowVariable?: boolean }
 
-type LocalFontMatch = Pick<FontInfo, 'family' | 'style'>
-
-export function chooseLocalFontMatch<T extends LocalFontMatch>(
-  fonts: T[],
-  family: string,
-  style?: string
-): T | undefined {
-  const families = [family]
-  const normalized = normalizeFontFamily(family)
-  if (normalized !== family) families.push(normalized)
-  const requested = parseFontStyle(style)
-
-  for (const f of families) {
-    const exact = style ? fonts.find((x) => x.family === f && x.style === style) : undefined
-    if (exact) return exact
-
-    const candidates = fonts.filter((x) => x.family === f)
-    const sameStyle = candidates.find((x) => {
-      const parsed = parseFontStyle(x.style)
-      return parsed.weight === requested.weight && parsed.italic === requested.italic
-    })
-    if (sameStyle) return sameStyle
-
-    if (style) continue
-
-    const sameSlant = candidates.filter((x) => parseFontStyle(x.style).italic === requested.italic)
-    if (sameSlant.length > 0) return sameSlant[0]
-
-    if (candidates.length > 0) return candidates[0]
-  }
-
-  return undefined
-}
-
 const BUNDLED_FONTS: Record<string, string> = {
   'Inter|Regular': '/Inter-Regular.ttf',
   'Inter|Medium': '/Inter-Medium.ttf',
@@ -75,62 +54,6 @@ const BUNDLED_FONTS: Record<string, string> = {
   'Inter|Bold': '/Inter-Bold.ttf',
   'Inter|ExtraBold': '/Inter-ExtraBold.ttf',
   'Noto Naskh Arabic|Regular': '/NotoNaskhArabic-Regular.ttf'
-}
-
-export const FONT_WEIGHT_NAMES: Record<number, string> = {
-  100: 'Thin',
-  200: 'Extra Light',
-  300: 'Light',
-  400: 'Regular',
-  500: 'Medium',
-  600: 'Semi Bold',
-  700: 'Bold',
-  800: 'Extra Bold',
-  900: 'Black'
-}
-
-export function normalizeFontFamily(family: string): string {
-  return family.replace(/\s+(Variable|\d+(?:pt|px|em))$/i, '')
-}
-
-export function styleToVariant(style: string): string {
-  const weight = styleToWeight(style)
-  const italic = style.toLowerCase().includes('italic')
-  if (weight === 400 && !italic) return 'regular'
-  if (weight === 400 && italic) return 'italic'
-  return italic ? `${weight}italic` : `${weight}`
-}
-
-export function isVariableFont(data: ArrayBuffer): boolean {
-  if (data.byteLength < 12) return false
-  const view = new DataView(data)
-  const numTables = view.getUint16(4)
-  for (let i = 0; i < numTables && 12 + i * 16 + 4 <= data.byteLength; i++) {
-    const tag = String.fromCharCode(
-      view.getUint8(12 + i * 16),
-      view.getUint8(12 + i * 16 + 1),
-      view.getUint8(12 + i * 16 + 2),
-      view.getUint8(12 + i * 16 + 3)
-    )
-    if (tag === 'fvar') return true
-  }
-  return false
-}
-
-export function styleToWeight(style: string): number {
-  return parseFontStyle(style).weight
-}
-
-export function weightToStyle(weight: number, italic = false): string {
-  const rounded = Math.round(weight / 100) * 100
-  const label = (FONT_WEIGHT_NAMES[rounded] ?? 'Regular').replace(/ /g, '')
-  return italic ? `${label} Italic` : label
-}
-
-export function weightToFigmaStyle(weight: number, italic = false): string {
-  const rounded = Math.round(weight / 100) * 100
-  const label = FONT_WEIGHT_NAMES[rounded] ?? 'Regular'
-  return italic ? `${label} Italic` : label
 }
 
 export class FontManager {

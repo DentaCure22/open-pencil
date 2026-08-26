@@ -6,6 +6,10 @@ import { browserInspectorState, requestBrowserElementPicker } from '@/app/browse
 import { toast } from '@/app/shell/ui'
 import Tip from '@/components/ui/Tip.vue'
 
+const { side = 'right' } = defineProps<{
+  side?: 'right' | 'top'
+}>()
+
 const pickerBusy = computed(() => browserInspectorState.pickerStatus === 'requesting')
 const pickerActive = computed(() => browserInspectorState.pickerStatus === 'active')
 
@@ -27,7 +31,7 @@ async function inspectChrome() {
           ? 'Chrome session active'
           : 'Inspect Chrome'
     "
-    side="right"
+    :side="side"
   >
     <ToolbarButton as-child>
       <button

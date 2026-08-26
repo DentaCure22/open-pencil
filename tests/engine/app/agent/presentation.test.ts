@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { AgentConversationThread } from '@/app/agent-chat/client'
+import type { AgentConversationThread } from '@/app/agent-chat/conversations'
 import { agentConversationTitle, plainConversationPreview } from '@/app/agent-chat/presentation'
 
 function thread(input: Partial<AgentConversationThread>): AgentConversationThread {
@@ -61,6 +61,14 @@ describe('agent conversation presentation', () => {
 
   test('keeps real prompt text such as Move this card', () => {
     expect(agentConversationTitle(thread({ task: 'Move this card' }))).toBe('Move this card')
+  })
+
+  test('prefers a generated semantic title over the provisional prompt title', () => {
+    expect(
+      agentConversationTitle(
+        thread({ task: 'how can we get summarized names for chats', title: 'Generate chat titles' })
+      )
+    ).toBe('Generate chat titles')
   })
 
   test('titles comma-joined capture filenames as Screenshot', () => {

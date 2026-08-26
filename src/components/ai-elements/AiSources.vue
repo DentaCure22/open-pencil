@@ -12,7 +12,7 @@ const { sources } = defineProps<{ sources: Extract<AiMessagePart, { type: 'sourc
     <summary class="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-muted">
       <icon-lucide-book-open class="size-3" />
       <span>{{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }}</span>
-      <icon-lucide-chevron-down class="ml-auto size-3 [[open]>&]:rotate-180" />
+      <IconlyIcon name="arrow-down" class="ml-auto size-3 [[open]>&]:rotate-180" />
     </summary>
     <div class="grid gap-1 border-t border-border/60 p-1.5">
       <a

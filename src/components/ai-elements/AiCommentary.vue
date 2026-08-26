@@ -1,28 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { useStreamedText } from './streamed-text'
+import AiMarkdown from './AiMarkdown.vue'
 
 const { state = 'complete', text } = defineProps<{
   state?: 'complete' | 'stopped' | 'streaming'
   text: string
 }>()
 
-const displayed = useStreamedText(
-  () => text,
-  () => state === 'streaming'
-)
-const commentary = computed(() => displayed.value.trim())
+const commentary = computed(() => text.trim())
 </script>
 
 <template>
-  <p
+  <div
     v-if="commentary"
     data-test-id="ai-commentary"
     :data-state="state"
-    class="my-1 whitespace-pre-wrap font-sans text-[13px] leading-5"
-    :class="state === 'streaming' ? 'agent-thought-shimmer' : 'text-muted'"
+    class="my-1 min-w-0 font-sans text-[13px] leading-5 font-normal"
+    :class="state === 'streaming' ? 'agent-thought-shimmer' : 'text-surface'"
   >
-    {{ commentary }}
-  </p>
+    <AiMarkdown :content="commentary" :streaming="state === 'streaming'" variant="activity" />
+  </div>
 </template>

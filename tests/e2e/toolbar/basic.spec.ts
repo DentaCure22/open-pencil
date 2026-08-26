@@ -29,6 +29,64 @@ test('collaboration controls live in the top toolbar', async () => {
   await expect(editor.page.getByTestId('properties-panel')).toHaveCount(0)
 })
 
+test('bottom toolbar stays between side chrome and scrolls when space is tight', async () => {
+  await editor.page.setViewportSize({ height: 821, width: 1280 })
+
+  const toolbarMotion = editor.page.getByTestId('toolbar-motion')
+  const toolbar = editor.page.getByRole('toolbar', { name: 'Editor tools' })
+  const scrollViewport = editor.page.getByTestId('toolbar-scroll-viewport')
+  const leftSidebar = editor.page.locator(
+    '[data-test-id="layers-shell-motion"][data-sidebar-open="true"]'
+  )
+  const zoomControls = editor.page.getByTestId('canvas-zoom-controls')
+
+  await expect(toolbar).toBeVisible()
+  await expect(scrollViewport).toBeVisible()
+  await expect
+    .poll(async () => Number(await toolbarMotion.getAttribute('data-toolbar-left-inset')))
+    .toBeGreaterThan(12)
+
+  const [leftBounds, toolbarBounds, zoomBounds] = await Promise.all([
+    leftSidebar.boundingBox(),
+    toolbar.boundingBox(),
+    zoomControls.boundingBox()
+  ])
+  if (!leftBounds || !toolbarBounds || !zoomBounds) {
+    throw new Error('Expected sidebar-aware toolbar bounds')
+  }
+  expect(toolbarBounds.x).toBeGreaterThanOrEqual(leftBounds.x + leftBounds.width + 11)
+  expect(toolbarBounds.x + toolbarBounds.width).toBeLessThanOrEqual(zoomBounds.x - 11)
+
+  await editor.page.getByTestId('app-menu-toggle').click()
+  await editor.page.getByTestId('settings-activity-toggle').click()
+  const rightPanel = editor.page.getByTestId('t3-right-panel')
+  await expect(rightPanel).toHaveAttribute('data-state', 'open')
+
+  await expect
+    .poll(async () => {
+      const [currentToolbar, currentPanel] = await Promise.all([
+        toolbar.boundingBox(),
+        rightPanel.boundingBox()
+      ])
+      if (!currentToolbar || !currentPanel) return false
+      return currentToolbar.x + currentToolbar.width <= currentPanel.x - 11
+    })
+    .toBe(true)
+
+  const overflowWithPanel = await scrollViewport.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollLeft: element.scrollLeft,
+    scrollWidth: element.scrollWidth
+  }))
+  expect(overflowWithPanel.scrollWidth).toBeGreaterThan(overflowWithPanel.clientWidth)
+
+  await scrollViewport.hover()
+  await editor.page.mouse.wheel(0, 180)
+  await expect
+    .poll(() => scrollViewport.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(overflowWithPanel.scrollLeft)
+})
+
 test('shapes flyout opens', async () => {
   await editor.page.getByTestId(toolbarFlyoutTestId('FRAME')).click()
   await expect(editor.page.getByTestId(toolbarFlyoutItemTestId('RECTANGLE'))).toBeVisible()

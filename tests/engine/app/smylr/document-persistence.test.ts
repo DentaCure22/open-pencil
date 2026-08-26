@@ -141,9 +141,9 @@ describe('Smylr production incremental document persistence', () => {
   })
 
   test('omits unchanged Board images on later authority saves', () => {
-    const document = {
+    const document = Object.assign(Object.create(null) as CachedSmylrProductionDocument, {
       images: [['asset', new Uint8Array([1, 2, 3])]]
-    } as unknown as CachedSmylrProductionDocument
+    })
     expect(omitUnchangedAuthorityImages(document, null, '1:asset:3|')).toBe(document)
     expect(omitUnchangedAuthorityImages(document, '1:asset:3|', '1:asset:3|')).toEqual({
       images: [],
@@ -154,10 +154,10 @@ describe('Smylr production incremental document persistence', () => {
 
   test('omits unchanged Board pages on later authority saves', () => {
     const { firstBoard, firstNode, graph, secondBoard, secondNode } = createWorkspaceGraph()
-    const document = {
+    const document = Object.assign(Object.create(null) as CachedSmylrProductionDocument, {
       nodes: [...graph.nodes],
       rootId: graph.rootId
-    } as unknown as CachedSmylrProductionDocument
+    })
 
     expect(omitUnchangedAuthorityPages(document, graph, new Set([firstBoard.id]), false)).toBe(
       document

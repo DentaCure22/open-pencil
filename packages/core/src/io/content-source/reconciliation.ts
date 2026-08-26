@@ -98,7 +98,10 @@ function canonicalize(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .sort(([left], [right]) => {
+        if (left === right) return 0
+        return left < right ? -1 : 1
+      })
       .map(([key, item]) => [key, canonicalize(item)])
   )
 }

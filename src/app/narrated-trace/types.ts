@@ -3,6 +3,25 @@ import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
 export type NarratedTraceStatus = 'idle' | 'recording' | 'review'
 
+export type NarratedTraceEpisodeKind = 'board' | 'chrome' | 'voice'
+
+export type NarratedTraceEpisode = {
+  endedAtMs?: number
+  id: string
+  kind: NarratedTraceEpisodeKind
+  label?: string
+  sourceSessionId?: string
+  startedAtMs: number
+}
+
+export type NarratedTraceEventOrigin = {
+  episodeId: string
+  kind: NarratedTraceEpisodeKind
+  reference?: string
+  sequence?: number
+  sourceSessionId?: string
+}
+
 export type NarratedTraceEventKind =
   | 'transcript'
   | 'selection'
@@ -165,6 +184,7 @@ export type NarratedTraceEvent = {
   id: string
   kind: NarratedTraceEventKind
   label: string
+  origin?: NarratedTraceEventOrigin
   ink?: NarratedTraceInk
   target?: NarratedTraceTarget
   text?: string
@@ -195,11 +215,14 @@ export type NarratedTraceRow = {
 }
 
 export type NarratedTraceSession = {
+  aliases?: string[]
   contextDraft: NarratedTraceContextEntry[]
   durationMs: number
+  episodes?: NarratedTraceEpisode[]
   events: NarratedTraceEvent[]
   id: string
   scope?: NarratedTraceScope
   startedAt: string
+  tag?: string
   title?: string
 }

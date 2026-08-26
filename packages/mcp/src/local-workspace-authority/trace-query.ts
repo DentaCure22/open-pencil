@@ -111,6 +111,7 @@ function traceSpokenTurn(value: unknown): TraceQuerySpokenTurn | null {
 function selectorCount(args: JsonRecord) {
   return [
     Boolean(optionalString(args, 'query')),
+    Boolean(optionalString(args, 'session_tag')),
     Boolean(optionalString(args, 'task_cursor')),
     args.latest_spoken_turn === true,
     Boolean(optionalString(args, 'spoken_text')),
@@ -121,7 +122,7 @@ function selectorCount(args: JsonRecord) {
 function traceQueryInput(args: JsonRecord): TraceQueryInput {
   if (selectorCount(args) !== 1) {
     throw new Error(
-      'Trace queries require exactly one of query, task_cursor, latest_spoken_turn, spoken_turn_id, or spoken_text.'
+      'Trace queries require exactly one of session_tag, query, task_cursor, latest_spoken_turn, spoken_turn_id, or spoken_text.'
     )
   }
   const spokenSelector =
@@ -148,6 +149,7 @@ function traceQueryInput(args: JsonRecord): TraceQueryInput {
     latestSpokenTurn: args.latest_spoken_turn === true,
     ...(typeof limit === 'number' ? { limit } : {}),
     query: optionalString(args, 'query'),
+    sessionTag: optionalString(args, 'session_tag'),
     since: optionalString(args, 'since'),
     spokenText: optionalString(args, 'spoken_text'),
     spokenTurnId: optionalString(args, 'spoken_turn_id'),

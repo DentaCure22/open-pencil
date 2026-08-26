@@ -2,8 +2,8 @@ import { defineConfig } from 'vitepress'
 import llmstxt from 'vitepress-plugin-llms'
 
 import { docsLocales } from './locales'
-import { rootThemeConfig } from './root-theme'
 import { BASE, LOCALE_PREFIXES, applyPageSeo, siteHead, withAlternateSitemapLinks } from './seo'
+import { rootThemeConfig } from './theme/root'
 
 export default defineConfig({
   title: 'OpenPencil',
@@ -15,7 +15,7 @@ export default defineConfig({
 
   sitemap: {
     hostname: BASE,
-    transformItems: withAlternateSitemapLinks,
+    transformItems: withAlternateSitemapLinks
   },
 
   head: siteHead,
@@ -42,5 +42,5 @@ export default defineConfig({
 
   locales: docsLocales,
 
-  themeConfig: rootThemeConfig(),
+  themeConfig: rootThemeConfig()
 })

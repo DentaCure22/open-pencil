@@ -1,6 +1,8 @@
 export type {
   AiConversationStatus,
+  AiFileChange,
   AiMessage,
   AiMessagePart,
-  AiToolState
+  AiToolState,
+  AiTurnChanges
 } from '@/app/agent-chat/types'

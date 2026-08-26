@@ -18,8 +18,11 @@ export async function getCanvasKit(options?: CanvasKitOptions): Promise<CanvasKi
       const ckPath = import.meta.resolve('canvaskit-wasm')
       return decodeURIComponent(new URL(file, ckPath).pathname)
     }
-    const pathname = typeof window === 'undefined' ? '' : window.location.pathname
-    return resolveBrowserAssetPath(file, import.meta.env.BASE_URL || '/', pathname)
+    return resolveBrowserAssetPath(
+      file,
+      import.meta.env.BASE_URL || '/',
+      globalThis.location.pathname
+    )
   }
 
   instance = await CanvasKitInit({

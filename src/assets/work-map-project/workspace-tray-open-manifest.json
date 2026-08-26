@@ -1,0 +1,66 @@
+{
+  "source": "artifacts/product-design/work-map-project-icons/workspace-tray/open-transparent.png",
+  "source_pixels": [
+    660,
+    570
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    24,
+    24,
+    636,
+    546
+  ],
+  "trimmed_pixels": [
+    612,
+    522
+  ],
+  "prepared_pixels": [
+    686,
+    686
+  ],
+  "padding_fraction": 0.06,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-project/workspace-tray-open-master.png",
+      "pixels": [
+        686,
+        686
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-project/workspace-tray-open.png",
+      "pixels": [
+        20,
+        20
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-project/workspace-tray-open@2x.png",
+      "pixels": [
+        40,
+        40
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-project/workspace-tray-open@3x.png",
+      "pixels": [
+        60,
+        60
+      ]
+    }
+  ],
+  "warnings": []
+}

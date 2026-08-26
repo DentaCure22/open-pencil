@@ -59,7 +59,7 @@ const separator = ui?.separator ?? 'mx-1 my-1 h-px bg-border'
   <SelectRoot v-model="modelValue">
     <SelectTrigger v-bind="$attrs" :class="select.trigger">
       <slot name="value">{{ displayValue }}</slot>
-      <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
+      <IconlyIcon name="arrow-down" class="size-2.5 shrink-0 text-muted" />
     </SelectTrigger>
     <SelectPortal>
       <SelectContent position="popper" :side-offset="4" :class="select.content">

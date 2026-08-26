@@ -1,4 +1,4 @@
-import type { AgentConversationHistory, AgentConversationThread } from './client'
+import type { AgentConversationHistory, AgentConversationThread } from './conversations'
 import type { AiMessage, AiMessagePart } from './types'
 
 function cheapHash(value: string): string {
@@ -40,6 +40,7 @@ function messageFingerprint(message: AiMessage): string {
 function threadFingerprint(thread: AgentConversationThread): string {
   return [
     thread.id,
+    thread.activeTurnStartedAt ?? '',
     thread.updatedAt,
     thread.state,
     thread.recentUpdate,

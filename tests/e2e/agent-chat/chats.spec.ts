@@ -103,6 +103,48 @@ function messagesApprovalThread(index: number) {
   }
 }
 
+test('shows whole-turn timing while running and marks finished chats', async ({ page }) => {
+  const running = {
+    ...worker(0),
+    activeTurnStartedAt: new Date(Date.now() - 60_000).toISOString(),
+    recentUpdate: 'bash failed. · 7s'
+  }
+  const finished = worker(1)
+  await mockThreads(page, [running, finished])
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'open-pencil:agent-thread-preferences-v1',
+      JSON.stringify({ 'thread-1': { unread: true } })
+    )
+  })
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+
+  const selector = page.getByTestId('agent-thread-selector')
+  const runningThread = selector.getByTestId('agent-chat-thread-agent:thread-0')
+  const runningStatus = runningThread.locator('span').filter({ hasText: 'bash failed.' }).last()
+  const elapsed = await runningStatus.textContent()
+  const elapsedSeconds = Number(/ · (\d+)s$/.exec(elapsed ?? '')?.[1])
+  expect(elapsedSeconds).toBeGreaterThanOrEqual(59)
+  expect(elapsedSeconds).toBeLessThan(75)
+  await expect(runningThread.getByTestId('agent-thread-finished-marker')).toHaveCount(0)
+
+  const finishedThread = selector.getByTestId('agent-chat-thread-agent:thread-1')
+  const runningHeight = (await runningThread.boundingBox())?.height
+  const finishedHeight = (await finishedThread.boundingBox())?.height
+  expect(runningHeight).toBeGreaterThanOrEqual(52)
+  expect(finishedHeight).toBe(runningHeight)
+  await expect(finishedThread.getByTestId('agent-thread-finished-marker')).toHaveAttribute(
+    'aria-label',
+    'Unread'
+  )
+  await finishedThread.click()
+  await page.getByRole('button', { name: 'Back to tasks' }).click()
+  await expect(finishedThread.getByTestId('agent-thread-finished-marker')).toHaveCount(0)
+})
+
 test('keeps one clean task list and preserves a conversation while navigating back', async ({
   page
 }) => {
@@ -178,8 +220,11 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   const chapterMarkers = chapterRail.getByTestId('ai-conversation-chapter-marker')
   await expect(chapterRail).toBeVisible()
   await expect(chapterMarkers).toHaveCount(12)
-  const viewportBox = expectDefined(await viewport.boundingBox(), 'conversation viewport bounds')
-  const chapterRailBox = expectDefined(await chapterRail.boundingBox(), 'chapter rail bounds')
+  const viewportBox = await viewport.boundingBox()
+  const chapterRailBox = await chapterRail.boundingBox()
+  expect(viewportBox).not.toBeNull()
+  expect(chapterRailBox).not.toBeNull()
+  if (!viewportBox || !chapterRailBox) throw new Error('Conversation navigation bounds missing')
   const chapterRailCenter = chapterRailBox.y + chapterRailBox.height / 2
   const viewportCenter = viewportBox.y + viewportBox.height / 2
   expect(chapterRailCenter - viewportCenter).toBeGreaterThan(24)
@@ -273,17 +318,113 @@ test('keeps one clean task list and preserves a conversation while navigating ba
     ])
 })
 
-test('starts a new task without the previous prompt or attachment', async ({ page }) => {
+test('renders conversation navigation as a plain left-edge rail', async ({ page }) => {
+  await mockThreads(page, [worker(11)])
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 11').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  const viewport = conversation.getByTestId('ai-conversation-viewport')
+  const rail = conversation.getByRole('navigation', { name: 'User messages' })
+  const markers = rail.getByTestId('ai-conversation-chapter-marker')
+  const viewportBox = await viewport.boundingBox()
+  const railBox = await rail.boundingBox()
+  expect(viewportBox).not.toBeNull()
+  expect(railBox).not.toBeNull()
+  if (!viewportBox || !railBox) throw new Error('Conversation navigation bounds missing')
+  expect(Math.abs(railBox.x - viewportBox.x)).toBeLessThan(8)
+  expect(railBox.width).toBeLessThan(28)
+  await expect(rail).toHaveCSS('border-top-width', '0px')
+  await expect(rail).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(rail).toHaveCSS('box-shadow', 'none')
+
+  await markers.nth(2).hover()
+  const tooltip = page.getByTestId('ai-conversation-chapter-tooltip')
+  await expect(tooltip).toBeVisible()
+  const hoveredLineBox = await markers.nth(2).locator('span').nth(1).boundingBox()
+  const distantLineBox = await markers.nth(8).locator('span').nth(1).boundingBox()
+  expect(hoveredLineBox).not.toBeNull()
+  expect(distantLineBox).not.toBeNull()
+  if (!hoveredLineBox || !distantLineBox) {
+    throw new Error('Conversation navigation marker bounds missing')
+  }
+  expect(Math.abs(hoveredLineBox.x - distantLineBox.x)).toBeLessThan(1)
+  expect(hoveredLineBox.x + hoveredLineBox.width).toBeGreaterThan(
+    distantLineBox.x + distantLineBox.width + 4
+  )
+  const tooltipBox = await tooltip.boundingBox()
+  expect(tooltipBox).not.toBeNull()
+  if (!tooltipBox) throw new Error('Conversation navigation tooltip bounds missing')
+  expect(tooltipBox.x).toBeGreaterThan(railBox.x + railBox.width + 8)
+})
+
+test('hands the first prompt to its thread without filler or a surface remount', async ({
+  page
+}, testInfo) => {
+  const threads = [worker(1)]
   const newTasks: string[] = []
-  await mockThreads(page, [worker(1)])
+  let releaseDispatch: (() => void) | undefined
+  const dispatchGate = new Promise<void>((resolve) => {
+    releaseDispatch = resolve
+  })
+  await mockThreads(page, threads)
   await page.route(/\/agent-router\/v1\/pi\/dispatch$/, async (route) => {
-    newTasks.push((route.request().postDataJSON() as { prompt: string }).prompt)
+    const prompt = (route.request().postDataJSON() as { prompt: string }).prompt
+    newTasks.push(prompt)
+    await dispatchGate
+    threads.unshift({
+      ...worker(2),
+      id: 'thread-new',
+      // A newly accepted worker can appear in the preview feed before its
+      // transcript endpoint exposes the first prompt. The draft handoff must
+      // keep the optimistic prompt visible across that eventual-consistency gap.
+      messages: [],
+      state: 'running',
+      task: 'Polished first-prompt handoff'
+    })
     await route.fulfill({
       body: '{"dispatchedAt":"2026-08-16T00:02:00.000Z","jobId":"job-new","state":"queued","threadId":"thread-new"}',
       contentType: 'application/json',
       status: 202
     })
   })
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  const panel = page.getByTestId('agent-chats-panel')
+  await panel.getByTestId('agent-thread-new').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  const surface = conversation.getByTestId('ai-conversation-surface')
+  const composer = conversation.getByRole('textbox', { name: 'New task' })
+  const headerTitle = conversation.getByTestId('agent-selected-header-title')
+  await surface.evaluate((element) => element.setAttribute('data-first-prompt-surface', 'stable'))
+  const composerBefore = await composer.boundingBox()
+  expect(composerBefore).not.toBeNull()
+
+  await composer.fill('Polish the first prompt transition')
+  await composer.press('Enter')
+  await expect.poll(() => newTasks).toEqual(['Polish the first prompt transition'])
+  await expect(headerTitle).toHaveText('Polish the first prompt transition')
+  await expect(conversation.getByTestId('ai-conversation-empty')).toHaveCount(0)
+
+  releaseDispatch?.()
+  await expect(headerTitle).toHaveText('Polished first-prompt handoff')
+  await expect(surface).toHaveAttribute('data-first-prompt-surface', 'stable')
+  await expect(conversation.getByText(/^Task started\.?$/)).toHaveCount(0)
+  await expect(conversation.getByText('Polish the first prompt transition')).toHaveCount(1)
+  await conversation.screenshot({ path: testInfo.outputPath('first-prompt-handoff.png') })
+  const composerAfter = await conversation.getByRole('textbox', { name: 'Follow up' }).boundingBox()
+  expect(composerAfter).not.toBeNull()
+  if (!composerBefore || !composerAfter) throw new Error('Composer bounds unavailable')
+  expect(Math.abs(composerAfter.y - composerBefore.y)).toBeLessThan(2)
+})
+
+test('restores a new-task draft after leaving and reload', async ({ page }) => {
+  await mockThreads(page, [worker(1)])
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
   await page.getByTestId('left-panel-chats-tab').click()
@@ -307,20 +448,57 @@ test('starts a new task without the previous prompt or attachment', async ({ pag
   await conversation.getByRole('button', { name: 'Back to tasks' }).click()
   await panel.getByTestId('agent-thread-new').click()
   await expect(conversation.getByTestId('agent-selected-header')).toContainText('New task')
-  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue('')
-  await expect(conversation.getByTestId('ai-prompt-attachment')).toHaveCount(0)
+  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue(
+    'Unsent previous draft'
+  )
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toContainText('reference.png')
 
-  await conversation.getByRole('textbox', { name: 'New task' }).fill('Previous attached prompt')
-  await conversation.getByRole('textbox', { name: 'New task' }).press('Enter')
-  await expect.poll(() => newTasks).toEqual(['Previous attached prompt'])
-  await expect(conversation.getByText('Previous attached prompt')).toBeVisible()
+  await page.reload()
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await panel.getByTestId('agent-thread-new').click()
+  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue(
+    'Unsent previous draft'
+  )
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toContainText('reference.png')
+})
+
+test('restores each existing thread draft and its attachments after switching and reload', async ({
+  page
+}) => {
+  await mockThreads(page, [worker(1), worker(2)])
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+
+  const conversation = page.getByTestId('agent-selected-conversation')
+  const selector = page.getByTestId('agent-thread-selector')
+  await selector.getByText('Human task title 1').click()
+  const composer = conversation.getByRole('textbox', { name: 'Follow up' })
+  await composer.fill('Keep this thread-specific draft')
+  await conversation.getByTestId('ai-prompt-file-input').setInputFiles({
+    buffer: Buffer.from('thread attachment'),
+    mimeType: 'text/plain',
+    name: 'thread-notes.txt'
+  })
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toContainText('thread-notes.txt')
 
   await conversation.getByRole('button', { name: 'Back to tasks' }).click()
-  await panel.getByTestId('agent-thread-new').click()
-  await expect(conversation.getByTestId('agent-selected-header')).toContainText('New task')
-  await expect(conversation.getByText('Previous attached prompt')).toHaveCount(0)
-  await expect(conversation.getByTestId('ai-prompt-attachment')).toHaveCount(0)
-  await expect(conversation.getByRole('textbox', { name: 'New task' })).toHaveValue('')
+  await selector.getByText('Human task title 2').click()
+  await expect(conversation.getByRole('textbox', { name: 'Follow up' })).toHaveValue('')
+  await conversation.getByRole('button', { name: 'Back to tasks' }).click()
+  await selector.getByText('Human task title 1').click()
+  await expect(composer).toHaveValue('Keep this thread-specific draft')
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toContainText('thread-notes.txt')
+
+  await page.reload()
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 1').click()
+  await expect(conversation.getByRole('textbox', { name: 'Follow up' })).toHaveValue(
+    'Keep this thread-specific draft'
+  )
+  await expect(conversation.getByTestId('ai-prompt-attachment')).toContainText('thread-notes.txt')
 })
 
 test('shows the exact Messages send and waits for the in-chat Send button', async ({ page }) => {
@@ -464,6 +642,53 @@ test('shows the exact Messages send and waits for the in-chat Send button', asyn
   await expect
     .poll(() => approval.evaluate((element) => getComputedStyle(element).boxShadow))
     .toBe('none')
+
+  await page.reload()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 20').click()
+  const restoredApproval = page.getByTestId('agent-ui-approval')
+  await expect(restoredApproval).toHaveCount(1)
+  await expect(restoredApproval).toHaveAttribute('data-state', 'sent')
+  await expect(restoredApproval.getByTestId('agent-message-recipient')).toHaveText('Test Recipient')
+  await expect(restoredApproval.getByTestId('agent-message-approval-status')).toHaveText('Sent')
+})
+
+test('restores a completed Messages card from persisted tool history', async ({ page }) => {
+  const thread = messagesApprovalThread(25)
+  thread.pendingUiRequests = []
+  thread.messages.push({
+    completedAt: '2026-08-22T14:30:02.000Z',
+    createdAt: '2026-08-22T14:30:01.000Z',
+    id: 'persisted-message-send-tool',
+    parts: [
+      {
+        input: JSON.stringify({
+          chat_guid: 'iMessage;-;test-recipient',
+          recipient_label: 'Test Recipient',
+          text: 'Hi'
+        }),
+        name: 'messages__send_send_message',
+        output: 'Message sent.',
+        state: 'success',
+        type: 'tool'
+      }
+    ],
+    role: 'assistant',
+    text: ''
+  })
+  await mockThreads(page, [thread])
+
+  await page.goto('/?test&no-rulers')
+  await new CanvasHelper(page).waitForInit()
+  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByTestId('agent-thread-selector').getByText('Human task title 25').click()
+
+  const approval = page.getByTestId('agent-ui-approval')
+  await expect(approval).toHaveCount(1)
+  await expect(approval).toHaveAttribute('data-state', 'sent')
+  await expect(approval.getByTestId('agent-message-recipient')).toHaveText('Test Recipient')
+  await expect(approval.getByTestId('agent-message-approval-text')).toHaveText('Hi')
+  await expect(approval.getByTestId('agent-message-approval-status')).toHaveText('Sent')
 })
 
 test('supersedes an untouched Messages approval and keeps it with its original turn', async ({
@@ -722,7 +947,7 @@ test('copies user prompts and assistant responses', async ({ page }) => {
 
   const panel = page.getByTestId('agent-chats-panel')
   await panel.getByTestId('agent-thread-selector').getByText('Copy controls').click()
-  const userMessage = panel.locator('[data-test-id="ai-message"][data-role="user"]')
+  const userMessage = panel.getByTestId('ai-message').and(panel.locator('[data-role="user"]'))
   const userCopy = userMessage.getByRole('button', { name: 'Copy prompt' })
   const userActions = userMessage.getByTestId('ai-message-actions')
   await expect(userMessage.getByTestId('ai-message-time')).toHaveAttribute(
@@ -743,7 +968,9 @@ test('copies user prompts and assistant responses', async ({ page }) => {
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe('User prompt to copy.')
 
-  const assistantMessage = panel.locator('[data-test-id="ai-message"][data-role="assistant"]')
+  const assistantMessage = panel
+    .getByTestId('ai-message')
+    .and(panel.locator('[data-role="assistant"]'))
   const assistantCopy = assistantMessage.getByRole('button', {
     name: 'Copy message'
   })
@@ -1046,17 +1273,26 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   const panel = page.getByTestId('agent-chats-panel')
   await panel.getByTestId('agent-thread-selector').getByText('Rich chat rendering').click()
   const viewport = panel.getByTestId('ai-conversation-viewport')
-  await expect(panel.getByTestId('ai-activity-disclosure')).toBeVisible()
-  const durationDivider = panel.getByTestId('ai-turn-duration')
-  await expect(durationDivider).toContainText('Thought for')
-  await expect(panel.getByTestId('ai-commentary')).toBeVisible()
-  const commentary = panel.getByTestId('ai-commentary')
-  await expect(commentary).toHaveText('Checked the scoped files.')
-  await expect(commentary.locator('svg, button')).toHaveCount(0)
-  const toolGroup = panel.getByTestId('ai-tool-group').filter({ hasText: 'Read files' })
+  const activityDisclosure = panel.getByTestId('ai-activity-disclosure').last()
+  await expect(activityDisclosure).toBeVisible()
+  const durationDivider = activityDisclosure.getByTestId('ai-turn-duration')
+  await expect(durationDivider).toContainText('Thinking')
+  await expect(activityDisclosure.getByTestId('ai-activity-timeline')).toHaveCount(0)
+  await durationDivider.click()
+  const commentaries = activityDisclosure.getByTestId('ai-commentary')
+  await expect(commentaries).toHaveText('Checked the scoped files.')
+  await expect(commentaries.locator('svg, button')).toHaveCount(0)
+  const toolGroup = activityDisclosure
+    .getByTestId('ai-tool-group')
+    .filter({ hasText: 'Read files, searched, used tools, edited files' })
   await expect(toolGroup).toBeVisible()
-  await expect(panel.getByTestId('ai-tool-group').filter({ hasText: 'Searched' })).toBeVisible()
-  await expect(panel.getByTestId('ai-tool-call')).toHaveCount(5)
+  await expect(toolGroup.getByTestId('ai-tool-group-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
+  await expect(activityDisclosure.getByTestId('ai-tool-call')).toHaveCount(0)
+  await toolGroup.getByTestId('ai-tool-group-toggle').click()
+  await expect(activityDisclosure.getByTestId('ai-tool-call')).toHaveCount(5)
   const imageGeneration = panel.getByTestId('ai-image-generation')
   await expect(imageGeneration).toBeVisible()
   await expect(imageGeneration).toHaveAttribute('data-provider', 'codex')
@@ -1069,17 +1305,15 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await expect(imageGeneration).toHaveScreenshot('agent-image-generation-loading.png')
   await expect(panel.getByRole('button', { name: 'Approve' })).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Reject' })).toHaveCount(0)
-  await expect(panel.getByTestId('ai-tool-call').filter({ hasText: 'Read' })).toBeVisible()
-  await expect(panel.getByTestId('ai-tool-call').filter({ hasText: 'Searched' })).toBeVisible()
-  await expect(panel.getByTestId('ai-tool-call').filter({ hasText: 'Read' })).toHaveAttribute(
-    'data-kind',
-    'read'
-  )
-  await expect(panel.getByTestId('ai-tool-call').filter({ hasText: 'Searched' })).toHaveAttribute(
-    'data-kind',
-    'search'
-  )
-  const timeline = panel.getByTestId('ai-activity-timeline')
+  const timeline = activityDisclosure.getByTestId('ai-activity-timeline')
+  expect(
+    await timeline.evaluate((element) =>
+      [...element.children].map((child) => ({
+        id: child.getAttribute('data-test-id'),
+        text: child.textContent?.trim()
+      }))
+    )
+  ).toEqual([{ id: 'ai-commentary', text: 'Checked the scoped files.' }])
   expect(
     await timeline.evaluate((element) => {
       const style = getComputedStyle(element)
@@ -1089,7 +1323,9 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
       }
     })
   ).toEqual({ borderLeftWidth: '0px', paddingLeft: '0px' })
-  const screenshotTool = panel.getByTestId('ai-tool-call').filter({ hasText: 'verify' })
+  const screenshotTool = activityDisclosure
+    .getByTestId('ai-tool-call')
+    .filter({ hasText: 'verify' })
   const screenshotDisclosure = screenshotTool.getByTestId('ai-tool-disclosure')
   await expect(screenshotDisclosure).toHaveCSS('opacity', '0')
   await screenshotTool.hover()
@@ -1104,7 +1340,9 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
     'down'
   )
   await expect(screenshotTool.getByAltText('Board screenshot')).toBeVisible()
-  const failedTool = panel.getByTestId('ai-tool-call').filter({ hasText: 'Edited files' })
+  const failedTool = activityDisclosure
+    .getByTestId('ai-tool-call')
+    .filter({ hasText: 'Edited files' })
   await failedTool.getByTestId('ai-tool-disclosure').click()
   await expect(failedTool).toContainText('Permission denied')
   await expect(panel.getByTestId('ai-code-block')).toContainText('const status = "ready"')
@@ -1117,7 +1355,7 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   await panel.getByRole('button', { name: 'Stop response' }).click()
   await expect.poll(() => stopAttempts).toBe(1)
   await expect(panel.getByTestId('ai-conversation-status')).toHaveCount(0)
-  await expect(durationDivider).toContainText('Thought for 2m 0s')
+  await expect(durationDivider).toContainText('Worked for 2m 0s')
   await expect(imageGeneration).toHaveAttribute('data-state', 'success')
   await expect(imageGeneration.getByAltText('Generated enamel illustration')).toBeVisible()
   await expect(imageGeneration).not.toContainText('Image created')
@@ -1185,11 +1423,11 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
   )
   expect(imageEditHandoffs[0]?.message).toContain('Do not flatten it onto white, black')
   expect(imageEditHandoffs[0]?.message).toContain('Keep alpha.')
-  await durationDivider.click()
-  await expect(panel.getByTestId('ai-commentary')).toHaveText('Checked the scoped files.')
-  await panel.getByTestId('ai-tool-group').first().getByTestId('ai-tool-group-toggle').click()
+  await expect(activityDisclosure.getByTestId('ai-commentary')).toHaveText(
+    'Checked the scoped files.'
+  )
   await expect(
-    panel.getByTestId('ai-tool-call').and(page.locator('[data-state="success"]'))
+    activityDisclosure.getByTestId('ai-tool-call').and(page.locator('[data-state="success"]'))
   ).toHaveCount(3)
   await expect(failedTool).toHaveAttribute('data-state', 'error')
 

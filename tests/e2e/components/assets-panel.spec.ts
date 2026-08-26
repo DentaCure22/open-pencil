@@ -1,9 +1,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+import rendererCatalog from '@/app/smylr-component-library/renderer-catalog.generated.json' with { type: 'json' }
+
 import { expectDefined } from '#tests/helpers/assert'
 import { CanvasHelper } from '#tests/helpers/canvas'
-
-import rendererCatalog from '../../../src/app/smylr-component-library/renderer-catalog.generated.json' with { type: 'json' }
 
 const baseAssetCoverage = (() => {
   const liveSourcePaths = new Set(rendererCatalog.fixtures.map((fixture) => fixture.sourcePath))
@@ -98,7 +98,7 @@ test('asset folders start closed and remain individually expandable', async ({ p
 
   await expect(page.getByTestId('asset-group-trigger')).not.toHaveCount(0)
   await expect(
-    page.locator('[data-test-id="asset-group-trigger"][aria-expanded="true"]')
+    page.getByTestId('asset-group-trigger').and(page.locator('[aria-expanded="true"]'))
   ).toHaveCount(0)
   await openAssetGroup(page, 'primitives')
   await expect(page.locator('[data-asset-group="board-experiences"]')).toHaveAttribute(

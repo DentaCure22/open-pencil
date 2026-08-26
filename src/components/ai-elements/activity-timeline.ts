@@ -1,13 +1,14 @@
-import { isAppLookup, isRetiredMemoryTool, toolCallKind, type AiToolKind } from './model'
+import { isRetiredMemoryTool, toolCallKind } from './model'
 import type { AiConversationStatus, AiMessagePart, AiToolState } from './types'
 
 export type ActivityToolPart = Extract<AiMessagePart, { type: 'tool' }>
 export type ActivityCommentaryPart = Extract<AiMessagePart, { type: 'commentary' }>
+export type ActivityReasoningPart = Extract<AiMessagePart, { type: 'reasoning' }>
 
 export type ActivityItem = {
   index: number
   key: string
-  part: ActivityCommentaryPart | ActivityToolPart
+  part: ActivityCommentaryPart | ActivityReasoningPart | ActivityToolPart
 }
 
 export type ActivityCommentaryGroup = {
@@ -19,12 +20,17 @@ export type ActivityCommentaryGroup = {
 export type ActivityToolGroup = {
   items: Array<ActivityItem & { part: ActivityToolPart }>
   key: string
-  kind: AiToolKind
   open: boolean
   type: 'tools'
 }
 
-export type ActivityGroup = ActivityCommentaryGroup | ActivityToolGroup
+export type ActivityReasoningGroup = {
+  item: ActivityItem & { part: ActivityReasoningPart }
+  key: string
+  type: 'reasoning'
+}
+
+export type ActivityGroup = ActivityCommentaryGroup | ActivityReasoningGroup | ActivityToolGroup
 
 function counted(count: number, singular: string, plural: string): string {
   return `${String(count)} ${count === 1 ? singular : plural}`
@@ -57,30 +63,19 @@ export function activityExploreLabel(tools: Array<{ input?: string; name: string
 }
 
 export function toolGroupIsOpen(input: {
-  followedByCommentary: boolean
+  followedByNarrative: boolean
   hasRunningTool: boolean
   status: AiConversationStatus
 }): boolean {
-  if (input.hasRunningTool) return true
-  if (input.followedByCommentary) return false
-  return input.status === 'streaming' || input.status === 'submitted'
+  // T3 keeps the live tool lane to one compact row. Details expand only when
+  // the user asks, which prevents tool output from repeatedly changing the
+  // transcript height while a turn is running.
+  void input
+  return false
 }
 
 function isRunningTool(state: AiToolState | 'stopped'): boolean {
   return state === 'pending' || state === 'running'
-}
-
-function activityToolKind(
-  items: readonly ActivityItem[],
-  item: ActivityItem & { part: ActivityToolPart }
-): AiToolKind {
-  const kind = toolCallKind(item.part.name, item.part.input)
-  if (kind !== 'connected-app' || isAppLookup(item.part.name, item.part.input)) return kind
-  const hasMail = items.some(
-    (other) =>
-      other.part.type === 'tool' && toolCallKind(other.part.name, other.part.input) === 'mail'
-  )
-  return hasMail ? 'mail' : kind
 }
 
 export function groupActivityTimeline(
@@ -98,36 +93,39 @@ export function groupActivityTimeline(
       })
       continue
     }
+    if (item.part.type === 'reasoning') {
+      groups.push({
+        item: { ...item, part: item.part },
+        key: item.key,
+        type: 'reasoning'
+      })
+      continue
+    }
     if (isRetiredMemoryTool(item.part.name)) continue
     const tool = { ...item, part: item.part }
-    const kind = activityToolKind(items, tool)
-    const previous = groups.findLast((group) => group.type === 'tools' && group.kind === kind)
-    if (previous) {
+    const previous = groups.at(-1)
+    if (previous?.type === 'tools') {
       previous.items.push(tool)
       continue
     }
     groups.push({
       items: [tool],
       key: `tools:${item.key}`,
-      kind,
       open: false,
       type: 'tools'
     })
   }
   const resolved = groups.map((group, index) => {
     if (group.type !== 'tools') return group
-    const followedByCommentary = groups.slice(index + 1).some((item) => item.type === 'commentary')
+    const followedByNarrative = groups.slice(index + 1).some((item) => item.type !== 'tools')
     return {
       ...group,
       open: toolGroupIsOpen({
-        followedByCommentary,
+        followedByNarrative,
         hasRunningTool: group.items.some((item) => isRunningTool(toolState(item))),
         status
       })
     }
   })
-  return [
-    ...resolved.filter((group) => group.type === 'commentary'),
-    ...resolved.filter((group) => group.type === 'tools')
-  ]
+  return resolved
 }

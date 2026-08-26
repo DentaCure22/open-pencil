@@ -1,5 +1,6 @@
 const MAX_RECORDING_BYTES = 11_500_000
 const MAX_RECORDING_DURATION_MS = 30_000
+const FRAME_RECORDING_INTERVAL_MS = 600
 const MIME_TYPES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
 let activeRecording = null
 const activeLiveCaptures = new Map()
@@ -19,6 +20,7 @@ function blobDataUrl(blob) {
 
 async function finalize(recording) {
   clearTimeout(recording.timeoutId)
+  if (recording.frameIntervalId) clearInterval(recording.frameIntervalId)
   for (const track of recording.stream.getTracks()) track.stop()
   if (activeRecording === recording) activeRecording = null
   const endedAt = new Date().toISOString()
@@ -46,6 +48,46 @@ async function finalize(recording) {
   })
 }
 
+function beginRecording(captureSessionId, stream, startedAt, mode) {
+  const mimeType = selectedMimeType()
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: 2_500_000
+  })
+  const recording = {
+    captureSessionId,
+    chunks: [],
+    frameIntervalId: 0,
+    framePending: false,
+    mimeType,
+    mode,
+    recorder,
+    startedAt,
+    startedAtMs: Date.now(),
+    stream,
+    timeoutId: 0
+  }
+  activeRecording = recording
+  recorder.addEventListener('dataavailable', (event) => {
+    if (event.data.size) recording.chunks.push(event.data)
+  })
+  recorder.addEventListener('stop', () => void finalize(recording), { once: true })
+  recorder.start(1_000)
+  recording.timeoutId = setTimeout(() => {
+    if (recorder.state !== 'inactive') recorder.stop()
+  }, MAX_RECORDING_DURATION_MS)
+  return recording
+}
+
+function recordingStarted(recording) {
+  return {
+    mimeType: recording.mimeType,
+    mode: recording.mode,
+    ok: true,
+    startedAt: recording.startedAt
+  }
+}
+
 async function startRecording(message) {
   if (activeRecording) return { ok: false, reason: 'recording-already-active' }
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -62,31 +104,81 @@ async function startRecording(message) {
       }
     }
   })
-  const mimeType = selectedMimeType()
-  const recorder = new MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: 2_500_000
+  return recordingStarted(
+    beginRecording(message.captureSessionId, stream, message.startedAt, 'tab-capture')
+  )
+}
+
+async function requestSampledFrame(captureSessionId) {
+  return chrome.runtime.sendMessage({
+    captureSessionId,
+    kind: 'capture-motion-frame',
+    target: 'service-worker'
   })
-  const recording = {
-    captureSessionId: message.captureSessionId,
-    chunks: [],
-    mimeType,
-    recorder,
-    startedAt: message.startedAt,
-    startedAtMs: Date.now(),
-    stream,
-    timeoutId: 0
+}
+
+async function frameBitmap(dataUrl) {
+  const response = await fetch(dataUrl)
+  return createImageBitmap(await response.blob())
+}
+
+async function appendSampledFrame(recording) {
+  if (activeRecording !== recording || recording.framePending) return
+  recording.framePending = true
+  try {
+    const response = await requestSampledFrame(recording.captureSessionId)
+    if (!response?.ok || typeof response.dataUrl !== 'string') return
+    const bitmap = await frameBitmap(response.dataUrl)
+    recording.context.drawImage(
+      bitmap,
+      0,
+      0,
+      bitmap.width,
+      bitmap.height,
+      0,
+      0,
+      recording.canvas.width,
+      recording.canvas.height
+    )
+    bitmap.close()
+    recording.stream.getVideoTracks()[0]?.requestFrame?.()
+  } finally {
+    recording.framePending = false
   }
-  activeRecording = recording
-  recorder.addEventListener('dataavailable', (event) => {
-    if (event.data.size) recording.chunks.push(event.data)
-  })
-  recorder.addEventListener('stop', () => void finalize(recording), { once: true })
-  recorder.start(1_000)
-  recording.timeoutId = setTimeout(() => {
-    if (recorder.state !== 'inactive') recorder.stop()
-  }, MAX_RECORDING_DURATION_MS)
-  return { mimeType, ok: true, startedAt: recording.startedAt }
+}
+
+async function startFrameRecording(message) {
+  if (activeRecording) return { ok: false, reason: 'recording-already-active' }
+  const firstFrame = await requestSampledFrame(message.captureSessionId)
+  if (!firstFrame?.ok || typeof firstFrame.dataUrl !== 'string') {
+    return { ok: false, reason: firstFrame?.reason || 'frame-capture-failed' }
+  }
+  const bitmap = await frameBitmap(firstFrame.dataUrl)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const context = canvas.getContext('2d', { alpha: false })
+  if (!context) {
+    bitmap.close()
+    return { ok: false, reason: 'frame-recorder-unavailable' }
+  }
+  context.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  const stream = canvas.captureStream(2)
+  const recording = beginRecording(
+    message.captureSessionId,
+    stream,
+    message.startedAt,
+    'frame-sampling'
+  )
+  recording.canvas = canvas
+  recording.context = context
+  recording.frameIntervalId = setInterval(
+    () => void appendSampledFrame(recording),
+    FRAME_RECORDING_INTERVAL_MS
+  )
+  stream.getVideoTracks()[0]?.requestFrame?.()
+  return recordingStarted(recording)
 }
 
 function stopRecording(message) {
@@ -303,6 +395,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.target !== 'offscreen') return false
   let promise = null
   if (message.kind === 'start-recording') promise = startRecording(message)
+  else if (message.kind === 'start-frame-recording') promise = startFrameRecording(message)
   else if (message.kind === 'stop-recording') promise = Promise.resolve(stopRecording(message))
   else if (message.kind === 'start-live-surface') promise = startLiveCapture(message)
   else if (message.kind === 'stop-live-surfaces-for-tab') {

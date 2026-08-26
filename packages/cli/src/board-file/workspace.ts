@@ -26,10 +26,7 @@ export async function readEditorPresence(): Promise<EditorPresence | null> {
   return payload.presence ?? null
 }
 
-async function localAuthorityRequest(
-  pathName: string,
-  init: RequestInit = {}
-): Promise<Response> {
+async function localAuthorityRequest(pathName: string, init: RequestInit = {}): Promise<Response> {
   const root = localWorkspaceRoot()
   let auth: { port?: unknown; token?: unknown }
   try {
@@ -51,7 +48,7 @@ async function localAuthorityRequest(
       ...init,
       headers: {
         Authorization: `Bearer ${auth.token}`,
-        ...(init.headers ?? {})
+        ...init.headers
       },
       signal: init.signal ?? AbortSignal.timeout(5000)
     })

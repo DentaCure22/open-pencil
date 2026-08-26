@@ -64,7 +64,7 @@ function loadPreviewFont(family: string, source: string) {
     <template #trigger>
       <button data-test-id="font-picker-trigger" :class="selectCls.trigger">
         <span class="truncate">{{ modelValue }}</span>
-        <icon-lucide-chevron-down class="size-3 shrink-0 text-muted" />
+        <IconlyIcon name="arrow-down" class="size-3 shrink-0 text-muted" />
       </button>
     </template>
 

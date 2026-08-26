@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import process from 'node:process'
 
 import tailwindcss from '@tailwindcss/vite'
@@ -26,8 +29,11 @@ const smylrEmbed = Boolean(process.env.SMYLR_OPENPENCIL_BASE) || base.includes('
 
 export default defineConfig(async ({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const workspaceCacheKey = createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12)
   return {
     base,
+    cacheDir:
+      env.OPENPENCIL_VITE_CACHE_DIR?.trim() || join(tmpdir(), 'openpencil-vite', workspaceCacheKey),
     resolve: {
       alias: createOpenPencilAliases(__dirname),
       dedupe: ['@univerjs/core', '@wendellhu/redi', 'react', 'react-dom', 'rxjs']
@@ -62,7 +68,10 @@ export default defineConfig(async ({ command, mode }) => {
     optimizeDeps: {
       // These local source aliases import raw Markdown/Kiwi assets that must pass through
       // rawMarkdownPlugin instead of Rolldown's dependency scanner.
-      exclude: ['@open-pencil/core', '@open-pencil/kiwi']
+      exclude: ['@open-pencil/core', '@open-pencil/kiwi'],
+      // Code Objects and Board capture are loaded on demand. Prebundle their runtimes so
+      // the first interaction does not invalidate the dependency graph mid-session.
+      include: ['html2canvas', 'react', 'react-dom/client', 'react/jsx-dev-runtime']
     },
     server: {
       ...createDevServerOptions({ host, smylrEmbed }),

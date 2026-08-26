@@ -1,4 +1,4 @@
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { hydrateSceneNodeDefaults } from '@open-pencil/scene-graph/node-defaults'
 
 import {
@@ -265,9 +265,8 @@ function pluginEntry(node: SceneNode, key: string): string | null {
 }
 
 function mermaidNodeFingerprint(node: SceneNode): string | null {
-  if (typeof (node as { mermaidSource?: unknown }).mermaidSource === 'string') {
-    return `src:${node.id}:${(node as { mermaidSource: string }).mermaidSource}`
-  }
+  const mermaidSource = 'mermaidSource' in node ? node.mermaidSource : undefined
+  if (typeof mermaidSource === 'string') return `src:${node.id}:${mermaidSource}`
   if (pluginEntry(node, 'mermaid/role') !== 'diagram') return null
   return `role:${node.id}:${pluginEntry(node, 'mermaid/source') ?? ''}`
 }

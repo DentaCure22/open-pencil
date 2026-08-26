@@ -33,7 +33,11 @@ function warmedEnough(record: UsageTurnRecord): boolean {
 }
 
 function sameThread(left: UsageTurnRecord, right: UsageTurnRecord): boolean {
-  return left.threadId === right.threadId && left.model === right.model && left.provider === right.provider
+  return (
+    left.threadId === right.threadId &&
+    left.model === right.model &&
+    left.provider === right.provider
+  )
 }
 
 export function checkUsageTurns(turns: UsageTurnRecord[]): UsageCheckFailure[] {
@@ -44,9 +48,7 @@ export function checkUsageTurns(turns: UsageTurnRecord[]): UsageCheckFailure[] {
   })
 
   for (const [index, record] of ordered.entries()) {
-    const previous = ordered
-      .slice(0, index)
-      .findLast((candidate) => sameThread(candidate, record))
+    const previous = ordered.slice(0, index).findLast((candidate) => sameThread(candidate, record))
 
     if (record.cacheRead === 0 && previous && previous.cacheRead > 0) {
       failures.push({

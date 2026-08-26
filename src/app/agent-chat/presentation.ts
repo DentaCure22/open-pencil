@@ -1,4 +1,4 @@
-import type { AgentConversationThread } from './client'
+import type { AgentConversationThread } from './conversations'
 
 function sentenceCase(value: string): string {
   return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value
@@ -60,5 +60,5 @@ export function plainConversationPreview(value: string, maxLength = 88): string 
 }
 
 export function agentConversationTitle(thread: AgentConversationThread): string {
-  return conciseTask(thread.task)
+  return thread.title?.trim() || conciseTask(thread.task)
 }

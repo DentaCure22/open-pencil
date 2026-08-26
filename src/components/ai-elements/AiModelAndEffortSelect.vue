@@ -78,7 +78,7 @@ function remainingLabel(group: string): string {
         <icon-lucide-sparkles v-if="iconOnly" class="size-4 shrink-0" />
         <template v-else>
           <span class="truncate">{{ selectedModel.label }}</span>
-          <icon-lucide-chevron-down class="size-3.5 shrink-0 text-muted" />
+          <IconlyIcon name="arrow-down" class="size-3.5 shrink-0 text-muted" />
         </template>
       </button>
     </DropdownMenuTrigger>

@@ -37,6 +37,25 @@ export type TraceQueryScope = {
 
 export type TraceEvidenceStatus = 'evicted' | 'failed' | 'pending' | 'ready'
 
+export type TraceEpisodeKind = 'board' | 'chrome' | 'voice'
+
+export type TraceHistoryEpisode = {
+  endedAtMs?: number
+  id: string
+  kind: TraceEpisodeKind
+  label?: string
+  sourceSessionId?: string
+  startedAtMs: number
+}
+
+export type TraceEventOrigin = {
+  episodeId: string
+  kind: TraceEpisodeKind
+  reference?: string
+  sequence?: number
+  sourceSessionId?: string
+}
+
 export type TraceHistoryEvent = {
   anchor?: {
     pageRegion: Rect
@@ -49,6 +68,7 @@ export type TraceHistoryEvent = {
   id: string
   kind: string
   label: string
+  origin?: TraceEventOrigin
   target?: {
     bounds?: Rect
     frameId?: string
@@ -69,16 +89,20 @@ export type TraceHistoryContextEntry = {
 }
 
 export type TraceHistorySession = {
+  aliases?: string[]
   /** Optional only for legacy file-native records written before context rows were preserved. */
   contextDraft?: TraceHistoryContextEntry[]
   durationMs: number
+  episodes?: TraceHistoryEpisode[]
   events: TraceHistoryEvent[]
   id: string
   scope?: TraceQueryScope
   startedAt: string
+  tag?: string
 }
 
 export type TraceQueryRecordSummary = {
+  aliases?: string[]
   bounds?: Rect
   durationMs: number
   eventCount?: number
@@ -90,6 +114,7 @@ export type TraceQueryRecordSummary = {
   scope?: TraceQueryScope
   searchTerms?: string[]
   startedAt: string
+  tag?: string
   targetIds?: string[]
   title: string
   updatedAt?: string
@@ -116,6 +141,7 @@ export type TraceQueryInput = {
   runtimeTabBindingId?: string
   scope?: TraceQueryScope
   selectionIds?: string[]
+  sessionTag?: string
   since?: string
   spokenText?: string
   spokenTurnId?: string
@@ -134,6 +160,7 @@ export type TraceQueryEvent = {
   id: string
   kind: string
   label: string
+  origin?: TraceEventOrigin
   target?: TraceHistoryEvent['target']
   text?: string
 }
@@ -142,12 +169,14 @@ export type TraceQueryTarget = NonNullable<TraceHistoryEvent['target']>
 
 export type TraceQueryMatch = {
   endedAt: string
+  episodes?: TraceHistoryEpisode[]
   events: TraceQueryEvent[]
   matchedBy: string[]
   score: number
   scope: TraceQueryScope
   sessionId: string
   startedAt: string
+  tag?: string
   targets: TraceQueryTarget[]
   title: string
 }
@@ -289,6 +318,28 @@ function tokenize(value: string): string[] {
   ]
 }
 
+export function normalizeTraceSessionTag(value: string): string {
+  return value
+    .normalize('NFKD')
+    .toLocaleLowerCase()
+    .replace(/^#+/u, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+    .slice(0, 40)
+}
+
+function summaryTags(summary: TraceQueryRecordSummary) {
+  return [summary.tag, ...(summary.aliases ?? [])]
+    .flatMap((tag) => (tag ? [normalizeTraceSessionTag(tag)] : []))
+    .filter(Boolean)
+}
+
+function matchesSessionTag(summary: TraceQueryRecordSummary, tag: string | undefined) {
+  if (!tag) return false
+  const normalized = normalizeTraceSessionTag(tag)
+  return Boolean(normalized && summaryTags(summary).includes(normalized))
+}
+
 type TraceSearchEvent = Pick<TraceHistoryEvent, 'changes' | 'label' | 'target' | 'text'>
 
 export function traceEventSearchValues(events: readonly TraceSearchEvent[]): string[] {
@@ -373,6 +424,7 @@ function summaryScore(
     summary.targetIds?.includes(id)
   ).length
   return (
+    (matchesSessionTag(summary, input.sessionTag) ? 100 : 0) +
     queryMatches * 6 +
     selectionMatches * 20 +
     (intersects(summary.bounds, input.tracedRegion) ? 14 : 0) +
@@ -463,15 +515,19 @@ function scoreSession(
     )
   const relevantEvents = scoredEvents.filter((entry) => entry.score > 0)
   const matchedBy = new Set(relevantEvents.flatMap((entry) => entry.matchedBy))
+  const tagMatch = matchesSessionTag(summary, input.sessionTag)
+  if (tagMatch) matchedBy.add('session-tag')
   const hasStrongMatch = [...matchedBy].some((reason) =>
     ['cursor', 'selection', 'text', 'traced-region'].includes(reason)
   )
   return {
     matchedBy: [...matchedBy],
     score:
-      queryTerms.length > 0 && !hasStrongMatch
+      queryTerms.length > 0 && !hasStrongMatch && !tagMatch
         ? 0
-        : relevantEvents.reduce((total, entry) => total + entry.score, 0) + (cursor ? 20 : 0),
+        : relevantEvents.reduce((total, entry) => total + entry.score, 0) +
+          (tagMatch ? 100 : 0) +
+          (cursor ? 20 : 0),
     session: {
       ...session,
       events: (relevantEvents.length > 0 ? relevantEvents : scoredEvents)
@@ -492,6 +548,7 @@ function buildQueryEvent(event: TraceHistoryEvent): TraceQueryEvent {
     id: event.id,
     kind: event.kind,
     label: event.label,
+    origin: event.origin ? structuredClone(event.origin) : undefined,
     target: event.target ? structuredClone(event.target) : undefined,
     text: event.text
   }
@@ -509,12 +566,16 @@ export function buildTraceQueryMatch(input: {
   const startedAtMs = Date.parse(input.session.startedAt)
   return {
     endedAt: new Date(startedAtMs + input.session.durationMs).toISOString(),
+    ...(input.session.episodes?.length
+      ? { episodes: structuredClone(input.session.episodes) }
+      : {}),
     events: input.session.events.map(buildQueryEvent),
     matchedBy: input.matchedBy,
     score: input.score,
     scope,
     sessionId: input.session.id,
     startedAt: input.session.startedAt,
+    ...(input.summary.tag ? { tag: input.summary.tag } : {}),
     targets: structuredClone(input.targets ?? traceQueryTargets(input.session.events)),
     title: input.summary.title
   }
@@ -587,9 +648,13 @@ function cursorScopeMismatch(cursor: TraceCursor, scope: TraceQueryScope) {
 }
 
 function hasQueryContext(input: TraceQueryInput, cursor: TraceCursor | null) {
-  return [input.selectionIds?.length, input.tracedRegion, input.viewportBounds, cursor].some(
-    Boolean
-  )
+  return [
+    input.selectionIds?.length,
+    input.sessionTag,
+    input.tracedRegion,
+    input.viewportBounds,
+    cursor
+  ].some(Boolean)
 }
 
 function prepareQuery(input: TraceQueryInput): TraceQueryResult | PreparedQuery {
@@ -604,6 +669,9 @@ function prepareQuery(input: TraceQueryInput): TraceQueryResult | PreparedQuery 
   }
 
   const queryTerms = tokenize(input.query ?? '')
+  if (input.sessionTag !== undefined && !normalizeTraceSessionTag(input.sessionTag)) {
+    return buildTraceEmptyResult('ambiguous_query')
+  }
   if (queryTerms.length === 0 && !hasQueryContext(input, cursor)) {
     return buildTraceEmptyResult('ambiguous_query')
   }
@@ -622,6 +690,7 @@ function scopedSummaries(
 ) {
   const scope = prepared.cursor ? cursorScope(prepared.cursor) : input.scope
   return records.filter((summary) => {
+    if (input.sessionTag && !matchesSessionTag(summary, input.sessionTag)) return false
     if (scope && !sameScope(summary.scope, scope)) return false
     if (prepared.cursor && summary.id !== prepared.cursor.sessionId) return false
     const startedAt = Date.parse(summary.startedAt)
@@ -637,6 +706,7 @@ function currentSessionSummary(
   existing?: TraceQueryRecordSummary
 ): TraceQueryRecordSummary {
   return {
+    ...(session.aliases?.length ? { aliases: [...session.aliases] } : {}),
     durationMs: session.durationMs,
     id: session.id,
     ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
@@ -644,6 +714,7 @@ function currentSessionSummary(
       [session.id, existing?.title ?? '', ...traceEventSearchValues(session.events)].join(' ')
     ),
     startedAt: session.startedAt,
+    ...(session.tag ? { tag: session.tag } : {}),
     title: existing?.title ?? 'Narrated session'
   }
 }
@@ -744,6 +815,7 @@ function validSpokenSelector(input: TraceQueryInput) {
     selectorCount(input) === 1 &&
     !input.cursor &&
     !input.query?.trim() &&
+    !input.sessionTag?.trim() &&
     input.since === undefined &&
     input.until === undefined
   )

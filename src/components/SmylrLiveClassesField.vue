@@ -141,7 +141,7 @@ useEventListener(document, 'pointerdown', onDocumentPointerDown, { capture: true
           class="border-border bg-input flex min-h-8 items-center gap-1.5 rounded-md border px-2"
           :class="open ? 'ring-accent/40 ring-1' : ''"
         >
-          <icon-lucide-search class="size-3.5 shrink-0 text-muted" />
+          <IconlyIcon name="search" class="size-3.5 shrink-0 text-muted" />
           <input
             ref="inputRef"
             v-model="query"
@@ -181,7 +181,7 @@ useEventListener(document, 'pointerdown', onDocumentPointerDown, { capture: true
             @mouseenter="highlight = index"
             @mousedown.prevent="pick(item)"
           >
-            <icon-lucide-plus class="size-3 shrink-0 text-muted" />
+            <IconlyIcon name="plus" class="size-3 shrink-0 text-muted" />
             <span class="min-w-0 flex-1 truncate font-mono">{{ item }}</span>
           </button>
 

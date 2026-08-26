@@ -7,6 +7,13 @@ import {
   type CampaignRunResult,
   type CampaignRunStatus
 } from './campaign'
+import {
+  CAMPAIGN_TRUTH_AUDIT_SCHEMA_VERSION,
+  type CampaignTruthAuditReport,
+  type CampaignTruthDiscrepancy,
+  type CampaignTruthObservation,
+  type CampaignTruthState
+} from './campaign-audit-types'
 import { readEvalEvents } from './io'
 import { sameEvalTarget } from './request-identity'
 import { parseEvalTarget, type EvalEvent } from './schema'
@@ -16,59 +23,13 @@ import {
   readEvalRunTelemetryArtifact
 } from './telemetry'
 
-export const CAMPAIGN_TRUTH_AUDIT_SCHEMA_VERSION =
-  'prompt-to-board-campaign-truth-audit/v1' as const
-
-export type CampaignTruthState =
-  | 'failed'
-  | 'finalized'
-  | 'interrupted'
-  | 'never_started'
-  | 'pending_proof'
-  | 'recorded'
-  | 'skipped'
-  | 'unlogged_failure'
-
-export interface CampaignTruthDiscrepancy {
-  code:
-    | 'dispatch_identity_mismatch'
-    | 'board_request_identity_mismatch'
-    | 'duplicate_result'
-    | 'finalization_mismatch'
-    | 'invalid_event_log'
-    | 'missing_event_log'
-    | 'missing_result'
-    | 'missing_telemetry_artifact'
-    | 'roster_identity_mismatch'
-    | 'result_identity_mismatch'
-    | 'terminal_event_mismatch'
-    | 'telemetry_artifact_mismatch'
-    | 'unexpected_event_log'
-    | 'unexpected_result'
-  detail: string
-  run_id: string
-}
-
-export interface CampaignTruthObservation {
-  discrepancies: readonly CampaignTruthDiscrepancy[]
-  event_count: number
-  result_status: CampaignRunStatus | null
-  run_id: string
-  state: CampaignTruthState
-  telemetry_artifact_path: string | null
-}
-
-export interface CampaignTruthAuditReport {
-  counts: Record<CampaignTruthState, number>
-  discrepancies: readonly CampaignTruthDiscrepancy[]
-  gate_passed: boolean
-  observations: readonly CampaignTruthObservation[]
-  results_total: number
-  roster_id: string
-  scheduled_total: number
-  schema_version: typeof CAMPAIGN_TRUTH_AUDIT_SCHEMA_VERSION
-  started_total: number
-}
+export { CAMPAIGN_TRUTH_AUDIT_SCHEMA_VERSION }
+export type {
+  CampaignTruthAuditReport,
+  CampaignTruthDiscrepancy,
+  CampaignTruthObservation,
+  CampaignTruthState
+} from './campaign-audit-types'
 
 function discrepancy(
   code: CampaignTruthDiscrepancy['code'],
@@ -203,23 +164,28 @@ function boardRequestDiscrepancies(
       ]
 }
 
+function mismatchedFields(checks: ReadonlyArray<readonly [boolean, string]>): string[] {
+  return checks.flatMap(([matches, field]) => (matches ? [] : [field]))
+}
+
 function resultDiscrepancies(
   roster: CampaignRoster,
   rosterRun: CampaignRoster['runs'][number],
   result: CampaignRunResult
 ): CampaignTruthDiscrepancy[] {
-  const fields = [
-    result.campaign_roster_id === roster.roster_id ? null : 'campaign_roster_id',
-    result.board_request_id === (rosterRun.board_request_identity?.board_request_id ?? null)
-      ? null
-      : 'board_request_id',
-    result.config_id === rosterRun.config_id ? null : 'config_id',
-    result.order === rosterRun.order ? null : 'order',
-    result.run_id === rosterRun.run_id ? null : 'run_id',
-    result.scenario_id === rosterRun.scenario_id ? null : 'scenario_id',
-    result.event_log_path === rosterRun.event_log_path ? null : 'event_log_path',
-    result.stderr_path === rosterRun.stderr_path ? null : 'stderr_path'
-  ].filter((value): value is string => value !== null)
+  const fields = mismatchedFields([
+    [result.campaign_roster_id === roster.roster_id, 'campaign_roster_id'],
+    [
+      result.board_request_id === (rosterRun.board_request_identity?.board_request_id ?? null),
+      'board_request_id'
+    ],
+    [result.config_id === rosterRun.config_id, 'config_id'],
+    [result.order === rosterRun.order, 'order'],
+    [result.run_id === rosterRun.run_id, 'run_id'],
+    [result.scenario_id === rosterRun.scenario_id, 'scenario_id'],
+    [result.event_log_path === rosterRun.event_log_path, 'event_log_path'],
+    [result.stderr_path === rosterRun.stderr_path, 'stderr_path']
+  ])
   const expectedTelemetryPath =
     result.status === 'skipped' ? null : evalRunTelemetryArtifactPath(rosterRun.event_log_path)
   if (result.telemetry_artifact_path !== expectedTelemetryPath) {
@@ -249,6 +215,65 @@ function resultDiscrepancies(
       ]
 }
 
+function isStraightThroughRecorded(
+  events: readonly EvalEvent[],
+  postBuildMessages: number,
+  released: number,
+  rawClosures: readonly EvalEvent[]
+): boolean {
+  return (
+    postBuildMessages === 0 &&
+    released === 1 &&
+    rawClosures.length === 1 &&
+    rawClosures[0]?.data.intentional_termination === true &&
+    events.filter(
+      ({ data, kind }) =>
+        kind === 'command_started' && data.semantic_command === 'build' && data.route === 'cli'
+    ).length === 1 &&
+    events.some(({ kind }) => kind === 'openpencil_result') &&
+    events.some(({ kind }) => kind === 'durability_confirmed') &&
+    events.find(({ kind }) => kind === 'final_response_released')?.data.final_origin ===
+      'board_build_release_summary' &&
+    !events.some(
+      ({ data, kind }) =>
+        kind === 'command_completed' && data.semantic_command === 'build' && data.route === 'cli'
+    )
+  )
+}
+
+type TerminalIssue = 'failed' | 'finalized' | 'pending_proof' | 'recorded' | null
+
+function terminalIssue(
+  status: CampaignRunStatus,
+  released: number,
+  pending: number,
+  missingVisibleWitnesses: readonly string[],
+  terminalErrors: number,
+  ordinaryRecorded: boolean,
+  straightThroughRecorded: boolean,
+  errors: number
+): TerminalIssue {
+  switch (status) {
+    case 'finalized':
+      return released !== 1 ||
+        pending !== 1 ||
+        missingVisibleWitnesses.length > 0 ||
+        terminalErrors > 0
+        ? 'finalized'
+        : null
+    case 'pending_proof':
+      return pending !== 1 || released > 0 || terminalErrors > 0 ? 'pending_proof' : null
+    case 'failed':
+      return errors === 0 ? 'failed' : null
+    case 'recorded':
+      return (!ordinaryRecorded && !straightThroughRecorded) || pending > 0 || errors > 0
+        ? 'recorded'
+        : null
+    default:
+      return null
+  }
+}
+
 function terminalDiscrepancies(
   runId: string,
   status: CampaignRunStatus,
@@ -273,36 +298,6 @@ function terminalDiscrepancies(
   const missingVisibleWitnesses = requiredVisibleWitnesses.filter(
     (kind) => !events.some((event) => event.kind === kind)
   )
-  if (
-    status === 'finalized' &&
-    (released !== 1 || pending !== 1 || missingVisibleWitnesses.length > 0 || terminalErrors > 0)
-  ) {
-    return [
-      discrepancy(
-        'finalization_mismatch',
-        runId,
-        `Finalized result requires one pending marker, durability, pixel, semantic proof, one release, and no post-pending errors; observed pending=${pending}, missing_witnesses=${missingVisibleWitnesses.join(',') || 'none'}, release=${released}, terminal_error=${terminalErrors}, retained_error=${errors}.`
-      )
-    ]
-  }
-  if (status === 'pending_proof' && (pending !== 1 || released > 0 || terminalErrors > 0)) {
-    return [
-      discrepancy(
-        'terminal_event_mismatch',
-        runId,
-        `Pending proof requires one pending marker and no release/post-pending error; observed pending=${pending}, release=${released}, terminal_error=${terminalErrors}, retained_error=${errors}.`
-      )
-    ]
-  }
-  if (status === 'failed' && errors === 0) {
-    return [
-      discrepancy(
-        'terminal_event_mismatch',
-        runId,
-        'Failed result has no retained run_error event.'
-      )
-    ]
-  }
   const ordinaryRecorded = messages > 0 && released === 0
   const straightThroughBuildStart = events.find(
     ({ data, kind }) =>
@@ -314,27 +309,50 @@ function terminalDiscrepancies(
           kind === 'agent_message_completed' && sequence > straightThroughBuildStart.sequence
       ).length
     : messages
-  const straightThroughRecorded =
-    postBuildMessages === 0 &&
-    released === 1 &&
-    rawClosures.length === 1 &&
-    rawClosures[0]?.data.intentional_termination === true &&
-    events.filter(
-      ({ data, kind }) =>
-        kind === 'command_started' && data.semantic_command === 'build' && data.route === 'cli'
-    ).length === 1 &&
-    events.some(({ kind }) => kind === 'openpencil_result') &&
-    events.some(({ kind }) => kind === 'durability_confirmed') &&
-    events.find(({ kind }) => kind === 'final_response_released')?.data.final_origin ===
-      'board_build_release_summary' &&
-    !events.some(
-      ({ data, kind }) =>
-        kind === 'command_completed' && data.semantic_command === 'build' && data.route === 'cli'
-    )
-  if (
-    status === 'recorded' &&
-    ((!ordinaryRecorded && !straightThroughRecorded) || pending > 0 || errors > 0)
-  ) {
+  const straightThroughRecorded = isStraightThroughRecorded(
+    events,
+    postBuildMessages,
+    released,
+    rawClosures
+  )
+  const issue = terminalIssue(
+    status,
+    released,
+    pending,
+    missingVisibleWitnesses,
+    terminalErrors,
+    ordinaryRecorded,
+    straightThroughRecorded,
+    errors
+  )
+  if (issue === 'finalized') {
+    return [
+      discrepancy(
+        'finalization_mismatch',
+        runId,
+        `Finalized result requires one pending marker, durability, pixel, semantic proof, one release, and no post-pending errors; observed pending=${pending}, missing_witnesses=${missingVisibleWitnesses.join(',') || 'none'}, release=${released}, terminal_error=${terminalErrors}, retained_error=${errors}.`
+      )
+    ]
+  }
+  if (issue === 'pending_proof') {
+    return [
+      discrepancy(
+        'terminal_event_mismatch',
+        runId,
+        `Pending proof requires one pending marker and no release/post-pending error; observed pending=${pending}, release=${released}, terminal_error=${terminalErrors}, retained_error=${errors}.`
+      )
+    ]
+  }
+  if (issue === 'failed') {
+    return [
+      discrepancy(
+        'terminal_event_mismatch',
+        runId,
+        'Failed result has no retained run_error event.'
+      )
+    ]
+  }
+  if (issue === 'recorded') {
     return [
       discrepancy(
         'terminal_event_mismatch',
@@ -443,11 +461,11 @@ function truthState(
   return result?.status ?? 'interrupted'
 }
 
-async function auditRosterRun(
+function matchingResultDiscrepancies(
   roster: CampaignRoster,
   rosterRun: CampaignRoster['runs'][number],
   matchingResults: readonly CampaignRunResult[]
-): Promise<CampaignTruthObservation> {
+): CampaignTruthDiscrepancy[] {
   const local: CampaignTruthDiscrepancy[] = []
   if (matchingResults.length > 1) {
     local.push(
@@ -458,6 +476,22 @@ async function auditRosterRun(
       )
     )
   }
+  if (matchingResults.length === 0) {
+    local.push(discrepancy('missing_result', rosterRun.run_id, 'Rostered run has no result.'))
+    return local
+  }
+  for (const candidate of matchingResults) {
+    local.push(...resultDiscrepancies(roster, rosterRun, candidate))
+  }
+  return local
+}
+
+async function auditRosterRun(
+  roster: CampaignRoster,
+  rosterRun: CampaignRoster['runs'][number],
+  matchingResults: readonly CampaignRunResult[]
+): Promise<CampaignTruthObservation> {
+  const local = matchingResultDiscrepancies(roster, rosterRun, matchingResults)
   const result = matchingResults[0] ?? null
   let events: EvalEvent[] | null = null
   let invalidLog: string | null = null
@@ -467,13 +501,6 @@ async function auditRosterRun(
     invalidLog = error instanceof Error ? error.message : String(error)
   }
 
-  if (!result) {
-    local.push(discrepancy('missing_result', rosterRun.run_id, 'Rostered run has no result.'))
-  } else {
-    for (const candidate of matchingResults) {
-      local.push(...resultDiscrepancies(roster, rosterRun, candidate))
-    }
-  }
   if (invalidLog) {
     local.push(discrepancy('invalid_event_log', rosterRun.run_id, invalidLog))
   } else if (result?.status === 'skipped' && events) {

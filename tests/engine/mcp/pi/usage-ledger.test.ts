@@ -115,7 +115,7 @@ describe('usage ledger', () => {
       expect(defaultUsageLedgerPath({ OPENPENCIL_MODEL_METER_LOG: filePath })).toBe(filePath)
       const first = buildUsageTurnRecord({
         at: '2026-08-23T00:00:01.000Z',
-        model: 'antigravity/gemini-3-7-flash',
+        modelId: 'antigravity/gemini-3-7-flash',
         source: 'probe',
         threadId: 'probe-1',
         tokens: parseUsageTokens({ cacheRead: 20_331, input: 4_207, output: 80 }),
@@ -128,7 +128,7 @@ describe('usage ledger', () => {
       await appendUsageTurn(
         buildUsageTurnRecord({
           at: '2026-08-23T00:00:02.000Z',
-          model: 'antigravity/gemini-3-7-flash',
+          modelId: 'antigravity/gemini-3-7-flash',
           source: 'probe',
           threadId: 'probe-1',
           tokens: parseUsageTokens({ cacheRead: 0, input: 25_228, output: 60 }),

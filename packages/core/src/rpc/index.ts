@@ -19,6 +19,7 @@ export {
   buildTraceQueryMatch,
   hasTraceSpokenTurnSelector,
   matchingTraceWindowEvents,
+  normalizeTraceSessionTag,
   publicTraceSpokenTurn,
   queryTraceRecords,
   queryTraceSpokenTurnWindow,
@@ -39,7 +40,10 @@ export type {
 } from './trace-search'
 export type {
   TraceEvidenceStatus,
+  TraceEpisodeKind,
+  TraceEventOrigin,
   TraceHistoryContextEntry,
+  TraceHistoryEpisode,
   TraceHistoryEvent,
   TraceHistorySession,
   TraceQueryDependencies,

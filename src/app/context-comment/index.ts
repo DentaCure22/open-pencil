@@ -1,6 +1,6 @@
 export * from './agent-image'
 export * from './anchor'
-export * from './anchor-format'
+export * from './anchor/format'
 export * from './dictation'
 export * from './dispatch'
 export * from './live-inspector-lifecycle'

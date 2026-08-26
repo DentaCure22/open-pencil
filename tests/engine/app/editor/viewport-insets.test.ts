@@ -54,4 +54,18 @@ describe('editor viewport insets', () => {
       top: 70
     })
   })
+
+  test('reserves the lower canvas edge for the bottom editor toolbar', () => {
+    installDocument({
+      '[data-test-id="canvas-area"]': rect(100, 50, 1000, 700),
+      '[data-test-id="toolbar"]': rect(390, 696, 420, 42)
+    })
+
+    expect(editorViewportInsets()).toEqual({
+      bottom: 68,
+      left: 14,
+      right: 14,
+      top: 14
+    })
+  })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { AgentConversationHistory } from '@/app/agent-chat/client'
+import type { AgentConversationHistory } from '@/app/agent-chat/conversations'
 import {
   applyConversationPage,
   applyConversationPreviewMetadata,

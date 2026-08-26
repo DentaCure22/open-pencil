@@ -8,7 +8,7 @@ import {
   type MessageApprovalPreview,
   type MessageApprovalState
 } from '@/app/agent-chat/approval'
-import type { AgentExtensionUiRequest, AgentExtensionUiResponse } from '@/app/agent-chat/client'
+import type { AgentExtensionUiRequest, AgentExtensionUiResponse } from '@/app/agent-chat/approval'
 import messagesAppIconUrl from '@/assets/messages-app-icon.png'
 
 const {
@@ -95,7 +95,7 @@ function deny() {
             class="size-3"
             aria-hidden="true"
           />
-          <icon-lucide-circle-alert v-else class="size-3" aria-hidden="true" />
+          <IconlyIcon name="danger" v-else class="size-3" aria-hidden="true" />
           <span>{{ statusLabel }}</span>
         </div>
         <div

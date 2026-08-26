@@ -8,7 +8,6 @@ import IconLoaderCircle from '~icons/lucide/loader-circle'
 import IconMaximize2 from '~icons/lucide/maximize-2'
 import IconMinimize2 from '~icons/lucide/minimize-2'
 import IconMonitor from '~icons/lucide/monitor'
-import IconPlay from '~icons/lucide/play'
 import IconRefreshCw from '~icons/lucide/refresh-cw'
 import IconScanSearch from '~icons/lucide/scan-search'
 import IconSmartphone from '~icons/lucide/smartphone'
@@ -30,6 +29,7 @@ import {
   type CodeObjectViewportPresetId
 } from '@/app/code-object/transform'
 import { useEditorStore } from '@/app/editor/active-store'
+import { IconlyPlay as IconPlay } from '@/components/icons/iconly'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import {
   clearLiveInspectorSelection,

@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { useHead } from '@unhead/vue'
-import {
-  useDebounceFn,
-  useDraggable,
-  useEventListener,
-  useIntervalFn,
-  useLocalStorage,
-  useUrlSearchParams
-} from '@vueuse/core'
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+import { useDebounceFn, useEventListener, useIntervalFn, useUrlSearchParams } from '@vueuse/core'
+import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import {
   computed,
   defineAsyncComponent,
@@ -43,7 +36,13 @@ import {
 } from '@/app/editor/viewport-animation'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useKeyboard } from '@/app/shell/keyboard/use'
-import { loadEditorLayout, saveEditorLayout } from '@/app/shell/layout-storage'
+import {
+  LEFT_SIDEBAR_MAX_PERCENT,
+  LEFT_SIDEBAR_MIN_PERCENT,
+  loadEditorLayout,
+  saveEditorLayout
+} from '@/app/shell/layout-storage'
+import { lockHorizontalResizeCursor } from '@/app/shell/horizontal-resize-lock'
 import { appMenuShortcut } from '@/app/shell/menu/shortcut'
 import { openFileFromPath, useMenu } from '@/app/shell/menu/use'
 import {
@@ -94,11 +93,13 @@ import {
   readOpenPencilWorkspaceIdentity
 } from '@/app/workspace-document/identity'
 import {
+  completeLocalWorkspaceScreenshot,
   consumeLocalWorkspaceNavigationIntent,
   consumeLocalWorkspaceThemeIntent,
   currentLocalWorkspaceAuthorityStatus,
   publishLocalWorkspacePresence,
   readLocalWorkspaceNavigationIntent,
+  readLocalWorkspaceScreenshotIntent,
   readLocalWorkspaceThemeIntent,
   refreshLocalWorkspaceAuthorityStatus,
   subscribeLocalWorkspaceAuthorityChanges
@@ -106,11 +107,13 @@ import {
 import { shouldAllowConcurrentLocalWorkspaceWriters } from '@/app/workspace-document/local-authority/mode'
 import { createLocalWorkspaceNavigationConsumer } from '@/app/workspace-document/local-authority/navigation'
 import { revealLocalWorkspaceNavigationTargets } from '@/app/workspace-document/local-authority/reveal'
+import { createLocalWorkspaceScreenshotConsumer } from '@/app/workspace-document/local-authority/screenshot'
 import { createLocalWorkspaceThemeConsumer } from '@/app/workspace-document/local-authority/theme'
 import { createLocalWorkspaceDocumentAuthority } from '@/app/workspace-document/local-authority/session'
 import { createLocalWorkspaceAuthorityHeadSynchronizer } from '@/app/workspace-document/local-authority/synchronizer'
 import EmptyBoardStart from '@/components/EmptyBoardStart.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
+import CanvasZoomControls from '@/components/canvas/CanvasZoomControls.vue'
 import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
 import MermaidImportDialog from '@/components/diagram/MermaidImportDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
@@ -318,6 +321,10 @@ async function ensureWorkspaceAuthorityMode() {
   stopLocalWorkspaceAuthorityHeadSubscription = subscribeLocalWorkspaceAuthorityChanges({
     onHeadCommitted: requestLocalWorkspaceAuthorityHeadSynchronization,
     onNavigationQueued: () => void consumePendingLocalNavigation(),
+    onScreenshotQueued: () =>
+      void synchronizeLocalWorkspaceAuthorityHeadIfChanged().then(() =>
+        consumePendingLocalScreenshot()
+      ),
     onThemeQueued: () => void applyPendingLocalTheme()
   })
   localWorkspaceRole.value = authority.role
@@ -417,6 +424,21 @@ const localAuthorityNavigation = createLocalWorkspaceNavigationConsumer({
 function consumePendingLocalNavigation() {
   return localAuthorityNavigation.consumePending().catch((error) => {
     console.warn('[Local workspace authority] Board navigation failed:', error)
+    return false
+  })
+}
+
+const localAuthorityScreenshot = createLocalWorkspaceScreenshotConsumer({
+  complete: completeLocalWorkspaceScreenshot,
+  currentAuthority: currentLocalWorkspaceAuthorityStatus,
+  currentPageId: () => workspaceStore.state.currentPageId,
+  readIntent: readLocalWorkspaceScreenshotIntent,
+  store: workspaceStore
+})
+
+function consumePendingLocalScreenshot() {
+  return localAuthorityScreenshot.consumePending().catch((error) => {
+    console.warn('[Local workspace authority] Board screenshot failed:', error)
     return false
   })
 }
@@ -817,70 +839,137 @@ function showEditorUI() {
   store.state.showUI = true
 }
 
-function handleEditorLayout(layout: number[]) {
-  if (showLayersPanel.value && layout.length === 2) {
-    saveEditorLayout(layout)
-  }
-}
-
 const fileAssociationCleanup = ref<(() => void) | null>(null)
 const initialEditorLayout = loadEditorLayout()
+const currentEditorLayout = ref([...initialEditorLayout])
 
 const showLayersPanel = ref(true)
 const desktopWorkspaceRef = ref<HTMLElement | null>(null)
-const layersSplitterPanelRef = ref<{ collapse: () => void; expand: () => void } | null>(null)
+const layersSplitterPanelRef = ref<{
+  collapse: () => void
+  expand: () => void
+  getSize: () => number
+  resize: (size: number) => void
+} | null>(null)
 const layersShellMotionRef = ref<HTMLElement | null>(null)
-const compactSidebarTabDragHandleRef = ref<HTMLElement | null>(null)
-const storedCompactSidebarTabY = useLocalStorage<number | null>(
-  'openpencil-sidebar-full-frame-tab-y-v1',
-  null
-)
-const compactSidebarTabActive = computed(
-  () => Boolean(fullFrameCodeObjectId.value) && !showLayersPanel.value
-)
-const compactSidebarTabY = ref(0)
 const closingSidebarWidth = ref<number | null>(null)
+const leftSidebarResizing = ref(false)
 let sidebarTransitionEpoch = 0
-let compactSidebarTabPointerOffsetY = 0
-const { isDragging: compactSidebarTabDragging } = useDraggable(layersShellMotionRef, {
-  axis: 'y',
-  disabled: computed(() => !compactSidebarTabActive.value),
-  handle: compactSidebarTabDragHandleRef,
-  initialValue: { x: 12, y: 0 },
-  preventDefault: true,
-  onStart: (_position, event) => {
-    const handle = event.currentTarget
-    const tab = layersShellMotionRef.value?.getBoundingClientRect()
-    compactSidebarTabPointerOffsetY = tab ? event.clientY - tab.top : 0
-    if (handle instanceof HTMLElement) handle.setPointerCapture(event.pointerId)
-  },
-  onMove: (_position, event) => {
-    const bounds = desktopWorkspaceBounds()
-    if (!bounds) return
-    compactSidebarTabY.value = clampCompactSidebarTabY(
-      event.clientY - bounds.top - compactSidebarTabPointerOffsetY
-    )
-  },
-  onEnd: (_position, event) => {
-    const handle = event.currentTarget
-    if (handle instanceof HTMLElement && handle.hasPointerCapture(event.pointerId)) {
-      handle.releasePointerCapture(event.pointerId)
+
+function handleEditorLayout(layout: number[]) {
+  if (layout.length !== 2) return
+  currentEditorLayout.value = [...layout]
+  if (showLayersPanel.value) saveEditorLayout(layout)
+}
+
+const leftSidebarResizeHandleStyle = computed<CSSProperties>(() => ({
+  left: `${currentEditorLayout.value[0] ?? initialEditorLayout[0]}%`
+}))
+
+type LeftSidebarResizeSession = {
+  frame: number
+  handle: HTMLElement
+  latestX: number
+  originSize: number
+  originX: number
+  pointerId: number
+  releaseCursorLock: () => void
+  splitter: NonNullable<typeof layersSplitterPanelRef.value>
+  workspaceWidth: number
+}
+let leftSidebarResizeSession: LeftSidebarResizeSession | null = null
+
+function resizeLeftSidebarBy(delta: number) {
+  const splitter = layersSplitterPanelRef.value
+  if (!splitter) return
+  if (!showLayersPanel.value) splitter.expand()
+  splitter.resize(splitter.getSize() + delta)
+}
+
+function leftSidebarResizeSize(session: LeftSidebarResizeSession) {
+  return session.originSize + ((session.latestX - session.originX) / session.workspaceWidth) * 100
+}
+
+function applyLeftSidebarResize(session: LeftSidebarResizeSession) {
+  session.frame = 0
+  session.splitter.resize(leftSidebarResizeSize(session))
+}
+
+function scheduleLeftSidebarResize(clientX: number) {
+  const session = leftSidebarResizeSession
+  if (!session) return
+  session.latestX = clientX
+  if (!session.frame) {
+    session.frame = window.requestAnimationFrame(() => applyLeftSidebarResize(session))
+  }
+}
+
+function moveLeftSidebarResize(event: PointerEvent) {
+  const session = leftSidebarResizeSession
+  if (!session || event.pointerId !== session.pointerId) return
+  event.preventDefault()
+  scheduleLeftSidebarResize(event.clientX)
+}
+
+function finishLeftSidebarResize(options: { clientX?: number; revert?: boolean } = {}) {
+  const session = leftSidebarResizeSession
+  if (!session) return
+  leftSidebarResizeSession = null
+  if (options.clientX !== undefined) session.latestX = options.clientX
+  if (session.frame) window.cancelAnimationFrame(session.frame)
+  session.splitter.resize(options.revert ? session.originSize : leftSidebarResizeSize(session))
+  try {
+    if (session.handle.hasPointerCapture(session.pointerId)) {
+      session.handle.releasePointerCapture(session.pointerId)
     }
-    storedCompactSidebarTabY.value = compactSidebarTabY.value
+  } catch {
+    // The browser may have already released capture while cancelling the pointer.
   }
-})
+  session.releaseCursorLock()
+  leftSidebarResizing.value = false
+}
+
+function endLeftSidebarResize(event: PointerEvent) {
+  const session = leftSidebarResizeSession
+  if (!session || event.pointerId !== session.pointerId) return
+  finishLeftSidebarResize({ clientX: event.clientX })
+}
+
+function cancelLeftSidebarResize(event?: PointerEvent) {
+  const session = leftSidebarResizeSession
+  if (!session || (event && event.pointerId !== session.pointerId)) return
+  finishLeftSidebarResize({ revert: true })
+}
+
+function beginLeftSidebarResize(event: PointerEvent) {
+  const splitter = layersSplitterPanelRef.value
+  const workspace = desktopWorkspaceBounds()
+  if (!splitter || !workspace || event.button !== 0) return
+  event.preventDefault()
+  const handle = event.currentTarget
+  if (!(handle instanceof HTMLElement)) return
+  try {
+    handle.setPointerCapture(event.pointerId)
+  } catch {
+    return
+  }
+  leftSidebarResizeSession = {
+    frame: 0,
+    handle,
+    latestX: event.clientX,
+    originSize: splitter.getSize(),
+    originX: event.clientX,
+    pointerId: event.pointerId,
+    releaseCursorLock: lockHorizontalResizeCursor(),
+    splitter,
+    workspaceWidth: workspace.width
+  }
+  leftSidebarResizing.value = true
+}
 const layersShellMotionStyle = computed<CSSProperties | undefined>(() => {
-  const style: CSSProperties = {}
-  if (compactSidebarTabActive.value) {
-    style.cursor = compactSidebarTabDragging.value ? 'grabbing' : undefined
-    style.left = '12px'
-    style.position = 'absolute'
-    style.top = `${compactSidebarTabY.value}px`
-    style.transform = 'none'
-    style.translate = 'none'
-  }
-  if (closingSidebarWidth.value !== null) style.width = `${closingSidebarWidth.value}px`
-  return Object.keys(style).length > 0 ? style : undefined
+  return closingSidebarWidth.value === null
+    ? undefined
+    : { width: `${closingSidebarWidth.value}px` }
 })
 const lastOpenSidebarInsets = ref<ReturnType<typeof editorViewportInsets>>({})
 const sidebarFocusAdjustment = ref<{
@@ -893,43 +982,6 @@ const viewportAnimation = useViewportAnimation(store)
 function desktopWorkspaceBounds() {
   return desktopWorkspaceRef.value?.getBoundingClientRect() ?? null
 }
-
-function clampCompactSidebarTabY(candidate: number) {
-  const bounds = desktopWorkspaceBounds()
-  if (!bounds) return Math.max(12, candidate)
-  const tabHeight = layersShellMotionRef.value?.getBoundingClientRect().height ?? 44
-  return Math.min(Math.max(12, candidate), bounds.height - tabHeight - 12)
-}
-
-function moveCompactSidebarTab(deltaY: number) {
-  compactSidebarTabY.value = clampCompactSidebarTabY(compactSidebarTabY.value + deltaY)
-  storedCompactSidebarTabY.value = compactSidebarTabY.value
-}
-
-async function placeCompactSidebarTab() {
-  if (!compactSidebarTabActive.value) return
-  await nextTick()
-  const bounds = desktopWorkspaceBounds()
-  const tabHeight = layersShellMotionRef.value?.getBoundingClientRect().height ?? 44
-  const preferred =
-    storedCompactSidebarTabY.value ??
-    (bounds ? (bounds.height - tabHeight) / 2 : compactSidebarTabY.value)
-  compactSidebarTabY.value = clampCompactSidebarTabY(preferred)
-}
-
-watch(
-  compactSidebarTabActive,
-  (active) => {
-    if (active) void placeCompactSidebarTab()
-  },
-  { flush: 'post' }
-)
-
-useEventListener(window, 'resize', () => {
-  if (compactSidebarTabActive.value) {
-    compactSidebarTabY.value = clampCompactSidebarTabY(compactSidebarTabY.value)
-  }
-})
 
 function protectSidebarFocus(nodeId: string, insets: ReturnType<typeof editorViewportInsets>) {
   if (!store.state.selectedIds.has(nodeId)) return
@@ -962,7 +1014,6 @@ function closeLayersPanel() {
       })
     })
   }
-  if (fullFrameCodeObjectId.value) void placeCompactSidebarTab()
   if (
     adjustment &&
     store.state.selectedIds.has(adjustment.nodeId) &&
@@ -1040,6 +1091,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   sidebarTransitionEpoch += 1
+  cancelLeftSidebarResize()
   window.clearTimeout(workspaceLoadingLimit)
   stopSmylrPagePersistence?.()
   stopSmylrSelectionPersistence?.()
@@ -1124,10 +1176,16 @@ onUnmounted(() => {
           collapsible
           :collapsed-size="0"
           :default-size="initialEditorLayout[0]"
-          :min-size="14"
-          :max-size="30"
+          :min-size="LEFT_SIDEBAR_MIN_PERCENT"
+          :max-size="LEFT_SIDEBAR_MAX_PERCENT"
           data-test-id="layers-splitter-panel"
-          class="pointer-events-none relative flex min-h-0 flex-col !overflow-visible bg-transparent transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+          :data-resizing="leftSidebarResizing ? 'true' : 'false'"
+          class="pointer-events-none relative flex min-h-0 flex-col !overflow-visible bg-transparent motion-reduce:transition-none"
+          :class="
+            leftSidebarResizing
+              ? 'transition-none'
+              : 'transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]'
+          "
           @collapse="showLayersPanel = false"
           @expand="showLayersPanel = true"
         >
@@ -1136,31 +1194,16 @@ onUnmounted(() => {
             data-test-id="layers-shell-motion"
             :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
             :data-full-frame="fullFrameCodeObjectId ? 'true' : 'false'"
-            :data-compact-tab-dragging="compactSidebarTabDragging ? 'true' : 'false'"
             :style="layersShellMotionStyle"
-            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex min-h-0 min-w-11 -translate-y-1/2 overflow-clip border border-chrome-border bg-sidebar shadow-chrome-panel [contain:layout_paint_style] [interpolate-size:allow-keywords] transition-[width,height,border-radius] will-change-[width,height,border-radius] motion-reduce:transition-none"
-            :class="
+            :data-resizing="leftSidebarResizing ? 'true' : 'false'"
+            class="pointer-events-auto absolute top-1/2 z-30 flex min-h-0 -translate-y-1/2 overflow-clip [contain:layout_paint_style] [interpolate-size:allow-keywords] will-change-[width,height,border-radius] motion-reduce:transition-none"
+            :class="[
+              leftSidebarResizing ? 'transition-none' : 'transition-[width,height,border-radius]',
               showLayersPanel
-                ? 'h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] rounded-[14px] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
-                : fullFrameCodeObjectId
-                  ? 'h-11 w-11 rounded-[14px] bg-chrome/95 shadow-lg ring-1 ring-white/5 duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
-                  : 'h-auto w-11 rounded-[22px] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
-            "
+                ? 'left-3 h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] min-w-11 rounded-[14px] border border-chrome-border bg-sidebar shadow-chrome-panel duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+                : 'left-0 h-11 w-7 min-w-7 rounded-r-[11px] bg-chrome/90 shadow-sm backdrop-blur-xl duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
+            ]"
           >
-            <button
-              v-if="compactSidebarTabActive"
-              ref="compactSidebarTabDragHandleRef"
-              type="button"
-              data-test-id="sidebar-compact-tab-drag-handle"
-              aria-label="Move sidebar tab"
-              class="absolute top-1/2 left-0.5 z-40 flex h-6 w-2.5 -translate-y-1/2 touch-none cursor-grab flex-col items-center justify-center gap-0.5 rounded-full active:cursor-grabbing"
-              @keydown.down.prevent="moveCompactSidebarTab(24)"
-              @keydown.up.prevent="moveCompactSidebarTab(-24)"
-            >
-              <span class="size-0.5 rounded-full bg-accent/70" />
-              <span class="size-0.5 rounded-full bg-accent/70" />
-              <span class="size-0.5 rounded-full bg-accent/70" />
-            </button>
             <div
               data-test-id="layers-shell"
               :aria-hidden="!showLayersPanel"
@@ -1177,22 +1220,12 @@ onUnmounted(() => {
             <Toolbar
               embedded
               :sidebar-open="showLayersPanel"
-              :sidebar-tab-only="Boolean(fullFrameCodeObjectId) && !showLayersPanel"
+              sidebar-tab-only
               @close-sidebar="closeLayersPanel"
               @open-sidebar="openLayersPanel"
             />
           </div>
         </SplitterPanel>
-        <SplitterResizeHandle
-          data-test-id="left-splitter-handle"
-          :disabled="!showLayersPanel"
-          class="relative z-30 w-3 cursor-col-resize bg-transparent transition-opacity motion-reduce:transition-none"
-          :class="
-            showLayersPanel
-              ? 'pointer-events-auto opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
-              : 'pointer-events-none opacity-0 duration-100 ease-in'
-          "
-        />
         <SplitterPanel
           id="canvas"
           :default-size="initialEditorLayout[1]"
@@ -1202,6 +1235,51 @@ onUnmounted(() => {
         >
         </SplitterPanel>
       </SplitterGroup>
+      <div
+        role="separator"
+        aria-label="Resize left sidebar"
+        aria-orientation="vertical"
+        tabindex="0"
+        data-test-id="left-splitter-handle"
+        :style="leftSidebarResizeHandleStyle"
+        class="absolute inset-y-0 z-40 w-10 -translate-x-1/2 cursor-col-resize touch-none transition-opacity select-none motion-reduce:transition-none"
+        :class="
+          showLayersPanel && !showEmptyBoardStart
+            ? 'pointer-events-auto opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+            : 'pointer-events-none opacity-0 duration-100 ease-in'
+        "
+        @keydown.left.prevent="resizeLeftSidebarBy(-2)"
+        @keydown.right.prevent="resizeLeftSidebarBy(2)"
+        @pointerdown.stop="beginLeftSidebarResize"
+        @pointermove.stop="moveLeftSidebarResize"
+        @pointerup.stop="endLeftSidebarResize"
+        @pointercancel.stop="cancelLeftSidebarResize"
+        @lostpointercapture="cancelLeftSidebarResize"
+      />
+      <Tip v-if="showLayersPanel && !showEmptyBoardStart" label="Close sidebar" side="right">
+        <button
+          type="button"
+          data-test-id="close-layers-panel"
+          data-sidebar-edge-hinge="true"
+          aria-label="Close sidebar"
+          :style="leftSidebarResizeHandleStyle"
+          class="group/sidebar-hinge pointer-events-auto absolute top-1/2 z-50 flex h-11 w-8 -translate-x-full -translate-y-1/2 items-center justify-end text-muted/75 opacity-0 transition-[color,opacity] duration-150 hover:text-surface hover:opacity-100 focus-visible:text-surface focus-visible:opacity-100 focus-visible:outline-none motion-reduce:transition-none [@media(hover:none)]:opacity-100"
+          @click.stop="closeLayersPanel"
+          @pointerdown.stop
+        >
+          <span
+            class="flex size-5 items-center justify-center rounded-[5px] transition-shadow group-focus-visible/sidebar-hinge:ring-2 group-focus-visible/sidebar-hinge:ring-component/35 motion-reduce:transition-none"
+          >
+            <icon-lucide-chevron-left class="size-3.5 stroke-[1.8]" />
+          </span>
+        </button>
+      </Tip>
+      <Toolbar
+        v-if="!showEmptyBoardStart"
+        :sidebar-open="showLayersPanel"
+        @close-sidebar="closeLayersPanel"
+        @open-sidebar="openLayersPanel"
+      />
     </div>
 
     <!-- Mobile layout -->
@@ -1268,5 +1346,6 @@ onUnmounted(() => {
         <EditorCanvas />
       </div>
     </div>
+    <CanvasZoomControls v-if="showChrome" />
   </div>
 </template>

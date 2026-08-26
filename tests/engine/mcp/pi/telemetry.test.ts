@@ -4,10 +4,12 @@ import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 import {
   applyMeasuredAntigravityThroughput,
   applyMeasuredAntigravityUsage,
+  hydrateAntigravityTelemetry
+} from '#mcp/pi/providers/antigravity/telemetry'
+import {
   applyPiEventTelemetry,
   applyPiSessionStats,
-  applyPiStateTelemetry,
-  hydrateEstimatedAntigravityTelemetry
+  applyPiStateTelemetry
 } from '#mcp/pi/telemetry'
 
 function thread(): AgentConversationThread {
@@ -321,7 +323,7 @@ describe('Pi conversation telemetry', () => {
       }
     )
 
-    expect(hydrateEstimatedAntigravityTelemetry(conversation)).toBe(true)
+    expect(hydrateAntigravityTelemetry(conversation)).toBe(true)
     expect(conversation.contextUsage).toMatchObject({
       tokensEstimated: true,
       tokensPerSecond: 106.3,

@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises'
 
 import type { AgentReasoningEffort } from '#mcp/agent-models/catalog'
+import { splitModelId as parsePiModelId } from '#mcp/usage-ledger-schema'
+
+export { parsePiModelId }
 
 export type PiLaunchMode = 'fork' | 'new' | 'resume'
 
@@ -31,16 +34,6 @@ function imageMimeType(filePath: string): string | null {
   if (extension === 'webp') return 'image/webp'
   if (extension === 'gif') return 'image/gif'
   return null
-}
-
-export function parsePiModelId(modelId: string): { model: string; provider: string } {
-  const slash = modelId.indexOf('/')
-  const model = slash <= 0 ? modelId : modelId.slice(slash + 1)
-  const provider = slash <= 0 ? 'xai-auth' : modelId.slice(0, slash)
-  return {
-    model,
-    provider: provider === 'xai' ? 'xai-auth' : provider
-  }
 }
 
 export function piThinkingLevel(effort: string): AgentReasoningEffort | 'off' | 'minimal' {

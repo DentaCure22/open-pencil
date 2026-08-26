@@ -85,6 +85,8 @@ describe('Pi RPC arguments', () => {
     })
     expect(args).toEqual(expect.arrayContaining(['--mcp-config', '/tmp/board-worker.mcp.json']))
     expect(args).not.toContain('--exclude-tools')
+    expect(args).not.toContain('--no-context-files')
+    expect(args).not.toContain('--no-skills')
   })
 
   test('keeps evidence on the prompt, not the CLI argv', () => {

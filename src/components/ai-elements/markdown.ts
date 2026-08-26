@@ -14,22 +14,46 @@ export type AssistantMarkdownNode = {
   value?: string
 }
 
+export type AssistantMarkdownBlock = {
+  nodes: AssistantMarkdownNode[]
+  root: object
+  source: string
+}
+
 const staticParser = new MarkdownParser({ mode: 'static' })
 
-function flattenParsedNodes(content: string, parser: MarkdownParser): AssistantMarkdownNode[] {
+function parsedBlocks(content: string, parser: MarkdownParser): AssistantMarkdownBlock[] {
   const text = content.trim()
   if (!text) return []
-  return parser.parseMarkdown(text).asts.flatMap((ast) => {
-    const children = 'children' in ast ? ast.children : []
-    return (children ?? []) as AssistantMarkdownNode[]
-  })
+  const parsed = parser.parseMarkdown(text)
+  return parsed.asts.map((ast, index) => ({
+    nodes: ast.children as AssistantMarkdownNode[],
+    root: ast,
+    source: parsed.contents[index] ?? ''
+  }))
+}
+
+function flattenParsedNodes(content: string, parser: MarkdownParser): AssistantMarkdownNode[] {
+  return parsedBlocks(content, parser).flatMap((block) => block.nodes)
 }
 
 export function createAssistantMarkdownParser(mode: 'static' | 'streaming' = 'static') {
   const parser = new MarkdownParser({ mode })
+  let retainedBlocks: AssistantMarkdownBlock[] = []
+
+  function blocks(content: string): AssistantMarkdownBlock[] {
+    const parsed = parsedBlocks(content, parser).map((block, index) => {
+      const retained = index < retainedBlocks.length ? retainedBlocks[index] : undefined
+      return retained && retained.source === block.source ? retained : block
+    })
+    retainedBlocks = parsed
+    return parsed
+  }
+
   return {
+    blocks,
     nodes(content: string): AssistantMarkdownNode[] {
-      return flattenParsedNodes(content, parser)
+      return blocks(content).flatMap((block) => block.nodes)
     }
   }
 }

@@ -142,10 +142,11 @@ describe('OpenPencil browser RPC runtime routing', () => {
   test('times out current-visible Board context once and ignores a late response', async () => {
     let fireTimeout: (() => void) | undefined
     let timeoutDelay: number | undefined
+    const timeoutHandle = Object.create(null) as ReturnType<typeof setTimeout>
     const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation((handler, delay) => {
       if (typeof handler === 'function') fireTimeout = () => handler()
       timeoutDelay = Number(delay)
-      return 1 as unknown as ReturnType<typeof setTimeout>
+      return timeoutHandle
     })
     const bridge = createBrowserRpcBridge({
       authToken: 'secret',

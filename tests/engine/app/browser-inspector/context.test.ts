@@ -51,8 +51,10 @@ describe('Chrome element context', () => {
   })
 
   test('stays selection context for Trace and the agent', () => {
-    expect(browserElementAgentContext(selection)).toContain('Chrome DOM selection:')
-    expect(browserElementAgentContext(selection)).toContain('[aria-label="Save patient"]')
+    const elementContext = browserElementAgentContext(selection)
+    expect(elementContext).toContain('Reference: Annotation #1')
+    expect(elementContext).toContain('Chrome DOM selection:')
+    expect(elementContext).toContain('[aria-label="Save patient"]')
     expect(browserElementTraceTarget(selection)).toEqual({
       elementKind: 'control',
       name: 'Save patient',
@@ -60,17 +62,44 @@ describe('Chrome element context', () => {
       route: 'https://example.com/patients/1',
       stableId: 'browser:chrome-session-1:capture-context'
     })
-    expect(
-      browserCaptureSessionAgentContext({
-        id: 'chrome-session-1',
-        page: selection.page,
-        recordings: [],
-        selections: [selection],
-        startedAt: '2026-08-22T11:59:00.000Z',
-        title: 'Patient editor · 6:59 AM',
-        traceSessionId: 'trace-1'
-      })
-    ).toContain('Trace session: trace-1')
+    const sessionContext = browserCaptureSessionAgentContext({
+      id: 'chrome-session-1',
+      page: selection.page,
+      recordings: [],
+      selections: [{ ...selection, session: { ...selection.session, sequence: 7 } }],
+      startedAt: '2026-08-22T11:59:00.000Z',
+      title: 'Patient editor · 6:59 AM',
+      traceSessionId: 'trace-1'
+    })
+    expect(sessionContext).toContain('Trace session: trace-1')
+    expect(sessionContext).toContain('Stable references: Annotation #7')
+    expect(sessionContext).toContain('Reference: Annotation #7')
+    expect(sessionContext).not.toContain('Selection 1 of 1')
+  })
+
+  test('keeps session references in stable numeric order', () => {
+    const first = { ...selection, id: 'capture-first' }
+    const second = {
+      ...selection,
+      id: 'capture-second',
+      session: { ...selection.session, sequence: 2 }
+    }
+    const context = browserCaptureSessionAgentContext({
+      id: 'chrome-session-1',
+      page: selection.page,
+      recordings: [],
+      selections: [second, first],
+      startedAt: '2026-08-22T11:59:00.000Z',
+      title: 'Patient editor · 6:59 AM'
+    })
+
+    expect(context).toContain('Stable references: Annotation #1, Annotation #2')
+    expect(context.indexOf('Reference: Annotation #1')).toBeLessThan(
+      context.indexOf('Reference: Annotation #2')
+    )
+    expect(context).toContain(
+      'a bare number, “#N”, or “annotation N” means the matching Annotation #N'
+    )
   })
 
   test('accepts only bounded selection and correlated command events', () => {
@@ -89,7 +118,10 @@ describe('Chrome element context', () => {
       parseBrowserElementEvent({
         contract: 'openpencil-browser-element/v1',
         kind: 'selection',
-        selection: { ...selection, page: { ...selection.page, url: 'file:///private/data' } }
+        selection: {
+          ...selection,
+          page: { ...selection.page, url: 'file:///private/data' }
+        }
       })
     ).toBeNull()
     expect(
@@ -123,6 +155,57 @@ describe('Chrome element context', () => {
       kind: 'annotate-requested',
       selectionId: 'capture-context',
       sequence: 1
+    })
+    expect(
+      parseBrowserElementEvent({
+        annotations: [
+          {
+            comment: 'Keep this visible',
+            id: 'annotation-1',
+            x: 0.25,
+            y: 0.75
+          }
+        ],
+        captureSessionId: 'chrome-session-1',
+        contract: 'openpencil-browser-element/v1',
+        kind: 'annotations-updated',
+        selectionId: 'capture-context'
+      })
+    ).toEqual({
+      annotations: [{ comment: 'Keep this visible', id: 'annotation-1', x: 0.25, y: 0.75 }],
+      captureSessionId: 'chrome-session-1',
+      contract: 'openpencil-browser-element/v1',
+      kind: 'annotations-updated',
+      selectionId: 'capture-context'
+    })
+    expect(
+      parseBrowserElementEvent({
+        annotations: [
+          {
+            comment: 'Outside the capture',
+            id: 'annotation-1',
+            x: 1.2,
+            y: 0.75
+          }
+        ],
+        captureSessionId: 'chrome-session-1',
+        contract: 'openpencil-browser-element/v1',
+        kind: 'annotations-updated',
+        selectionId: 'capture-context'
+      })
+    ).toBeNull()
+    expect(
+      parseBrowserElementEvent({
+        captureSessionId: 'chrome-session-1',
+        contract: 'openpencil-browser-element/v1',
+        kind: 'selection-removed',
+        selectionId: 'capture-context'
+      })
+    ).toEqual({
+      captureSessionId: 'chrome-session-1',
+      contract: 'openpencil-browser-element/v1',
+      kind: 'selection-removed',
+      selectionId: 'capture-context'
     })
     expect(
       parseBrowserElementEvent({

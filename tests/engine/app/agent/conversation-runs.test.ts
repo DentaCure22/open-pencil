@@ -19,6 +19,29 @@ function message(
 }
 
 describe('conversation runs', () => {
+  test('keeps workspace changes attached to the turn that produced them', () => {
+    const changes = {
+      additions: 4,
+      capturedAt: '2026-08-25T12:00:02.000Z',
+      deletions: 1,
+      files: [
+        {
+          additions: 4,
+          deletions: 1,
+          patch: 'diff --git a/app.ts b/app.ts',
+          path: 'app.ts',
+          status: 'modified' as const
+        }
+      ]
+    }
+    const [run] = conversationRuns([
+      message('user-1', 'user', 'Update the app.', { changes }),
+      message('assistant-1', 'assistant', 'Updated the app.')
+    ])
+
+    expect(run?.changes).toEqual(changes)
+  })
+
   test('does not lift commentary into a visible answer', () => {
     const [run] = conversationRuns([
       message('user-1', 'user', 'Add a spinner.'),
@@ -145,7 +168,9 @@ describe('conversation runs', () => {
     const [run] = conversationRuns([
       message('user-1', 'user', 'yesterdays emails'),
       message('mem-1', 'assistant', '', {
-        parts: [{ input: '{"query":"inbox"}', name: 'memory_search', state: 'success', type: 'tool' }]
+        parts: [
+          { input: '{"query":"inbox"}', name: 'memory_search', state: 'success', type: 'tool' }
+        ]
       }),
       message('mail-1', 'assistant', '', {
         parts: [
@@ -174,5 +199,78 @@ describe('conversation runs', () => {
 
     expect(run?.missingResponse).toBe(true)
     expect(run?.visible).toEqual([])
+  })
+
+  test('keeps an unfinished tool preamble out of the answer lane', () => {
+    const [run] = conversationRuns(
+      [
+        message('user-1', 'user', 'Run the checks.'),
+        message('preamble-1', 'assistant', 'Running the type checks now.'),
+        message('tool-1', 'assistant', '', {
+          parts: [{ name: 'bash', state: 'running', type: 'tool' }]
+        })
+      ],
+      { active: true }
+    )
+
+    expect(run?.visible).toEqual([])
+    expect(run?.activity).toEqual([
+      expect.objectContaining({
+        id: 'preamble-1',
+        parts: [
+          expect.objectContaining({ text: 'Running the type checks now.', type: 'commentary' })
+        ],
+        text: ''
+      }),
+      expect.objectContaining({ id: 'tool-1' })
+    ])
+  })
+
+  test('keeps a short unfinished preamble in the live lane before its tool arrives', () => {
+    const [run] = conversationRuns(
+      [
+        message('user-1', 'user', 'Run the checks.'),
+        message('preamble-1', 'assistant', 'Running the type checks now.')
+      ],
+      { active: true }
+    )
+
+    expect(run?.visible).toEqual([])
+    expect(run?.activity).toEqual([
+      expect.objectContaining({
+        id: 'preamble-1',
+        parts: [expect.objectContaining({ type: 'commentary' })],
+        text: ''
+      })
+    ])
+  })
+
+  test('keeps a completed final answer visible when no tool follows it', () => {
+    const [run] = conversationRuns(
+      [
+        message('user-1', 'user', 'Explain the renderer.'),
+        message('answer-1', 'assistant', 'The renderer keeps completed blocks stable.', {
+          completedAt: '2026-08-23T13:30:01.000Z'
+        })
+      ],
+      { active: true }
+    )
+
+    expect(run?.visible).toEqual([
+      expect.objectContaining({
+        id: 'answer-1',
+        text: 'The renderer keeps completed blocks stable.'
+      })
+    ])
+  })
+
+  test('streams a substantive unfinished answer in the answer lane', () => {
+    const text = '### Stable blocks\nCompleted Markdown stays mounted while the live tail grows.'
+    const [run] = conversationRuns(
+      [message('user-1', 'user', 'Explain the renderer.'), message('answer-1', 'assistant', text)],
+      { active: true }
+    )
+
+    expect(run?.visible).toEqual([expect.objectContaining({ id: 'answer-1', text })])
   })
 })

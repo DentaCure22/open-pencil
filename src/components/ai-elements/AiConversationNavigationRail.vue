@@ -7,8 +7,8 @@ import type { ConversationNavigationItem } from './conversation-navigation'
 const MINIMUM_NAVIGATION_ITEMS = 4
 const PREVIEW_DELAY_MS = 150
 const MARKER_PROGRESS = [1, 0.7, 0.4, 0.2] as const
-const MARKER_BASE_SCALE = 0.2308
-const MARKER_PROGRESS_SCALE = 0.7692
+const MARKER_BASE_SCALE = 0.25
+const MARKER_PROGRESS_SCALE = 0.75
 
 const { items, scrollElement } = defineProps<{
   items: ConversationNavigationItem[]
@@ -187,7 +187,7 @@ function markerLineStyle(index: number) {
   const progress = markerProgress(index)
   const scale = MARKER_BASE_SCALE + MARKER_PROGRESS_SCALE * progress
   return {
-    width: `${String(26 * scale)}px`,
+    width: `${String(12 * scale)}px`,
     transitionDuration: scrubbing.value ? '0ms' : '160ms',
     transitionTimingFunction:
       'linear(0, 0.398 10%, 0.682 20%, 0.843 30%, 0.925 40%, 0.972 50%, 1.004 60%, 1.008 70%, 1.003 80%, 1)'
@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
         "
         :aria-label="`Jump to user message ${String(index + 1)}`"
         :data-conversation-chapter-marker-id="item.id"
-        class="flex h-2.5 w-9 shrink-0 cursor-pointer items-center outline-none focus-visible:ring-2 focus-visible:ring-component/35"
+        class="flex h-3 w-3.5 shrink-0 cursor-pointer items-center justify-start rounded-full outline-none focus-visible:ring-2 focus-visible:ring-component/35"
         data-test-id="ai-conversation-chapter-marker"
         @blur="blurMarker"
         @click="clickMarker(item, index, $event)"
@@ -404,11 +404,11 @@ onBeforeUnmount(() => {
       >
         <span
           aria-hidden="true"
-          class="flex h-1 w-[30px] items-center transition-[color,opacity] duration-150 motion-reduce:transition-none"
+          class="flex h-1 w-3 items-center justify-start transition-[color,opacity] duration-150 motion-reduce:transition-none"
           :class="markerTone(item, index)"
         >
           <span
-            class="h-full w-[26px] rounded-[1.5px] bg-current transition-[width] motion-reduce:transition-none"
+            class="h-[3px] rounded-full bg-current transition-[width] motion-reduce:transition-none"
             :style="markerLineStyle(index)"
           />
         </span>
@@ -422,7 +422,7 @@ onBeforeUnmount(() => {
       :id="`${previewItem.id}-preview`"
       ref="tooltip"
       role="tooltip"
-      class="pointer-events-none fixed z-[170] w-[22rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[14px] border border-chrome-border bg-chrome-raised/98 px-4 py-3.5 text-[14px] leading-[1.55] text-surface shadow-[0_16px_42px_rgb(0_0_0/0.16),0_3px_10px_rgb(0_0_0/0.07),inset_0_1px_0_rgb(255_255_255/0.7)] ring-1 ring-black/5 backdrop-blur-xl animate-in fade-in slide-in-from-left-1 zoom-in-95 duration-150 motion-reduce:animate-none"
+      class="pointer-events-none fixed z-[170] w-[14rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[14px] border border-chrome-border bg-chrome-raised/98 px-4 py-3.5 text-[14px] leading-[1.55] text-surface shadow-[0_16px_42px_rgb(0_0_0/0.16),0_3px_10px_rgb(0_0_0/0.07),inset_0_1px_0_rgb(255_255_255/0.7)] ring-1 ring-black/5 backdrop-blur-xl animate-in fade-in slide-in-from-left-1 zoom-in-95 duration-150 motion-reduce:animate-none"
       :style="tooltipStyle"
       data-test-id="ai-conversation-chapter-tooltip"
     >

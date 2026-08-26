@@ -18,7 +18,7 @@ export interface CampaignPromptParts {
 
 const REQUEST_SCOPE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
-function requestScopeRunId(value: string): string {
+function requestScopeRunId(value: unknown): string {
   if (typeof value !== 'string' || !REQUEST_SCOPE_RUN_ID_PATTERN.test(value)) {
     throw new Error(`Campaign request scope run_id must be path-safe: ${value}.`)
   }
@@ -45,7 +45,7 @@ export function sameEvalTarget(left: EvalTarget, right: EvalTarget): boolean {
   )
 }
 
-export function campaignBoardRequestId(runId: string, target: EvalTarget): string {
+export function campaignBoardRequestId(runId: unknown, target: EvalTarget): string {
   const scopedRunId = requestScopeRunId(runId)
   const exactTarget = requestTarget(target)
   const digest = createHash('sha256')

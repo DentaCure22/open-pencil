@@ -241,23 +241,23 @@ export function codeObjectViewportPluginData(
   node: SceneNode,
   preset: CodeObjectViewportPresetId | null
 ): SceneNode['pluginData'] | null {
-  const document = parseCodeObjectDocument(node)
-  if (!document) return null
-  const currentPreset = isRecord(document.viewport) ? document.viewport.preset : undefined
+  const codeObject = parseCodeObjectDocument(node)
+  if (!codeObject) return null
+  const currentPreset = isRecord(codeObject.viewport) ? codeObject.viewport.preset : undefined
   if (
-    (preset === null && document.viewport === undefined) ||
+    (preset === null && codeObject.viewport === undefined) ||
     (preset !== null && isCodeObjectViewportPresetId(currentPreset) && currentPreset === preset)
   ) {
     return node.pluginData
   }
-  const nextDocument: CodeObjectDocumentEnvelope = structuredClone(document)
+  const nextDocument: CodeObjectDocumentEnvelope = structuredClone(codeObject)
   if (preset) nextDocument.viewport = { preset }
   else delete nextDocument.viewport
   return serializeCodeObjectPluginData(node, nextDocument)
 }
 
 export function serializeCodeObjectPluginData(
-  node: SceneNode,
+  node: Pick<SceneNode, 'pluginData'>,
   codeObject: CodeObjectDocumentEnvelope
 ): SceneNode['pluginData'] {
   const smylrPluginData = smylrTrustedWebAppPluginData(codeObject)

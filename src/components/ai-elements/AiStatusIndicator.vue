@@ -31,7 +31,8 @@ const busy = computed(() => ['streaming', 'submitted'].includes(status))
     role="status"
   >
     <span v-if="busy" class="mt-1 size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
-    <icon-lucide-circle-alert
+    <IconlyIcon
+      name="danger"
       v-else-if="status === 'error' || status === 'needs_attention'"
       class="size-3"
     />

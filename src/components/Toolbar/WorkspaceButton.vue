@@ -2,9 +2,9 @@
 import { templateRef, useEventListener, useLocalStorage } from '@vueuse/core'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
-import IconLibrary from '~icons/lucide/library'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { IconlyCategory as IconLibrary } from '@/components/icons/iconly'
 import { switchSidebarWorkspaceBoard } from '@/app/sidebar-workspace/navigation'
 import { updateRecentBoardIds } from '@/app/sidebar-workspace/recent'
 import {

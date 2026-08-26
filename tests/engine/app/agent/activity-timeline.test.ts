@@ -15,6 +15,14 @@ function commentary(id: string, text: string): ActivityItem {
   }
 }
 
+function reasoning(id: string, text: string): ActivityItem {
+  return {
+    index: 0,
+    key: id,
+    part: { state: 'complete', text, type: 'reasoning' }
+  }
+}
+
 function tool(id: string, name: string, state: 'success' | 'running' = 'success'): ActivityItem {
   return {
     index: 0,
@@ -37,38 +45,45 @@ describe('activity timeline', () => {
     expect(activityExploreLabel([{ name: 'read_file' }])).toBe('Explored 1 file')
   })
 
-  test('keeps the latest tool group open until the next thought, then closes it', () => {
+  test('keeps every tool group compact until the user opens it', () => {
     expect(
       toolGroupIsOpen({
-        followedByCommentary: false,
+        followedByNarrative: false,
         hasRunningTool: true,
         status: 'streaming'
       })
-    ).toBe(true)
+    ).toBe(false)
     expect(
       toolGroupIsOpen({
-        followedByCommentary: false,
-        hasRunningTool: false,
-        status: 'streaming'
-      })
-    ).toBe(true)
-    expect(
-      toolGroupIsOpen({
-        followedByCommentary: true,
+        followedByNarrative: false,
         hasRunningTool: false,
         status: 'streaming'
       })
     ).toBe(false)
     expect(
       toolGroupIsOpen({
-        followedByCommentary: false,
+        followedByNarrative: true,
+        hasRunningTool: true,
+        status: 'streaming'
+      })
+    ).toBe(false)
+    expect(
+      toolGroupIsOpen({
+        followedByNarrative: true,
+        hasRunningTool: false,
+        status: 'streaming'
+      })
+    ).toBe(false)
+    expect(
+      toolGroupIsOpen({
+        followedByNarrative: false,
         hasRunningTool: false,
         status: 'ready'
       })
     ).toBe(false)
   })
 
-  test('splits tools by kind and closes a group once a later thought arrives', () => {
+  test('keeps narrative and adjacent tool blocks in chronological order', () => {
     const groups = groupActivityTimeline(
       [
         tool('read-1', 'read_file'),
@@ -81,14 +96,13 @@ describe('activity timeline', () => {
       (item) => item.part.state
     )
 
-    expect(groups.map((group) => group.type)).toEqual(['commentary', 'tools', 'tools', 'tools'])
-    expect(groups[1]).toMatchObject({ kind: 'read', open: false, type: 'tools' })
-    expect(groups[1]?.type === 'tools' ? groups[1].items.length : 0).toBe(2)
-    expect(groups[2]).toMatchObject({ kind: 'search', open: false, type: 'tools' })
-    expect(groups[3]).toMatchObject({ kind: 'edit', open: true, type: 'tools' })
+    expect(groups.map((group) => group.type)).toEqual(['tools', 'commentary', 'tools'])
+    expect(groups[0]).toMatchObject({ open: false, type: 'tools' })
+    expect(groups[0]?.type === 'tools' ? groups[0].items.length : 0).toBe(3)
+    expect(groups[2]).toMatchObject({ open: false, type: 'tools' })
   })
 
-  test('merges the same tool kind even when other kinds sit in between', () => {
+  test('summarizes adjacent mixed tools in one activity row', () => {
     const groups = groupActivityTimeline(
       [
         tool('read-1', 'read_file'),
@@ -100,14 +114,12 @@ describe('activity timeline', () => {
       (item) => item.part.state
     )
 
-    expect(groups).toHaveLength(2)
-    expect(groups[0]).toMatchObject({ kind: 'read', type: 'tools' })
-    expect(groups[0]?.type === 'tools' ? groups[0].items.length : 0).toBe(2)
-    expect(groups[1]).toMatchObject({ kind: 'search', type: 'tools' })
-    expect(groups[1]?.type === 'tools' ? groups[1].items.length : 0).toBe(2)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ type: 'tools' })
+    expect(groups[0]?.type === 'tools' ? groups[0].items.length : 0).toBe(4)
   })
 
-  test('folds a generic connected-app call into Read mail when the turn also reads mail', () => {
+  test('does not pull connected-app tools across later commentary', () => {
     const groups = groupActivityTimeline(
       [
         tool('connect-1', 'mcp'),
@@ -118,21 +130,23 @@ describe('activity timeline', () => {
       (item) => item.part.state
     )
 
-    expect(groups.map((group) => group.type)).toEqual(['commentary', 'tools'])
-    expect(groups[1]).toMatchObject({ kind: 'mail', type: 'tools' })
-    expect(groups[1]?.type === 'tools' ? groups[1].items.length : 0).toBe(2)
+    expect(groups.map((group) => group.type)).toEqual(['tools', 'commentary', 'tools'])
+    expect(groups[0]?.type === 'tools' ? groups[0].items.length : 0).toBe(1)
+    expect(groups[2]?.type === 'tools' ? groups[2].items.length : 0).toBe(1)
   })
 
-  test('keeps app lookup separate from Read mail', () => {
+  test('keeps reasoning at its exact boundary in the activity stream', () => {
     const groups = groupActivityTimeline(
-      [tool('lookup-1', 'connected_app_search'), tool('mail-1', 'codex_apps_gmail_search_emails')],
+      [
+        commentary('note-1', 'I will inspect the files.'),
+        tool('read-1', 'read_file'),
+        reasoning('reason-1', 'The next step is an edit.'),
+        tool('edit-1', 'write_file')
+      ],
       'ready',
       (item) => item.part.state
     )
 
-    expect(groups.map((group) => (group.type === 'tools' ? group.kind : group.type))).toEqual([
-      'connected-app',
-      'mail'
-    ])
+    expect(groups.map((group) => group.type)).toEqual(['commentary', 'tools', 'reasoning', 'tools'])
   })
 })

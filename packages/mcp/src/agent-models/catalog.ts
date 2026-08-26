@@ -26,3 +26,15 @@ export function resolveAgentEffort(
   }
   return model.defaultEffort
 }
+
+export function resolveAgentSelection(
+  models: readonly AgentModelDefinition[],
+  modelId?: string | null,
+  effort?: string | null
+): { effort: AgentReasoningEffort; model: string } {
+  const model = resolveAgentModel(models, modelId)
+  return {
+    effort: resolveAgentEffort(model, effort),
+    model: model.id
+  }
+}

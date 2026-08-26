@@ -11,6 +11,14 @@ import {
 import { useEditorStore } from '@/app/editor/active-store'
 import { resolveLiveDropLayer } from '@/app/smylr-live-inspector/drop-layer'
 import {
+  beginLiveInspectorOverlayTransform,
+  LIVE_INSPECTOR_CORNER_HANDLES,
+  liveInspectorTransformDistance,
+  type LiveInspectorMoveTransform,
+  type LiveInspectorOverlayTransform,
+  updateLiveInspectorOverlayTransform
+} from '@/app/smylr-live-inspector/overlay-transform'
+import {
   liveInspectorActiveFrameId,
   liveInspectorInteractionMode,
   liveInspectorCanRedoSelectedDraft,
@@ -32,46 +40,13 @@ import { getContainerLabelPlacement } from '@/components/smylr-live-container-ov
 import SmylrLiveSpacingMeasurements from '@/components/smylr-live-container-overlay/SmylrLiveSpacingMeasurements.vue'
 import Tip from '@/components/ui/Tip.vue'
 
-type CornerHandle = 'nw' | 'ne' | 'se' | 'sw'
-type ResizeDrag = {
-  baseX: number
-  baseY: number
-  handle: CornerHandle
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startHeight: number
-  startWidth: number
-}
-type RotateDrag = {
-  centerClientX: number
-  centerClientY: number
-  pointerId: number
-  startAngle: number
-  startRotation: number
-}
-type MoveDrag = {
-  baseX: number
-  baseY: number
-  pointerId: number
-  selectOnClick: boolean
-  startClientX: number
-  startClientY: number
-  startRectX: number
-  startRectY: number
-}
-
-const MIN_CONTAINER_SIZE = 24
-const CORNER_HANDLES = ['nw', 'ne', 'se', 'sw'] as const
 const emit = defineEmits<{
   'select-at-point': [event: PointerEvent]
 }>()
 const store = useEditorStore()
 const syncTick = ref(0)
 const overlayRef = ref<HTMLElement | null>(null)
-const resizeDrag = ref<ResizeDrag | null>(null)
-const rotateDrag = ref<RotateDrag | null>(null)
-const moveDrag = ref<MoveDrag | null>(null)
+const activeTransform = ref<LiveInspectorOverlayTransform | null>(null)
 const previewSize = ref<{ height: number; width: number } | null>(null)
 const previewPosition = ref<Vector | null>(null)
 
@@ -210,7 +185,14 @@ const rotationHandleStyle = computed(() => {
   }
 })
 
-function beginResize(handle: CornerHandle, event: PointerEvent) {
+function currentTransformStyles() {
+  return {
+    ...selectedLiveInspectorNode.value?.computedStyle,
+    ...liveInspectorPatchDraft.value?.styles
+  }
+}
+
+function beginResize(handle: (typeof LIVE_INSPECTOR_CORNER_HANDLES)[number], event: PointerEvent) {
   if (!isSelectMode.value || event.button !== 0) return
   const rect = liveInspectorSelectedRect.value
   const node = selectedLiveInspectorNode.value
@@ -218,26 +200,14 @@ function beginResize(handle: CornerHandle, event: PointerEvent) {
 
   event.preventDefault()
   event.stopPropagation()
-  const current = translatePair(
-    liveInspectorPatchDraft.value?.styles?.translate ?? node.computedStyle?.translate
-  )
-  resizeDrag.value = {
-    baseX: current.x,
-    baseY: current.y,
-    handle,
-    pointerId: event.pointerId,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    startHeight: rect.height,
-    startWidth: rect.width
-  }
+  activeTransform.value = beginLiveInspectorOverlayTransform({
+    action: { handle, kind: 'resize' },
+    pointer: event,
+    rect,
+    styles: currentTransformStyles()
+  })
   previewSize.value = { height: rect.height, width: rect.width }
   ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
-}
-
-function numericRotation(value: string | undefined) {
-  if (!value || value === 'none') return 0
-  return Number.parseFloat(value) || 0
 }
 
 function beginRotate(event: PointerEvent) {
@@ -247,30 +217,16 @@ function beginRotate(event: PointerEvent) {
   if (!node || !bounds) return
   event.preventDefault()
   event.stopPropagation()
-  const centerClientX = bounds.left + bounds.width / 2
-  const centerClientY = bounds.top + bounds.height / 2
-  rotateDrag.value = {
-    centerClientX,
-    centerClientY,
-    pointerId: event.pointerId,
-    startAngle: Math.atan2(event.clientY - centerClientY, event.clientX - centerClientX),
-    startRotation: numericRotation(
-      liveInspectorPatchDraft.value?.styles?.rotate ?? node.computedStyle?.rotate
-    )
-  }
+  activeTransform.value = beginLiveInspectorOverlayTransform({
+    action: { kind: 'rotate' },
+    bounds,
+    pointer: event,
+    styles: currentTransformStyles()
+  })
   ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
 }
 
-function translatePair(value: string | undefined) {
-  if (!value || value === 'none') return { x: 0, y: 0 }
-  const parts = value.trim().split(/\s+/)
-  return {
-    x: Number.parseFloat(parts[0] ?? '0') || 0,
-    y: Number.parseFloat(parts[1] ?? '0') || 0
-  }
-}
-
-function applyDropLayer(move: MoveDrag, event: PointerEvent) {
+function applyDropLayer(move: LiveInspectorMoveTransform, event: PointerEvent) {
   if (
     event.type !== 'pointerup' ||
     Math.hypot(event.clientX - move.startClientX, event.clientY - move.startClientY) < 2
@@ -316,116 +272,38 @@ function beginMove(event: PointerEvent, selectOnClick = false) {
   if (!node || !rect) return
   event.preventDefault()
   event.stopPropagation()
-  const current = translatePair(
-    liveInspectorPatchDraft.value?.styles?.translate ?? node.computedStyle?.translate
-  )
-  moveDrag.value = {
-    baseX: current.x,
-    baseY: current.y,
-    pointerId: event.pointerId,
-    selectOnClick,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    startRectX: rect.x,
-    startRectY: rect.y
-  }
+  activeTransform.value = beginLiveInspectorOverlayTransform({
+    action: { kind: 'move', selectOnClick },
+    pointer: event,
+    rect,
+    styles: currentTransformStyles()
+  })
   previewPosition.value = { x: rect.x, y: rect.y }
   ;(event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId)
 }
 
-function resizedDraft(drag: ResizeDrag, event: PointerEvent) {
-  const zoom = Math.max(store.state.zoom, 0.01)
-  const dx = (event.clientX - drag.startClientX) / zoom
-  const dy = (event.clientY - drag.startClientY) / zoom
-  const west = drag.handle.includes('w')
-  const north = drag.handle.includes('n')
-  const width = Math.max(MIN_CONTAINER_SIZE, Math.round(drag.startWidth + (west ? -dx : dx)))
-  const height = Math.max(MIN_CONTAINER_SIZE, Math.round(drag.startHeight + (north ? -dy : dy)))
-  const appliedX = west ? drag.startWidth - width : 0
-  const appliedY = north ? drag.startHeight - height : 0
-  const next = { height, width }
-  const styles = { ...liveInspectorPatchDraft.value?.styles }
-  styles.width = `${next.width}px`
-  styles.height = `${next.height}px`
-  if (west || north) {
-    styles.translate = `${drag.baseX + appliedX}px ${drag.baseY + appliedY}px`
-  }
-  return { next, styles }
-}
-
-function previewRotationDrag(event: PointerEvent) {
-  const rotation = rotateDrag.value
-  const rotationNode = selectedLiveInspectorNode.value
-  if (!rotation || rotation.pointerId !== event.pointerId || !rotationNode) return false
-  const angle = Math.atan2(
-    event.clientY - rotation.centerClientY,
-    event.clientX - rotation.centerClientX
-  )
-  const degrees = rotation.startRotation + ((angle - rotation.startAngle) * 180) / Math.PI
-  previewLiveInspectorDraft(
-    {
-      add: liveInspectorPatchDraft.value?.add ?? [],
-      nodeId: rotationNode.id,
-      remove: liveInspectorPatchDraft.value?.remove ?? [],
-      source: rotationNode.source,
-      styles: {
-        ...liveInspectorPatchDraft.value?.styles,
-        rotate: `${Math.round(degrees * 10) / 10}deg`
-      }
-    },
-    { coalesceKey: `${rotationNode.id}:rotate`, label: `Rotate ${rotationNode.label}` }
-  )
-  return true
-}
-
-function previewMoveDrag(event: PointerEvent) {
-  const move = moveDrag.value
-  const selected = selectedLiveInspectorNode.value
-  if (!move || move.pointerId !== event.pointerId || !selected) return false
-  const zoom = Math.max(store.state.zoom, 0.01)
-  const x = Math.round((event.clientX - move.startClientX) / zoom)
-  const y = Math.round((event.clientY - move.startClientY) / zoom)
-  previewPosition.value = { x: move.startRectX + x, y: move.startRectY + y }
-  previewLiveInspectorDraft(
-    {
-      add: liveInspectorPatchDraft.value?.add ?? [],
-      nodeId: selected.id,
-      remove: liveInspectorPatchDraft.value?.remove ?? [],
-      source: selected.source,
-      styles: {
-        ...liveInspectorPatchDraft.value?.styles,
-        translate: `${move.baseX + x}px ${move.baseY + y}px`
-      }
-    },
-    { coalesceKey: `${selected.id}:move`, label: `Move ${selected.label}` }
-  )
-  return true
-}
-
-function previewResizeDrag(event: PointerEvent) {
-  const drag = resizeDrag.value
+function onPointerMove(event: PointerEvent) {
+  const transform = activeTransform.value
   const node = selectedLiveInspectorNode.value
-  if (!drag || drag.pointerId !== event.pointerId || !node) return false
+  if (!transform || !node) return
+  const update = updateLiveInspectorOverlayTransform(transform, event, store.state.zoom)
+  if (!update) return
 
-  const { next, styles } = resizedDraft(drag, event)
-  previewSize.value = next
+  if (update.kind === 'move') previewPosition.value = update.position
+  if (update.kind === 'resize') previewSize.value = update.size
   previewLiveInspectorDraft(
     {
       add: liveInspectorPatchDraft.value?.add ?? [],
       nodeId: node.id,
       remove: liveInspectorPatchDraft.value?.remove ?? [],
       source: node.source,
-      styles
+      styles: { ...liveInspectorPatchDraft.value?.styles, ...update.styles }
     },
-    { coalesceKey: `${node.id}:resize`, label: `Resize ${node.label}` }
+    {
+      coalesceKey: `${node.id}:${update.kind}`,
+      label: `${update.kind === 'move' ? 'Move' : update.kind === 'resize' ? 'Resize' : 'Rotate'} ${node.label}`
+    }
   )
-  return true
-}
-
-function onPointerMove(event: PointerEvent) {
-  if (previewRotationDrag(event)) return
-  if (previewMoveDrag(event)) return
-  previewResizeDrag(event)
 }
 
 function undoSelectedEdit() {
@@ -441,34 +319,22 @@ function redoSelectedEdit() {
 }
 
 function endResize(event: PointerEvent) {
-  if (rotateDrag.value?.pointerId === event.pointerId) {
-    rotateDrag.value = null
-    return
-  }
-  const move = moveDrag.value
-  if (move?.pointerId === event.pointerId) {
-    const distance = Math.hypot(
-      event.clientX - move.startClientX,
-      event.clientY - move.startClientY
-    )
-    if (move.selectOnClick && event.type === 'pointerup' && distance < 2) {
+  const transform = activeTransform.value
+  if (!transform || transform.pointerId !== event.pointerId) return
+  if (transform.kind === 'move') {
+    const distance = liveInspectorTransformDistance(transform, event)
+    if (transform.selectOnClick && event.type === 'pointerup' && distance < 2) {
       emit('select-at-point', event)
     } else {
-      applyDropLayer(move, event)
+      applyDropLayer(transform, event)
     }
-    moveDrag.value = null
-    return
   }
-  const drag = resizeDrag.value
-  if (!drag || drag.pointerId !== event.pointerId) return
-  resizeDrag.value = null
+  activeTransform.value = null
 }
 
 watch(liveInspectorSelectedId, () => {
   previewSize.value = null
-  resizeDrag.value = null
-  rotateDrag.value = null
-  moveDrag.value = null
+  activeTransform.value = null
   previewPosition.value = null
 })
 watch(
@@ -490,7 +356,7 @@ watch(
 watch(liveInspectorSelectedRect, (rect) => {
   const target = previewPosition.value
   if (
-    !moveDrag.value &&
+    activeTransform.value?.kind !== 'move' &&
     rect &&
     target &&
     Math.abs(rect.x - target.x) <= 1 &&
@@ -575,7 +441,7 @@ onUnmounted(() => {
       </div>
     </Tip>
 
-    <template v-for="corner in CORNER_HANDLES" :key="corner">
+    <template v-for="corner in LIVE_INSPECTOR_CORNER_HANDLES" :key="corner">
       <button
         :aria-label="`Resize selected container from ${corner}`"
         class="pointer-events-auto absolute rounded-full border border-violet-500 bg-white shadow-sm"

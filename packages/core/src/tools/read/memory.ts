@@ -5,10 +5,20 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import { defineTool } from '#core/tools/schema'
 
-const MEMORY_PLUGIN_ID = 'openpencil.memory'
-const CANONICAL_OBJECT_KEY = 'canonical-object-id'
-const CANONICAL_SOURCE_NODE_KEY = 'canonical-source-node-id'
-const DERIVED_FROM_CANONICAL_OBJECT_KEY = 'derived-from-canonical-object-id'
+import {
+  canonicalMemoryDerivedFromId,
+  canonicalMemoryObjectId,
+  canonicalMemorySourceNodeId
+} from './memory-identity'
+
+export {
+  canonicalMemoryDerivedFromId,
+  canonicalMemoryObjectId,
+  canonicalMemoryObjectPluginData,
+  canonicalMemorySourceNodeId,
+  type CanonicalMemoryObjectMetadata
+} from './memory-identity'
+
 const BOARD_TEXT_LIMIT = 12_000
 const OBJECT_TEXT_LIMIT = 2_000
 const DEFAULT_RESULT_LIMIT = 12
@@ -140,73 +150,6 @@ function subtreeText(graph: SceneGraph, node: SceneNode, maximum: number): strin
     for (const descendant of graph.getDescendants(node.id)) yield directNodeText(descendant)
   }
   return boundedText(parts(), maximum)
-}
-
-export function canonicalMemoryObjectId(node: SceneNode): string {
-  const assigned = node.pluginData?.find(
-    (entry) => entry.pluginId === MEMORY_PLUGIN_ID && entry.key === CANONICAL_OBJECT_KEY
-  )?.value
-  return assigned?.trim() || node.id
-}
-
-export function canonicalMemorySourceNodeId(node: SceneNode): string | undefined {
-  return node.pluginData
-    ?.find(
-      (entry) => entry.pluginId === MEMORY_PLUGIN_ID && entry.key === CANONICAL_SOURCE_NODE_KEY
-    )
-    ?.value.trim()
-}
-
-export function canonicalMemoryDerivedFromId(node: SceneNode): string | undefined {
-  return node.pluginData
-    ?.find(
-      (entry) =>
-        entry.pluginId === MEMORY_PLUGIN_ID && entry.key === DERIVED_FROM_CANONICAL_OBJECT_KEY
-    )
-    ?.value.trim()
-}
-
-export type CanonicalMemoryObjectMetadata = {
-  canonicalObjectId?: string
-  derivedFromCanonicalObjectId?: string
-  sourceNodeId?: string
-}
-
-export function canonicalMemoryObjectPluginData(
-  node: Pick<SceneNode, 'pluginData'>,
-  metadata: CanonicalMemoryObjectMetadata
-): SceneNode['pluginData'] {
-  const pluginData = node.pluginData.filter(
-    (entry) =>
-      !(
-        entry.pluginId === MEMORY_PLUGIN_ID &&
-        (entry.key === CANONICAL_OBJECT_KEY ||
-          entry.key === CANONICAL_SOURCE_NODE_KEY ||
-          entry.key === DERIVED_FROM_CANONICAL_OBJECT_KEY)
-      )
-  )
-  if (metadata.canonicalObjectId) {
-    pluginData.push({
-      key: CANONICAL_OBJECT_KEY,
-      pluginId: MEMORY_PLUGIN_ID,
-      value: metadata.canonicalObjectId
-    })
-  }
-  if (metadata.sourceNodeId) {
-    pluginData.push({
-      key: CANONICAL_SOURCE_NODE_KEY,
-      pluginId: MEMORY_PLUGIN_ID,
-      value: metadata.sourceNodeId
-    })
-  }
-  if (metadata.derivedFromCanonicalObjectId) {
-    pluginData.push({
-      key: DERIVED_FROM_CANONICAL_OBJECT_KEY,
-      pluginId: MEMORY_PLUGIN_ID,
-      value: metadata.derivedFromCanonicalObjectId
-    })
-  }
-  return pluginData
 }
 
 function indexBoardMemory(graph: SceneGraph): MemoryIndex {

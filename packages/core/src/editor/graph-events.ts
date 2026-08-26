@@ -62,10 +62,7 @@ export type RendererInvalidation = {
   paragraphCache: boolean
 }
 
-export function rendererInvalidationForChanges(
-  changes: Partial<SceneNode>,
-  options: { preview: boolean }
-): RendererInvalidation {
+export function rendererInvalidationForChanges(changes: Partial<SceneNode>): RendererInvalidation {
   const keys = Object.keys(changes) as (keyof SceneNode)[]
   const geometryCache = keys.some((key) => GEOMETRY_CACHE_KEYS.has(key))
   const nodePicture = keys.some((key) => !NODE_PICTURE_STABLE_KEYS.has(key))
@@ -77,10 +74,9 @@ function invalidateRenderersForChange(
   renderers: Iterable<SkiaRenderer>,
   graph: SceneGraph,
   id: string,
-  changes: Partial<SceneNode>,
-  invalidateNodePicture: boolean
+  changes: Partial<SceneNode>
 ) {
-  const invalidation = rendererInvalidationForChanges(changes, { preview: !invalidateNodePicture })
+  const invalidation = rendererInvalidationForChanges(changes)
   for (const renderer of renderers) {
     if (invalidation.geometryCache) renderer.invalidateVectorPath(id)
     if (invalidation.nodePicture) renderer.invalidateNodePicture(id)
@@ -103,21 +99,14 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
   let unbindGraphEvents: (() => void) | null = null
 
   function onNodeUpdated(id: string, changes: Partial<SceneNode>) {
-    invalidateRenderersForChange(options.getRenderers(), options.getGraph(), id, changes, true)
+    invalidateRenderersForChange(options.getRenderers(), options.getGraph(), id, changes)
     options.emitEditorEvent('node:updated', id, changes)
     options.scheduleComponentSync(id)
     options.requestRender()
   }
 
   function onNodePreviewUpdated(id: string, changes: Partial<SceneNode>) {
-    const { nodePicture } = rendererInvalidationForChanges(changes, { preview: true })
-    invalidateRenderersForChange(
-      options.getRenderers(),
-      options.getGraph(),
-      id,
-      changes,
-      nodePicture
-    )
+    invalidateRenderersForChange(options.getRenderers(), options.getGraph(), id, changes)
     options.emitEditorEvent('node:previewUpdated', id, changes)
   }
 

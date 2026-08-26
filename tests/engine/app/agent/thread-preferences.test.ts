@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { AgentConversationThread } from '@/app/agent-chat/client'
+import type { AgentConversationThread } from '@/app/agent-chat/conversations'
 import {
   agentConversationCopyText,
   agentConversationDisplayTitle,
@@ -13,6 +13,7 @@ import {
   setAgentConversationPinned,
   setAgentConversationTitle,
   setAgentConversationUnread,
+  shouldMarkFinishedConversationUnread,
   sortAgentConversationThreads
 } from '@/app/agent-chat/thread-preferences'
 
@@ -73,6 +74,30 @@ describe('agent conversation preferences', () => {
     setAgentConversationTitle(first, '')
     setAgentConversationUnread(first, false)
     setAgentConversationArchived(first, false)
+  })
+
+  test('marks a background completion unread but not a task already open', () => {
+    expect(
+      shouldMarkFinishedConversationUnread({
+        open: false,
+        previousState: 'running',
+        state: 'completed'
+      })
+    ).toBe(true)
+    expect(
+      shouldMarkFinishedConversationUnread({
+        open: true,
+        previousState: 'running',
+        state: 'completed'
+      })
+    ).toBe(false)
+    expect(
+      shouldMarkFinishedConversationUnread({
+        open: false,
+        previousState: 'completed',
+        state: 'completed'
+      })
+    ).toBe(false)
   })
 
   test('keeps tasks ordered by the last user message, not later agent turns', () => {

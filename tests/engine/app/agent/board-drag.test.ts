@@ -93,7 +93,7 @@ describe('agent conversation Board drag', () => {
     expect(sidebar).toContain('data-test-id="agent-selected-header-title"')
     expect(sidebar).toContain('rounded-[8px]')
     expect(sidebar).toContain('hover:bg-hover')
-    expect(sidebar).toContain('@dragstart="beginSelectedThreadDrag"')
+    expect(sidebar).not.toContain('beginSelectedThreadDrag')
     expect(sidebar).toContain('@pointerdown="armSelectedThreadPointerDrag"')
     expect(sidebar).toContain('cursor-grab')
     expect(sidebar).toContain('active:cursor-grabbing')
@@ -119,6 +119,8 @@ describe('agent conversation Board drag', () => {
     expect(drag).toContain('pointerup')
     expect(canvas).not.toContain('isDraggingAgentConversation')
     expect(sidebar).toContain('@pointerdown="armNewThreadPointerDrag"')
+    expect(sidebar).not.toContain('beginNewThreadDrag')
+    expect(sidebar).not.toContain('beginSelectedThreadDrag')
     expect(sidebar).toContain('@pointerdown="armThreadPointerDrag($event, thread)"')
     expect(sidebar).toContain('@pointerdown="armSelectedThreadPointerDrag"')
   })
@@ -129,23 +131,16 @@ describe('agent conversation Board drag', () => {
       threadId: 'thread-memory',
       title: 'Remembered chat'
     }
-    const dataTransfer = {
+    const dataTransfer = Object.assign(Object.create(null) as DataTransfer, {
       dropEffect: 'none',
       effectAllowed: 'none',
       getData: () => '',
-      setData() {},
-      setDragImage() {},
+      setData: () => undefined,
+      setDragImage: () => undefined,
       types: []
-    }
-    writeAgentConversationDrag(
-      { dataTransfer } as unknown as DragEvent,
-      payload
-    )
-    expect(
-      resolveAgentConversationDrag({
-        getData: () => '',
-        types: []
-      } as unknown as DataTransfer)
-    ).toEqual(payload)
+    })
+    const dragEvent = Object.assign(Object.create(null) as DragEvent, { dataTransfer })
+    writeAgentConversationDrag(dragEvent, payload)
+    expect(resolveAgentConversationDrag(dataTransfer)).toEqual(payload)
   })
 })

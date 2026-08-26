@@ -29,8 +29,9 @@ const { menu: t } = useI18n()
         @pointerdown.stop
         @click.stop="emit('toggleLock')"
       >
-        <icon-lucide-lock v-if="node.locked" class="size-3 text-surface" />
-        <icon-lucide-unlock
+        <IconlyIcon name="lock" v-if="node.locked" class="size-3 text-surface" />
+        <IconlyIcon
+          name="unlock"
           v-else
           class="size-3 text-surface/70 opacity-0 group-hover/row:opacity-100"
         />

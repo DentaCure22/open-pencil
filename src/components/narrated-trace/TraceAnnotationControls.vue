@@ -31,6 +31,10 @@ import Tip from '@/components/ui/Tip.vue'
 
 import type { NarratedTraceActiveAnnotationTool } from '@/app/narrated-trace'
 
+const { orientation = 'vertical' } = defineProps<{
+  orientation?: 'horizontal' | 'vertical'
+}>()
+
 const store = useEditorStore()
 
 const inkLabel = `Ink intent tool (${NARRATED_TRACE_ANNOTATION_SHORTCUTS.ink.label})`
@@ -80,8 +84,11 @@ if (IS_BROWSER) useEventListener(window, 'pagehide', disposeNarratedTraceMic)
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-0.5">
-    <Tip :label="inkLabel" side="right">
+  <div
+    class="flex items-center gap-0.5"
+    :class="orientation === 'vertical' ? 'flex-col' : 'flex-row'"
+  >
+    <Tip :label="inkLabel" :side="orientation === 'vertical' ? 'right' : 'top'">
       <ToolButton
         data-test-id="narrated-trace-ink-tool"
         :icon="IconInk"
@@ -91,7 +98,7 @@ if (IS_BROWSER) useEventListener(window, 'pagehide', disposeNarratedTraceMic)
         @click="selectTool('ink')"
       />
     </Tip>
-    <Tip :label="focusLabel" side="right">
+    <Tip :label="focusLabel" :side="orientation === 'vertical' ? 'right' : 'top'">
       <ToolButton
         data-test-id="narrated-trace-focus-tool"
         :data-mic-phase="narratedTraceMicPhase"
@@ -103,7 +110,7 @@ if (IS_BROWSER) useEventListener(window, 'pagehide', disposeNarratedTraceMic)
         @click="selectTool('focus')"
       />
     </Tip>
-    <Tip :label="micLabel" side="right">
+    <Tip :label="micLabel" :side="orientation === 'vertical' ? 'right' : 'top'">
       <ToolButton
         data-test-id="narrated-trace-mic-toggle"
         :data-mic-phase="narratedTraceMicPhase"

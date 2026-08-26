@@ -1,0 +1,66 @@
+{
+  "source": "artifacts/product-design/work-map-project-icons/working-plane/closed-cell.png",
+  "source_pixels": [
+    887,
+    887
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    413,
+    75,
+    612,
+    790
+  ],
+  "trimmed_pixels": [
+    199,
+    715
+  ],
+  "prepared_pixels": [
+    831,
+    831
+  ],
+  "padding_fraction": 0.08,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-project/working-plane-closed-master.png",
+      "pixels": [
+        831,
+        831
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-project/working-plane-closed.png",
+      "pixels": [
+        20,
+        20
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-project/working-plane-closed@2x.png",
+      "pixels": [
+        40,
+        40
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-project/working-plane-closed@3x.png",
+      "pixels": [
+        60,
+        60
+      ]
+    }
+  ],
+  "warnings": []
+}

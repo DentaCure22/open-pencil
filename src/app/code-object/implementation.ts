@@ -8,7 +8,7 @@ import {
   parseCodeObjectDocument,
   resolveCodeObjectUiBlock,
   serializeCodeObjectPluginData,
-  type CodeObjectDocument,
+  type CodeObjectDocument as CoreCodeObjectDocument,
   type CodeObjectSurface,
   type CodeObjectViewportPresetId
 } from '@open-pencil/core/code-object'
@@ -46,8 +46,6 @@ import {
 } from './saved-sources'
 
 export { CODE_OBJECT_SCHEMA_VERSION } from '@open-pencil/core/code-object'
-/** @deprecated Read compatibility only. New code uses CODE_OBJECT_SCHEMA_VERSION. */
-export const REACT_SHAPE_SCHEMA_VERSION = CODE_OBJECT_SCHEMA_VERSION
 
 export type EarthSignalsState = {
   autoRotate: boolean
@@ -168,7 +166,7 @@ export type TrustedWebAppLaunchMetadata = {
 type OpenPencilCodeDocument<
   Component extends string,
   State extends Record<string, unknown>
-> = CodeObjectDocument<Component, State, CodeObjectBoardPermission>
+> = CoreCodeObjectDocument<Component, State, CodeObjectBoardPermission>
 
 export type EarthSignalsDocument = OpenPencilCodeDocument<'earth-signals', EarthSignalsState>
 export type OrbitLabDocument = OpenPencilCodeDocument<'orbit-lab', OrbitLabState>
@@ -223,7 +221,7 @@ export type SmylrProductionAppDocument = OpenPencilCodeDocument<
   }
 }
 
-export type ReactShapeDocument =
+export type CodeObjectDocument =
   | AgentConversationTerminalDocument
   | CodeStarterDocument
   | UserCodeObjectDocument
@@ -238,10 +236,10 @@ export type ReactShapeDocument =
   | ExternalLiveSurfaceDocument
   | SmylrFlowScreenDocument
   | SmylrProductionAppDocument
-export type ReactShapeState = ReactShapeDocument['state']
-export type ReactShapePresetId =
+export type CodeObjectState = CodeObjectDocument['state']
+export type CodeObjectPresetId =
   | Exclude<
-      ReactShapeDocument['component'],
+      CodeObjectDocument['component'],
       | 'code-starter'
       | 'external-live-surface'
       | 'pdf-document'
@@ -254,9 +252,9 @@ export type ReactShapePresetId =
   | 'financial-dashboard'
   | 'interactive-form'
 
-export type CreateReactShapeInput = {
+export type CreateCodeObjectInput = {
   cornerRadius?: number
-  document: ReactShapeDocument
+  document: CodeObjectDocument
   height: number
   name: string
   parentId?: string
@@ -307,11 +305,11 @@ export function createExternalLiveSurfaceDocument(input: {
   }
 }
 
-export type ReactShapePreset = {
+export type CodeObjectPreset = {
   cornerRadius: number
   description: string
   height: number
-  id: ReactShapePresetId
+  id: CodeObjectPresetId
   label: string
   width: number
 }
@@ -637,7 +635,7 @@ const FINANCIAL_DASHBOARD_UI_BLOCK = resolveCodeObjectUiBlock({
   block: 'financial-dashboard'
 })
 
-export const REACT_SHAPE_PRESETS = [
+export const CODE_OBJECT_PRESETS = [
   {
     cornerRadius: 12,
     description: 'A TypeScript/TSX Code Object with persisted interactive state',
@@ -726,12 +724,12 @@ export const REACT_SHAPE_PRESETS = [
     label: 'Form',
     width: 620
   }
-] as const satisfies readonly ReactShapePreset[]
+] as const satisfies readonly CodeObjectPreset[]
 
-export function reactShapePresetsForQuery(query: string) {
+export function codeObjectPresetsForQuery(query: string) {
   const normalized = query.trim().toLowerCase()
-  if (!normalized) return REACT_SHAPE_PRESETS
-  return REACT_SHAPE_PRESETS.filter((preset) =>
+  if (!normalized) return CODE_OBJECT_PRESETS
+  return CODE_OBJECT_PRESETS.filter((preset) =>
     [preset.label, preset.description, 'code object'].some((value) =>
       value.toLowerCase().includes(normalized)
     )
@@ -947,19 +945,14 @@ export function createSmylrFlowScreenDocument(input: {
   }
 }
 
-export function createSmylrProductionAppDocument(input: {
-  label: string
-  route: string
-  viewportPreset?: CodeObjectViewportPresetId
-}): SmylrProductionAppDocument {
-  return createSmylrTrustedWebAppDocument<CodeObjectBoardPermission>(input)
-}
+export const createSmylrProductionAppDocument =
+  createSmylrTrustedWebAppDocument<CodeObjectBoardPermission>
 
 function normalizeSmylrProductionAppState(): SmylrProductionAppState {
   return { view: 'live' }
 }
 
-function documentForPreset(id: ReactShapePresetId): ReactShapeDocument {
+function documentForPreset(id: CodeObjectPresetId): CodeObjectDocument {
   if (id === 'user-code') return createUserCodeObjectDocument()
   if (id === 'board-remote') {
     return createUserCodeObjectDocument({
@@ -1126,7 +1119,7 @@ function normalizeCodeObjectBoardPermissions(value: unknown): CodeObjectBoardPer
     : permissions
 }
 
-function materializeFrameOwnedFields<T extends ReactShapeDocument>(
+function materializeFrameOwnedFields<T extends CodeObjectDocument>(
   parsed: Record<string, unknown>,
   fallback: T
 ): T {
@@ -1386,7 +1379,7 @@ function normalizeSmylrFlowScreenState(
   }
 }
 
-function agentReactShapeDocument(parsed: Record<string, unknown>): ReactShapeDocument | null {
+function agentCodeObjectDocument(parsed: Record<string, unknown>): CodeObjectDocument | null {
   if (parsed.component === 'agent-conversation-terminal') {
     const workerConversationId = recordString(parsed, 'workerConversationId')
     if (!workerConversationId) return null
@@ -1408,7 +1401,7 @@ function agentReactShapeDocument(parsed: Record<string, unknown>): ReactShapeDoc
   return null
 }
 
-function trustedSurfaceDocument(parsed: Record<string, unknown>): ReactShapeDocument | null {
+function trustedSurfaceDocument(parsed: Record<string, unknown>): CodeObjectDocument | null {
   if (parsed.component !== 'smylr-production-app') return null
   const label = recordString(parsed, 'label')
   const route = recordString(parsed, 'route')
@@ -1441,10 +1434,10 @@ function externalLiveSurfaceDocument(
   )
 }
 
-function standardReactShapeDocument(
+function standardCodeObjectDocument(
   parsed: Record<string, unknown>,
   state: Record<string, unknown>
-): ReactShapeDocument | null {
+): CodeObjectDocument | null {
   if (parsed.component === 'user-code') {
     return materializeFrameOwnedFields(
       parsed,
@@ -1522,7 +1515,7 @@ function standardReactShapeDocument(
  */
 function userCodeRecoveryDocument(
   parsed: NonNullable<ReturnType<typeof parseCodeObjectDocument>>
-): ReactShapeDocument | null {
+): CodeObjectDocument | null {
   if (isKnownCodeObjectComponent(parsed.component)) return null
   const source = recordString(parsed, 'source')
   if (!source) return null
@@ -1538,16 +1531,16 @@ function userCodeRecoveryDocument(
   )
 }
 
-export function reactShapeDocument(node: SceneNode | null | undefined): ReactShapeDocument | null {
+export function codeObjectDocument(node: SceneNode | null | undefined): CodeObjectDocument | null {
   const parsed = parseCodeObjectDocument(node)
   if (!parsed) return null
-  const agent = agentReactShapeDocument(parsed)
+  const agent = agentCodeObjectDocument(parsed)
   if (agent) return agent
   const trustedSurface = trustedSurfaceDocument(parsed)
   if (trustedSurface) return trustedSurface
   const externalSurface = externalLiveSurfaceDocument(parsed)
   if (externalSurface) return externalSurface
-  const standard = standardReactShapeDocument(parsed, parsed.state)
+  const standard = standardCodeObjectDocument(parsed, parsed.state)
   if (standard) return standard
   if (parsed.component !== 'smylr-flow-screen') return userCodeRecoveryDocument(parsed)
   const flowId = recordString(parsed, 'flowId')
@@ -1568,33 +1561,33 @@ export function reactShapeDocument(node: SceneNode | null | undefined): ReactSha
   })
 }
 
-export function isReactShapeFrame(node: SceneNode | null | undefined): node is SceneNode {
-  return reactShapeDocument(node) !== null
+export function isCodeObjectFrame(node: SceneNode | null | undefined): node is SceneNode {
+  return codeObjectDocument(node) !== null
 }
 
-export const reactShapePluginData = serializeCodeObjectPluginData
+export const codeObjectPluginData = serializeCodeObjectPluginData
 
-export function setReactShapeDocument(
+export function setCodeObjectDocument(
   graph: SceneGraph,
   nodeId: string,
-  document: ReactShapeDocument
+  document: CodeObjectDocument
 ) {
   const node = graph.getNode(nodeId)
   if (node?.type !== 'FRAME') return false
-  const nextPluginData = reactShapePluginData(node, document)
+  const nextPluginData = codeObjectPluginData(node, document)
   if (JSON.stringify(nextPluginData) === JSON.stringify(node.pluginData)) return false
   graph.updateNode(node.id, { pluginData: nextPluginData })
   return true
 }
 
-export function materializeReactShapeDocument(
+export function materializeCodeObjectDocument(
   store: EditorStore,
   nodeId: string
-): ReactShapeDocument | null {
+): CodeObjectDocument | null {
   const node = store.graph.getNode(nodeId)
-  const document = reactShapeDocument(node)
+  const document = codeObjectDocument(node)
   if (!node || !document) return null
-  const pluginData = reactShapePluginData(node, document)
+  const pluginData = codeObjectPluginData(node, document)
   if (JSON.stringify(pluginData) === JSON.stringify(node.pluginData)) return document
   store.updateNodeWithUndo(
     node.id,
@@ -1613,7 +1606,7 @@ function restoreSceneNode(store: EditorStore, snapshot: SceneNode) {
   })
 }
 
-function createReactShapeFrame(store: EditorStore, input: CreateReactShapeInput) {
+function createCodeObjectFrame(store: EditorStore, input: CreateCodeObjectInput) {
   const pageId = store.state.currentPageId
   const parentId =
     input.parentId &&
@@ -1638,14 +1631,14 @@ function createReactShapeFrame(store: EditorStore, input: CreateReactShapeInput)
     y: input.y ?? 88
   })
   store.graph.updateNode(frame.id, {
-    pluginData: reactShapePluginData(frame, input.document)
+    pluginData: codeObjectPluginData(frame, input.document)
   })
   return store.graph.getNode(frame.id) ?? frame
 }
 
-export function createReactShape(store: EditorStore, input: CreateReactShapeInput) {
+export function createCodeObject(store: EditorStore, input: CreateCodeObjectInput) {
   const previousSelection = new Set(store.state.selectedIds)
-  const frame = createReactShapeFrame(store, input)
+  const frame = createCodeObjectFrame(store, input)
   const snapshot = structuredClone(store.graph.getNode(frame.id) ?? frame)
 
   store.undo.push({
@@ -1706,7 +1699,7 @@ export function createOpenSourceWorkspaceKit(store: EditorStore, position: Parti
     y: preferred.y
   }
   const previousSelection = [...store.state.selectedIds]
-  const architecture = createReactShapeFrame(store, {
+  const architecture = createCodeObjectFrame(store, {
     cornerRadius: 0,
     document: createOpenSourceWorkspaceDocument(openSourceArchitectureState()),
     height: OPEN_SOURCE_KIT.height,
@@ -1715,7 +1708,7 @@ export function createOpenSourceWorkspaceKit(store: EditorStore, position: Parti
     x: origin.x,
     y: origin.y
   })
-  const kanban = createReactShapeFrame(store, {
+  const kanban = createCodeObjectFrame(store, {
     cornerRadius: 0,
     document: createOpenSourceWorkspaceDocument(openSourceKanbanState()),
     height: OPEN_SOURCE_KIT.height,
@@ -1747,17 +1740,17 @@ export function createOpenSourceWorkspaceKit(store: EditorStore, position: Parti
   return architecture
 }
 
-export function createReactShapeFromPreset(
+export function createCodeObjectFromPreset(
   store: EditorStore,
-  id: ReactShapePresetId,
+  id: CodeObjectPresetId,
   position: Partial<Vector> = {}
 ) {
-  const preset = REACT_SHAPE_PRESETS.find((candidate) => candidate.id === id)
+  const preset = CODE_OBJECT_PRESETS.find((candidate) => candidate.id === id)
   if (!preset) return null
   if (id === 'open-source-workspace') {
     return createOpenSourceWorkspaceKit(store, position)
   }
-  return createReactShape(store, {
+  return createCodeObject(store, {
     cornerRadius: preset.cornerRadius,
     document: documentForPreset(preset.id),
     height: preset.height,
@@ -1768,9 +1761,9 @@ export function createReactShapeFromPreset(
 }
 
 function updatedInteractiveDocument(
-  document: ReactShapeDocument,
-  state: ReactShapeState
-): ReactShapeDocument | null {
+  document: CodeObjectDocument,
+  state: CodeObjectState
+): CodeObjectDocument | null {
   if (document.component === 'earth-signals' && 'autoRotate' in state) {
     return { ...document, state: normalizeEarthSignalsState(state) }
   }
@@ -1793,9 +1786,9 @@ function updatedInteractiveDocument(
 }
 
 function updatedArtifactDocument(
-  document: ReactShapeDocument,
-  state: ReactShapeState
-): ReactShapeDocument | null {
+  document: CodeObjectDocument,
+  state: CodeObjectState
+): CodeObjectDocument | null {
   if (document.component === 'office-document' && 'seedText' in state) {
     return { ...document, state: normalizeOfficeDocumentState(state) }
   }
@@ -1817,9 +1810,9 @@ function updatedArtifactDocument(
   return null
 }
 
-export function updateReactShapeState(store: EditorStore, nodeId: string, state: ReactShapeState) {
+export function updateCodeObjectState(store: EditorStore, nodeId: string, state: CodeObjectState) {
   const node = store.graph.getNode(nodeId)
-  const document = reactShapeDocument(node)
+  const document = codeObjectDocument(node)
   if (!node || !document) return false
 
   const nextDocument =
@@ -1829,13 +1822,13 @@ export function updateReactShapeState(store: EditorStore, nodeId: string, state:
   }
   store.updateNodeWithUndo(
     node.id,
-    { pluginData: reactShapePluginData(node, nextDocument) },
+    { pluginData: codeObjectPluginData(node, nextDocument) },
     'Update code object'
   )
   return true
 }
 
-export function reactShapeViewportInsets() {
+export function codeObjectViewportInsets() {
   const insets = editorViewportInsets()
   return { ...insets, top: (insets.top ?? 14) + 8 }
 }

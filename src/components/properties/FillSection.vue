@@ -58,7 +58,7 @@ function updateFillHex(
           data-test-id="fill-section-add"
           @click="actions.add({ ...fillCtx.defaultFill })"
         >
-          <icon-lucide-plus class="size-3.5" />
+          <IconlyIcon name="plus" class="size-3.5" />
         </IconButton>
       </template>
       <p v-if="isMixed" class="text-[11px] text-muted">{{ panels.mixedFillsHelp }}</p>

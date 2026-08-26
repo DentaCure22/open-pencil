@@ -64,10 +64,22 @@ function targetLine(event: NarratedTraceEvent): string | null {
 
 function timelineLine(session: NarratedTraceSession, event: NarratedTraceEvent): string {
   const text = compactContextField(eventText(session, event))
+  const reference = event.origin?.reference ? `${event.origin.reference} — ` : ''
   const targetName = event.target?.name
   const targetSuffix =
     targetName && !text.toLowerCase().includes(targetName.toLowerCase()) ? ` — ${targetName}` : ''
-  return `- ${formatNarratedTraceTime(event.atMs)} — ${text}${targetSuffix}`
+  return `- ${formatNarratedTraceTime(event.atMs)} — ${reference}${text}${targetSuffix}`
+}
+
+function episodeLine(session: NarratedTraceSession, episodeIndex: number) {
+  const episode = session.episodes?.[episodeIndex]
+  if (!episode) return null
+  const label = episode.label?.trim() || `${episode.kind} activity`
+  const duration =
+    episode.endedAtMs === undefined
+      ? 'active'
+      : formatNarratedTraceTime(Math.max(0, episode.endedAtMs - episode.startedAtMs))
+  return `- ${episode.kind} — ${compactContextField(label)} — ${duration}`
 }
 
 function isMeaningfulChange(event: NarratedTraceEvent, changeIndex: number): boolean {
@@ -180,6 +192,9 @@ export function buildNarratedContextMarkdown(session: NarratedTraceSession | nul
     'timeline moment'
   )
   const evidenceLines = events.map(evidenceLine).filter((line): line is string => line !== null)
+  const episodeLines = (session.episodes ?? [])
+    .map((_, index) => episodeLine(session, index))
+    .filter((line): line is string => line !== null)
   const reviewFlags = events.flatMap((event) => {
     const text = eventText(compactedSession, event)
     if (event.kind !== 'transcript' || !CANCELLATION_PATTERN.test(text)) return []
@@ -194,8 +209,10 @@ export function buildNarratedContextMarkdown(session: NarratedTraceSession | nul
     '# OpenPencil Narrated Context',
     '',
     ...(session.title?.trim() ? [`Trace: ${compactContextField(session.title)}`] : []),
+    ...(session.tag ? [`Session tag: #${session.tag}`] : []),
     `Session started: ${session.startedAt}`,
     `Duration: ${formatNarratedTraceTime(session.durationMs)}`,
+    ...(episodeLines.length > 0 ? ['', '## Episodes', ...episodeLines] : []),
     '',
     '## Relevant targets',
     ...(targetLines.length > 0 ? targetLines : ['- No semantic targets were included.']),

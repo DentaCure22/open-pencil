@@ -5,7 +5,8 @@ import {
   previewAgentConversation,
   type AgentExtensionUiRequest,
   type AgentConversationThread,
-  type AgentDispatchRequest
+  type AgentDispatchRequest,
+  type AgentTodoDraftRequest
 } from '#mcp/agent-router/contracts'
 import {
   readAgentConversationHistory,
@@ -13,15 +14,19 @@ import {
 } from '#mcp/agent-router/conversation-history'
 import { AgentJobTracker, type AgentJobRecord } from '#mcp/agent-router/jobs'
 
-import type { AntigravityUsageCursor } from './antigravity-usage'
-import { closingTextFromAssistantMessage } from './closing-text'
 import { ConversationMediaStore } from './conversation-media'
 import { piEventText, piToolOutputFailed } from './events'
 import { recoverDurableMediaResults } from './media-recovery'
+import {
+  DefaultPiProviderRuntime,
+  type PiProviderRuntime,
+  type PiProviderTurnCursor
+} from './providers'
+import { closingTextFromAssistantMessage } from './providers/closing'
 import { migrateProviderActivityHistory } from './reasoning-history'
 import type { PiRpcProcess, PiRpcRecord } from './rpc-process'
-import { hydrateEstimatedAntigravityTelemetry } from './telemetry'
 import { compactAgentThreadMemory } from './thread-memory'
+import type { TurnWorkspaceSnapshot } from './turn-changes'
 import {
   parseUsageTokens,
   usageTokensAreZero,
@@ -40,13 +45,12 @@ export type ValidatedPiRequest = AgentDispatchRequest & {
 
 export type PiLaunch =
   | { forkedFromId: string; kind: 'fork'; sessionId: string }
-  | { forkedFromId?: string; kind: 'new' }
+  | { forkedFromId?: string; kind: 'new'; sessionId?: string }
   | { kind: 'resume'; sessionId: string }
 
 export type PiSession = {
   aborting: 'stop' | null
   activeJobId: string | null
-  antigravityUsageCursor: AntigravityUsageCursor | null
   configuredEffort: string
   configuredModel: string
   eventTurnKey: string | null
@@ -61,10 +65,13 @@ export type PiSession = {
   lastToolError: string
   lastTurnUsage: { source: UsageSource; tokens: UsageTokens } | null
   pendingUiRequests: Map<string, AgentExtensionUiRequest>
+  providerTurnCursor: PiProviderTurnCursor | null
   probeInFlight: boolean
   process: PiRpcProcess
   recovering: boolean
   settling: boolean
+  turnPromptMessageId: string | null
+  turnWorkspaceSnapshot: TurnWorkspaceSnapshot | null
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -151,9 +158,19 @@ function captureTurnUsage(session: PiSession, event: PiRpcRecord): void {
   const message = assistantMessage(event)
   if (!message || !isRecord(message.usage)) return
   const tokens = parseUsageTokens(message.usage)
+  const previous = session.lastTurnUsage
   session.lastTurnUsage = {
-    source: usageTokensAreZero(tokens) ? 'estimated' : 'pi-event',
-    tokens
+    source:
+      previous?.source === 'pi-event' || !usageTokensAreZero(tokens) ? 'pi-event' : 'estimated',
+    tokens: previous
+      ? {
+          cacheRead: previous.tokens.cacheRead + tokens.cacheRead,
+          cacheWrite: previous.tokens.cacheWrite + tokens.cacheWrite,
+          input: previous.tokens.input + tokens.input,
+          output: previous.tokens.output + tokens.output,
+          reasoning: previous.tokens.reasoning + tokens.reasoning
+        }
+      : tokens
   }
 }
 
@@ -248,7 +265,6 @@ export function createPiSession(
   return {
     aborting: null,
     activeJobId: null,
-    antigravityUsageCursor: null,
     configuredEffort: selection.effort,
     configuredModel: selection.model,
     eventTurnKey: null,
@@ -263,10 +279,13 @@ export function createPiSession(
     lastToolError: '',
     lastTurnUsage: null,
     pendingUiRequests: new Map(),
+    providerTurnCursor: null,
     probeInFlight: false,
     process,
     recovering: false,
-    settling: false
+    settling: false,
+    turnPromptMessageId: null,
+    turnWorkspaceSnapshot: null
   }
 }
 
@@ -280,6 +299,7 @@ export function createIdleForkThread(input: {
   recentUpdate: string
   sessionId: string | null
   task: string
+  title?: string
   toolScope?: AgentConversationThread['toolScope']
   workerId: string
 }): AgentConversationThread {
@@ -297,9 +317,42 @@ export function createIdleForkThread(input: {
     sessionId: input.sessionId,
     state: 'completed',
     task: input.task,
+    ...(input.title ? { title: input.title } : {}),
     toolScope: input.toolScope ?? 'general',
     updatedAt: input.now,
     workerId: input.workerId
+  }
+}
+
+export function createPiTodoDraftThread(
+  request: AgentTodoDraftRequest & { effort: string; model: string },
+  now: string,
+  workerId: string
+): AgentConversationThread {
+  return {
+    canFollowUp: true,
+    createdAt: now,
+    effort: request.effort,
+    id: request.threadId?.trim() || randomUUID(),
+    messages: [],
+    model: request.model,
+    recentUpdate: 'Ready to plan.',
+    sessionId: null,
+    state: 'completed',
+    task: request.brief.goal.trim(),
+    title: request.title.trim(),
+    todoDraft: {
+      brief: structuredClone(request.brief),
+      ...(request.createdByThreadId?.trim()
+        ? { createdByThreadId: request.createdByThreadId.trim() }
+        : {}),
+      kind: 'todo',
+      projectId: request.projectId.trim(),
+      todoId: request.todoId.trim()
+    },
+    toolScope: 'board-worker',
+    updatedAt: now,
+    workerId
   }
 }
 
@@ -311,6 +364,7 @@ export function createPiThread(
 ): AgentConversationThread {
   const id = randomUUID()
   return {
+    activeTurnStartedAt: now,
     canFollowUp: true,
     createdAt: now,
     effort: request.effort,
@@ -341,12 +395,15 @@ export class PiRouterState {
   private persistenceTimer: ReturnType<typeof setTimeout> | null = null
   private readonly persistedSignatures = new Map<string, string>()
 
-  constructor(private readonly historyPath: string | undefined) {
+  constructor(
+    private readonly historyPath: string | undefined,
+    providers: PiProviderRuntime = new DefaultPiProviderRuntime()
+  ) {
     this.mediaStore = new ConversationMediaStore(historyPath)
     this.threads = readAgentConversationHistory(historyPath).map((thread) => {
       migrateProviderActivityHistory(thread)
       compactAgentThreadMemory(thread)
-      hydrateEstimatedAntigravityTelemetry(thread)
+      providers.hydrateThread(thread)
       return thread.state === 'running'
         ? {
             ...thread,
@@ -378,9 +435,15 @@ export class PiRouterState {
     return this.jobs.job(jobId)
   }
 
-  requireThread(threadId: string): AgentConversationThread {
+  requireThread(
+    threadId: string,
+    options: { allowTodoDraft?: boolean } = {}
+  ): AgentConversationThread {
     const thread = this.threads.find((candidate) => candidate.id === threadId)
-    if (!thread?.canFollowUp || !thread.sessionId) {
+    if (
+      !thread?.canFollowUp ||
+      (!thread.sessionId && !(options.allowTodoDraft && thread.todoDraft))
+    ) {
       throw new Error('This Pi conversation cannot preserve context yet.')
     }
     return thread
@@ -404,6 +467,10 @@ export class PiRouterState {
     this.recoverMediaResults()
     const thread = this.threads.find((candidate) => candidate.id === threadId)
     return thread ? this.mediaStore.materialize(thread) : null
+  }
+
+  continuationImagePaths(thread: AgentConversationThread): string[] {
+    return this.mediaStore.inputImagePaths(thread)
   }
 
   async waitForJob(jobId: string, timeoutMs: number): Promise<AgentJobRecord | null> {

@@ -26,6 +26,22 @@ describe('viewport fitting', () => {
     expect(previousZoom).toBe(1)
   })
 
+  test('keeps the same canvas point centered when zooming to a level', () => {
+    const graph = new SceneGraph()
+    const editor = createEditor({
+      graph,
+      getViewportSize: () => ({ height: 700, width: 1000 }),
+      skipInitialGraphSetup: true
+    })
+    editor.setViewport({ panX: 100, panY: -50, zoom: 0.5 })
+    const centerBefore = editor.screenToCanvas(500, 350)
+
+    editor.zoomToLevel(2)
+
+    expect(editor.screenToCanvas(500, 350)).toEqual(centerBefore)
+    expect(editor.state).toMatchObject({ panX: -1100, panY: -1250, zoom: 2 })
+  })
+
   test('centers content inside the unobstructed viewport insets', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]

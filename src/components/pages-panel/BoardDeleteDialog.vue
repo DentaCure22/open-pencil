@@ -35,7 +35,7 @@ const cls = useDialogUI({
           <div
             class="flex size-8 shrink-0 items-center justify-center rounded-full bg-red-400/10 text-red-300"
           >
-            <icon-lucide-trash-2 class="size-4" />
+            <IconlyIcon name="delete" class="size-4" />
           </div>
           <div class="min-w-0 pt-0.5">
             <AlertDialogTitle :class="cls.title"> Delete “{{ boardLabel }}”? </AlertDialogTitle>

@@ -13,7 +13,8 @@ import {
   TASK_FLOW_RECORD_FINDING_APP_FLOW,
   TECHNICAL_FLOW_SAVE_FINDING_APP_FLOW,
   USER_JOURNEY_COMPLETE_DENTAL_EXAM_APP_FLOW,
-  parseAppScreenFlowMarkdown
+  parseAppScreenFlowMarkdown,
+  type AppScreenFlowDefinition
 } from '@/app/smylr-production/app-flow/model'
 import { APP_FLOW_COLOR } from '@/app/smylr-production/app-flow/primitives'
 import {
@@ -30,6 +31,8 @@ import {
   TECHNICAL_FLOW_SAVE_FINDING_MERMAID_SOURCE
 } from '@/app/smylr-production/technical-flow'
 
+import { assertScreenFlowRouting } from './app-screen-flow-routing'
+
 function createFlowFixture() {
   const graph = new SceneGraph()
   const page = graph.getPages()[0]
@@ -45,13 +48,6 @@ function createFlowFixture() {
 
 type TestBounds = Pick<SceneNode, 'height' | 'width' | 'x' | 'y'>
 
-type TestSegment = {
-  axis: 'horizontal' | 'vertical'
-  end: number
-  fixed: number
-  start: number
-}
-
 function overlaps(left: TestBounds, right: TestBounds) {
   return (
     left.x < right.x + right.width &&
@@ -59,37 +55,6 @@ function overlaps(left: TestBounds, right: TestBounds) {
     left.y < right.y + right.height &&
     left.y + left.height > right.y
   )
-}
-
-function absoluteBounds(parent: SceneNode, child: SceneNode): TestBounds {
-  return { ...child, x: parent.x + child.x, y: parent.y + child.y }
-}
-
-function vectorSegmentBounds(
-  parent: SceneNode,
-  vector: SceneNode,
-  segment: NonNullable<SceneNode['vectorNetwork']>['segments'][number]
-): TestBounds {
-  const network = vector.vectorNetwork
-  const start = network?.vertices[segment.start]
-  const end = network?.vertices[segment.end]
-  if (!start || !end) throw new Error('Vector route segment is missing an endpoint')
-  const controlStart = {
-    x: start.x + segment.tangentStart.x,
-    y: start.y + segment.tangentStart.y
-  }
-  const controlEnd = { x: end.x + segment.tangentEnd.x, y: end.y + segment.tangentEnd.y }
-  const points = [start, end, controlStart, controlEnd]
-  const minX = Math.min(...points.map((point) => point.x))
-  const minY = Math.min(...points.map((point) => point.y))
-  const maxX = Math.max(...points.map((point) => point.x))
-  const maxY = Math.max(...points.map((point) => point.y))
-  return {
-    height: maxY - minY,
-    width: maxX - minX,
-    x: parent.x + vector.x + minX,
-    y: parent.y + vector.y + minY
-  }
 }
 
 function unionBounds(nodes: SceneNode[]): TestBounds {
@@ -114,39 +79,6 @@ function screenEvidenceShare(nodes: SceneNode[]) {
   const bounds = unionBounds(content)
   const screenArea = screens.reduce((sum, screen) => sum + screen.width * screen.height, 0)
   return screenArea / (bounds.width * bounds.height)
-}
-
-function segmentFromBounds(bounds: TestBounds): TestSegment {
-  return bounds.width >= bounds.height
-    ? {
-        axis: 'horizontal',
-        end: bounds.x + bounds.width,
-        fixed: bounds.y + bounds.height / 2,
-        start: bounds.x
-      }
-    : {
-        axis: 'vertical',
-        end: bounds.y + bounds.height,
-        fixed: bounds.x + bounds.width / 2,
-        start: bounds.y
-      }
-}
-
-function segmentsCross(left: TestSegment, right: TestSegment) {
-  if (left.axis === right.axis) {
-    return (
-      left.fixed === right.fixed &&
-      Math.min(left.end, right.end) > Math.max(left.start, right.start)
-    )
-  }
-  const horizontal = left.axis === 'horizontal' ? left : right
-  const vertical = left.axis === 'vertical' ? left : right
-  return (
-    vertical.fixed > horizontal.start &&
-    vertical.fixed < horizontal.end &&
-    horizontal.fixed > vertical.start &&
-    horizontal.fixed < vertical.end
-  )
 }
 
 describe('Dental Chart Markdown journey lanes', () => {
@@ -645,192 +577,13 @@ describe('Dental Chart Markdown journey lanes', () => {
   })
 
   test('routes every screen flow outside content with clear arrows, labels, and paint order', () => {
-    const definitions = [
+    const definitions: AppScreenFlowDefinition[] = [
       PRODUCT_MAP_DENTAL_CHART_APP_FLOW,
       ...SMYLR_DURABLE_APP_FLOW_DEFINITIONS.filter(
         (definition) => definition.id !== 'technical-flow-save-finding'
       )
     ]
-    for (const definition of definitions) {
-      const graph = new SceneGraph()
-      const page = graph.getPages()[0]
-      syncAppScreenFlowScene(graph, page.id, definition)
-      const children = graph.getChildren(page.id)
-      const childIndex = new Map(children.map((node, index) => [node.id, index]))
-      const content = children.filter((node) =>
-        ['app-screen-flow-feedback', 'smylr-code-object-frame'].includes(
-          appScreenFlowPluginValue(node, 'kind') ?? ''
-        )
-      )
-      const routeNodes = children.filter((node) =>
-        ['app-screen-flow-feedback', 'app-screen-flow-marker', 'smylr-code-object-frame'].includes(
-          appScreenFlowPluginValue(node, 'kind') ?? ''
-        )
-      )
-      const edges = children.filter(
-        (node) => appScreenFlowPluginValue(node, 'kind') === 'app-screen-flow-edge'
-      )
-      const overlays = children.filter((node) =>
-        ['app-screen-flow-marker', 'app-screen-flow-state-label'].includes(
-          appScreenFlowPluginValue(node, 'kind') ?? ''
-        )
-      )
-      const persistentLabels = children.filter((node) =>
-        [
-          'app-screen-flow-chapter',
-          'app-screen-flow-lane',
-          'app-screen-flow-state-label',
-          'smylr-board-guide'
-        ].includes(appScreenFlowPluginValue(node, 'kind') ?? '')
-      )
-      expect(Math.min(...edges.map((edge) => childIndex.get(edge.id) ?? -1))).toBeGreaterThan(
-        Math.max(...content.map((node) => childIndex.get(node.id) ?? -1))
-      )
-      expect(Math.max(...edges.map((edge) => childIndex.get(edge.id) ?? -1))).toBeLessThan(
-        Math.min(...overlays.map((node) => childIndex.get(node.id) ?? Number.MAX_SAFE_INTEGER))
-      )
-
-      const routedSegments: { edgeId: string; segment: TestSegment }[] = []
-      const labelBounds: TestBounds[] = []
-      for (const edge of edges) {
-        const edgeId = appScreenFlowPluginValue(edge, 'appFlowEdgeId')
-        const sourceId = appScreenFlowPluginValue(edge, 'sourceFlowNodeId')
-        const targetId = appScreenFlowPluginValue(edge, 'targetFlowNodeId')
-        expect(appScreenFlowPluginValue(edge, 'sourceAnchorSide')).toMatch(
-          /^(bottom|left|right|top)$/
-        )
-        expect(appScreenFlowPluginValue(edge, 'targetAnchorSide')).toMatch(
-          /^(bottom|left|right|top)$/
-        )
-        expect(appScreenFlowPluginValue(edge, 'routeChannel')).toBeTruthy()
-        const parts = graph.getChildren(edge.id)
-        const edgeKind = appScreenFlowPluginValue(edge, 'edgeKind')
-        if (edgeKind === 'entry' || edgeKind === 'exit') {
-          expect(appScreenFlowPluginValue(edge, 'routeChannel')).toBe('direct-horizontal')
-        }
-        const mayShowLabel =
-          ['open-chart', 'record', 'return', 'save', 'submit', 'undo'].includes(edgeId ?? '') &&
-          edgeKind !== 'feedback' &&
-          sourceId !== 'entry' &&
-          targetId !== 'exit'
-        expect(parts.length).toBeGreaterThanOrEqual(2)
-        expect(parts.length).toBeLessThanOrEqual(mayShowLabel ? 3 : 2)
-        expect(
-          parts
-            .map((node) => appScreenFlowPluginValue(node, 'part'))
-            .filter((part): part is string => Boolean(part))
-            .sort()
-        ).toEqual(
-          parts.some((part) => appScreenFlowPluginValue(part, 'part') === 'label')
-            ? ['arrow', 'label', 'path']
-            : ['arrow', 'path']
-        )
-        const path = parts.find((node) => appScreenFlowPluginValue(node, 'part') === 'path')
-        const halo = parts.find((node) => appScreenFlowPluginValue(node, 'part') === 'halo')
-        const arrow = parts.find((node) => appScreenFlowPluginValue(node, 'part') === 'arrow')
-        const label = parts.find((node) => appScreenFlowPluginValue(node, 'part') === 'label')
-        expect(path?.type).toBe('VECTOR')
-        expect(halo).toBeUndefined()
-        if (!path || path.type !== 'VECTOR' || !path.vectorNetwork) {
-          throw new Error('Rounded route path was not created')
-        }
-        expect(path.vectorNetwork.segments.length).toBeGreaterThan(0)
-        if (path.vectorNetwork.segments.length > 1) {
-          expect(
-            path.vectorNetwork.segments.some(
-              (segment) =>
-                segment.tangentStart.x !== 0 ||
-                segment.tangentStart.y !== 0 ||
-                segment.tangentEnd.x !== 0 ||
-                segment.tangentEnd.y !== 0
-            )
-          ).toBe(true)
-        }
-        expect(path.strokes[0]?.cap).toBe('ROUND')
-        expect(path.strokes[0]?.join).toBe('ROUND')
-        expect(path.strokes).toHaveLength(1)
-        expect(path.strokes[0]?.color).not.toEqual(APP_FLOW_COLOR.violet)
-        expect(path.strokes[0]?.weight).toBe(
-          edgeKind === 'alternate' || edgeKind === 'feedback' ? 2 : 2.5
-        )
-        if (edgeKind === 'primary' || edgeKind === 'entry') {
-          expect(path.strokes[0]?.color).toEqual(APP_FLOW_COLOR.connector)
-        }
-        if (edgeKind === 'alternate') {
-          expect(path.strokes[0]?.color).toEqual(APP_FLOW_COLOR.amber)
-        }
-        if (edgeKind === 'exit') expect(path.strokes[0]?.color).toEqual(APP_FLOW_COLOR.green)
-        if ((appScreenFlowPluginValue(edge, 'transitionLabel') ?? '') === 'Save failed') {
-          expect(path.strokes[0]?.color).toEqual(APP_FLOW_COLOR.coral)
-        }
-        expect(arrow?.type).toBe('POLYGON')
-        expect({ height: arrow?.height, width: arrow?.width }).toEqual({ height: 20, width: 20 })
-        expect(arrow?.fills).toHaveLength(1)
-        expect(arrow?.strokes).toEqual([])
-        if (!mayShowLabel) {
-          expect(label).toBeUndefined()
-        } else if (label) {
-          expect(label?.type).toBe('FRAME')
-          expect(label?.height).toBe(36)
-          expect(label?.fills).toEqual([])
-          expect(label?.strokes).toEqual([])
-          expect(
-            graph.getChildren(label?.id ?? '').find((node) => node.type === 'TEXT')?.fontSize
-          ).toBe(20)
-          expect(graph.getChildren(label?.id ?? '').some((node) => node.text)).toBe(true)
-        }
-
-        for (const routeSegment of path.vectorNetwork.segments) {
-          const bounds = vectorSegmentBounds(edge, path, routeSegment)
-          expect(routeNodes.some((node) => overlaps(bounds, node))).toBe(false)
-          if (
-            routeSegment.tangentStart.x === 0 &&
-            routeSegment.tangentStart.y === 0 &&
-            routeSegment.tangentEnd.x === 0 &&
-            routeSegment.tangentEnd.y === 0
-          ) {
-            routedSegments.push({ edgeId: edgeId ?? '', segment: segmentFromBounds(bounds) })
-          }
-        }
-        if (arrow) {
-          const bounds = absoluteBounds(edge, arrow)
-          const target = routeNodes.find(
-            (node) => appScreenFlowPluginValue(node, 'appFlowNodeId') === targetId
-          )
-          expect(target && overlaps(bounds, target)).toBe(false)
-        }
-        if (label) {
-          const bounds = absoluteBounds(edge, label)
-          expect(routeNodes.some((node) => overlaps(bounds, node))).toBe(false)
-          expect(persistentLabels.some((node) => overlaps(bounds, node))).toBe(false)
-          labelBounds.push(bounds)
-        }
-      }
-
-      expect(
-        edges
-          .filter((edge) => appScreenFlowPluginValue(edge, 'edgeKind') === 'primary')
-          .every(
-            (edge) => !(appScreenFlowPluginValue(edge, 'routeChannel') ?? '').startsWith('outside:')
-          )
-      ).toBe(true)
-
-      for (let left = 0; left < routedSegments.length; left += 1) {
-        for (let right = left + 1; right < routedSegments.length; right += 1) {
-          const leftSegment = routedSegments[left]
-          const rightSegment = routedSegments[right]
-          if (!leftSegment || !rightSegment || leftSegment.edgeId === rightSegment.edgeId) continue
-          expect(segmentsCross(leftSegment.segment, rightSegment.segment)).toBe(false)
-        }
-      }
-      for (let left = 0; left < labelBounds.length; left += 1) {
-        for (let right = left + 1; right < labelBounds.length; right += 1) {
-          const leftBounds = labelBounds[left]
-          const rightBounds = labelBounds[right]
-          if (leftBounds && rightBounds) expect(overlaps(leftBounds, rightBounds)).toBe(false)
-        }
-      }
-    }
+    for (const definition of definitions) assertScreenFlowRouting(definition)
   })
 
   test('reroutes a durable task-flow connector through live node integration after a screen moves', () => {

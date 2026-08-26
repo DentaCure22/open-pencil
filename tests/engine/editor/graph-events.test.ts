@@ -7,7 +7,7 @@ import { rendererInvalidationForChanges } from '#core/editor/graph-events'
 
 describe('graph event renderer invalidation', () => {
   test('position-only committed updates keep node pictures', () => {
-    expect(rendererInvalidationForChanges({ x: 10 }, { preview: false })).toEqual({
+    expect(rendererInvalidationForChanges({ x: 10 })).toEqual({
       geometryCache: false,
       nodePicture: false,
       paragraphCache: false
@@ -16,13 +16,12 @@ describe('graph event renderer invalidation', () => {
 
   test('geometry fields invalidate vector and geometry path caches', () => {
     for (const changes of [{ vectorNetwork: null }, { fillGeometry: [] }, { strokeGeometry: [] }]) {
-      expect(rendererInvalidationForChanges(changes, { preview: false }).geometryCache).toBe(true)
-      expect(rendererInvalidationForChanges(changes, { preview: true }).geometryCache).toBe(true)
+      expect(rendererInvalidationForChanges(changes).geometryCache).toBe(true)
     }
   })
 
   test('position-only preview updates keep node pictures', () => {
-    expect(rendererInvalidationForChanges({ x: 10, y: 20 }, { preview: true })).toEqual({
+    expect(rendererInvalidationForChanges({ x: 10, y: 20 })).toEqual({
       geometryCache: false,
       nodePicture: false,
       paragraphCache: false
@@ -30,19 +29,13 @@ describe('graph event renderer invalidation', () => {
   })
 
   test('text layout fields invalidate the paragraph cache without treating position as text', () => {
-    expect(
-      rendererInvalidationForChanges({ text: 'Hello' }, { preview: true }).paragraphCache
-    ).toBe(true)
-    expect(
-      rendererInvalidationForChanges({ fontWeight: 700 }, { preview: false }).paragraphCache
-    ).toBe(true)
-    expect(rendererInvalidationForChanges({ x: 12, y: 8 }, { preview: false }).paragraphCache).toBe(
-      false
-    )
+    expect(rendererInvalidationForChanges({ text: 'Hello' }).paragraphCache).toBe(true)
+    expect(rendererInvalidationForChanges({ fontWeight: 700 }).paragraphCache).toBe(true)
+    expect(rendererInvalidationForChanges({ x: 12, y: 8 }).paragraphCache).toBe(false)
   })
 
   test('size preview updates invalidate node pictures for effects and cached shapes', () => {
-    expect(rendererInvalidationForChanges({ width: 20, height: 30 }, { preview: true })).toEqual({
+    expect(rendererInvalidationForChanges({ width: 20, height: 30 })).toEqual({
       geometryCache: false,
       nodePicture: true,
       paragraphCache: true

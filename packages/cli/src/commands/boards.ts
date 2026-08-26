@@ -6,7 +6,7 @@ import { rpcEnvelopeExact, type AppRpcEnvelope, type AppRpcTarget } from '#cli/a
 import { exactAppTargetRpcArgs } from '#cli/app-target'
 import { readEditorPresence } from '#cli/board-file/workspace'
 import { boardsListRpcArgs, resolveBoardIndexTarget, type BoardListResult } from '#cli/board-list'
-import { bold, entity, kv, printError } from '#cli/format'
+import { bold, kv, printError } from '#cli/format'
 
 type JsonObject = { [key: string]: unknown }
 
@@ -177,7 +177,7 @@ export const where = defineCommand({
         Math.round((Date.now() - Date.parse(presence.updatedAt)) / 1000)
       )
       console.log(bold(presence.pageName))
-      console.log(kv('page_id', entity(presence.pageId)))
+      console.log(kv('page_id', presence.pageId))
       console.log(kv('updated', `${String(ageSeconds)}s ago`))
       if (presence.viewport) {
         console.log(kv('zoom', presence.viewport.zoom.toFixed(2)))

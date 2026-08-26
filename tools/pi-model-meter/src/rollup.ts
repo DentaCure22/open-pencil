@@ -47,9 +47,9 @@ export function rollupUsageTurns(turns: UsageTurnRecord[], sinceMs?: number): Us
         callHitPercent: group.length ? percentage((hits / group.length) * 100) : 0,
         estimatedPercent: group.length ? percentage((estimated / group.length) * 100) : 0,
         medianGapMs: median(gaps),
-        model: slash >= 0 ? key.slice(slash + 1) : key,
+        model: slash !== -1 ? key.slice(slash + 1) : key,
         promptTokens,
-        provider: slash >= 0 ? key.slice(0, slash) : key,
+        provider: slash !== -1 ? key.slice(0, slash) : key,
         tokenCachePercent: promptTokens ? percentage((cacheRead / promptTokens) * 100) : 0,
         turns: group.length
       }

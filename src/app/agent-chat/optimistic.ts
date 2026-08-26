@@ -98,6 +98,19 @@ export function clearOptimisticConversation(threadId: string) {
   Reflect.deleteProperty(conversations, threadId)
 }
 
+export function moveOptimisticConversation(
+  sourceThreadId: string,
+  targetThreadId: string
+): boolean {
+  const pending = conversations[sourceThreadId]
+  if (!pending || !targetThreadId) return false
+  if (sourceThreadId === targetThreadId) return true
+  releasePreviewUrls(conversations[targetThreadId])
+  conversations[targetThreadId] = pending
+  Reflect.deleteProperty(conversations, sourceThreadId)
+  return true
+}
+
 export function optimisticConversation(threadId: string): OptimisticConversation | undefined {
   return conversations[threadId]
 }

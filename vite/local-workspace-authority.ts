@@ -15,6 +15,7 @@ import {
 } from '../src/app/model-meter/rollup'
 
 const LOCAL_AUTHORITY_PORT = '7602'
+const LOCAL_AUTHORITY_SHUTDOWN_GRACE_MS = 2_000
 const DEFAULT_AUTHORITY_ROOT = join(homedir(), '.openpencil', 'local-workspace-authority-v1')
 const localAuthorityDisabled = process.env.OPENPENCIL_DISABLE_LOCAL_WORKSPACE_AUTHORITY === '1'
 
@@ -48,7 +49,9 @@ function serveModelMeter(request: IncomingMessage, response: ServerResponse): bo
       return true
     }
     response.statusCode = 500
-    response.end(JSON.stringify({ available: false, days, lastAt: null, rows: [], series: [], turns: 0 }))
+    response.end(
+      JSON.stringify({ available: false, days, lastAt: null, rows: [], series: [], turns: 0 })
+    )
   }
   return true
 }
@@ -123,7 +126,24 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
   const stopChild = () => {
     const runningChild = child
     child = null
-    runningChild?.kill()
+    if (!runningChild || runningChild.exitCode !== null) return
+
+    const processGroup = process.platform !== 'win32' ? -(runningChild.pid ?? 0) : 0
+    const signal = (name: NodeJS.Signals) => {
+      try {
+        if (processGroup) process.kill(processGroup, name)
+        else runningChild.kill(name)
+      } catch {
+        // The process already exited.
+      }
+    }
+
+    signal('SIGTERM')
+    const forceClose = setTimeout(() => {
+      if (runningChild.exitCode === null) signal('SIGKILL')
+    }, LOCAL_AUTHORITY_SHUTDOWN_GRACE_MS)
+    forceClose.unref()
+    runningChild.once('exit', () => clearTimeout(forceClose))
   }
 
   return {
@@ -169,6 +189,7 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
               : {}),
             ...(options.smylrAppRoot ? { OPENPENCIL_SMYLR_APP_ROOT: options.smylrAppRoot } : {})
           },
+          detached: process.platform !== 'win32',
           stdio: ['ignore', 'inherit', 'pipe']
         }
       )
@@ -181,7 +202,7 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
           console.error(
             '\x1b[31m[Local authority] Port 7602 is already in use by another process.\x1b[0m'
           )
-          spawnedChild.kill()
+          stopChild()
           if (child === spawnedChild) child = null
           return
         }

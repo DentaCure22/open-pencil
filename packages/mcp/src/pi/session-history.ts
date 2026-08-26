@@ -1,7 +1,7 @@
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 
-import { closingTextFromAssistantMessage } from './closing-text'
 import { applyPiEvent } from './events'
+import { closingTextFromAssistantMessage } from './providers/closing'
 import type { PiRpcProcess } from './rpc-process'
 import { collapseDuplicateTurnResponses, normalizedThreadText } from './thread-memory'
 
@@ -44,10 +44,6 @@ function messageContent(message: Record<string, unknown>): Record<string, unknow
   return Array.isArray(message.content) ? message.content.filter(isRecord) : []
 }
 
-function finalAssistantText(message: Record<string, unknown>, fallbackModelId?: string): string {
-  return closingTextFromAssistantMessage(message, fallbackModelId)
-}
-
 function entryTimestamp(entry: SessionEntry, message: Record<string, unknown>): string {
   if (typeof message.timestamp === 'number') return new Date(message.timestamp).toISOString()
   if (typeof entry.timestamp === 'string') return entry.timestamp
@@ -58,9 +54,11 @@ function applyBaselineTail(thread: AgentConversationThread, entries: SessionEntr
   const lastUserIndex = entries.findLastIndex((entry) => entry.message?.role === 'user')
   const finalEntry = entries
     .slice(lastUserIndex + 1)
-    .findLast((entry) => entry.message && finalAssistantText(entry.message, thread.model))
+    .findLast(
+      (entry) => entry.message && closingTextFromAssistantMessage(entry.message, thread.model)
+    )
   if (!finalEntry?.message) return ''
-  const text = finalAssistantText(finalEntry.message, thread.model)
+  const text = closingTextFromAssistantMessage(finalEntry.message, thread.model)
   const latestUserIndex = thread.messages.findLastIndex((message) => message.role === 'user')
   const existing = thread.messages
     .slice(latestUserIndex + 1)
@@ -101,7 +99,7 @@ function applyIncrementalEntries(
       if (applyPiEvent(thread, { id: entry.id, message, type: 'message_end' }, turnKey)) {
         applied = true
       }
-      const text = finalAssistantText(message, thread.model)
+      const text = closingTextFromAssistantMessage(message, thread.model)
       if (text) finalResponse = text
       for (const part of messageContent(message)) {
         if (part.type !== 'toolCall' || typeof part.id !== 'string') continue

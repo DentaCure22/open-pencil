@@ -10,7 +10,7 @@ import type { UsageProbeScenario } from './schema'
 
 function argValue(flag: string): string | undefined {
   const index = process.argv.indexOf(flag)
-  if (index < 0) return undefined
+  if (index === -1) return undefined
   return process.argv[index + 1]
 }
 

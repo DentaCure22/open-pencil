@@ -2,6 +2,12 @@
 @import 'tw-animate-css';
 @import '@univerjs/preset-sheets-core/lib/index.css';
 
+html[data-horizontal-resizing],
+html[data-horizontal-resizing] * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 @keyframes openpencil-image-shimmer {
   0% {
     transform: translateX(-20%) skewX(-12deg);
@@ -26,6 +32,186 @@
   }
   100% {
     background-position: -40% 50%;
+  }
+}
+
+/* T3 Code timeline motion, adapted from its MIT-licensed August 25 timeline. */
+@keyframes t3-status-pulse {
+  0%,
+  40% {
+    opacity: 1;
+    animation-timing-function: steps(6);
+  }
+  50%,
+  90% {
+    opacity: 0.5;
+    animation-timing-function: steps(6);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes t3-stream-glyph-in {
+  from {
+    opacity: 0.18;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.t3-status-dot,
+.t3-tool-pulse {
+  animation: t3-status-pulse 2s infinite;
+}
+
+.t3-status-dot-paused {
+  animation: none;
+}
+
+@keyframes t3-live-activity-focus {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes t3-live-activity-focus-counter {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.t3-live-activity-focus {
+  --t3-live-activity-focus-width: 4.5rem;
+
+  right: auto;
+  left: calc(-1 * var(--t3-live-activity-focus-width));
+  width: calc(100% + var(--t3-live-activity-focus-width) + var(--t3-live-activity-focus-width));
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(0 0 0 / 12%) 0.675rem,
+    rgb(0 0 0 / 55%) 1.575rem,
+    black 2.25rem,
+    rgb(0 0 0 / 55%) 2.925rem,
+    rgb(0 0 0 / 12%) 3.825rem,
+    transparent var(--t3-live-activity-focus-width),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(0 0 0 / 12%) 0.675rem,
+    rgb(0 0 0 / 55%) 1.575rem,
+    black 2.25rem,
+    rgb(0 0 0 / 55%) 2.925rem,
+    rgb(0 0 0 / 12%) 3.825rem,
+    transparent var(--t3-live-activity-focus-width),
+    transparent 100%
+  );
+  mask-repeat: no-repeat;
+  animation: t3-live-activity-focus 2.2s linear infinite;
+  will-change: transform;
+}
+
+.t3-live-activity-focus-counter {
+  width: 100%;
+  animation: t3-live-activity-focus-counter 2.2s linear infinite;
+  will-change: transform;
+}
+
+.t3-live-activity-focus-aligned {
+  width: calc(100% - var(--t3-live-activity-focus-width) - var(--t3-live-activity-focus-width));
+  margin-left: var(--t3-live-activity-focus-width);
+}
+
+.t3-stream-word {
+  white-space: nowrap;
+}
+
+.t3-stream-glyph {
+  animation: t3-stream-glyph-in 110ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.t3-activity-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.t3-activity-markdown p,
+.t3-activity-markdown h1,
+.t3-activity-markdown h2,
+.t3-activity-markdown h3,
+.t3-activity-markdown h4 {
+  margin: 0;
+  font: inherit;
+}
+
+.t3-activity-markdown ul,
+.t3-activity-markdown ol {
+  margin: 0.2em 0 0.35em;
+  padding-left: 1.35em;
+}
+
+.t3-activity-markdown li {
+  margin: 0;
+  padding: 0;
+}
+
+.t3-activity-markdown strong,
+.t3-activity-markdown b {
+  font-weight: inherit;
+}
+
+.t3-activity-markdown code:not(pre code) {
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  padding: 0.05em 0.3em;
+  font-size: 0.9em;
+}
+
+.t3-activity-markdown a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.t3-activity-markdown a:hover {
+  text-decoration: underline;
+}
+
+.t3-activity-markdown pre {
+  margin: 0.35em 0;
+  max-height: 10rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t3-live-activity-focus {
+    animation: none;
+    opacity: 0;
+    will-change: auto;
+  }
+
+  .t3-live-activity-focus-counter {
+    animation: none;
+    will-change: auto;
+  }
+
+  .t3-status-dot,
+  .t3-tool-pulse,
+  .t3-stream-glyph {
+    animation: none;
   }
 }
 
@@ -81,6 +267,25 @@
   }
   &::-webkit-scrollbar-thumb:hover {
     background: var(--color-muted);
+  }
+}
+
+/* Native overflow that matches AppScrollAreaScrollbar: 6px track, 1px inset, muted/30 pill. */
+@utility scrollbar-panel {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted) 30%, transparent) transparent;
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-clip: content-box;
+    background-color: color-mix(in srgb, var(--color-muted) 30%, transparent);
+    border: 1px solid transparent;
+    border-radius: 9999px;
   }
 }
 
@@ -239,9 +444,408 @@ html[data-theme='light'] {
   margin-inline: auto;
 }
 
+/* T3 Code chat chrome. The React islands keep T3's compact status language,
+   attached composer drawers, and stacked alert behavior while inheriting
+   OpenPencil's own surface tokens. */
+.t3-thread-status {
+  display: inline-flex;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.t3-thread-status-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.t3-thread-status[data-tone='sky'] {
+  color: #38bdf8;
+}
+
+.t3-thread-status[data-tone='amber'] {
+  color: #fbbf24;
+}
+
+.t3-thread-status[data-tone='indigo'] {
+  color: #a5b4fc;
+}
+
+.t3-thread-status[data-tone='emerald'] {
+  color: var(--color-success);
+}
+
+.t3-thread-status[data-tone='red'] {
+  color: #f87171;
+}
+
+.t3-thread-status[data-tone='zinc'] {
+  color: var(--color-muted);
+}
+
+.t3-thread-status[data-pulse='true'] .t3-thread-status-dot {
+  animation: t3-status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes t3-status-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.88);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.t3-composer-command-menu,
+.t3-composer-banner-stack {
+  width: calc(100% - var(--spacing-agent-conversation-gutter));
+  max-width: var(--spacing-agent-conversation-max-width);
+  margin-inline: auto;
+}
+
+.t3-composer-command-menu {
+  position: relative;
+  z-index: 24;
+  max-height: min(288px, 38vh);
+  margin-bottom: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-agent-border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--color-agent-composer) 96%, transparent);
+  box-shadow: 0 -14px 38px -24px rgb(0 0 0 / 60%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  scrollbar-width: thin;
+}
+
+.t3-composer-command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px;
+}
+
+.t3-composer-command-item {
+  display: grid;
+  min-height: 36px;
+  grid-template-columns: 18px minmax(88px, 0.48fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 9px;
+  color: var(--color-surface);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+
+.t3-composer-command-item[data-active='true'] {
+  background: color-mix(in srgb, var(--color-accent) 17%, var(--color-hover));
+}
+
+.t3-composer-command-icon {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+}
+
+.t3-composer-command-icon svg,
+.t3-composer-banner-icon svg,
+.t3-composer-banner-dismiss svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.t3-composer-command-label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3-composer-command-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3-composer-command-badge {
+  border-radius: 9999px;
+  padding: 3px 6px;
+  color: var(--color-muted);
+  background: var(--color-chrome-detail);
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.t3-composer-command-empty {
+  margin: 0;
+  padding: 15px 18px 28px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.t3-composer-banner-stack {
+  position: relative;
+  z-index: 22;
+  display: flex;
+  flex-direction: column-reverse;
+  margin-bottom: 6px;
+}
+
+.t3-composer-banner-front {
+  position: relative;
+  z-index: 2;
+}
+
+.t3-composer-banner-cap {
+  position: absolute;
+  z-index: 0;
+  top: -7px;
+  right: 2%;
+  left: 2%;
+  height: 10px;
+  border: 1px solid var(--color-agent-border);
+  border-bottom: 0;
+  border-radius: 13px 13px 0 0;
+  background: color-mix(in srgb, var(--color-agent-composer) 92%, transparent);
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.t3-composer-banner-stack:hover .t3-composer-banner-cap,
+.t3-composer-banner-stack:focus-within .t3-composer-banner-cap {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+.t3-composer-banner-expanded {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-rows: 0fr;
+  pointer-events: none;
+  transition: grid-template-rows 150ms ease-out;
+}
+
+.t3-composer-banner-expanded > div {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 7px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.t3-composer-banner-stack:hover .t3-composer-banner-expanded,
+.t3-composer-banner-stack:focus-within .t3-composer-banner-expanded {
+  grid-template-rows: 1fr;
+  pointer-events: auto;
+}
+
+.t3-composer-banner-stack:hover .t3-composer-banner-expanded > div,
+.t3-composer-banner-stack:focus-within .t3-composer-banner-expanded > div {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.t3-composer-banner {
+  display: grid;
+  min-height: 43px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-agent-border);
+  border-radius: 14px;
+  padding: 8px 10px;
+  color: var(--color-surface);
+  background: color-mix(in srgb, var(--color-agent-composer) 96%, transparent);
+  box-shadow: 0 -14px 38px -25px rgb(0 0 0 / 65%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  transition:
+    opacity 220ms ease-in,
+    transform 220ms ease-in;
+}
+
+.t3-composer-banner[data-attached='true'] {
+  border-radius: 11px;
+}
+
+.t3-composer-banner[data-variant='error'] {
+  border-color: color-mix(in srgb, #ef4444 32%, transparent);
+  background: color-mix(in srgb, #ef4444 7%, var(--color-agent-composer));
+}
+
+.t3-composer-banner[data-variant='warning'] {
+  border-color: var(--color-warning-border);
+  background: color-mix(in srgb, #f59e0b 7%, var(--color-agent-composer));
+}
+
+.t3-composer-banner[data-variant='info'] {
+  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-agent-composer));
+}
+
+.t3-composer-banner[data-variant='success'] {
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-success) 5%, var(--color-agent-composer));
+}
+
+.t3-composer-banner[data-exiting='true'] {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(44px);
+}
+
+.t3-composer-banner-icon {
+  display: flex;
+  color: var(--color-muted);
+}
+
+.t3-composer-banner[data-variant='error'] .t3-composer-banner-icon {
+  color: #f87171;
+}
+
+.t3-composer-banner[data-variant='warning'] .t3-composer-banner-icon {
+  color: #fbbf24;
+}
+
+.t3-composer-banner[data-variant='info'] .t3-composer-banner-icon {
+  color: #60a5fa;
+}
+
+.t3-composer-banner-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.t3-composer-banner-copy strong {
+  font-weight: 600;
+}
+
+.t3-composer-banner-copy span {
+  overflow: hidden;
+  color: var(--color-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3-composer-banner-action,
+.t3-composer-banner-dismiss {
+  border: 0;
+  color: var(--color-surface);
+  background: transparent;
+}
+
+.t3-composer-banner-action {
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: var(--color-chrome-detail);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.t3-composer-banner-action:hover,
+.t3-composer-banner-dismiss:hover {
+  background: var(--color-hover);
+}
+
+.t3-composer-banner-dismiss {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--color-muted);
+}
+
+.t3-drop-overlay-icon {
+  animation: t3-drop-overlay 1.35s ease-in-out infinite;
+}
+
+@keyframes t3-drop-overlay {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateY(1px) scale(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t3-thread-status[data-pulse='true'] .t3-thread-status-dot,
+  .t3-drop-overlay-icon {
+    animation: none;
+  }
+
+  .t3-composer-banner,
+  .t3-composer-banner-cap,
+  .t3-composer-banner-expanded,
+  .t3-composer-banner-expanded > div {
+    transition: none;
+  }
+}
+
 @container (max-width: 30rem) {
   .agent-conversation-column {
     width: calc(100% - var(--spacing-agent-conversation-compact-gutter));
+  }
+
+  .t3-composer-command-menu,
+  .t3-composer-banner-stack {
+    width: calc(100% - var(--spacing-agent-conversation-compact-gutter));
+  }
+
+  .t3-composer-command-description,
+  .t3-composer-command-badge {
+    display: none;
+  }
+
+  .t3-composer-command-item {
+    grid-template-columns: 18px minmax(0, 1fr);
   }
 }
 

@@ -211,24 +211,24 @@ test('retained scene backing stays reusable while a position preview is active',
 })
 
 test('retained scene backing skips recording top-level subtrees outside its world coverage', () => {
-  const backingCanvas = {
+  const backingCanvas = Object.assign(Object.create(null) as Canvas, {
     clear: mock(),
     drawPicture: mock(),
     restore: mock(),
     save: mock(),
     scale: mock(),
     translate: mock()
-  } as unknown as Canvas
+  })
   const image = { delete: mock() } as CKImage
-  const surface = {
+  const surface = Object.assign(Object.create(null) as Surface, {
     delete: mock(),
     flush: mock(),
     getCanvas: mock(() => backingCanvas),
     makeImageSnapshot: mock(() => image)
-  } as unknown as Surface
+  })
   const r = createRenderer(() => surface)
   const canvas = createCanvas()
-  const graph = {
+  const graph = Object.assign(Object.create(null) as SceneGraph, {
     getAbsolutePosition: mock(() => ({ x: 10_000, y: 10_000 })),
     getDescendantVisualBounds: mock(() => ({
       maxX: 10_100,
@@ -252,7 +252,7 @@ test('retained scene backing skips recording top-level subtrees outside its worl
     }),
     positionPreviewVersion: 0,
     rootId: 'root'
-  } as unknown as SceneGraph
+  })
 
   expect(renderSceneBacking(r, canvas, graph, 1)).toBe(true)
   expect(r.renderNode).not.toHaveBeenCalled()

@@ -1,8 +1,4 @@
-import { bytesToHex, hexToBytes } from '#core/bytes/hex'
-import { encodePathCommandsBlob } from '#core/kiwi/fig/node-change/path-commands'
-import { buildDerivedTextData as buildSharedDerivedTextData } from '#core/text/derived-text/data'
-import { normalizeFontFamily, weightToFigmaStyle, weightToStyle } from '#core/text/fonts'
-import { getGlyphOutlineMetricsSync } from '#core/text/opentype'
+import { hexToBytes } from '#core/bytes/hex'
 import { encodeVectorNetworkBlob, buildStyleOverrideTable } from '#core/vector'
 
 export {
@@ -23,14 +19,12 @@ import {
   sceneNodeToKiwiWithContext,
   type KiwiNodeChange
 } from './export-node'
-import { applyFontFeaturesToKiwi } from './font/features'
 import {
   BOUND_VARIABLES_PLUGIN_KEY,
   LAYOUT_DIRECTION_PLUGIN_KEY,
-  TEXT_DIRECTION_PLUGIN_KEY,
   upsertPluginData
 } from './plugin-data'
-import { exportTextData, fontVariationToKiwi } from './text-data-export'
+import { serializeTextNode } from './serialize-text'
 
 export function mapToFigmaType(type: SceneNode['type']): string {
   switch (type) {
@@ -90,111 +84,6 @@ export function fractionalPosition(index: number): string {
   const numTildes = Math.floor(index / BASE)
   const lastChar = String.fromCharCode(FIRST + (index % BASE))
   return String.fromCharCode(TILDE).repeat(numTildes) + lastChar
-}
-
-function textLines(text: string): NonNullable<NodeChange['textData']>['lines'] {
-  const lineCount = Math.max(1, text.split('\n').length)
-  return Array.from({ length: lineCount }, () => ({ lineType: 'PLAIN' }))
-}
-
-function appendGlyphBlob(
-  blobs: Uint8Array[],
-  glyphBlobMap: Map<string, number>,
-  blob: Uint8Array
-): number {
-  const key = bytesToHex(blob)
-  const existing = glyphBlobMap.get(key)
-  if (existing !== undefined) return existing
-  const index = blobs.push(blob) - 1
-  glyphBlobMap.set(key, index)
-  return index
-}
-
-function buildDerivedTextData(
-  node: SceneNode,
-  digestMap: Map<string, Uint8Array>,
-  blobs: Uint8Array[],
-  glyphBlobMap: Map<string, number>
-): NodeChange['derivedTextData'] {
-  const fontMeta: NonNullable<NodeChange['derivedTextData']>['fontMetaData'] = []
-  const seen = new Set<string>()
-
-  const addFont = (family: string, weight: number, italic: boolean) => {
-    const style = weightToStyle(weight, italic)
-    const normalized = normalizeFontFamily(family)
-    const key = `${normalized}|${style}`
-    if (seen.has(key)) return
-    seen.add(key)
-    fontMeta.push({
-      key: { family: normalized, style: weightToFigmaStyle(weight, italic), postscript: '' },
-      fontLineHeight: 1.2,
-      fontDigest: digestMap.get(key),
-      fontStyle: italic ? 'ITALIC' : 'NORMAL',
-      fontWeight: weight
-    })
-  }
-
-  addFont(node.fontFamily, node.fontWeight, node.italic)
-  for (const run of node.styleRuns) {
-    addFont(
-      run.style.fontFamily ?? node.fontFamily,
-      run.style.fontWeight ?? node.fontWeight,
-      run.style.italic ?? node.italic
-    )
-  }
-
-  const lineHeight = node.lineHeight ?? Math.ceil(node.fontSize * 1.2)
-  const glyphAdvance = node.text.length > 0 ? node.width / Math.max(node.text.length, 1) : 0
-
-  const derivedGlyphs = node.figmaDerivedTextGlyphs ?? []
-  const glyphs =
-    derivedGlyphs.length > 0
-      ? derivedGlyphs.map((glyph, index) => ({
-          commandsBlob: appendGlyphBlob(blobs, glyphBlobMap, glyph.commandsBlob),
-          position: { x: glyph.x, y: glyph.y },
-          fontSize: glyph.fontSize,
-          firstCharacter: index,
-          advance:
-            index + 1 < derivedGlyphs.length
-              ? Math.max(derivedGlyphs[index + 1].x - glyph.x, 0)
-              : glyphAdvance,
-          rotation: 0
-        }))
-      : (
-          getGlyphOutlineMetricsSync(
-            node.fontFamily,
-            weightToStyle(node.fontWeight, node.italic),
-            node.text,
-            node.fontSize
-          ) ?? []
-        ).map((glyph, index) => ({
-          commandsBlob: appendGlyphBlob(
-            blobs,
-            glyphBlobMap,
-            encodePathCommandsBlob(glyph.commands, node.fontSize)
-          ),
-          position: { x: glyph.x || index * glyphAdvance, y: lineHeight },
-          fontSize: node.fontSize,
-          firstCharacter: index,
-          advance: glyph.advance || glyphAdvance,
-          rotation: 0
-        }))
-
-  const logicalIndexToCharacterOffsetMap = Array.from(
-    { length: node.text.length + 1 },
-    (_, index) => index * glyphAdvance
-  )
-
-  return buildSharedDerivedTextData({
-    node,
-    glyphs,
-    fontMetaData: fontMeta,
-    baseline: lineHeight,
-    width: node.width,
-    lineHeight,
-    lineAscent: Math.max(lineHeight - node.fontSize * 0.2, 0),
-    logicalIndexToCharacterOffsetMap
-  })
 }
 
 export function safeColor(c: Color | Omit<Color, 'a'>): Color {
@@ -259,23 +148,6 @@ function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
   }
 }
 
-function resolveTextAutoResize(node: SceneNode, graph: SceneGraph): SceneNode['textAutoResize'] {
-  // For nodes imported from .fig files, preserve the original textAutoResize
-  // value. Forcing 'HEIGHT' for fixed-height text inside auto-layout causes
-  // layout drift on roundtrip.
-  if (node.source.id) return node.textAutoResize
-  const parent = node.parentId ? graph.getNode(node.parentId) : undefined
-  if (
-    parent &&
-    parent.layoutMode !== 'NONE' &&
-    parent.layoutMode !== 'GRID' &&
-    node.layoutPositioning !== 'ABSOLUTE'
-  ) {
-    return 'HEIGHT'
-  }
-  return node.textAutoResize
-}
-
 function serializeTextProps(
   node: SceneNode,
   nc: KiwiNodeChange,
@@ -284,50 +156,15 @@ function serializeTextProps(
   blobs: Uint8Array[],
   glyphBlobMap: Map<string, number> | undefined
 ): void {
-  upsertPluginData(node, TEXT_DIRECTION_PLUGIN_KEY, node.textDirection)
-  nc.fontSize = node.fontSize
-  nc.fontName = {
-    family: normalizeFontFamily(node.fontFamily),
-    style: weightToFigmaStyle(node.fontWeight, node.italic),
-    postscript: ''
-  }
-  nc.textData = exportTextData(node, textLines, fillToKiwiPaint)
-  if (node.fontVariations.length > 0) {
-    nc.fontVariations = node.fontVariations.map(fontVariationToKiwi)
-  }
-  const autoResize = resolveTextAutoResize(node, graph)
-  nc.textAutoResize = autoResize
-  nc.textAlignHorizontal = node.textAlignHorizontal
-  nc.textAlignVertical = node.textAlignVertical
-  nc.textUserLayoutVersion = 4
-  nc.textExplicitLayoutVersion = 1
-  nc.textBidiVersion = 1
-  nc.textDecorationSkipInk = node.textDecorationSkipInk
-  nc.fontVariantCommonLigatures = true
-  nc.fontVariantContextualLigatures = true
-  applyFontFeaturesToKiwi(nc, node.fontFeatures)
-  nc.fontVersion = ''
-  nc.emojiImageSet = 'APPLE'
-  if (node.textCase !== 'ORIGINAL') nc.textCase = node.textCase
-  if (fontDigestMap) {
-    nc.derivedTextData = buildDerivedTextData(node, fontDigestMap, blobs, glyphBlobMap ?? new Map())
-  }
-  if (node.leadingTrim !== 'NONE') nc.leadingTrim = node.leadingTrim
-  if (node.lineHeight != null) nc.lineHeight = { value: node.lineHeight, units: 'PIXELS' }
-  nc.letterSpacing = { value: node.letterSpacing, units: 'PIXELS' }
-  if (node.textDecoration !== 'NONE') {
-    nc.textDecoration = node.textDecoration === 'UNDERLINE' ? 'UNDERLINE' : 'STRIKETHROUGH'
-  }
-  if (node.textDecorationStyle !== 'SOLID') nc.textDecorationStyle = node.textDecorationStyle
-  if (node.textDecorationThickness != null) {
-    nc.textDecorationThickness = { value: node.textDecorationThickness, units: 'PIXELS' }
-  }
-  if (node.textUnderlineOffset != null) {
-    nc.textUnderlineOffset = { value: node.textUnderlineOffset, units: 'PIXELS' }
-  }
-  if (node.textDecorationFills.length > 0) {
-    nc.textDecorationFillPaints = node.textDecorationFills.map(fillToKiwiPaint)
-  }
+  serializeTextNode({
+    blobs,
+    fillToKiwiPaint,
+    fontDigestMap,
+    glyphBlobMap,
+    graph,
+    node,
+    nodeChange: nc
+  })
 }
 
 function normalizeStackMode(value: string | undefined): KiwiNodeChange['stackMode'] {

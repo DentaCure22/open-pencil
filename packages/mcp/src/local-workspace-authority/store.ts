@@ -4,15 +4,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, realpath, unlink } from 'node:fs/promises'
 import path from 'node:path'
 
-import type {
-  TraceHistoryContextEntry,
-  TraceHistoryEvent,
-  TraceHistorySession,
-  TraceQueryRecordSummary,
-  TraceQueryScope,
-  TraceQuerySpokenTurn,
-  WorkspaceSearchResult
-} from '@open-pencil/core/rpc'
+import { normalizeTraceSessionTag, type WorkspaceSearchResult } from '@open-pencil/core/rpc'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import { readAuthorityBoardDocument } from './document'
@@ -28,23 +20,36 @@ import {
   writeSerializedJsonFile
 } from './json-file'
 import { documentMayNeedMermaidMaterialization } from './mermaid-presence'
-import {
-  normalizeLocalWorkspaceTraceGesture,
-  type LocalWorkspaceTraceEvidenceReference,
-  type LocalWorkspaceTraceGesture,
-  type LocalWorkspaceTraceGestureRead
-} from './trace'
+import { normalizeLocalWorkspaceTraceGesture, type LocalWorkspaceTraceGestureRead } from './trace'
 import {
   LocalWorkspaceTraceFileStore,
   type LocalWorkspaceTraceEvidenceOverview,
-  type LocalWorkspaceTraceEvidencePinResult,
-  type LocalWorkspaceTraceFileEvent
+  type LocalWorkspaceTraceEvidencePinResult
 } from './trace-file-store'
+import {
+  gestureWithEvidenceReference,
+  sameTraceSessionReferences,
+  traceEvidenceReferences,
+  traceSession,
+  traceSpokenTurn,
+  traceSummary
+} from './trace-history'
+import {
+  replayTraceFileEvents,
+  resolveDirectTraceBoardContext,
+  selectDirectTrace,
+  traceActivityPage,
+  type LocalWorkspaceTraceActivityPage,
+  type LocalWorkspaceTraceHistorySnapshot,
+  type TraceFileSnapshot
+} from './trace-replay'
 import {
   LOCAL_WORKSPACE_AUTHORITY_VERSION,
   LOCAL_WORKSPACE_NAVIGATION_INTENT_VERSION,
   LOCAL_WORKSPACE_PRESENCE_SELECTION_LIMIT,
+  LOCAL_WORKSPACE_SCREENSHOT_INTENT_VERSION,
   LOCAL_WORKSPACE_THEME_INTENT_VERSION,
+  type CompleteLocalWorkspaceScreenshotRequest,
   type CommitLocalWorkspaceRequest,
   type InitializeLocalWorkspaceRequest,
   type LocalWorkspaceAuthorityHead,
@@ -53,8 +58,11 @@ import {
   type LocalWorkspaceIdentity,
   type LocalWorkspaceNavigationIntent,
   type LocalWorkspacePresence,
+  type LocalWorkspaceScreenshotIntent,
+  type LocalWorkspaceScreenshotResult,
   type LocalWorkspaceThemeIntent,
   type QueueLocalWorkspaceNavigationRequest,
+  type QueueLocalWorkspaceScreenshotRequest,
   type QueueResolvedLocalWorkspaceNavigationRequest,
   type RecordLocalWorkspacePresenceRequest,
   type RecordLocalWorkspaceThemeRequest
@@ -71,16 +79,19 @@ const AUTHORITY_DOCUMENT_FILE = 'workspace.json'
 const AUTHORITY_LEDGER_FILE = 'workspace-state.json'
 const AUTHORITY_NAVIGATION_FILE = 'navigation.json'
 const AUTHORITY_PRESENCE_FILE = 'presence.json'
+const AUTHORITY_SCREENSHOT_INTENT_FILE = 'screenshot-intent.json'
+const AUTHORITY_SCREENSHOT_RESULT_FILE = 'screenshot-result.json'
 const AUTHORITY_THEME_FILE = 'theme.json'
 const AUTHORITY_HISTORY_DIRECTORY = 'history'
 const MAX_HISTORY_SNAPSHOTS = 64
 const MAX_RECEIPTS = 500
 const DEFAULT_NAVIGATION_INTENT_TTL_MS = 60_000
-const DEFAULT_TRACE_ACTIVITY_PAGE_LIMIT = 80
-const MAX_TRACE_ACTIVITY_PAGE_LIMIT = 80
+const DEFAULT_SCREENSHOT_INTENT_TTL_MS = 10_000
+const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024
 const rootWriteTails = new Map<string, Promise<void>>()
+const rootDeferredWriteTails = new Map<string, { owner: object; tail: Promise<void> }>()
 
-export const LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT = 'trace-activity-page/v1'
+export { LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT } from './trace-replay'
 
 type PersistedLocalWorkspaceAuthorityMetadata = {
   authorityId: string
@@ -122,6 +133,9 @@ export type LocalWorkspaceAuthorityStoreOptions = {
 export type LocalWorkspaceAuthorityHeadListener = (receipt: LocalWorkspaceCommitReceipt) => void
 export type LocalWorkspaceAuthorityNavigationListener = (
   intent: LocalWorkspaceNavigationIntent
+) => void
+export type LocalWorkspaceAuthorityScreenshotListener = (
+  intent: LocalWorkspaceScreenshotIntent
 ) => void
 export type LocalWorkspaceAuthorityThemeListener = (intent: LocalWorkspaceThemeIntent) => void
 
@@ -346,328 +360,106 @@ function isNavigationIntent(value: unknown): value is LocalWorkspaceNavigationIn
   )
 }
 
-type TraceJsonRecord = Record<string, unknown>
-
-type PersistedTraceSpokenTurn = {
-  endedAt: string
-  id: string
-  sequence: number
-  startedAt: string
-  value: TraceQuerySpokenTurn
-}
-
-function jsonRecord(value: unknown): TraceJsonRecord | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as TraceJsonRecord)
-    : null
-}
-
-function traceScope(value: unknown): TraceQueryScope | undefined {
-  if (value === undefined) return undefined
-  const scope = jsonRecord(value)
-  if (!scope || typeof scope.documentId !== 'string' || typeof scope.pageId !== 'string') {
-    throw new TypeError('Trace scope is invalid.')
-  }
-  return {
-    documentId: scope.documentId,
-    ...(typeof scope.documentName === 'string' ? { documentName: scope.documentName } : {}),
-    pageId: scope.pageId,
-    ...(typeof scope.pageName === 'string' ? { pageName: scope.pageName } : {}),
-    ...(typeof scope.workspaceId === 'string' ? { workspaceId: scope.workspaceId } : {})
-  }
-}
-
-function isTraceHistoryEvent(value: unknown): value is TraceHistoryEvent {
-  const event = jsonRecord(value)
+function isScreenshotIntent(value: unknown): value is LocalWorkspaceScreenshotIntent {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<LocalWorkspaceScreenshotIntent>
   return Boolean(
-    event &&
-    typeof event.atMs === 'number' &&
-    Number.isFinite(event.atMs) &&
-    typeof event.id === 'string' &&
-    typeof event.kind === 'string' &&
-    typeof event.label === 'string'
+    candidate.version === LOCAL_WORKSPACE_SCREENSHOT_INTENT_VERSION &&
+    typeof candidate.authorityId === 'string' &&
+    typeof candidate.contentDocumentId === 'string' &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.expiresAt === 'string' &&
+    Array.isArray(candidate.objectIds) &&
+    candidate.objectIds.length > 0 &&
+    candidate.objectIds.length <= 8 &&
+    candidate.objectIds.every((id) => typeof id === 'string' && id.length > 0) &&
+    typeof candidate.pageId === 'string' &&
+    typeof candidate.requestId === 'string' &&
+    typeof candidate.sequence === 'number' &&
+    Number.isInteger(candidate.sequence) &&
+    candidate.sequence > 0 &&
+    typeof candidate.workspaceId === 'string'
   )
 }
 
-function traceHistoryEvents(value: unknown): TraceHistoryEvent[] {
-  if (!Array.isArray(value)) throw new TypeError('Trace session events must be an array.')
-  return value.map((entry) => {
-    if (isTraceHistoryEvent(entry)) return structuredClone(entry)
-    const event = jsonRecord(entry)
-    if (!event || typeof event.id !== 'string' || !event.id.trim()) {
-      throw new TypeError('Trace session event is invalid.')
-    }
-    const evidence = jsonRecord(event.evidence)
-    return {
-      atMs: typeof event.atMs === 'number' && Number.isFinite(event.atMs) ? event.atMs : 0,
-      ...(evidence && typeof evidence.evidenceId === 'string'
-        ? { evidence: { evidenceId: evidence.evidenceId } }
-        : {}),
-      id: event.id,
-      kind: typeof event.kind === 'string' ? event.kind : 'trace',
-      label: typeof event.label === 'string' ? event.label : '',
-      ...(typeof event.text === 'string' ? { text: event.text } : {})
-    }
-  })
-}
-
-function traceContextDraft(
-  value: unknown,
-  events: readonly TraceHistoryEvent[]
-): TraceHistoryContextEntry[] {
-  if (!Array.isArray(value)) throw new TypeError('Trace session context draft must be an array.')
-  const entries = new Map<string, TraceHistoryContextEntry>()
-  for (const candidate of value) {
-    const entry = jsonRecord(candidate)
-    if (
-      !entry ||
-      typeof entry.sourceEventId !== 'string' ||
-      typeof entry.included !== 'boolean' ||
-      typeof entry.removed !== 'boolean'
-    ) {
-      throw new TypeError('Trace session context entry is invalid.')
-    }
-    entries.set(entry.sourceEventId, {
-      ...(typeof entry.editedText === 'string' ? { editedText: entry.editedText } : {}),
-      included: entry.included,
-      ...(typeof entry.note === 'string' ? { note: entry.note } : {}),
-      removed: entry.removed,
-      sourceEventId: entry.sourceEventId
-    })
-  }
-  return events.map(
-    (event) =>
-      entries.get(event.id) ?? {
-        included: true,
-        removed: false,
-        sourceEventId: event.id
-      }
-  )
-}
-
-function traceRect(value: unknown): Rect | undefined {
-  if (value === undefined) return undefined
-  const rect = jsonRecord(value)
+function isScreenshotResult(value: unknown): value is LocalWorkspaceScreenshotResult {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<LocalWorkspaceScreenshotResult>
   if (
-    !rect ||
-    typeof rect.x !== 'number' ||
-    !Number.isFinite(rect.x) ||
-    typeof rect.y !== 'number' ||
-    !Number.isFinite(rect.y) ||
-    typeof rect.width !== 'number' ||
-    !Number.isFinite(rect.width) ||
-    typeof rect.height !== 'number' ||
-    !Number.isFinite(rect.height)
+    (candidate.status !== 'completed' && candidate.status !== 'failed') ||
+    typeof candidate.completedAt !== 'string' ||
+    !Array.isArray(candidate.objectIds) ||
+    candidate.objectIds.some((id) => typeof id !== 'string' || !id) ||
+    typeof candidate.requestId !== 'string'
   ) {
-    throw new TypeError('Trace bounds are invalid.')
+    return false
   }
-  return { height: rect.height, width: rect.width, x: rect.x, y: rect.y }
-}
-
-function traceStrings(value: unknown, field: string): string[] | undefined {
-  if (value === undefined) return undefined
-  if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string')) {
-    throw new TypeError(`Trace ${field} is invalid.`)
-  }
-  return [...value]
-}
-
-function optionalNonNegativeInteger(value: unknown, field: string): number | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new TypeError(`Trace ${field} is invalid.`)
-  }
-  return value
-}
-
-function traceSession(value: unknown): TraceHistorySession {
-  const session = jsonRecord(value)
-  if (
-    !session ||
-    typeof session.id !== 'string' ||
-    !session.id.trim() ||
-    typeof session.startedAt !== 'string' ||
-    !Number.isFinite(Date.parse(session.startedAt)) ||
-    typeof session.durationMs !== 'number' ||
-    !Number.isFinite(session.durationMs) ||
-    !Array.isArray(session.events) ||
-    !Array.isArray(session.contextDraft)
-  ) {
-    throw new TypeError('Trace session payload is invalid.')
-  }
-  const scope = traceScope(session.scope)
-  const events = traceHistoryEvents(session.events)
-  return {
-    contextDraft: traceContextDraft(session.contextDraft, events),
-    durationMs: session.durationMs,
-    events,
-    id: session.id,
-    ...(scope ? { scope } : {}),
-    startedAt: session.startedAt
-  }
-}
-
-function traceSummary(value: unknown, sessionId: string): TraceQueryRecordSummary {
-  const summary = jsonRecord(value)
-  if (
-    !summary ||
-    summary.id !== sessionId ||
-    typeof summary.startedAt !== 'string' ||
-    typeof summary.updatedAt !== 'string' ||
-    typeof summary.title !== 'string'
-  ) {
-    throw new TypeError('Trace session summary is invalid.')
-  }
-  const bounds = traceRect(summary.bounds)
-  const eventCount = optionalNonNegativeInteger(summary.eventCount, 'summary.eventCount')
-  const evidenceCount = optionalNonNegativeInteger(summary.evidenceCount, 'summary.evidenceCount')
-  const gestureCount = optionalNonNegativeInteger(summary.gestureCount, 'summary.gestureCount')
-  const gestureIds = traceStrings(summary.gestureIds, 'summary.gestureIds')
-  const latestGestureAt = summary.latestGestureAt
-  if (
-    latestGestureAt !== undefined &&
-    (typeof latestGestureAt !== 'string' || !Number.isFinite(Date.parse(latestGestureAt)))
-  ) {
-    throw new TypeError('Trace summary.latestGestureAt is invalid.')
-  }
-  const scope = traceScope(summary.scope)
-  const searchTerms = traceStrings(summary.searchTerms, 'summary.searchTerms')
-  const targetIds = traceStrings(summary.targetIds, 'summary.targetIds')
-  return {
-    ...(bounds ? { bounds } : {}),
-    durationMs:
-      typeof summary.durationMs === 'number' && Number.isFinite(summary.durationMs)
-        ? summary.durationMs
-        : 0,
-    ...(eventCount !== undefined ? { eventCount } : {}),
-    ...(evidenceCount !== undefined ? { evidenceCount } : {}),
-    ...(gestureCount !== undefined ? { gestureCount } : {}),
-    ...(gestureIds ? { gestureIds } : {}),
-    id: summary.id,
-    ...(latestGestureAt !== undefined ? { latestGestureAt } : {}),
-    ...(scope ? { scope } : {}),
-    ...(searchTerms ? { searchTerms } : {}),
-    startedAt: summary.startedAt,
-    ...(targetIds ? { targetIds } : {}),
-    title: summary.title,
-    updatedAt: summary.updatedAt
-  }
-}
-
-function traceEvidenceReferences(
-  value: unknown
-): Map<string, LocalWorkspaceTraceEvidenceReference> {
-  const session = jsonRecord(value)
-  if (!Array.isArray(session?.events)) return new Map()
-  return new Map(
-    session.events.flatMap((value) => {
-      const event = jsonRecord(value)
-      const evidence = jsonRecord(event?.evidence)
-      if (
-        !event ||
-        typeof event.id !== 'string' ||
-        !event.id.trim() ||
-        !evidence ||
-        typeof evidence.evidenceId !== 'string' ||
-        !evidence.evidenceId.trim()
-      ) {
-        return []
-      }
-      const mimeType = evidence.mimeType === 'image/png' ? evidence.mimeType : undefined
-      return [
-        [
-          event.id.trim(),
-          {
-            evidenceId: evidence.evidenceId.trim(),
-            ...(mimeType ? { mimeType } : {})
-          }
-        ] as const
-      ]
-    })
-  )
-}
-
-function gestureWithEvidenceReference(
-  value: unknown,
-  references: Map<string, LocalWorkspaceTraceEvidenceReference>
-): unknown {
-  const gesture = jsonRecord(value)
-  if (!gesture || gesture.evidence !== undefined) return value
-  const reference =
-    typeof gesture.gestureId === 'string' ? references.get(gesture.gestureId.trim()) : undefined
-  return reference ? { ...gesture, evidence: reference } : gesture
-}
-
-type ValidTraceSpokenTurn = TraceJsonRecord & {
-  endedAt: string
-  endedAtEpochMs: number
-  id: string
-  sequence: number
-  startedAt: string
-  startedAtEpochMs: number
-  text: string
-}
-
-function hasValidTraceSpokenTurnFields(turn: TraceJsonRecord): turn is ValidTraceSpokenTurn {
-  return (
-    typeof turn.id === 'string' &&
-    Boolean(turn.id.trim()) &&
-    typeof turn.sequence === 'number' &&
-    Number.isInteger(turn.sequence) &&
-    turn.sequence > 0 &&
-    typeof turn.text === 'string' &&
-    Boolean(turn.text.trim())
-  )
-}
-
-function hasValidTraceSpokenTurnTiming(turn: TraceJsonRecord): turn is ValidTraceSpokenTurn {
-  return (
-    typeof turn.startedAt === 'string' &&
-    Number.isFinite(Date.parse(turn.startedAt)) &&
-    typeof turn.endedAt === 'string' &&
-    Number.isFinite(Date.parse(turn.endedAt)) &&
-    typeof turn.startedAtEpochMs === 'number' &&
-    Number.isFinite(turn.startedAtEpochMs) &&
-    typeof turn.endedAtEpochMs === 'number' &&
-    Number.isFinite(turn.endedAtEpochMs) &&
-    turn.startedAtEpochMs <= turn.endedAtEpochMs &&
-    turn.endedAtEpochMs - turn.startedAtEpochMs <= 60_000
-  )
-}
-
-function hasValidTraceSpokenTurnScope(
-  scope: TraceJsonRecord | null,
-  metadata: PersistedLocalWorkspaceAuthorityMetadata
-): boolean {
+  if (candidate.status === 'failed') return typeof candidate.error === 'string'
   return Boolean(
-    scope &&
-    scope.workspaceId === metadata.identity.workspaceId &&
-    scope.documentId === metadata.identity.documentId &&
-    typeof scope.pageId === 'string' &&
-    scope.pageId.trim()
+    typeof candidate.base64 === 'string' &&
+    candidate.mimeType === 'image/png' &&
+    typeof candidate.byteLength === 'number' &&
+    typeof candidate.pixelHeight === 'number' &&
+    typeof candidate.pixelWidth === 'number' &&
+    candidate.source === 'live_board' &&
+    candidate.bounds &&
+    isNavigationRegion(candidate.bounds)
   )
 }
 
-function traceSpokenTurn(
-  value: unknown,
-  metadata: PersistedLocalWorkspaceAuthorityMetadata
-): PersistedTraceSpokenTurn {
-  const turn = jsonRecord(value)
-  const scope = jsonRecord(turn?.scope)
+function completedScreenshotResult(
+  request: CompleteLocalWorkspaceScreenshotRequest,
+  intent: LocalWorkspaceScreenshotIntent
+): LocalWorkspaceScreenshotResult {
   if (
-    !turn ||
-    !hasValidTraceSpokenTurnFields(turn) ||
-    !hasValidTraceSpokenTurnTiming(turn) ||
-    !hasValidTraceSpokenTurnScope(scope, metadata)
+    request.mimeType !== 'image/png' ||
+    typeof request.base64 !== 'string' ||
+    !request.base64 ||
+    !request.bounds ||
+    !isNavigationRegion(request.bounds) ||
+    typeof request.pixelHeight !== 'number' ||
+    !Number.isInteger(request.pixelHeight) ||
+    request.pixelHeight < 1 ||
+    typeof request.pixelWidth !== 'number' ||
+    !Number.isInteger(request.pixelWidth) ||
+    request.pixelWidth < 1 ||
+    request.source !== 'live_board'
   ) {
-    throw new TypeError('Trace spoken turn payload is invalid.')
+    throw new TypeError('Completed screenshot payload is invalid.')
+  }
+  const byteLength = Buffer.byteLength(request.base64, 'base64')
+  if (byteLength === 0 || byteLength > MAX_SCREENSHOT_BYTES) {
+    throw new TypeError('Completed screenshot must contain at most 2 MiB of PNG data.')
   }
   return {
-    endedAt: new Date(turn.endedAt).toISOString(),
-    id: turn.id.trim(),
-    sequence: turn.sequence,
-    startedAt: new Date(turn.startedAt).toISOString(),
-    value: structuredClone(turn) as TraceQuerySpokenTurn
+    base64: request.base64,
+    bounds: { ...request.bounds },
+    byteLength,
+    completedAt: new Date().toISOString(),
+    mimeType: 'image/png',
+    objectIds: [...intent.objectIds],
+    pixelHeight: request.pixelHeight,
+    pixelWidth: request.pixelWidth,
+    requestId: intent.requestId,
+    source: 'live_board',
+    status: 'completed'
+  }
+}
+
+function screenshotResult(
+  request: CompleteLocalWorkspaceScreenshotRequest,
+  intent: LocalWorkspaceScreenshotIntent
+): LocalWorkspaceScreenshotResult {
+  const status = request.status ?? (request.error ? 'failed' : 'completed')
+  if (status === 'completed') return completedScreenshotResult(request, intent)
+  const error = request.error?.trim()
+  if (!error) throw new TypeError('Failed screenshot completion requires an error.')
+  return {
+    completedAt: new Date().toISOString(),
+    error: error.slice(0, 1_000),
+    objectIds: [...intent.objectIds],
+    requestId: intent.requestId,
+    status: 'failed'
   }
 }
 
@@ -719,302 +511,10 @@ function boundedReceipts(
   return Object.fromEntries(entries.slice(-MAX_RECEIPTS))
 }
 
-type TraceFileSnapshot = {
-  gestures: Map<string, LocalWorkspaceTraceGesture>
-  sessions: Map<string, TraceHistorySession>
-  spokenTurns: Map<string, TraceQuerySpokenTurn>
-  summaries: Map<string, TraceQueryRecordSummary>
-}
-
-export type LocalWorkspaceTraceHistorySnapshot = {
-  sessions: TraceHistorySession[]
-  spokenTurns: TraceQuerySpokenTurn[]
-  summaries: TraceQueryRecordSummary[]
-}
-
-export type LocalWorkspaceTraceActivityItem = {
-  context: TraceHistoryContextEntry
-  event: TraceHistoryEvent
-  occurredAtMs: number
-  scope?: TraceQueryScope
-  sessionId: string
-  sessionStartedAt: string
-  title: string
-}
-
-export type LocalWorkspaceTraceActivityPage = {
-  contract: typeof LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT
-  hasMore: boolean
-  items: LocalWorkspaceTraceActivityItem[]
-  nextCursor: string | null
-}
-
-type TraceActivityCursor = {
-  atMs: number
-  eventId: string
-  occurredAtMs: number
-  sessionId: string
-}
-
-function replayTraceFileEvents(events: readonly LocalWorkspaceTraceFileEvent[]): TraceFileSnapshot {
-  const snapshot: TraceFileSnapshot = {
-    gestures: new Map(),
-    sessions: new Map(),
-    spokenTurns: new Map(),
-    summaries: new Map()
-  }
-  const spokenTurnSessionIds = new Map<string, string>()
-  const clearSessionRecords = (sessionId: string) => {
-    for (const [gestureId, gesture] of snapshot.gestures) {
-      if (gesture.sessionId === sessionId) snapshot.gestures.delete(gestureId)
-    }
-    for (const [turnId, associatedSessionId] of spokenTurnSessionIds) {
-      if (associatedSessionId !== sessionId) continue
-      snapshot.spokenTurns.delete(turnId)
-      spokenTurnSessionIds.delete(turnId)
-    }
-  }
-  for (const event of events) {
-    if (event.recordType === 'session-deleted') {
-      snapshot.sessions.delete(event.sessionId)
-      snapshot.summaries.delete(event.sessionId)
-      clearSessionRecords(event.sessionId)
-      continue
-    }
-    if (event.recordType === 'session') {
-      clearSessionRecords(event.session.id)
-      snapshot.sessions.set(event.session.id, structuredClone(event.session))
-      snapshot.summaries.set(event.summary.id, structuredClone(event.summary))
-      continue
-    }
-    if (event.recordType === 'gesture') {
-      snapshot.gestures.set(event.gesture.gestureId, structuredClone(event.gesture))
-      continue
-    }
-    snapshot.spokenTurns.set(event.spokenTurn.id, structuredClone(event.spokenTurn))
-    if (event.sessionId) spokenTurnSessionIds.set(event.spokenTurn.id, event.sessionId)
-    else spokenTurnSessionIds.delete(event.spokenTurn.id)
-  }
-  return snapshot
-}
-
-function traceActivityContext(
-  session: TraceHistorySession,
-  event: TraceHistoryEvent
-): TraceHistoryContextEntry {
-  return (
-    session.contextDraft?.find((entry) => entry.sourceEventId === event.id) ?? {
-      included: true,
-      removed: false,
-      sourceEventId: event.id
-    }
-  )
-}
-
-function compareTraceActivity(
-  first: {
-    event: Pick<TraceHistoryEvent, 'atMs' | 'id'>
-    occurredAtMs: number
-    sessionId: string
-  },
-  second: {
-    event: Pick<TraceHistoryEvent, 'atMs' | 'id'>
-    occurredAtMs: number
-    sessionId: string
-  }
-) {
-  return (
-    second.occurredAtMs - first.occurredAtMs ||
-    second.event.atMs - first.event.atMs ||
-    first.sessionId.localeCompare(second.sessionId) ||
-    first.event.id.localeCompare(second.event.id)
-  )
-}
-
-function encodeTraceActivityCursor(item: LocalWorkspaceTraceActivityItem) {
-  const cursor: TraceActivityCursor = {
-    atMs: item.event.atMs,
-    eventId: item.event.id,
-    occurredAtMs: item.occurredAtMs,
-    sessionId: item.sessionId
-  }
-  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
-}
-
-function decodeTraceActivityCursor(value: string | undefined): TraceActivityCursor | null {
-  if (value === undefined) return null
-  const normalized = value.trim()
-  if (!normalized || normalized.length > 512)
-    throw new TypeError('Trace activity cursor is invalid.')
-  try {
-    const decoded = jsonRecord(JSON.parse(Buffer.from(normalized, 'base64url').toString('utf8')))
-    if (
-      !decoded ||
-      typeof decoded.atMs !== 'number' ||
-      !Number.isFinite(decoded.atMs) ||
-      typeof decoded.eventId !== 'string' ||
-      !decoded.eventId ||
-      typeof decoded.occurredAtMs !== 'number' ||
-      !Number.isFinite(decoded.occurredAtMs) ||
-      typeof decoded.sessionId !== 'string' ||
-      !decoded.sessionId
-    ) {
-      throw new TypeError('Trace activity cursor is invalid.')
-    }
-    return {
-      atMs: decoded.atMs,
-      eventId: decoded.eventId,
-      occurredAtMs: decoded.occurredAtMs,
-      sessionId: decoded.sessionId
-    }
-  } catch (error) {
-    if (error instanceof TypeError && error.message === 'Trace activity cursor is invalid.') {
-      throw error
-    }
-    throw new TypeError('Trace activity cursor is invalid.')
-  }
-}
-
-function traceActivityPage(
-  snapshot: TraceFileSnapshot,
-  input: { before?: string; limit?: number }
-): LocalWorkspaceTraceActivityPage {
-  const limit = input.limit ?? DEFAULT_TRACE_ACTIVITY_PAGE_LIMIT
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TRACE_ACTIVITY_PAGE_LIMIT) {
-    throw new TypeError(
-      `Trace activity limit must be between 1 and ${String(MAX_TRACE_ACTIVITY_PAGE_LIMIT)}.`
-    )
-  }
-  const cursor = decodeTraceActivityCursor(input.before)
-  const items = [...snapshot.sessions.values()]
-    .flatMap((session): LocalWorkspaceTraceActivityItem[] => {
-      const startedAtMs = Date.parse(session.startedAt)
-      const summary = snapshot.summaries.get(session.id)
-      return session.events.map((event) => ({
-        context: structuredClone(traceActivityContext(session, event)),
-        event: structuredClone(event),
-        occurredAtMs: (Number.isNaN(startedAtMs) ? 0 : startedAtMs) + event.atMs,
-        ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
-        sessionId: session.id,
-        sessionStartedAt: session.startedAt,
-        title: summary?.title || 'Recent activity'
-      }))
-    })
-    .sort(compareTraceActivity)
-  const startIndex = cursor
-    ? items.findIndex(
-        (item) =>
-          compareTraceActivity(item, {
-            event: { atMs: cursor.atMs, id: cursor.eventId },
-            occurredAtMs: cursor.occurredAtMs,
-            sessionId: cursor.sessionId
-          }) > 0
-      )
-    : 0
-  const safeStartIndex = startIndex < 0 ? items.length : startIndex
-  const pageItems = items.slice(safeStartIndex, safeStartIndex + limit)
-  const hasMore = safeStartIndex + pageItems.length < items.length
-  const nextCursorItem = pageItems.at(-1)
-  return {
-    contract: LOCAL_WORKSPACE_TRACE_ACTIVITY_PAGE_CONTRACT,
-    hasMore,
-    items: pageItems,
-    nextCursor: hasMore && nextCursorItem ? encodeTraceActivityCursor(nextCursorItem) : null
-  }
-}
-
-type DirectTraceSelection = {
-  gesture?: LocalWorkspaceTraceGesture
-  spokenTurn?: TraceQuerySpokenTurn
-}
-
-type DirectTraceBoardContext = {
-  pageMissing: boolean
-  pageName?: string
-  targetMissing: boolean
-}
-
-function traceGestureMatchesTurn(
-  gesture: LocalWorkspaceTraceGesture,
-  spokenTurn: TraceQuerySpokenTurn
-): boolean {
-  const capturedAt = Date.parse(gesture.capturedAt)
-  return (
-    gesture.boardOrigin.workspaceId === spokenTurn.scope.workspaceId &&
-    gesture.boardOrigin.contentDocumentId === spokenTurn.scope.documentId &&
-    gesture.boardOrigin.pageId === spokenTurn.scope.pageId &&
-    capturedAt >= Date.parse(spokenTurn.startedAt) - 3_000 &&
-    capturedAt <= Date.parse(spokenTurn.endedAt) + 3_000
-  )
-}
-
-function selectDirectTrace(snapshot: TraceFileSnapshot): DirectTraceSelection | null {
-  const gestures = [...snapshot.gestures.values()].sort(
-    (first, second) =>
-      Date.parse(second.capturedAt) - Date.parse(first.capturedAt) ||
-      second.gestureId.localeCompare(first.gestureId)
-  )
-  const spokenTurns = [...snapshot.spokenTurns.values()].sort(
-    (first, second) =>
-      Date.parse(second.endedAt) - Date.parse(first.endedAt) ||
-      second.sequence - first.sequence ||
-      second.id.localeCompare(first.id)
-  )
-  const latestGesture = gestures.at(0)
-  const latestSpokenTurn = spokenTurns.at(0)
-  if (!latestGesture && !latestSpokenTurn) return null
-  const latestGestureAt = latestGesture
-    ? Date.parse(latestGesture.capturedAt)
-    : Number.NEGATIVE_INFINITY
-  const latestSpokenAt = latestSpokenTurn
-    ? Date.parse(latestSpokenTurn.endedAt)
-    : Number.NEGATIVE_INFINITY
-  const spokenTurn =
-    latestSpokenTurn && (!latestGesture || latestSpokenAt >= latestGestureAt - 3_000)
-      ? latestSpokenTurn
-      : undefined
-  return {
-    gesture: spokenTurn
-      ? gestures.find((candidate) => traceGestureMatchesTurn(candidate, spokenTurn))
-      : latestGesture,
-    ...(spokenTurn ? { spokenTurn } : {})
-  }
-}
-
-function directTraceTargetIds(gesture?: LocalWorkspaceTraceGesture): Set<string> {
-  const items = gesture?.candidates.items ?? []
-  const targetIds = new Set(items.map(({ stableId }) => stableId))
-  const primaryTargetId = gesture?.candidates.primaryTargetId
-  if (primaryTargetId && !items.some(({ stableId }) => stableId === primaryTargetId)) {
-    targetIds.add(primaryTargetId)
-  }
-  return targetIds
-}
-
-function resolveDirectTraceBoardContext(
-  documentValue: unknown,
-  pageId?: string,
-  gesture?: LocalWorkspaceTraceGesture
-): DirectTraceBoardContext {
-  try {
-    const document = readAuthorityBoardDocument(documentValue)
-    const page = pageId ? document.graph.getNode(pageId) : undefined
-    if (page?.type !== 'CANVAS' || page.parentId !== document.graph.rootId) {
-      return { pageMissing: true, targetMissing: false }
-    }
-    const targetMissing = [...directTraceTargetIds(gesture)].some((id) => {
-      const node = document.graph.getNode(id)
-      return !node || (node.id !== page.id && !document.graph.isDescendant(node.id, page.id))
-    })
-    return { pageMissing: false, pageName: page.name, targetMissing }
-  } catch {
-    return { pageMissing: true, targetMissing: false }
-  }
-}
-
 export class LocalWorkspaceAuthorityStore {
   private readonly headListeners = new Set<LocalWorkspaceAuthorityHeadListener>()
   private readonly navigationListeners = new Set<LocalWorkspaceAuthorityNavigationListener>()
+  private readonly screenshotListeners = new Set<LocalWorkspaceAuthorityScreenshotListener>()
   private readonly themeListeners = new Set<LocalWorkspaceAuthorityThemeListener>()
   private readonly rootPath: string
   private readonly metadataPath: string
@@ -1023,6 +523,8 @@ export class LocalWorkspaceAuthorityStore {
   private readonly historyPath: string
   private readonly navigationPath: string
   private readonly presencePath: string
+  private readonly screenshotIntentPath: string
+  private readonly screenshotResultPath: string
   private readonly themePath: string
   private readonly traceFiles: LocalWorkspaceTraceFileStore
   private readonly preferredWorkspaceId: string | null
@@ -1031,6 +533,7 @@ export class LocalWorkspaceAuthorityStore {
   private workspaceIndexVerifiedKey: string | null = null
   private workspaceIndexCache: WorkspaceJsonlIndexPrevious | null = null
   private historyWriteTail: Promise<void> = Promise.resolve()
+  private activeWriteLockKey: string | null = null
 
   constructor(options: LocalWorkspaceAuthorityStoreOptions) {
     this.rootPath = path.resolve(options.root)
@@ -1041,6 +544,8 @@ export class LocalWorkspaceAuthorityStore {
     this.historyPath = path.join(this.rootPath, AUTHORITY_HISTORY_DIRECTORY)
     this.navigationPath = path.join(this.rootPath, AUTHORITY_NAVIGATION_FILE)
     this.presencePath = path.join(this.rootPath, AUTHORITY_PRESENCE_FILE)
+    this.screenshotIntentPath = path.join(this.rootPath, AUTHORITY_SCREENSHOT_INTENT_FILE)
+    this.screenshotResultPath = path.join(this.rootPath, AUTHORITY_SCREENSHOT_RESULT_FILE)
     this.themePath = path.join(this.rootPath, AUTHORITY_THEME_FILE)
     this.preferredWorkspaceId = normalizedId(options.preferredWorkspaceId)
     this.semanticServices = options.semanticServices ?? true
@@ -1054,6 +559,11 @@ export class LocalWorkspaceAuthorityStore {
   subscribeNavigationQueued(listener: LocalWorkspaceAuthorityNavigationListener): () => void {
     this.navigationListeners.add(listener)
     return () => this.navigationListeners.delete(listener)
+  }
+
+  subscribeScreenshotQueued(listener: LocalWorkspaceAuthorityScreenshotListener): () => void {
+    this.screenshotListeners.add(listener)
+    return () => this.screenshotListeners.delete(listener)
   }
 
   subscribeThemeQueued(listener: LocalWorkspaceAuthorityThemeListener): () => void {
@@ -1167,6 +677,110 @@ export class LocalWorkspaceAuthorityStore {
       })
       return true
     })
+  }
+
+  queueScreenshotIntent(
+    request: QueueLocalWorkspaceScreenshotRequest
+  ): Promise<LocalWorkspaceScreenshotIntent> {
+    return this.withWriteLock(async () => {
+      const metadata = await this.ensureMetadata()
+      const state = await this.readState(metadata)
+      if (!state) {
+        throw new LocalWorkspaceAuthorityStoreError(
+          'invalid_document',
+          'Local workspace authority has no saved Board document'
+        )
+      }
+      this.assertStateMatchesMetadata(state, metadata)
+      if (request.workspaceId !== metadata.identity.workspaceId) {
+        throw new LocalWorkspaceAuthorityStoreError(
+          'workspace_mismatch',
+          `Authority owns workspace "${metadata.identity.workspaceId}", received "${request.workspaceId}"`,
+          state.revision
+        )
+      }
+      if (request.contentDocumentId !== metadata.identity.documentId) {
+        throw new LocalWorkspaceAuthorityStoreError(
+          'invalid_document',
+          `Authority owns content document "${metadata.identity.documentId}", received "${request.contentDocumentId}"`,
+          state.revision
+        )
+      }
+      const objectIds = [...new Set(request.objectIds.map((id) => id.trim()))]
+      if (objectIds.length === 0 || objectIds.length > 8 || objectIds.some((id) => !id)) {
+        throw new TypeError('Screenshot intents require from 1 to 8 unique object IDs.')
+      }
+      const ttlMs = request.ttlMs ?? DEFAULT_SCREENSHOT_INTENT_TTL_MS
+      if (!Number.isInteger(ttlMs) || ttlMs < 1 || ttlMs > DEFAULT_SCREENSHOT_INTENT_TTL_MS) {
+        throw new TypeError(
+          `Screenshot intent ttlMs must be between 1 and ${String(DEFAULT_SCREENSHOT_INTENT_TTL_MS)}.`
+        )
+      }
+      const existing = await this.readScreenshotIntent()
+      const createdAt = new Date()
+      const intent: LocalWorkspaceScreenshotIntent = {
+        authorityId: metadata.authorityId,
+        contentDocumentId: metadata.identity.documentId,
+        createdAt: createdAt.toISOString(),
+        expiresAt: new Date(createdAt.getTime() + ttlMs).toISOString(),
+        objectIds,
+        pageId: request.pageId,
+        requestId: `board-screenshot-${randomUUID()}`,
+        sequence: (existing?.sequence ?? 0) + 1,
+        version: LOCAL_WORKSPACE_SCREENSHOT_INTENT_VERSION,
+        workspaceId: metadata.identity.workspaceId
+      }
+      await this.atomicWrite(this.screenshotIntentPath, intent)
+      await unlink(this.screenshotResultPath).catch((error: unknown) => {
+        if (errorCode(error) !== 'ENOENT') throw error
+      })
+      this.notifyScreenshotQueued(intent)
+      return intent
+    })
+  }
+
+  pendingScreenshotIntent(): Promise<LocalWorkspaceScreenshotIntent | null> {
+    return this.withReadLock(async () => {
+      const intent = await this.readScreenshotIntent()
+      if (!intent || Date.parse(intent.expiresAt) <= Date.now()) return null
+      const result = await this.readScreenshotResult()
+      return result?.requestId === intent.requestId ? null : structuredClone(intent)
+    })
+  }
+
+  completeScreenshot(
+    request: CompleteLocalWorkspaceScreenshotRequest
+  ): Promise<LocalWorkspaceScreenshotResult> {
+    return this.withWriteLock(async () => {
+      const intent = await this.readScreenshotIntent()
+      if (!intent || intent.requestId !== request.requestId) {
+        throw new TypeError('Screenshot completion does not match the pending request.')
+      }
+      if (
+        request.objectIds.length !== intent.objectIds.length ||
+        request.objectIds.some((id, index) => id !== intent.objectIds[index])
+      ) {
+        throw new TypeError('Screenshot completion object IDs do not match the pending request.')
+      }
+      const result = screenshotResult(request, intent)
+      await this.atomicWrite(this.screenshotResultPath, result)
+      return structuredClone(result)
+    })
+  }
+
+  async waitForScreenshotResult(
+    requestId: string,
+    timeoutMs = DEFAULT_SCREENSHOT_INTENT_TTL_MS
+  ): Promise<LocalWorkspaceScreenshotResult | null> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const result = await this.withReadLock(() => this.readScreenshotResult())
+      if (result?.requestId === requestId) return structuredClone(result)
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    }
+    return null
   }
 
   recordPresence(request: RecordLocalWorkspacePresenceRequest): Promise<LocalWorkspacePresence> {
@@ -1300,6 +914,20 @@ export class LocalWorkspaceAuthorityStore {
       this.assertStateMatchesMetadata(state, metadata)
       const session = traceSession(input.session)
       const summary = traceSummary(input.summary, session.id)
+      if (!sameTraceSessionReferences(session, summary)) {
+        throw new TypeError('Trace session and summary tags must match.')
+      }
+      if (summary.tag) {
+        const existing = await this.readTraceSnapshot(false)
+        const collision = [...existing.summaries.values()].some((candidate) => {
+          if (candidate.id === session.id) return false
+          const tags = [candidate.tag, ...(candidate.aliases ?? [])].filter(
+            (tag): tag is string => typeof tag === 'string'
+          )
+          return tags.some((tag) => normalizeTraceSessionTag(tag) === summary.tag)
+        })
+        if (collision) throw new TypeError(`Trace session tag #${summary.tag} is already in use.`)
+      }
       if (!Array.isArray(input.gestures)) {
         throw new TypeError('Trace session gestures must be an array.')
       }
@@ -1848,6 +1476,27 @@ export class LocalWorkspaceAuthorityStore {
     return metadata
   }
 
+  private async restoreStaleDocumentRewrite(
+    persistedLedger: PersistedLocalWorkspaceAuthorityLedger,
+    contentHash: string
+  ): Promise<{ document: unknown; serialized: ReturnType<typeof serializeDocument> } | null> {
+    await this.historyWriteTail
+    const staleRewriteRevision = await findJsonHistoryRevisionByHash(this.historyPath, contentHash)
+    if (staleRewriteRevision === null || staleRewriteRevision >= persistedLedger.revision) {
+      return null
+    }
+    const document = historyDocument(
+      await readJsonHistory(this.historyPath, persistedLedger.revision)
+    )
+    if (document === null) return null
+    console.warn(
+      `[Local workspace authority] workspace.json matched saved revision ${String(staleRewriteRevision)}; keeping revision ${String(persistedLedger.revision)}`
+    )
+    const serialized = serializeDocument(document)
+    await writeSerializedJsonFile(this.documentPath, serialized.serialized)
+    return { document, serialized }
+  }
+
   private async readState(
     metadata: PersistedLocalWorkspaceAuthorityMetadata
   ): Promise<PersistedLocalWorkspaceAuthorityState | null> {
@@ -1885,24 +1534,11 @@ export class LocalWorkspaceAuthorityStore {
     }
     let contentHash = serialized.hash
     if (persistedLedger !== null && persistedLedger.contentHash !== contentHash) {
-      await this.historyWriteTail
-      const staleRewriteRevision = await findJsonHistoryRevisionByHash(
-        this.historyPath,
-        contentHash
-      )
-      if (staleRewriteRevision !== null && staleRewriteRevision < persistedLedger.revision) {
-        const restored = historyDocument(
-          await readJsonHistory(this.historyPath, persistedLedger.revision)
-        )
-        if (restored !== null) {
-          console.warn(
-            `[Local workspace authority] workspace.json matched saved revision ${String(staleRewriteRevision)}; keeping revision ${String(persistedLedger.revision)}`
-          )
-          serialized = serializeDocument(restored)
-          await writeSerializedJsonFile(this.documentPath, serialized.serialized)
-          document = restored
-          contentHash = persistedLedger.contentHash
-        }
+      const restored = await this.restoreStaleDocumentRewrite(persistedLedger, contentHash)
+      if (restored) {
+        serialized = restored.serialized
+        document = restored.document
+        contentHash = persistedLedger.contentHash
       }
     }
     const ledger = persistedLedger ?? {
@@ -1958,12 +1594,18 @@ export class LocalWorkspaceAuthorityStore {
     state: PersistedLocalWorkspaceAuthorityState | null,
     knownDocumentMarker?: string,
     knownLedgerMarker?: string,
-    options?: { pendingDocumentWrite?: boolean }
+    options?: { expectedCurrentRevision?: number; pendingDocumentWrite?: boolean }
   ): Promise<void> {
     const [documentMarker, ledgerMarker] =
       knownDocumentMarker !== undefined && knownLedgerMarker !== undefined
         ? [knownDocumentMarker, knownLedgerMarker]
         : await Promise.all([jsonFileMarker(this.documentPath), jsonFileMarker(this.ledgerPath)])
+    if (
+      options?.expectedCurrentRevision !== undefined &&
+      this.stateCache?.state?.revision !== options.expectedCurrentRevision
+    ) {
+      return
+    }
     this.stateCache = {
       documentMarker,
       ledgerMarker,
@@ -2085,6 +1727,10 @@ export class LocalWorkspaceAuthorityStore {
 
   private notifyNavigationQueued(intent: LocalWorkspaceNavigationIntent): void {
     for (const listener of this.navigationListeners) listener(intent)
+  }
+
+  private notifyScreenshotQueued(intent: LocalWorkspaceScreenshotIntent): void {
+    for (const listener of this.screenshotListeners) listener(intent)
   }
 
   private notifyThemeQueued(intent: LocalWorkspaceThemeIntent): void {
@@ -2236,6 +1882,24 @@ export class LocalWorkspaceAuthorityStore {
     return value
   }
 
+  private async readScreenshotIntent(): Promise<LocalWorkspaceScreenshotIntent | null> {
+    const value = await this.readJson(this.screenshotIntentPath)
+    if (value === null) return null
+    if (!isScreenshotIntent(value)) {
+      throw new TypeError('Local workspace authority screenshot intent is invalid')
+    }
+    return value
+  }
+
+  private async readScreenshotResult(): Promise<LocalWorkspaceScreenshotResult | null> {
+    const value = await this.readJson(this.screenshotResultPath)
+    if (value === null) return null
+    if (!isScreenshotResult(value)) {
+      throw new TypeError('Local workspace authority screenshot result is invalid')
+    }
+    return value
+  }
+
   private async readThemeIntent(): Promise<LocalWorkspaceThemeIntent | null> {
     const value = await this.readJson(this.themePath)
     if (value === null) return null
@@ -2319,7 +1983,19 @@ export class LocalWorkspaceAuthorityStore {
   }
 
   private enqueueHistoryWrite(work: () => Promise<void>): void {
-    this.historyWriteTail = this.historyWriteTail.then(work, work)
+    const tail = this.historyWriteTail.then(work, work)
+    this.historyWriteTail = tail
+    const writeLockKey = this.activeWriteLockKey
+    if (!writeLockKey) return
+    rootDeferredWriteTails.set(writeLockKey, { owner: this, tail })
+    void tail.then(
+      () => {
+        if (rootDeferredWriteTails.get(writeLockKey)?.tail === tail) {
+          rootDeferredWriteTails.delete(writeLockKey)
+        }
+      },
+      () => undefined
+    )
   }
 
   private async writeState(
@@ -2364,7 +2040,9 @@ export class LocalWorkspaceAuthorityStore {
       this.enqueueHistoryWrite(async () => {
         if (options?.deferDocument) await persistDocument()
         await persistHistory()
-        await this.cacheStatus(metadata, state)
+        await this.cacheStatus(metadata, state, undefined, undefined, {
+          expectedCurrentRevision: state.revision
+        })
       })
       return
     }
@@ -2392,9 +2070,13 @@ export class LocalWorkspaceAuthorityStore {
     })
     rootWriteTails.set(writeLockKey, current)
     await previous
+    const deferredWrite = rootDeferredWriteTails.get(writeLockKey)
+    if (deferredWrite && deferredWrite.owner !== this) await deferredWrite.tail
+    this.activeWriteLockKey = writeLockKey
     try {
       return await operation()
     } finally {
+      this.activeWriteLockKey = null
       release()
       if (rootWriteTails.get(writeLockKey) === current) {
         rootWriteTails.delete(writeLockKey)

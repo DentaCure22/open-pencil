@@ -79,7 +79,9 @@ async function listen(server: Server, socketPath: string): Promise<void> {
 async function waitUntilAcceptable(canAccept: () => boolean): Promise<boolean> {
   const deadline = performance.now() + 500
   while (!canAccept() && performance.now() < deadline) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 5))
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 5)
+    })
   }
   return canAccept()
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
 import AiToolCall from './AiToolCall.vue'
 import { resolveToolActivityState, toolGroupLabel } from './model'
@@ -15,23 +15,19 @@ type ToolItem = {
 const {
   activityCount,
   open = false,
+  summary = true,
   status,
   tools
 } = defineProps<{
   activityCount: number
   open?: boolean
+  summary?: boolean
   status: AiConversationStatus
   tools: ToolItem[]
 }>()
 
 const expanded = ref(open)
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
-watch(
-  () => open,
-  (value) => {
-    expanded.value = value
-  }
-)
 const renderedTools = computed(() =>
   tools.map((tool) => ({
     ...tool,
@@ -53,8 +49,12 @@ const label = computed(() =>
 </script>
 
 <template>
-  <div class="min-w-0 py-0.5 text-[12px] leading-5 text-muted" data-test-id="ai-tool-group">
+  <div
+    class="min-w-0 py-0.5 text-[12px] leading-5 text-muted"
+    :data-test-id="summary ? 'ai-tool-group' : undefined"
+  >
     <button
+      v-if="summary"
       type="button"
       class="group flex w-full min-w-0 items-center gap-1.5 rounded-[5px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
       :aria-expanded="expanded"
@@ -74,13 +74,15 @@ const label = computed(() =>
         class="flex size-6 shrink-0 items-center justify-center rounded-[5px] text-muted opacity-0 transition-[opacity,background-color,color] duration-150 group-hover:opacity-100 hover:bg-hover hover:text-surface group-focus-within:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
         aria-hidden="true"
       >
-        <icon-lucide-chevron-down
+        <IconlyIcon
+          name="arrow-down"
           v-if="expanded"
           class="size-3.5"
           data-direction="down"
           data-test-id="ai-disclosure-chevron"
         />
-        <icon-lucide-chevron-right
+        <IconlyIcon
+          name="arrow-right"
           v-else
           class="size-3.5"
           data-direction="right"
@@ -97,7 +99,7 @@ const label = computed(() =>
       leave-from-class="grid-rows-[1fr] translate-y-0 opacity-100"
       leave-to-class="-translate-y-0.5 grid-rows-[0fr] opacity-0"
     >
-      <div v-if="expanded" data-test-id="ai-tool-group-content">
+      <div v-if="expanded || !summary" data-test-id="ai-tool-group-content">
         <div class="min-h-0 overflow-hidden">
           <TransitionGroup
             tag="div"

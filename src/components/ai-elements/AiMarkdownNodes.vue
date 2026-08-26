@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import AiCodeBlock from './AiCodeBlock.vue'
+import AiStreamingTextNode from './AiStreamingTextNode.vue'
 import { isSafeMarkdownImageUrl, isSafeMarkdownUrl, type AssistantMarkdownNode } from './markdown'
 
 defineOptions({ name: 'AiMarkdownNodes' })
 
-defineProps<{
+const { nodes, streamingTail = false } = defineProps<{
   nodes: AssistantMarkdownNode[]
+  streamingTail?: boolean
 }>()
+
+function streamsInto(index: number) {
+  return streamingTail && index === nodes.length - 1
+}
 
 function isTaskItem(node: AssistantMarkdownNode) {
   return typeof node.checked === 'boolean'
@@ -29,35 +35,71 @@ function cellAlign(table: AssistantMarkdownNode, index: number) {
 <template>
   <template v-for="(node, index) in nodes" :key="`${node.type}-${String(index)}`">
     <p v-if="node.type === 'paragraph'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </p>
     <component
       :is="`h${String(Math.min(4, Math.max(1, node.depth ?? 2)))}`"
       v-else-if="node.type === 'heading'"
     >
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </component>
     <ul v-else-if="node.type === 'list' && !node.ordered">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </ul>
     <ol v-else-if="node.type === 'list'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </ol>
     <li v-else-if="node.type === 'listItem'">
       <input v-if="isTaskItem(node)" type="checkbox" disabled :checked="node.checked === true" />
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </li>
     <blockquote v-else-if="node.type === 'blockquote'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </blockquote>
     <strong v-else-if="node.type === 'strong'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </strong>
     <em v-else-if="node.type === 'emphasis'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </em>
     <del v-else-if="node.type === 'delete'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </del>
     <a
       v-else-if="node.type === 'link' && isSafeMarkdownUrl(node.url)"
@@ -65,10 +107,18 @@ function cellAlign(table: AssistantMarkdownNode, index: number) {
       rel="noreferrer"
       target="_blank"
     >
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </a>
     <span v-else-if="node.type === 'link'">
-      <AiMarkdownNodes v-if="node.children?.length" :nodes="node.children" />
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
     </span>
     <img
       v-else-if="node.type === 'image' && isSafeMarkdownImageUrl(node.url)"
@@ -115,7 +165,11 @@ function cellAlign(table: AssistantMarkdownNode, index: number) {
     <code v-else-if="node.type === 'inlineCode'">{{ node.value }}</code>
     <br v-else-if="node.type === 'break'" />
     <hr v-else-if="node.type === 'thematicBreak'" />
-    <template v-else-if="node.type === 'text'">{{ node.value }}</template>
+    <AiStreamingTextNode
+      v-else-if="node.type === 'text'"
+      :active="streamsInto(index)"
+      :text="node.value ?? ''"
+    />
     <AiMarkdownNodes v-else-if="node.children?.length" :nodes="node.children" />
     <template v-else-if="node.value">{{ node.value }}</template>
   </template>

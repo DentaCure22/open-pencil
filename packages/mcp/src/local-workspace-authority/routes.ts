@@ -10,6 +10,7 @@ import { LocalWorkspaceAuthorityStoreError, type LocalWorkspaceAuthorityStore } 
 import {
   LOCAL_WORKSPACE_PRESENCE_SELECTION_LIMIT,
   type CommitLocalWorkspaceRequest,
+  type CompleteLocalWorkspaceScreenshotRequest,
   type InitializeLocalWorkspaceRequest,
   type LocalWorkspaceAuthorityStatus,
   type LocalWorkspaceCommitReceipt,
@@ -67,6 +68,7 @@ type HeadChangeWaitResult =
       changed: false
       navigationSequence?: number
       revision: number
+      screenshotSequence?: number
       themeSequence?: number
     }
 
@@ -94,6 +96,7 @@ async function waitForAuthorityChange(
   store: LocalWorkspaceAuthorityStore,
   afterRevision: number,
   afterNavigationSequence: number,
+  afterScreenshotSequence: number,
   afterThemeSequence: number,
   timeoutMs: number,
   signal: AbortSignal
@@ -106,6 +109,7 @@ async function waitForAuthorityChange(
   let observedMarker = await store.externalStateMarker()
   let unsubscribeHead: () => void = () => undefined
   let unsubscribeNavigation: () => void = () => undefined
+  let unsubscribeScreenshot: () => void = () => undefined
   let unsubscribeTheme: () => void = () => undefined
   let abort: () => void = () => undefined
   const result = new Promise<HeadChangeWaitResult>((resolve) => {
@@ -116,6 +120,7 @@ async function waitForAuthorityChange(
       if (poll) clearInterval(poll)
       unsubscribeHead()
       unsubscribeNavigation()
+      unsubscribeScreenshot()
       unsubscribeTheme()
       signal.removeEventListener('abort', abort)
       resolve(value)
@@ -131,6 +136,15 @@ async function waitForAuthorityChange(
         changed: false,
         navigationSequence: intent.sequence,
         revision: afterRevision
+      })
+    }
+  })
+  unsubscribeScreenshot = store.subscribeScreenshotQueued((intent) => {
+    if (intent.sequence > afterScreenshotSequence) {
+      finish({
+        changed: false,
+        revision: afterRevision,
+        screenshotSequence: intent.sequence
       })
     }
   })
@@ -186,6 +200,17 @@ async function waitForAuthorityChange(
     }
   }
 
+  async function detectQueuedScreenshot(): Promise<void> {
+    const intent = await store.pendingScreenshotIntent()
+    if (intent && intent.sequence > afterScreenshotSequence) {
+      finish({
+        changed: false,
+        revision: afterRevision,
+        screenshotSequence: intent.sequence
+      })
+    }
+  }
+
   async function pollForExternalCommit(): Promise<void> {
     if (polling || settled) return
     polling = true
@@ -204,6 +229,7 @@ async function waitForAuthorityChange(
   try {
     await detectChangedHead()
     await detectQueuedNavigation()
+    await detectQueuedScreenshot()
     await detectQueuedTheme()
     await pollForExternalCommit()
   } catch (error) {
@@ -218,6 +244,33 @@ function navigationIntentId(body: AuthorityRequestBody): string {
     throw new TypeError('Navigation consumption requires intentId')
   }
   return body.intentId.trim()
+}
+
+function screenshotCompletion(body: AuthorityRequestBody): CompleteLocalWorkspaceScreenshotRequest {
+  const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : ''
+  if (!requestId) throw new TypeError('Screenshot completion requires requestId')
+  const objectIds = optionalStringList(body.objectIds, 'objectIds')
+  if (!objectIds) throw new TypeError('Screenshot completion requires objectIds')
+  if (body.status === 'failed' || typeof body.error === 'string') {
+    return {
+      error: typeof body.error === 'string' ? body.error : 'Live Board capture failed.',
+      objectIds,
+      requestId,
+      status: 'failed'
+    }
+  }
+  return {
+    base64: typeof body.base64 === 'string' ? body.base64 : undefined,
+    bounds: navigationRegion(body.bounds),
+    byteLength: typeof body.byteLength === 'number' ? body.byteLength : undefined,
+    mimeType: body.mimeType === 'image/png' ? 'image/png' : undefined,
+    objectIds,
+    pixelHeight: typeof body.pixelHeight === 'number' ? body.pixelHeight : undefined,
+    pixelWidth: typeof body.pixelWidth === 'number' ? body.pixelWidth : undefined,
+    requestId,
+    source: body.source === 'live_board' ? 'live_board' : undefined,
+    status: 'completed'
+  }
 }
 
 function themeSequence(body: AuthorityRequestBody): number {
@@ -510,6 +563,12 @@ export function registerLocalWorkspaceAuthorityRoutes(
         0,
         Number.MAX_SAFE_INTEGER
       )
+      const afterScreenshotSequence = integerQuery(
+        c,
+        'after_screenshot_sequence',
+        0,
+        Number.MAX_SAFE_INTEGER
+      )
       const afterThemeSequence = integerQuery(c, 'after_theme_sequence', 0, Number.MAX_SAFE_INTEGER)
       const timeoutMs = integerQuery(
         c,
@@ -522,6 +581,7 @@ export function registerLocalWorkspaceAuthorityRoutes(
           options.store,
           afterRevision,
           afterNavigationSequence,
+          afterScreenshotSequence,
           afterThemeSequence,
           timeoutMs,
           c.req.raw.signal
@@ -569,6 +629,24 @@ export function registerLocalWorkspaceAuthorityRoutes(
       return c.json({ presence: await options.store.readPresence() })
     } catch (error) {
       return errorResponse(c, error)
+    }
+  })
+
+  app.get(`${AUTHORITY_ROUTE}/screenshot`, async (c) => {
+    try {
+      return c.json({ intent: await options.store.pendingScreenshotIntent() })
+    } catch (error) {
+      return errorResponse(c, error)
+    }
+  })
+
+  app.post(`${AUTHORITY_ROUTE}/screenshot/complete`, async (c) => {
+    try {
+      return c.json({
+        result: await options.store.completeScreenshot(screenshotCompletion(await parseBody(c)))
+      })
+    } catch (error) {
+      return requestErrorResponse(c, error)
     }
   })
 

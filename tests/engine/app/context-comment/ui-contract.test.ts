@@ -14,7 +14,7 @@ describe('context comment UI contract', () => {
     const liveContainer = source('src/components/SmylrLiveContainerOverlay.vue')
     const lifecycle = source('src/app/context-comment/live-inspector-lifecycle.ts')
 
-    expect(toolbar).toContain('<ContextCommentToolbarControl />')
+    expect(toolbar).toContain('<ContextCommentToolbarControl')
     expect(liveContainer).toContain('liveInspectorSelectionEpoch')
     expect(liveContainer).toContain('openContextCommentForLiveInspector(store)')
     expect(lifecycle).toContain("current?.target?.kind === 'live-container'")

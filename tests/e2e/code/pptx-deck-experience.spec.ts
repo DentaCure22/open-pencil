@@ -5,7 +5,9 @@ import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 const editor = useEditorSetupWithClear('/?test&no-chrome&no-rulers')
 
 test('opens a source PowerPoint as a focused deck with thumbnails and slide navigation', async () => {
-  const bytes = [...new Uint8Array(await readFile('outputs/openpencil-native-pptx-preview.pptx'))]
+  const bytes = [
+    ...new Uint8Array(await readFile('tests/fixtures/openpencil-native-pptx-preview.pptx'))
+  ]
 
   await editor.page.getByTestId('canvas-element').evaluate((canvas, pptxBytes) => {
     const bounds = canvas.getBoundingClientRect()

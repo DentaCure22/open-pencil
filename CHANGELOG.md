@@ -2,6 +2,223 @@
 
 ## Unreleased
 
+- Move project Layers and Assets out of the Work Map's left utility strip and
+  into the existing T3 right workspace beside Diff. Clicking a project's
+  workspace tray now opens its board layers directly; Assets can switch between
+  Project and Global scope, and Settings can toggle Activity in the same right
+  workspace. The left sidebar now stays focused on the Work Map.
+- Adopt Iconly's free Essential Light set as OpenPencil's shared interface icon
+  language for navigation, chat, search, settings, files, common actions, and
+  feedback, while retaining specialist editor glyphs where the free set has no
+  accurate equivalent.
+- Keep one thread-safe Gemini Board worker ready in the local authority and
+  bind its live Board thread only when claimed. Fresh Board chats now avoid Pi,
+  plugin, and Antigravity process startup while preserving the full Board-tool
+  surface; the generic worker pool remains bounded separately.
+- Replace the flat agent-chat history with a durable Work Map of projects,
+  one-level subprojects, live chats, and linked todos. Board workers now place
+  their own chats from current Board context, can capture and advance todos from
+  Todo through In motion to Finished, and respect manual placement. Legacy Needs
+  you and Review items return to In motion so blockers stay in the conversation
+  and verified workers can finish the work they complete.
+- Polish the Work Map sidebar with a borderless utility strip, a roomier top
+  inset, a dedicated zero-width edge hinge for closing the panel, full-width
+  spaced shadowless tabs with a soft grey fill and no border on the active
+  utility, and an icon-first search control that expands left into the title
+  space. Search, new chat, and new project stay ordered together at the right.
+  Project highlighting remains hover-only, with a visible placeholder beneath
+  an empty active status. Finished and Misc chats rows no longer show trailing
+  counts. Task-status icons are smaller with breathing room around their guide
+  line, use transparent icon wells, and pair with larger, higher-contrast labels.
+  Task-row hover surfaces begin after the guide rail without moving their text,
+  so the highlight no longer paints across the hierarchy line.
+  The former Global section is now Pinned, with top-level project rows aligned to
+  the section instead of visually nested beneath it. Expanded project statuses
+  and tasks now use one compact hierarchy step, while child-project icon spacing
+  is tuned separately so both child types share the same label column. Opening
+  and closing a project now slides its contents smoothly from the directory row,
+  with reduced-motion preferences respected.
+  Project rows now use a translucent raster workspace tray that changes with the
+  workspace's real expanded or collapsed state. Projects, subprojects, and their
+  contents now use compact stepped whitespace for hierarchy, with subproject
+  icons centered on the same column as their parent's task-status icons. Child
+  projects now hide with their collapsed parent and return when it reopens.
+  The entire project row now toggles its disclosure, while folder-plus and the
+  same simple plus used by Todo hover keep child-project and new-chat creation
+  easy to tell apart. Both actions use the same icon size and stroke weight, with
+  the directory action kept rightmost.
+  The collapsed Finished disclosure stays quiet until its row is hovered or
+  keyboard-focused, while the expanded state remains visible.
+  Expanded projects begin directly with their task statuses instead of placed
+  chat rows or a redundant Tasks heading; unplaced conversations remain
+  recoverable under Misc chats. Each task status now reveals five rows at a
+  time, while Misc chats starts at fifteen and reveals ten more per step. These
+  quiet disclosure labels darken on hover without painting a background box.
+  The Work Map title's optical top inset now matches its side insets. Expanded
+  search now dismisses when the user clicks elsewhere without stealing focus
+  from the clicked control. Existing chat rows now advertise click first with a
+  pointer and switch to grabbing only while pressed.
+- Make both workspace edges easier to resize: stable, visually transparent 40px
+  hit areas keep neighboring Board controls from flickering the resize cursor.
+  The left edge now lives directly in the workspace interaction layer instead of
+  re-enabling pointer input through disabled splitter ancestors. Each handle now
+  owns one captured pointer stream, and a drag-scoped cursor lock prevents the
+  canvas or toolbar from replacing the resize cursor mid-drag. The sidebar close
+  hinge now stays visually hidden at rest and reveals only its flush chevron on
+  hover or keyboard focus, while preserving a generous invisible hit target.
+  When collapsed, the old draggable mini-toolbar is replaced by a fixed 28 x 44
+  edge tab with a centered reopen icon and no duplicate grip or floating shell.
+  The tab now stays pinned to its final midpoint throughout the collapse instead
+  of riding the shrinking panel edge and settling into place afterward.
+- Keep the bottom editor toolbar inside the free canvas between the Work Map,
+  right workspace, and zoom controls. Its chrome now contracts with the
+  available space while one continuous horizontal control track remains
+  scrollable, so tools and utilities stay reachable without covering either
+  side panel.
+- Keep historical task failures in the task row and selected header instead of
+  repeating them as a large composer card. Composer banners remain reserved for
+  actionable connection, retry, and in-progress states, and now sit in their own
+  space above the prompt instead of overlapping its top edge.
+- Keep the composer command drawer in its own aligned space above the prompt,
+  with a complete border and compact padding instead of a tucked-under stacked
+  shell.
+- Bring T3 Code's surrounding chat workflow into OpenPencil: task rows now expose
+  working, connecting, approval, input, completion, stopped, and failure states;
+  connection and retry notices attach above the composer in a non-jumping stack;
+  `/commands`, `/skill:` and `@files` open a keyboard-navigable command drawer;
+  and files can be dropped anywhere on a conversation to attach them.
+- Match the agent-chat transcript scrollbar to thread history: a thin light-grey
+  pill instead of the thick dark native bar.
+- Give agent chats concise persisted titles generated in the background by xAI
+  Composer 2.5 Fast. The first prompt remains available immediately as the
+  provisional label, existing untitled chats are named when opened, title
+  generation uses an isolated tool-free ephemeral session, and a manual rename
+  continues to take precedence.
+- Replace the imitated agent activity disclosure with an attributed React
+  island derived from T3 Code's exact August 19 message workflow: commentary
+  and tool runs stay chronological, adjacent tools retain only their newest
+  row behind a `+N previous tool calls` control, and the self-ticking working
+  row remains at the live bottom without rerendering the transcript each second.
+- Attach exact Git workspace changes to the agent turn that produced them. Completed
+  responses now show a compact changed-file summary that opens a T3 Code-style,
+  resizable right-side diff workspace with stacked files, unified or split views,
+  responsive sheet behavior, and source-backed line comments that return to the
+  prompt as annotations. A persistent selected-chat header button opens the Diff
+  surface and selects the newest available changes without attributing pre-existing
+  dirty files to the agent.
+- Extend the T3-style right workspace with real Browser, Terminal, and Files
+  tabs. Browser keeps URL history and renders local previews, Terminal runs a
+  persistent shell in the current workspace, Files browses and reads actual
+  workspace files, and the unused Agents launcher entry is removed.
+- Keep Board-worker tool definitions stable after MCP startup so Sol can reuse
+  its prompt prefix across tool loops, and aggregate every model call in a user
+  turn in the cache meter instead of recording only the final call.
+- Give chat-history rows slightly more height and separation for easier scanning.
+- Keep task-list elapsed time tied to the whole active agent turn instead of
+  resetting for each tool or action. Background completions now show a right-side
+  unread dot that clears when the chat is opened.
+- Simplify the Board Activity panel by removing its explanatory subtitle,
+  session-tag badge, and redundant Trace Activity summary band. Replace the
+  heavy purple rail, dots, and boxed timeline cards with a calmer compact event
+  log that keeps evidence and details available.
+- Preserve unsent agent-chat text, annotations, and file attachments per new
+  task or existing thread, so leaving a composer or refreshing OpenPencil no
+  longer loses the draft; explicitly starting a fresh task still clears it.
+- Keep the source image attached to the visible agent-chat turn when image
+  annotations are sent from the composer, instead of showing only the numbered
+  edit instructions while the image is hidden in worker evidence.
+- Expose the canonical Codex image tools directly to every Board worker and
+  match their request timeout to the media job lifecycle, so proxy providers do
+  not fall back to workspace-bound native image tools or abandon valid jobs at
+  60 seconds.
+- Treat typed `create_image` and `create_code_object` bounds as page coordinates
+  by default, converting them for nested parents so generated media lands at the
+  requested absolute Board position.
+- Recognize image generation nested through the Antigravity MCP bridge, so
+  agent chats show the live generating state and completed image preview
+  instead of a generic MCP activity row.
+- Keep repeated image-edit retries from flooding agent chats with near-identical
+  full-size previews. The latest completed edit stays prominent, earlier edits
+  remain available behind one compact disclosure, and distinct generated
+  variants remain visible.
+- Keep completed Markdown blocks inert while an agent response streams, poll
+  only the changing transcript tail instead of the full chat every 80 ms, and
+  pause the heavyweight task-list poll while a retained chat is live. Match T3
+  Code's transcript model by keeping one compact live-work row visible, folding
+  earlier activity, and maintaining the live edge instantly instead of making
+  the viewport chase each resize with a spring. Long answers no longer become
+  progressively choppier or randomly jump as the transcript grows.
+- Let Board workers import completed local PNG, JPEG, WebP, and GIF outputs
+  directly as source-backed native images through `board_apply.create_image`,
+  avoiding base64 conversion, oversized Code Objects, and vector stand-ins.
+- Start Board workers in a dedicated neutral runtime directory while preserving
+  Pi's normal context-file and global skill loading, so repository instructions
+  are not inherited merely because the OpenPencil authority runs from its source
+  checkout.
+- Keep Board workers aware of resident chats without letting ambiguous follow-ups
+  import them. Chat listings mark the active thread, preserve its substantive
+  task, and omit answer previews; cross-chat reads require a concrete match and
+  are blocked when “continue” or another bare follow-up refers to the active
+  chat.
+- Keep each agent run as one Codex-style chronological work stream: the
+  “Worked for” disclosure now owns its commentary, reasoning, and compact
+  adjacent tool rows instead of sorting those events into separate buckets.
+  New provider thinking starts a fresh boundary and closes the tools above it;
+  OpenAI commentary remains the user-visible preamble lane.
+- Render Markdown inside OpenAI and Antigravity commentary and reasoning rows,
+  so emphasis, links, lists, and inline code no longer appear as literal source
+  markers in the work stream.
+- Replace separate worker Board discovery and hydration tools with progressive
+  `board_query`, and expose bounded read-only `trace_query` eagerly for exact
+  history or referent lookup without making Trace the source of current Board
+  state.
+- Make Inspect Chrome annotation-first: every element click opens an optional
+  inline comment pill, durable handles reopen without duplicating selections,
+  and comments save on Enter or click-away. The pill reuses compact icon controls
+  for dictation, motion recording, and revisit-only deletion, all with tooltips;
+  deleting a handle removes that selection. The editable field remains a real
+  text input even on pages with global keyboard shortcuts, and the aligned
+  numbered handle matches the image-annotation message bubble. Its generated,
+  vectorized marker, mic, recording, and delete artwork is embedded as
+  self-contained SVG image data instead of relying on page-visible extension
+  URLs or page-sensitive CSS masks. Each numbered handle also appears as soon
+  as its sequence is reserved while capture and delivery finish in the
+  background. Record motion starts after
+  clearing inspector chrome, a temporary Escape hint replaces the persistent
+  top toolbar, and Escape finishes the whole session.
+- Make Inspect Chrome selection work across embedded-document boundaries: iframe,
+  frame, embed, and object shells now receive explicit selection shields, while
+  controls in open shadow roots resolve from the composed event path. Motion
+  recording also falls back to a bounded visible-frame WebM when Chrome rejects
+  `tabCapture` because the session originated in OpenPencil rather than an
+  extension-toolbar gesture.
+- Give every Inspect Chrome capture a stable `Annotation #N` reference in the
+  agent prompt, including single-selection drags, so typed and voice-dispatched
+  instructions can address captures by number. Live and captured highlights now
+  use dashed borders without an interior tint.
+- Expand attached Inspect Chrome sessions to the full five-file chat budget
+  instead of silently stopping at two screenshots. Screenshot notes are now
+  counted in the composer and baked into the submitted evidence as numbered
+  markers with a readable comment legend.
+- Record Inspect Chrome as a first-class durable Trace session instead of a
+  browser-only attachment list. Chrome, Board, and voice activity now retain
+  structured source episodes; Escape closes the Chrome episode and its owned
+  Trace session, while annotation deletion removes that selection from agent
+  context without erasing the audit record. Every session gets a short editable
+  tag such as `#patient-flow`, and `trace_query` can resolve that tag exactly
+  across Boards and chats.
+- Keep the Codex OpenPencil parent to presence, navigation, theme, and worker
+  routing tools. Board discovery, reads, screenshots, and mutations remain on
+  the Pi worker surface.
+- Keep healthy follow-ups in the same native Pi thread. When a failed or stopped
+  turn receives a bare “continue,” retain the visible chat but replace the
+  broken native session with one seeded only from that chat's saved transcript
+  tail and images. Dev-authority restarts now terminate the previous authority
+  and its Pi children before a replacement takes ownership.
+- Make Board proof boundaries machine-readable: atomic apply receipts identify
+  saved/static verification, while screenshots identify live composed capture
+  or persisted fallback. Visible Code Object UI is included without moving the
+  camera; a still image still does not prove interaction behavior.
 - Stop asking Board and sidebar Pi chats to narrate progress every few steps.
   The launch no longer appends that extra system line.
 - Board image and video makers stay named-only: Codex for a generic picture,
@@ -15,9 +232,9 @@
 - Keep a working chat from jumping while it streams: the live reply stays put
   when a tool starts, tool rows do not slide in, and older turns keep their
   height so the transcript does not snap.
-- Keep the Thinking line still while a turn is running, with a light shimmer,
-  instead of swapping in tool names or a ticking timer. The duration shows
-  after the turn settles.
+- Match T3 Code's work hierarchy while a turn runs: a stable, independently
+  ticking “Working for” header sits above one smoothly updating activity row;
+  “Thinking” appears only as the fallback when no specific activity exists.
 - Ease live chat text in instead of dropping whole chunks. The reply,
   commentary, and thought lines catch up smoothly, then settle at once when
   the turn finishes.
@@ -93,8 +310,9 @@
 - Virtualize long open agent transcripts so only the visible turns plus a
   small overscan stay mounted. Chapter-rail jumps remount a loaded turn
   without refetching, and the live turn stays painted while it streams.
-- Parse only the live streaming assistant bubble incrementally so completed
-  markdown blocks are not rebuilt on every token.
+- Stream the live assistant and commentary tail at a continuous frame-paced
+  cadence with a short glyph fade instead of burst-pause token dumps. Completed
+  Markdown blocks stay inert while only the changing tail is repainted.
 - Keep ordinary Pi chats on the user's MCP catalog, but launch Board-dispatched
   workers with a generated, fail-closed catalog containing only OpenPencil
   `board_where` and `board_screenshot`. Explicit user MCP config is filtered too,

@@ -15,6 +15,7 @@ import { useDialogUI } from '@/components/ui/dialog'
 import { transparencyCheckerboardClass } from '@/components/ui/transparency'
 
 import {
+  compactImageEditAttempts,
   imageGenerationPrompt,
   imageGenerationProvider,
   isImageGenerationTool,
@@ -38,6 +39,7 @@ const {
 }>()
 
 const annotatingImageUrl = ref<string | null>(null)
+const showEarlierEdits = ref(false)
 const viewerOpen = ref(false)
 const viewerImage = ref<{ alt?: string; url: string } | null>(null)
 const viewerDialog = useDialogUI({
@@ -79,7 +81,10 @@ const generations = computed(() => {
       const tool: ImageTool = part
       return [
         {
+          imageCount: tool.images?.length ?? 0,
+          input: tool.input,
           key: `${message.id}:${String(partIndex)}`,
+          name: tool.name,
           part: tool,
           prompt: imageGenerationPrompt(tool.input),
           provider: imageGenerationProvider(tool.name, tool.input),
@@ -97,6 +102,11 @@ const generations = computed(() => {
       generation.state === 'stopped'
   )
 })
+
+const compactedGenerations = computed(() => compactImageEditAttempts(generations.value))
+const displayedGenerations = computed(() =>
+  showEarlierEdits.value ? generations.value : compactedGenerations.value.visible
+)
 
 function providerLabel(provider: 'codex' | 'grok'): string {
   return provider === 'grok' ? 'Grok Imagine' : 'Codex Image'
@@ -143,7 +153,7 @@ async function annotateImage(
 <template>
   <div v-if="generations.length" class="flex flex-col gap-2" data-test-id="ai-image-generations">
     <figure
-      v-for="generation in generations"
+      v-for="generation in displayedGenerations"
       :key="generation.key"
       data-test-id="ai-image-generation"
       :data-provider="generation.provider"
@@ -153,7 +163,7 @@ async function annotateImage(
         generation.part.images?.length === 1 &&
         generation.state !== 'pending' &&
         generation.state !== 'running'
-          ? 'w-fit max-w-full'
+          ? 'w-fit max-w-[320px]'
           : 'w-full max-w-[420px]'
       "
     >
@@ -223,7 +233,7 @@ async function annotateImage(
               :class="
                 generation.part.images.length > 1
                   ? 'h-full max-h-[240px] w-full object-contain'
-                  : 'block h-auto max-h-[340px] w-auto max-w-full object-contain'
+                  : 'block h-auto max-h-[280px] w-auto max-w-full object-contain'
               "
             />
             <span
@@ -246,8 +256,8 @@ async function annotateImage(
           :class="generation.state === 'error' ? 'text-red-400' : 'text-muted'"
           aria-hidden="true"
         >
-          <icon-lucide-triangle-alert v-if="generation.state === 'error'" class="size-4" />
-          <icon-lucide-image v-else class="size-4" />
+          <IconlyIcon name="danger" v-if="generation.state === 'error'" class="size-4" />
+          <IconlyIcon name="image" v-else class="size-4" />
         </span>
         <div class="min-w-0">
           <p class="text-[12px] font-medium text-surface">
@@ -265,6 +275,22 @@ async function annotateImage(
         </div>
       </div>
     </figure>
+    <button
+      v-if="compactedGenerations.earlier.length"
+      type="button"
+      class="flex w-fit items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted transition-colors hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+      :aria-expanded="showEarlierEdits"
+      data-test-id="ai-image-earlier-edits"
+      @click="showEarlierEdits = !showEarlierEdits"
+    >
+      <IconlyIcon name="arrow-down" v-if="showEarlierEdits" class="size-3" />
+      <IconlyIcon name="arrow-right" v-else class="size-3" />
+      {{
+        showEarlierEdits
+          ? 'Hide earlier edits'
+          : `Show ${String(compactedGenerations.earlier.length)} earlier ${compactedGenerations.earlier.length === 1 ? 'edit' : 'edits'}`
+      }}
+    </button>
   </div>
 
   <DialogRoot v-model:open="viewerOpen">

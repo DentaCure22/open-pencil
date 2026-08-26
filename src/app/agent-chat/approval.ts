@@ -1,4 +1,21 @@
-import type { AgentExtensionUiRequest, AgentExtensionUiResponse } from './client'
+import { localWorkspaceAuthorityFetch } from '@/app/workspace-document/local-authority/client'
+
+import { agentRouterResponseError } from './router-response'
+
+export type AgentExtensionUiRequest = {
+  id: string
+  message?: string
+  method: 'confirm' | 'select'
+  options?: string[]
+  requestedAt: string
+  title: string
+}
+
+export type AgentExtensionUiResponse = {
+  cancelled?: boolean
+  confirmed?: boolean
+  value?: string
+}
 
 export type MessageApprovalPreview = {
   recipient: string
@@ -94,4 +111,22 @@ export function denyExtensionUiRequest(request: AgentExtensionUiRequest): AgentE
   if (request.method === 'confirm') return { confirmed: false }
   const value = request.options?.find((option) => /^deny$/i.test(option))
   return value ? { value } : { cancelled: true }
+}
+
+export async function respondToAgentUiRequest(
+  threadId: string,
+  requestId: string,
+  decision: AgentExtensionUiResponse
+): Promise<void> {
+  const response = await localWorkspaceAuthorityFetch(
+    `/agent-router/v1/pi/conversations/${encodeURIComponent(threadId)}/ui/${encodeURIComponent(requestId)}/respond`,
+    {
+      body: JSON.stringify(decision),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    }
+  )
+  if (!response.ok) {
+    throw await agentRouterResponseError(response, 'The approval response was rejected')
+  }
 }

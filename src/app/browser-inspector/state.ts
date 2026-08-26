@@ -1,6 +1,6 @@
 import { computed, reactive } from 'vue'
 
-import { noteNarratedTraceEvent } from '@/app/narrated-trace'
+import { noteNarratedTraceEvent, removeNarratedTraceEventFromContext } from '@/app/narrated-trace'
 import { IS_BROWSER } from '@/constants'
 
 import {
@@ -25,6 +25,8 @@ export type BrowserCaptureSession = {
   startedAt: string
   title: string
   traceSessionId?: string
+  traceEpisodeId?: string
+  traceTag?: string
 }
 
 export const browserInspectorState = reactive<{
@@ -100,6 +102,9 @@ export function startBrowserCaptureSession(input: {
   captureSessionId: string
   page: BrowserElementSelection['page']
   startedAt: string
+  traceEpisodeId?: string
+  traceSessionId?: string
+  traceTag?: string
 }) {
   browserInspectorState.error = null
   browserInspectorState.pickerStatus = 'active'
@@ -110,6 +115,9 @@ export function startBrowserCaptureSession(input: {
     existing.page = structuredClone(input.page)
     addSessionPage(existing, input.page)
     existing.title = browserCaptureSessionTitle(sessionPages(existing), existing.startedAt)
+    existing.traceEpisodeId = input.traceEpisodeId ?? existing.traceEpisodeId
+    existing.traceSessionId = input.traceSessionId ?? existing.traceSessionId
+    existing.traceTag = input.traceTag ?? existing.traceTag
   } else {
     browserInspectorState.sessions.push({
       id: input.captureSessionId,
@@ -118,7 +126,10 @@ export function startBrowserCaptureSession(input: {
       recordings: [],
       selections: [],
       startedAt: input.startedAt,
-      title: browserCaptureSessionTitle([input.page], input.startedAt)
+      title: browserCaptureSessionTitle([input.page], input.startedAt),
+      ...(input.traceEpisodeId ? { traceEpisodeId: input.traceEpisodeId } : {}),
+      ...(input.traceSessionId ? { traceSessionId: input.traceSessionId } : {}),
+      ...(input.traceTag ? { traceTag: input.traceTag } : {})
     })
   }
 }
@@ -200,7 +211,15 @@ export function removeBrowserElementSelection(sessionId: string, selectionId: st
   const session = getBrowserCaptureSession(sessionId)
   if (!session) return
   const index = session.selections.findIndex((selection) => selection.id === selectionId)
-  if (index !== -1) session.selections.splice(index, 1)
+  if (index === -1) return
+  const [selection] = session.selections.splice(index, 1)
+  if (selection.traceEventId) removeNarratedTraceEventFromContext(selection.traceEventId)
+  if (
+    browserInspectorState.annotationRequest?.sessionId === sessionId &&
+    browserInspectorState.annotationRequest.selectionId === selectionId
+  ) {
+    browserInspectorState.annotationRequest = null
+  }
 }
 
 export function removeBrowserCaptureRecording(sessionId: string, recordingId: string) {

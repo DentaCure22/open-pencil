@@ -6,7 +6,7 @@ import {
   DropdownMenuRoot,
   DropdownMenuTrigger
 } from 'reka-ui'
-import IconChevronDown from '~icons/lucide/chevron-down'
+import { IconlyArrowDown as IconChevronDown } from '@/components/icons/iconly'
 import IconCombine from '~icons/lucide/combine'
 import IconCopyMinus from '~icons/lucide/copy-minus'
 import IconCopyX from '~icons/lucide/copy-x'

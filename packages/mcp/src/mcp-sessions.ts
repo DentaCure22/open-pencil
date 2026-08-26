@@ -25,6 +25,12 @@ export function createMcpSessionManager({
 }: McpSessionManagerOptions) {
   const sessions = new Map<string, MCPSession>()
 
+  function closeSession(id: string) {
+    const session = sessions.get(id)
+    sessions.delete(id)
+    if (session) void session.server.close()
+  }
+
   function notifyToolsChanged() {
     for (const session of sessions.values()) {
       try {
@@ -39,7 +45,7 @@ export function createMcpSessionManager({
     const now = Date.now()
     for (const [id, session] of sessions) {
       if (now - session.lastSeen > MCP_SESSION_TTL_MS) {
-        sessions.delete(id)
+        closeSession(id)
       }
     }
   }
@@ -75,11 +81,11 @@ export function createMcpSessionManager({
   }
 
   function deleteSession(sessionId: string | undefined) {
-    if (sessionId) sessions.delete(sessionId)
+    if (sessionId) closeSession(sessionId)
   }
 
   function clear() {
-    sessions.clear()
+    for (const id of sessions.keys()) closeSession(id)
   }
 
   return { clear, deleteSession, notifyToolsChanged, resolveTransport, touch }

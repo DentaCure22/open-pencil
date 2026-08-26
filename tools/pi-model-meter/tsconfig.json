@@ -6,7 +6,11 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "baseUrl": "../..",
+    "paths": {
+      "#pi-grok-eval/*": ["tools/pi-grok-eval/src/*"]
+    }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

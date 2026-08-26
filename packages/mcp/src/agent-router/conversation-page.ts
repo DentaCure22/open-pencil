@@ -241,7 +241,8 @@ export function pageAgentConversation(
   const beforeIndex = query.before
     ? messages.findIndex((message) => message.id === query.before)
     : -1
-  const end = !query.before ? messages.length : beforeIndex === -1 ? 0 : beforeIndex
+  let end = messages.length
+  if (query.before) end = beforeIndex === -1 ? 0 : beforeIndex
   const range = boundedRange(messages, end, turnLimit, itemLimit, byteBudget)
   return pageThread(thread, range.start, range.end)
 }

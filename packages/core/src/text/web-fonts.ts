@@ -35,7 +35,6 @@ export class WebFontResolver {
   private unifontPromises = new Map<WebFontProviderId, Promise<WebUnifont>>()
   private familiesCache = new Map<WebFontProviderId, string[]>()
   private familiesPromises = new Map<WebFontProviderId, Promise<string[]>>()
-  private failedFonts = new Set<string>()
   private fontPromises = new Map<string, Promise<ArrayBuffer | null>>()
   private remoteFetch: WebFontFetch | null = null
 
@@ -141,7 +140,6 @@ export class WebFontResolver {
     provider: WebFontProviderId
   ): Promise<ArrayBuffer | null> {
     const key = `${provider}|${family}|${style}`
-    if (this.failedFonts.has(key)) return null
 
     let promise = this.fontPromises.get(key)
     if (!promise) {
@@ -151,7 +149,6 @@ export class WebFontResolver {
 
     const result = await promise
     this.fontPromises.delete(key)
-    if (!result) this.failedFonts.add(key)
     return result
   }
 

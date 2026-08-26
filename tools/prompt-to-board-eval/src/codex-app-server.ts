@@ -174,6 +174,39 @@ function sandboxMode(
   return mode
 }
 
+function projectItemNotification(value: CodexAppServerNotification): ProjectedCodexJsonEvent[] {
+  const item = itemFromNotification(value)
+  const itemType = string(item?.type)
+  if (!item || !itemType) return []
+  const type = value.method === 'item/started' ? 'item.started' : 'item.completed'
+  if (itemType === 'agentMessage') {
+    return [
+      {
+        item: {
+          id: item.id ?? null,
+          text: item.text ?? '',
+          type: 'agent_message'
+        },
+        type
+      }
+    ]
+  }
+  if (itemType !== 'commandExecution') return []
+  return [
+    {
+      item: {
+        aggregated_output: item.aggregatedOutput ?? '',
+        command: item.command ?? '',
+        exit_code: item.exitCode ?? null,
+        id: item.id ?? null,
+        status: item.status ?? null,
+        type: 'command_execution'
+      },
+      type
+    }
+  ]
+}
+
 export function projectCodexAppServerNotification(
   value: CodexAppServerNotification,
   usage: CodexAppServerTokenUsage | null
@@ -192,44 +225,22 @@ export function projectCodexAppServerNotification(
     ]
   }
   if (value.method !== 'item/started' && value.method !== 'item/completed') return []
-  const item = itemFromNotification(value)
-  const itemType = string(item?.type)
-  if (!item || !itemType) return []
-  const type = value.method === 'item/started' ? 'item.started' : 'item.completed'
-  if (itemType === 'agentMessage') {
-    return [
-      {
-        item: {
-          id: item.id ?? null,
-          text: item.text ?? '',
-          type: 'agent_message'
-        },
-        type
-      }
-    ]
-  }
-  if (itemType === 'commandExecution') {
-    return [
-      {
-        item: {
-          aggregated_output: item.aggregatedOutput ?? '',
-          command: item.command ?? '',
-          exit_code: item.exitCode ?? null,
-          id: item.id ?? null,
-          status: item.status ?? null,
-          type: 'command_execution'
-        },
-        type
-      }
-    ]
-  }
-  return []
+  return projectItemNotification(value)
 }
 
 function timeoutPromise(milliseconds: number): Promise<'timeout'> {
   return new Promise((resolve) => {
     setTimeout(() => resolve('timeout'), milliseconds)
   })
+}
+
+function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return
+    throw error
+  }
 }
 
 function processExit(child: ChildProcessWithoutNullStreams): Promise<{
@@ -409,25 +420,13 @@ export class CodexAppServerSession {
       return graceful
     }
     const pid = this.#child.pid
-    if (pid) {
-      try {
-        process.kill(-pid, 'SIGTERM')
-      } catch {
-        // The isolated app-server already exited between the timeout and signal.
-      }
-    }
+    if (pid) signalProcessGroup(pid, 'SIGTERM')
     const terminated = await Promise.race([this.#exit, timeoutPromise(750)])
     if (terminated !== 'timeout') {
       await Promise.all([this.#reader, this.#stderrReader])
       return terminated
     }
-    if (pid) {
-      try {
-        process.kill(-pid, 'SIGKILL')
-      } catch {
-        // The isolated app-server already exited between the timeout and signal.
-      }
-    }
+    if (pid) signalProcessGroup(pid, 'SIGKILL')
     const exit = await Promise.race([this.#exit, timeoutPromise(750)])
     if (exit === 'timeout') throw new Error('Codex app-server did not exit after SIGKILL.')
     await Promise.all([this.#reader, this.#stderrReader])

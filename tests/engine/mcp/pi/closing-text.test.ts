@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
-import { FALLBACK_PI_MODELS } from '#mcp/pi/catalog'
+import { FALLBACK_PI_MODELS } from '#mcp/pi/board-model-catalog'
 import {
   closingTextForFamily,
   closingTextFromAssistantMessage,
   isConfiguredClosingModel,
   piClosingFamily
-} from '#mcp/pi/closing-text'
+} from '#mcp/pi/providers/closing'
 
 describe('Pi closing capture', () => {
   test('configures every enabled catalog model to a known family', () => {

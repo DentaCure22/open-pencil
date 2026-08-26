@@ -39,7 +39,8 @@ const fontLoader = { load: loadFont }
             ctx.missingFonts.value.join(', ')
           "
         >
-          <icon-lucide-alert-triangle
+          <IconlyIcon
+            name="danger"
             data-test-id="typography-missing-font"
             class="size-3.5 shrink-0 text-[var(--color-warning-action)]"
           />

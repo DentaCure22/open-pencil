@@ -3,43 +3,35 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 
 import type { AgentConversationThread } from '#mcp/agent-router/contracts'
+import {
+  buildUsageTurnRecord,
+  cacheHitPercent,
+  emptyUsageTokens,
+  parseUsageTokens,
+  parseUsageTurnRecord,
+  percentage,
+  promptTokens,
+  type UsageSource,
+  type UsageTokens,
+  type UsageTurnRecord
+} from '#mcp/usage-ledger-schema'
 
-import { parsePiModelId } from './arguments'
-
-export type UsageSource = 'agy-sqlite' | 'estimated' | 'pi-event'
-export type UsageTurnSource = 'live' | 'probe'
-export type UsageProbeScenario = 'delay' | 'size' | 'warmup'
-
-export type UsageTokens = {
-  cacheRead: number
-  cacheWrite: number
-  input: number
-  output: number
-  reasoning: number
+export {
+  buildUsageTurnRecord,
+  cacheHitPercent,
+  emptyUsageTokens,
+  parseUsageTokens,
+  parseUsageTurnRecord,
+  percentage,
+  promptTokens
 }
-
-export type UsageTurnRecord = {
-  at: string
-  cacheHitPercent: number
-  cacheRead: number
-  cacheWrite: number
-  compacted: boolean
-  gapMs: number | null
-  input: number
-  model: string
-  output: number
-  promptTokens: number
-  provider: string
-  reasoning: number
-  source: UsageTurnSource
-  threadId: string
-  toolsPresent: boolean
-  turnIndex: number
-  usageSource: UsageSource
-  scenario?: UsageProbeScenario
-  targetPromptTokens?: number
-  waitMs?: number
-}
+export type {
+  UsageProbeScenario,
+  UsageSource,
+  UsageTokens,
+  UsageTurnRecord,
+  UsageTurnSource
+} from '#mcp/usage-ledger-schema'
 
 export type LiveUsageTurnInput = {
   at?: string
@@ -50,41 +42,8 @@ export type LiveUsageTurnInput = {
 
 const DEFAULT_LEDGER_FILE = 'turns.jsonl'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function finiteNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
-}
-
-export function percentage(value: number): number {
-  return Math.round(value * 10) / 10
-}
-
-export function promptTokens(tokens: Pick<UsageTokens, 'cacheRead' | 'cacheWrite' | 'input'>): number {
-  return Math.max(0, tokens.input) + Math.max(0, tokens.cacheRead) + Math.max(0, tokens.cacheWrite)
-}
-
-export function cacheHitPercent(tokens: Pick<UsageTokens, 'cacheRead' | 'cacheWrite' | 'input'>): number {
-  const prompt = promptTokens(tokens)
-  if (prompt <= 0) return 0
-  return percentage((Math.max(0, tokens.cacheRead) / prompt) * 100)
-}
-
-export function emptyUsageTokens(): UsageTokens {
-  return { cacheRead: 0, cacheWrite: 0, input: 0, output: 0, reasoning: 0 }
-}
-
-export function parseUsageTokens(value: unknown): UsageTokens {
-  if (!isRecord(value)) return emptyUsageTokens()
-  return {
-    cacheRead: Math.max(0, finiteNumber(value.cacheRead)),
-    cacheWrite: Math.max(0, finiteNumber(value.cacheWrite)),
-    input: Math.max(0, finiteNumber(value.input)),
-    output: Math.max(0, finiteNumber(value.output)),
-    reasoning: Math.max(0, finiteNumber(value.reasoning))
-  }
+function hasErrorCode(error: unknown, code: string): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code)
 }
 
 export function usageTokensAreZero(tokens: UsageTokens): boolean {
@@ -134,10 +93,12 @@ const MAX_SERIES_POINTS = 80
 
 function downsampleTurns(turns: UsageTurnRecord[]): UsageTurnRecord[] {
   if (turns.length <= MAX_SERIES_POINTS) return turns
+  const fallback = turns.at(-1)
+  if (!fallback) return turns
   const step = (turns.length - 1) / (MAX_SERIES_POINTS - 1)
   return Array.from({ length: MAX_SERIES_POINTS }, (_, index) => {
     const turn = turns[Math.round(index * step)]
-    return turn ?? turns[turns.length - 1]!
+    return turn ?? fallback
   })
 }
 
@@ -177,9 +138,9 @@ export function rollupUsageSnapshot(turns: UsageTurnRecord[], days = 7): UsageRo
         callHitPercent: group.length ? percentage((hits / group.length) * 100) : 0,
         estimatedPercent: group.length ? percentage((estimated / group.length) * 100) : 0,
         lastAt,
-        model: slash >= 0 ? key.slice(slash + 1) : key,
+        model: slash !== -1 ? key.slice(slash + 1) : key,
         promptTokens: prompt,
-        provider: slash >= 0 ? key.slice(0, slash) : key,
+        provider: slash !== -1 ? key.slice(0, slash) : key,
         tokenCachePercent: prompt ? percentage((cacheRead / prompt) * 100) : 0,
         turns: group.length
       }
@@ -198,7 +159,9 @@ export function rollupUsageSnapshot(turns: UsageTurnRecord[], days = 7): UsageRo
   }
 }
 
-export function usageLedgerThreadId(thread: Pick<AgentConversationThread, 'id' | 'sessionId'>): string {
+export function usageLedgerThreadId(
+  thread: Pick<AgentConversationThread, 'id' | 'sessionId'>
+): string {
   return thread.sessionId?.trim() || thread.id
 }
 
@@ -219,10 +182,10 @@ export function usageTurnGapMs(thread: Pick<AgentConversationThread, 'messages'>
 
 export function usageTurnToolsPresent(thread: Pick<AgentConversationThread, 'messages'>): boolean {
   const lastUser = thread.messages.findLastIndex((message) => message.role === 'user')
-  if (lastUser < 0) return false
-  return thread.messages.slice(lastUser + 1).some((message) =>
-    (message.parts ?? []).some((part) => part.type === 'tool')
-  )
+  if (lastUser === -1) return false
+  return thread.messages
+    .slice(lastUser + 1)
+    .some((message) => (message.parts ?? []).some((part) => part.type === 'tool'))
 }
 
 export function usageTurnCompacted(
@@ -235,57 +198,6 @@ export function usageTurnCompacted(
   return compactedAt >= lastUser.createdAt
 }
 
-export function buildUsageTurnRecord(
-  input: {
-    at?: string
-    compacted?: boolean
-    gapMs?: number | null
-    model: string
-    scenario?: UsageProbeScenario
-    source: UsageTurnSource
-    targetPromptTokens?: number
-    threadId: string
-    tokens: UsageTokens
-    toolsPresent?: boolean
-    turnIndex: number
-    usageSource: UsageSource
-    waitMs?: number
-  }
-): UsageTurnRecord {
-  const { model, provider } = parsePiModelId(input.model)
-  const tokens = {
-    cacheRead: Math.max(0, input.tokens.cacheRead),
-    cacheWrite: Math.max(0, input.tokens.cacheWrite),
-    input: Math.max(0, input.tokens.input),
-    output: Math.max(0, input.tokens.output),
-    reasoning: Math.max(0, input.tokens.reasoning)
-  }
-  return {
-    at: input.at ?? new Date().toISOString(),
-    cacheHitPercent: cacheHitPercent(tokens),
-    cacheRead: tokens.cacheRead,
-    cacheWrite: tokens.cacheWrite,
-    compacted: input.compacted === true,
-    gapMs: input.gapMs ?? null,
-    input: tokens.input,
-    model,
-    output: tokens.output,
-    promptTokens: promptTokens(tokens),
-    provider,
-    reasoning: tokens.reasoning,
-    source: input.source,
-    threadId: input.threadId,
-    toolsPresent: input.toolsPresent === true,
-    turnIndex: input.turnIndex,
-    usageSource: input.usageSource,
-    ...(input.scenario ? { scenario: input.scenario } : {}),
-    ...(input.targetPromptTokens !== undefined
-      ? { targetPromptTokens: input.targetPromptTokens }
-      : {}),
-    ...(input.waitMs !== undefined ? { waitMs: input.waitMs } : {})
-  }
-}
-
 export function buildLiveUsageTurn(
   thread: AgentConversationThread,
   input: LiveUsageTurnInput
@@ -294,50 +206,13 @@ export function buildLiveUsageTurn(
     at: input.at,
     compacted: usageTurnCompacted(thread),
     gapMs: usageTurnGapMs(thread),
-    model: thread.model,
+    modelId: thread.model,
     source: 'live',
     threadId: input.sessionId?.trim() || usageLedgerThreadId(thread),
     tokens: input.tokens,
     toolsPresent: usageTurnToolsPresent(thread),
     turnIndex: usageTurnIndex(thread),
     usageSource: input.usageSource
-  })
-}
-
-export function parseUsageTurnRecord(value: unknown): UsageTurnRecord | null {
-  if (!isRecord(value) || typeof value.at !== 'string') return null
-  if (typeof value.model !== 'string' || typeof value.provider !== 'string') return null
-  if (typeof value.threadId !== 'string') return null
-  if (value.source !== 'live' && value.source !== 'probe') return null
-  if (
-    value.usageSource !== 'agy-sqlite' &&
-    value.usageSource !== 'estimated' &&
-    value.usageSource !== 'pi-event'
-  ) {
-    return null
-  }
-  if (typeof value.turnIndex !== 'number' || !Number.isFinite(value.turnIndex)) return null
-  const tokens = parseUsageTokens(value)
-  return buildUsageTurnRecord({
-    at: value.at,
-    compacted: value.compacted === true,
-    gapMs: typeof value.gapMs === 'number' && Number.isFinite(value.gapMs) ? value.gapMs : null,
-    model: `${value.provider}/${value.model}`,
-    source: value.source,
-    threadId: value.threadId,
-    tokens,
-    toolsPresent: value.toolsPresent === true,
-    turnIndex: value.turnIndex,
-    usageSource: value.usageSource,
-    ...(value.scenario === 'delay' || value.scenario === 'size' || value.scenario === 'warmup'
-      ? { scenario: value.scenario }
-      : {}),
-    ...(typeof value.targetPromptTokens === 'number' && Number.isFinite(value.targetPromptTokens)
-      ? { targetPromptTokens: value.targetPromptTokens }
-      : {}),
-    ...(typeof value.waitMs === 'number' && Number.isFinite(value.waitMs)
-      ? { waitMs: value.waitMs }
-      : {})
   })
 }
 
@@ -357,7 +232,7 @@ export async function readUsageTurns(filePath: string): Promise<UsageTurnRecord[
         }
       })
   } catch (error) {
-    if (isRecord(error) && error.code === 'ENOENT') return []
+    if (hasErrorCode(error, 'ENOENT')) return []
     throw error
   }
 }
@@ -376,7 +251,7 @@ export async function appendUsageTurnBestEffort(
 ): Promise<void> {
   try {
     await appendUsageTurn(record, filePath)
-  } catch {
-    // Metering must never fail a chat turn.
+  } catch (error) {
+    console.warn('[Usage ledger] Could not append metering record:', error)
   }
 }

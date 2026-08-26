@@ -34,8 +34,18 @@ function mediaReferences(thread: AgentConversationThread): MediaReference[] {
     for (const part of message.parts ?? []) {
       if (part.type === 'image') references.push({ kind: 'image', value: part })
       if (part.type !== 'tool') continue
-      references.push(...(part.images ?? []).map((value) => ({ kind: 'image' as const, value })))
-      references.push(...(part.videos ?? []).map((value) => ({ kind: 'video' as const, value })))
+      references.push(
+        ...(part.images ?? []).map((value) => ({
+          kind: 'image' as const,
+          value
+        }))
+      )
+      references.push(
+        ...(part.videos ?? []).map((value) => ({
+          kind: 'video' as const,
+          value
+        }))
+      )
     }
   }
   return references
@@ -182,6 +192,24 @@ export class ConversationMediaStore {
       }
     }
     return hydrated
+  }
+
+  inputImagePaths(thread: AgentConversationThread): string[] {
+    const root = this.root
+    if (!root) return []
+    for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+      const message = thread.messages[index]
+      if (message.role !== 'user') continue
+      const paths = (message.parts ?? []).flatMap((part) => {
+        if (part.type !== 'image') return []
+        const name = referenceName(part.url)
+        if (!name) return []
+        const filePath = path.join(root, name)
+        return existsSync(filePath) ? [filePath] : []
+      })
+      if (paths.length) return paths
+    }
+    return []
   }
 
   private async persistVideo(video: { extension: string; source: string }): Promise<string | null> {

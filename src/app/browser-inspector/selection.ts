@@ -1,10 +1,15 @@
-import { uploadAgentAttachments } from '@/app/agent-chat/client'
+import { uploadAgentAttachments } from '@/app/agent-chat/attachment-transfer'
 import {
   attachNarratedTraceEvidence,
+  beginNarratedTraceEpisode,
+  beginNarratedTraceSession,
   captureNarratedTraceDisplayEvidence,
+  finishNarratedTraceEpisode,
+  finishNarratedTraceSession,
   markNarratedTraceEvidenceFailed,
   narratedTraceScopeForStore,
   narratedTraceSession,
+  narratedTraceStatus,
   noteNarratedTraceEvent,
   recordNarratedTraceActivity
 } from '@/app/narrated-trace'
@@ -25,6 +30,55 @@ import {
   setBrowserCaptureRecordingAttachment,
   setBrowserInspectorError
 } from './state'
+
+type BrowserTraceBinding = {
+  episodeId: string
+  traceSessionId: string
+}
+
+const browserTraceBindings = new Map<string, BrowserTraceBinding>()
+
+function chromeEpisodeId(captureSessionId: string) {
+  return `chrome:${captureSessionId}`
+}
+
+export function beginBrowserCaptureTrace(input: {
+  captureSessionId: string
+  page: BrowserElementSelection['page']
+}) {
+  const existing = browserTraceBindings.get(input.captureSessionId)
+  if (existing && narratedTraceSession.value?.id === existing.traceSessionId) {
+    return { ...existing, traceTag: narratedTraceSession.value.tag }
+  }
+
+  const scope = narratedTraceScopeForStore(getActiveStore())
+  if (narratedTraceStatus.value === 'recording') finishNarratedTraceSession()
+  beginNarratedTraceSession(scope, {
+    tagSeed: input.page.title || new URL(input.page.url).hostname,
+    title: `Inspect Chrome · ${input.page.title || new URL(input.page.url).hostname}`
+  })
+  const traceSession = narratedTraceSession.value
+  if (!traceSession || narratedTraceStatus.value !== 'recording') return null
+  const episodeId = chromeEpisodeId(input.captureSessionId)
+  beginNarratedTraceEpisode({
+    id: episodeId,
+    kind: 'chrome',
+    label: input.page.title || input.page.url,
+    sourceSessionId: input.captureSessionId
+  })
+  const binding = { episodeId, traceSessionId: traceSession.id }
+  browserTraceBindings.set(input.captureSessionId, binding)
+  return { ...binding, traceTag: traceSession.tag }
+}
+
+export function finishBrowserCaptureTrace(captureSessionId: string) {
+  const binding = browserTraceBindings.get(captureSessionId)
+  if (!binding) return
+  browserTraceBindings.delete(captureSessionId)
+  if (narratedTraceSession.value?.id !== binding.traceSessionId) return
+  finishNarratedTraceEpisode(binding.episodeId)
+  finishNarratedTraceSession()
+}
 
 async function attachSelectionEvidence(
   selection: BrowserElementSelection,
@@ -65,19 +119,34 @@ async function attachSelectionEvidence(
 }
 
 export function commitBrowserElementSelection(incoming: BrowserElementSelection) {
+  beginBrowserCaptureTrace({
+    captureSessionId:
+      incoming.session.captureSessionId ??
+      `legacy-${String(incoming.session.tabId)}-${incoming.id}`,
+    page: incoming.page
+  })
   const accepted = acceptBrowserElementSelection(incoming)
   if (!accepted) return
   const { selection, session } = accepted
   const store = getActiveStore()
   const target = browserElementTraceTarget(selection)
+  const sequence = selection.session.sequence ?? session.selections.length
+  const episodeId = session.traceEpisodeId ?? chromeEpisodeId(session.id)
   const eventId = recordNarratedTraceActivity(narratedTraceScopeForStore(store), {
     evidenceStatus: 'pending',
     kind: 'selection',
     label: `Selected ${target.name} from Chrome`,
+    origin: {
+      episodeId,
+      kind: 'chrome',
+      reference: `Annotation #${String(sequence)}`,
+      sequence,
+      sourceSessionId: session.id
+    },
     target,
     text: [
       `Chrome capture session ${session.id}`,
-      `selection ${String(selection.session.sequence ?? session.selections.length)}`,
+      `Annotation #${String(sequence)}`,
       `${selection.element.selector} on ${selection.page.url}`
     ].join(' · ')
   })
@@ -96,6 +165,11 @@ export function commitBrowserCaptureRecording(recording: BrowserCaptureRecording
     durationMs: recording.durationMs,
     kind: 'screenshot',
     label: 'Recorded Chrome motion',
+    origin: {
+      episodeId: chromeEpisodeId(recording.captureSessionId),
+      kind: 'chrome',
+      sourceSessionId: recording.captureSessionId
+    },
     target: {
       elementKind: 'container',
       name: 'Chrome capture session',

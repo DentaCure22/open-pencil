@@ -4,7 +4,7 @@ import { deflateSync, inflateSync } from 'fflate'
 import { initCodec, getCompiledSchema, getSchemaBytes } from '@open-pencil/kiwi/fig/codec'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { decodeBinarySchema, compileSchema, ByteBuffer } from '@open-pencil/kiwi/schema-runtime'
-import type { SceneGraph, VariableValue } from '@open-pencil/scene-graph'
+import type { SceneGraph } from '@open-pencil/scene-graph'
 import type { GUID } from '@open-pencil/scene-graph/primitives'
 
 import type { SkiaRenderer } from '#core/canvas'
@@ -16,12 +16,12 @@ import {
   sceneNodeToKiwi,
   fractionalPosition,
   buildFontDigestMap,
-  safeColor,
   makeDocumentNodeChange,
   makeCanvasNodeChange
 } from '#core/kiwi/fig/node-change/serialize'
 
 import { compressFigDataSync } from './compress'
+import { planFigVariableExport } from './export-variables'
 
 const THUMBNAIL_1X1 = Uint8Array.from(
   atob(
@@ -37,39 +37,6 @@ interface CanvasExportEntry {
   page: FigExportPage
   canvasGuid: GUID
   canvasNc: KiwiNodeChange
-}
-
-function variableValueToKiwi(
-  value: VariableValue,
-  type: string,
-  varIdToGuid: Map<string, GUID>
-): { value: Record<string, unknown>; dataType: string; resolvedDataType: string } {
-  if (value && typeof value === 'object' && 'aliasId' in value) {
-    const aliasGuid = varIdToGuid.get(value.aliasId) ?? stringToGuid(value.aliasId)
-    return {
-      value: { alias: { guid: aliasGuid } },
-      dataType: 'ALIAS',
-      resolvedDataType: { COLOR: 'COLOR', BOOLEAN: 'BOOLEAN', STRING: 'STRING' }[type] ?? 'FLOAT'
-    }
-  }
-  if (type === 'COLOR' && typeof value === 'object' && 'r' in value) {
-    return {
-      value: { colorValue: safeColor(value) },
-      dataType: 'COLOR',
-      resolvedDataType: 'COLOR'
-    }
-  }
-  if (type === 'BOOLEAN') {
-    return { value: { boolValue: !!value }, dataType: 'BOOLEAN', resolvedDataType: 'BOOLEAN' }
-  }
-  if (type === 'STRING') {
-    return {
-      value: { textValue: typeof value === 'string' ? value : JSON.stringify(value) },
-      dataType: 'STRING',
-      resolvedDataType: 'STRING'
-    }
-  }
-  return { value: { floatValue: Number(value) }, dataType: 'FLOAT', resolvedDataType: 'FLOAT' }
 }
 
 function collectImageEntries(graph: SceneGraph): Array<{ name: string; data: Uint8Array }> {
@@ -103,114 +70,6 @@ async function renderFigThumbnail(
     (await headlessRenderThumbnail(graph, pageId, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)) ??
     THUMBNAIL_1X1
   )
-}
-
-function assignVariableGuids(
-  graph: SceneGraph,
-  localIdCounter: { value: number },
-  varIdToGuid: Map<string, GUID>,
-  modeIdToGuid: Map<string, GUID>,
-  assignedGuidValues: Set<string>
-): void {
-  for (const [colId, col] of graph.variableCollections) {
-    const colGuid = { sessionID: 0, localID: localIdCounter.value++ }
-    varIdToGuid.set(colId, colGuid)
-    assignedGuidValues.add(`${colGuid.sessionID}:${colGuid.localID}`)
-    for (const mode of col.modes) {
-      const modeGuid = { sessionID: 0, localID: localIdCounter.value++ }
-      modeIdToGuid.set(mode.modeId, modeGuid)
-      assignedGuidValues.add(`${modeGuid.sessionID}:${modeGuid.localID}`)
-    }
-    for (const varId of col.variableIds) {
-      const varGuid = { sessionID: 0, localID: localIdCounter.value++ }
-      varIdToGuid.set(varId, varGuid)
-      assignedGuidValues.add(`${varGuid.sessionID}:${varGuid.localID}`)
-    }
-  }
-}
-
-function appendVariableNodeChanges(
-  graph: SceneGraph,
-  nodeChanges: KiwiNodeChange[],
-  internalCanvasGuid: GUID,
-  varIdToGuid: Map<string, GUID>,
-  modeIdToGuid: Map<string, GUID>
-): void {
-  let collIdx = 0
-  for (const [colId, col] of graph.variableCollections) {
-    const colGuid = varIdToGuid.get(colId) ?? stringToGuid(colId)
-    nodeChanges.push({
-      guid: colGuid,
-      parentIndex: { guid: internalCanvasGuid, position: fractionalPosition(collIdx++) },
-      type: 'VARIABLE_SET',
-      name: col.name,
-      phase: 'CREATED',
-      strokeAlign: 'CENTER',
-      strokeJoin: 'BEVEL',
-      variableSetModes: col.modes.map((m, i) => {
-        const mGuid = modeIdToGuid.get(m.modeId) ?? stringToGuid(m.modeId)
-        return { id: mGuid, name: m.name, sortPosition: fractionalPosition(i) }
-      })
-    })
-
-    appendVariablesForCollection(
-      graph,
-      nodeChanges,
-      colGuid,
-      internalCanvasGuid,
-      col.variableIds,
-      varIdToGuid,
-      modeIdToGuid
-    )
-  }
-}
-
-function appendVariablesForCollection(
-  graph: SceneGraph,
-  nodeChanges: KiwiNodeChange[],
-  colGuid: GUID,
-  parentGuid: GUID,
-  variableIds: string[],
-  varIdToGuid: Map<string, GUID>,
-  modeIdToGuid: Map<string, GUID>
-): void {
-  let varIdx = 0
-  for (const varId of variableIds) {
-    const variable = graph.variables.get(varId)
-    if (!variable) continue
-
-    const varGuid = varIdToGuid.get(varId) ?? stringToGuid(varId)
-    const typeMap: Record<string, string> = {
-      COLOR: 'COLOR',
-      BOOLEAN: 'BOOLEAN',
-      STRING: 'STRING'
-    }
-    const resolvedType = typeMap[variable.type] ?? 'FLOAT'
-
-    const entries = Object.entries(variable.valuesByMode).map(([modeId, value]) => ({
-      modeID: modeIdToGuid.get(modeId) ?? stringToGuid(modeId),
-      variableData: variableValueToKiwi(value, variable.type, varIdToGuid)
-    }))
-
-    const nc: KiwiNodeChange = {
-      guid: varGuid,
-      parentIndex: { guid: parentGuid, position: fractionalPosition(varIdx++) },
-      type: 'VARIABLE',
-      name: variable.name,
-      phase: 'CREATED',
-      strokeAlign: 'CENTER',
-      strokeJoin: 'BEVEL',
-      variableSetID: { guid: colGuid },
-      variableResolvedType: resolvedType,
-      variableDataValues: { entries },
-      variableScopes: ['ALL_SCOPES']
-    }
-    // Preserve library key/version on VARIABLE NodeChanges so that
-    // buildAssetRefMap can resolve assetRef to guid on reimport.
-    if (variable.key) nc.key = variable.key
-    if (variable.version) nc.version = variable.version
-    nodeChanges.push(nc)
-  }
 }
 
 function applyImportedCanvasFields(page: FigExportPage, canvasNc: KiwiNodeChange): void {
@@ -342,8 +201,6 @@ export async function exportFigFile(
   // Reserve the document GUID to prevent imported nodes with source.id "0:0"
   // from reusing the document's own GUID slot.
   assignedGuidValues.add(`${docGuid.sessionID}:${docGuid.localID}`)
-  const varIdToGuid = new Map<string, GUID>()
-  const modeIdToGuid = new Map<string, GUID>()
   const fontDigestMap = await buildFontDigestMap(graph)
   const glyphBlobMap = new Map<string, number>()
   const blobIndexByHex = new Map<string, number>()
@@ -378,7 +235,7 @@ export async function exportFigFile(
 
   // Assign variable GUIDs AFTER canvas entries so that source.id-derived
   // canvas GUIDs don't collide with generated variable GUIDs.
-  assignVariableGuids(graph, localIdCounter, varIdToGuid, modeIdToGuid, assignedGuidValues)
+  const variableExport = planFigVariableExport(graph, localIdCounter, assignedGuidValues)
 
   for (const entry of canvasEntries) nodeChanges.push(entry.canvasNc)
 
@@ -399,7 +256,7 @@ export async function exportFigFile(
           blobs,
           nodeIdToGuid,
           fontDigestMap,
-          varIdToGuid,
+          variableExport.varIdToGuid,
           glyphBlobMap,
           blobIndexByHex,
           assignedGuidValues
@@ -409,7 +266,7 @@ export async function exportFigFile(
   }
 
   if (graph.variableCollections.size > 0 && internalCanvasGuid) {
-    appendVariableNodeChanges(graph, nodeChanges, internalCanvasGuid, varIdToGuid, modeIdToGuid)
+    variableExport.appendNodeChanges(nodeChanges, internalCanvasGuid)
   }
 
   const msg: Record<string, unknown> = {

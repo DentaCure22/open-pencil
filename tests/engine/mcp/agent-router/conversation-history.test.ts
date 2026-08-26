@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { AgentConversationThread } from '#mcp/agent-router/contracts'
+import { isConversationThread, type AgentConversationThread } from '#mcp/agent-router/contracts'
 import {
   conversationPersistSignature,
   conversationThreadBodiesDirectory,
@@ -48,6 +48,30 @@ function thread(
 }
 
 describe('agent conversation history files', () => {
+  test('rejects malformed persisted message parts before hydration', () => {
+    const candidate = thread('invalid-parts', 'Invalid parts.')
+    const assistant = candidate.messages[1]
+    if (!assistant) throw new Error('Expected assistant fixture message.')
+
+    expect(
+      isConversationThread({
+        ...candidate,
+        messages: [{ ...assistant, parts: [null] }]
+      })
+    ).toBe(false)
+  })
+
+  test('changes the persistence signature when equal-length content changes', () => {
+    const original = thread('signature', 'Done.')
+    const changed = structuredClone(original)
+    const part = changed.messages[1]?.parts?.[0]
+    if (part?.type !== 'tool') throw new Error('Expected tool fixture part.')
+    part.output = 'tool output for two'
+
+    expect(part.output.length).toBe('tool output for one'.length)
+    expect(conversationPersistSignature(changed)).not.toBe(conversationPersistSignature(original))
+  })
+
   test('loads a legacy full-thread array and splits dirty bodies on write', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'openpencil-conversation-history-'))
     const historyPath = path.join(root, 'pi-conversations.json')

@@ -12,7 +12,14 @@ describe('pi-grok-eval parse', () => {
   test('reads Pi usage from a jsonl turn', () => {
     const line = JSON.stringify({
       message: {
-        usage: { cacheRead: 10, cacheWrite: 4, input: 100, output: 20, reasoning: 5, totalTokens: 139 }
+        usage: {
+          cacheRead: 10,
+          cacheWrite: 4,
+          input: 100,
+          output: 20,
+          reasoning: 5,
+          totalTokens: 139
+        }
       },
       type: 'message_end'
     })

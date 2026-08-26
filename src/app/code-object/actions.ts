@@ -1,9 +1,6 @@
 import { randomHex } from '@open-pencil/core/random'
 
-import {
-  reactShapeDocument as codeObjectDocument,
-  reactShapePluginData as codeObjectPluginData
-} from '@/app/code-object/implementation'
+import { codeObjectDocument, codeObjectPluginData } from '@/app/code-object/implementation'
 import type { EditorStore } from '@/app/editor/active-store'
 
 import {

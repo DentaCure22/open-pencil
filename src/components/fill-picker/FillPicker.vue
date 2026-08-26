@@ -78,7 +78,7 @@ const { panels } = useI18n()
             data-test-id="fill-picker-tab-image"
             @click="toImage"
           >
-            <icon-lucide-image class="size-3.5" />
+            <IconlyIcon name="image" class="size-3.5" />
           </button>
         </Tip>
       </div>

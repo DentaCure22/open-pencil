@@ -23,7 +23,6 @@ import {
 } from '@/app/smylr-live-inspector/frame-origin'
 import { isLiveInspectorMessageFromFrame } from '@/app/smylr-live-inspector/message-source'
 import {
-  isSmylrOpenPencilInspectorMessage,
   liveInspectorActiveFrameId,
   liveInspectorInteractionMode,
   liveInspectorReloadTickFor,
@@ -32,10 +31,13 @@ import {
   markLiveInspectorFrameUnavailable,
   receiveLiveInspectorMessage,
   setLiveInspectorActiveFrame,
-  setLiveInspectorCommandTarget,
+  setLiveInspectorCommandTarget
+} from '@/app/smylr-live-inspector/session'
+import {
+  isSmylrOpenPencilInspectorMessage,
   SMYLR_OPENPENCIL_INSPECTOR_MESSAGE,
   type SmylrOpenPencilInspectorCommand
-} from '@/app/smylr-live-inspector/session'
+} from '@/app/smylr-live-inspector/protocol'
 import SmylrLiveContainerOverlay from '@/components/SmylrLiveContainerOverlay.vue'
 import { IS_BROWSER } from '@/constants'
 

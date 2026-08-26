@@ -315,7 +315,7 @@ onBeforeUnmount(() => disposeViewer('paused'))
       aria-live="polite"
       data-test-id="spatial-media-status"
     >
-      <icon-lucide-circle-alert v-if="viewerState === 'error'" class="size-5 text-[#f3a2a2]" />
+      <IconlyIcon name="danger" v-if="viewerState === 'error'" class="size-5 text-[#f3a2a2]" />
       <icon-lucide-loader-circle
         v-else-if="viewerState === 'loading'"
         class="size-5 animate-spin text-[#a78bfa]"

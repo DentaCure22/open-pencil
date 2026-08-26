@@ -1,8 +1,0 @@
-{
-  "finalText": "Built on the exact requested Board at revision 82.\n\n- Independent owners: Must `0:369`, Should `0:372`, Could `0:387`\n- Adjustable capacity control `0:393`: 24 points, ±2 buttons, 8–60 slider\n- Durable typed `data` relationships labeled `constrains · data`:\n  - Must → Should\n  - Must → Could\n- All four pieces are independently selectable, movable, persistent, and framed together.\n\nGraph/readback and renderer acknowledgement passed. Final Chrome screenshot and live button-click proof were blocked because another browser-control session held the tab.\n\n### Recap\n\n- Created four separate Board pieces and two durable constraint relationships on the exact target.\n- Remaining proof: click `+` once to visually confirm capacity changes from 24 to 26.\n\n",
-  "generatedAtMs": 1785364341780,
-  "originalProofDeadlineAtMs": 1785367941893,
-  "releasedAfterOriginalDeadlineMs": 0,
-  "releasedAtMs": 1785364869144,
-  "safetyTimeoutMs": 3600000
-}

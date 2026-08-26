@@ -110,6 +110,50 @@ function eventThreadId(event: EvalEvent): string | null {
     : null
 }
 
+interface ProjectionState {
+  activeBoardBuild: boolean
+  generatedFinal: EvalEvent | null
+  straightThroughDisqualified: boolean
+  threadId: string | null
+}
+
+function newProjectionState(): ProjectionState {
+  return {
+    activeBoardBuild: false,
+    generatedFinal: null,
+    straightThroughDisqualified: false,
+    threadId: null
+  }
+}
+
+function applyProjectedEvent(
+  state: ProjectionState,
+  event: EvalEvent,
+  releaseAccepted: boolean
+): void {
+  state.threadId = eventThreadId(event) ?? state.threadId
+  if (event.kind === 'agent_message_completed') {
+    state.generatedFinal = event
+    if (state.activeBoardBuild) state.straightThroughDisqualified = true
+  }
+  if (event.kind === 'run_error') state.straightThroughDisqualified = true
+  if (event.kind === 'openpencil_result' || event.kind === 'durability_confirmed') {
+    state.straightThroughDisqualified = true
+  }
+  if (event.kind === 'command_started' && event.data.semantic_command) {
+    const eligibleBoardBuild =
+      event.data.route === 'cli' &&
+      event.data.semantic_command === 'build' &&
+      !state.activeBoardBuild &&
+      !state.straightThroughDisqualified
+    if (eligibleBoardBuild) state.activeBoardBuild = true
+    else state.straightThroughDisqualified = true
+  }
+  if (event.kind === 'command_completed' && state.activeBoardBuild && !releaseAccepted) {
+    state.straightThroughDisqualified = true
+  }
+}
+
 async function appendPendingProof(
   options: RecordCodexRunOptions,
   configuration: Readonly<EvaluationConfiguration>,
@@ -214,6 +258,25 @@ async function appendOrchestratorGenerated(
   })
 }
 
+function validateStraightThroughRecording(
+  options: RecordCodexRunOptions,
+  configuration: Readonly<EvaluationConfiguration>
+): void {
+  if (configuration.context.ignore_rules || configuration.context.ignore_user_config) {
+    throw new Error(
+      'Straight-through app-server recording does not support disabled rules or user config.'
+    )
+  }
+  if (options.resumeThreadId) {
+    throw new Error('Straight-through app-server recording requires a fresh thread.')
+  }
+}
+
+async function readOutputSchema(outputSchemaPath?: string): Promise<unknown> {
+  if (!outputSchemaPath) return undefined
+  return JSON.parse(await readFile(outputSchemaPath, 'utf8')) as unknown
+}
+
 async function recordStraightThroughAppServer(
   options: RecordCodexRunOptions,
   configuration: Readonly<EvaluationConfiguration>,
@@ -224,20 +287,10 @@ async function recordStraightThroughAppServer(
   configuredServiceTier: 'default' | 'priority',
   updateReleaseEligibility: (activeBoardBuild: boolean, disqualified: boolean) => void
 ): Promise<RecordCodexRunResult> {
-  if (configuration.context.ignore_rules || configuration.context.ignore_user_config) {
-    throw new Error(
-      'Straight-through app-server recording does not support disabled rules or user config.'
-    )
-  }
-  if (options.resumeThreadId) {
-    throw new Error('Straight-through app-server recording requires a fresh thread.')
-  }
+  validateStraightThroughRecording(options, configuration)
 
-  let activeBoardBuild = false
   let releaseAccepted = false
-  let straightThroughDisqualified = false
-  let generatedFinal: EvalEvent | null = null
-  let threadId: string | null = null
+  const projectionState = newProjectionState()
   const rawStreamHash = createHash('sha256')
   let rawStreamBytes = 0
   let rawStreamLines = 0
@@ -250,29 +303,12 @@ async function recordStraightThroughAppServer(
   const appendProjected = async (lines: readonly string[]) => {
     for (const line of lines) {
       for (const event of projector.projectLine(line)) {
-        threadId = eventThreadId(event) ?? threadId
-        if (event.kind === 'agent_message_completed') {
-          generatedFinal = event
-          if (activeBoardBuild) straightThroughDisqualified = true
-        }
-        if (event.kind === 'run_error') straightThroughDisqualified = true
-        if (event.kind === 'openpencil_result' || event.kind === 'durability_confirmed') {
-          straightThroughDisqualified = true
-        }
-        if (event.kind === 'command_started' && event.data.semantic_command) {
-          const eligibleBoardBuild =
-            event.data.route === 'cli' &&
-            event.data.semantic_command === 'build' &&
-            !activeBoardBuild &&
-            !straightThroughDisqualified
-          if (eligibleBoardBuild) activeBoardBuild = true
-          else straightThroughDisqualified = true
-        }
-        if (event.kind === 'command_completed' && activeBoardBuild && !releaseAccepted) {
-          straightThroughDisqualified = true
-        }
+        applyProjectedEvent(projectionState, event, releaseAccepted)
         await log.append(event)
-        updateReleaseEligibility(activeBoardBuild, straightThroughDisqualified)
+        updateReleaseEligibility(
+          projectionState.activeBoardBuild,
+          projectionState.straightThroughDisqualified
+        )
       }
     }
   }
@@ -321,9 +357,7 @@ async function recordStraightThroughAppServer(
         bytes: Buffer.byteLength(options.prompt)
       })
     )
-    const outputSchema = options.outputSchemaPath
-      ? JSON.parse(await readFile(options.outputSchemaPath, 'utf8'))
-      : undefined
+    const outputSchema = await readOutputSchema(options.outputSchemaPath)
     const started = await session.start({
       cwd: options.cwd,
       ephemeral: options.ephemeral ?? false,
@@ -334,7 +368,7 @@ async function recordStraightThroughAppServer(
       sandbox: options.sandbox ?? 'workspace-write',
       serviceTier: configuredServiceTier
     })
-    threadId = started.threadId
+    projectionState.threadId = started.threadId
 
     const outcome = await Promise.race([
       releaseSupervisor.acceptance.then((acceptance) => ({ acceptance, kind: 'release' as const })),
@@ -355,7 +389,7 @@ async function recordStraightThroughAppServer(
         })
         await releaseSupervisor.close()
         await session.close()
-        return { exitCode: 1, status: 'failed', threadId }
+        return { exitCode: 1, status: 'failed', threadId: projectionState.threadId }
       }
 
       await log.appendGenerated((last) => {
@@ -429,7 +463,11 @@ async function recordStraightThroughAppServer(
         usage_unavailable_reason: drain.usage_unavailable_reason
       })
       const clean = drain.post_release_raw_response_count === 0
-      return { exitCode: clean ? 0 : 1, status: clean ? 'recorded' : 'failed', threadId }
+      return {
+        exitCode: clean ? 0 : 1,
+        status: clean ? 'recorded' : 'failed',
+        threadId: projectionState.threadId
+      }
     }
 
     await releaseSupervisor.close()
@@ -463,11 +501,11 @@ async function recordStraightThroughAppServer(
         configuration,
         log,
         projector.nextSequence + 2,
-        generatedFinal,
-        threadId
+        projectionState.generatedFinal,
+        projectionState.threadId
       )
     }
-    return { exitCode: 0, status: 'recorded', threadId }
+    return { exitCode: 0, status: 'recorded', threadId: projectionState.threadId }
   } catch (error) {
     await appendOrchestratorGenerated(options, log, 'run_error', {
       code: 'codex_app_server_failed',
@@ -475,8 +513,38 @@ async function recordStraightThroughAppServer(
     })
     await releaseSupervisor.close()
     await session?.close().catch(() => undefined)
-    return { exitCode: 1, status: 'failed', threadId }
+    return { exitCode: 1, status: 'failed', threadId: projectionState.threadId }
   }
+}
+
+function codexExecArguments(
+  options: RecordCodexRunOptions,
+  configuration: Readonly<EvaluationConfiguration>,
+  configuredReasoningEffort: 'high' | 'low' | 'medium' | 'xhigh',
+  configuredServiceTier: 'default' | 'priority'
+): string[] {
+  return [
+    'exec',
+    '--json',
+    '--color',
+    'never',
+    '--sandbox',
+    options.sandbox ?? 'workspace-write',
+    '-C',
+    options.cwd,
+    ...(options.skipGitRepoCheck ? ['--skip-git-repo-check'] : []),
+    ...(options.ephemeral ? ['--ephemeral'] : []),
+    ...(configuration.context.ignore_user_config ? ['--ignore-user-config'] : []),
+    ...(configuration.context.ignore_rules ? ['--ignore-rules'] : []),
+    '--model',
+    configuration.agent.model,
+    '--config',
+    `model_reasoning_effort="${configuredReasoningEffort}"`,
+    '--config',
+    `service_tier="${configuredServiceTier}"`,
+    ...(options.outputSchemaPath ? ['--output-schema', options.outputSchemaPath] : []),
+    ...(options.resumeThreadId ? ['resume', options.resumeThreadId, '-'] : ['-'])
+  ]
 }
 
 export async function recordCodexRunDetailed(
@@ -517,33 +585,17 @@ export async function recordCodexRunDetailed(
     )
   )
   await writeFile(rawCodexLogPath, '', { encoding: 'utf8', flag: 'wx' })
-  const args = [
-    'exec',
-    '--json',
-    '--color',
-    'never',
-    '--sandbox',
-    options.sandbox ?? 'workspace-write',
-    '-C',
-    options.cwd,
-    ...(options.skipGitRepoCheck ? ['--skip-git-repo-check'] : []),
-    ...(options.ephemeral ? ['--ephemeral'] : []),
-    ...(configuration.context.ignore_user_config ? ['--ignore-user-config'] : []),
-    ...(configuration.context.ignore_rules ? ['--ignore-rules'] : []),
-    '--model',
-    configuration.agent.model,
-    '--config',
-    `model_reasoning_effort="${configuredReasoningEffort}"`,
-    '--config',
-    `service_tier="${configuredServiceTier}"`,
-    ...(options.outputSchemaPath ? ['--output-schema', options.outputSchemaPath] : []),
-    ...(options.resumeThreadId ? ['resume', options.resumeThreadId, '-'] : ['-'])
-  ]
-  let activeBoardBuild = false
-  let straightThroughDisqualified = false
+  const args = codexExecArguments(
+    options,
+    configuration,
+    configuredReasoningEffort,
+    configuredServiceTier
+  )
+  const projectionState = newProjectionState()
   const releaseSupervisor = options.straightThrough
     ? await createStraightThroughReleaseSupervisor({
-        canAccept: () => activeBoardBuild && !straightThroughDisqualified,
+        canAccept: () =>
+          projectionState.activeBoardBuild && !projectionState.straightThroughDisqualified,
         input: options.straightThrough
       }).catch(() => null)
     : null
@@ -557,8 +609,8 @@ export async function recordCodexRunDetailed(
       configuredReasoningEffort,
       configuredServiceTier,
       (active, disqualified) => {
-        activeBoardBuild = active
-        straightThroughDisqualified = disqualified
+        projectionState.activeBoardBuild = active
+        projectionState.straightThroughDisqualified = disqualified
       }
     )
   }
@@ -601,8 +653,6 @@ export async function recordCodexRunDetailed(
   const stderrTask = (async () => {
     for await (const line of stderr) await appendFile(options.stderrPath, `${line}\n`, 'utf8')
   })()
-  let threadId: string | null = null
-  let generatedFinal: EvalEvent | null = null
   const rawStreamHash = createHash('sha256')
   let rawStreamBytes = 0
   let rawStreamLines = 0
@@ -613,29 +663,7 @@ export async function recordCodexRunDetailed(
     rawStreamBytes += Buffer.byteLength(rawLine, 'utf8')
     rawStreamLines += 1
     for (const event of projector.projectLine(line)) {
-      threadId = eventThreadId(event) ?? threadId
-      if (event.kind === 'agent_message_completed') {
-        generatedFinal = event
-        if (activeBoardBuild) straightThroughDisqualified = true
-      }
-      if (event.kind === 'run_error') {
-        straightThroughDisqualified = true
-      }
-      if (event.kind === 'openpencil_result' || event.kind === 'durability_confirmed') {
-        straightThroughDisqualified = true
-      }
-      if (event.kind === 'command_started' && event.data.semantic_command) {
-        const eligibleBoardBuild =
-          event.data.route === 'cli' &&
-          event.data.semantic_command === 'build' &&
-          !activeBoardBuild &&
-          !straightThroughDisqualified
-        if (eligibleBoardBuild) activeBoardBuild = true
-        else straightThroughDisqualified = true
-      }
-      if (event.kind === 'command_completed' && activeBoardBuild) {
-        straightThroughDisqualified = true
-      }
+      applyProjectedEvent(projectionState, event, false)
       await log.append(event)
     }
     nextSequence = projector.nextSequence
@@ -662,9 +690,20 @@ export async function recordCodexRunDetailed(
     nextSequence += 1
   }
   if (exitCode === 0 && configuration.browser.required) {
-    return appendPendingProof(options, configuration, log, nextSequence, generatedFinal, threadId)
+    return appendPendingProof(
+      options,
+      configuration,
+      log,
+      nextSequence,
+      projectionState.generatedFinal,
+      projectionState.threadId
+    )
   }
-  return { exitCode, status: exitCode === 0 ? 'recorded' : 'failed', threadId }
+  return {
+    exitCode,
+    status: exitCode === 0 ? 'recorded' : 'failed',
+    threadId: projectionState.threadId
+  }
 }
 
 export async function recordCodexRun(options: RecordCodexRunOptions): Promise<number> {

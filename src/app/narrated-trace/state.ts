@@ -11,12 +11,14 @@ import {
   narratedTraceHistoryLoaded,
   readNarratedTraceRecord,
   renameNarratedTraceRecord,
-  saveNarratedTraceRecord
+  saveNarratedTraceRecord,
+  uniqueNarratedTraceTag
 } from './history'
 import type {
   NarratedTraceAppendOptions,
   NarratedTraceContextEntry,
   NarratedTraceEvidence,
+  NarratedTraceEpisode,
   NarratedTraceEvent,
   NarratedTraceEventInput,
   NarratedTraceScope,
@@ -138,23 +140,64 @@ function updateNarratedTraceEvent(
   })
 }
 
-export function beginNarratedTraceSession(scope?: NarratedTraceScope) {
+export function beginNarratedTraceSession(
+  scope?: NarratedTraceScope,
+  options: { tagSeed?: string; title?: string } = {}
+) {
   stopClock()
   coalescedEvents.clear()
   narratedTraceElapsedMs.value = 0
   narratedTraceError.value = null
   narratedTraceInterimText.value = ''
   narratedTraceSession.value = {
+    aliases: [],
     contextDraft: [],
     durationMs: 0,
+    episodes: [],
     events: [],
     id: createId('trace'),
     scope: scope ? structuredClone(scope) : undefined,
-    startedAt: new Date().toISOString()
+    startedAt: new Date().toISOString(),
+    tag: uniqueNarratedTraceTag(
+      options.tagSeed ?? scope?.pageName ?? scope?.documentName ?? 'session'
+    ),
+    ...(options.title?.trim() ? { title: compactNarratedTraceTitle(options.title) } : {})
   }
   narratedTraceStatus.value = 'recording'
   startClock()
   schedulePersist()
+}
+
+export function beginNarratedTraceEpisode(
+  input: Omit<NarratedTraceEpisode, 'startedAtMs'> & { startedAtMs?: number }
+) {
+  const session = narratedTraceSession.value
+  if (!session || narratedTraceStatus.value !== 'recording') return null
+  const existing = session.episodes?.find((episode) => episode.id === input.id)
+  if (existing) return existing.id
+  const episode: NarratedTraceEpisode = {
+    ...structuredClone(input),
+    startedAtMs: input.startedAtMs ?? narratedTraceElapsedMs.value
+  }
+  replaceSession({ ...session, episodes: [...(session.episodes ?? []), episode] })
+  return episode.id
+}
+
+export function finishNarratedTraceEpisode(
+  episodeId: string,
+  endedAtMs = narratedTraceElapsedMs.value
+) {
+  const session = narratedTraceSession.value
+  if (!session?.episodes?.some((episode) => episode.id === episodeId)) return false
+  replaceSession({
+    ...session,
+    episodes: session.episodes.map((episode) =>
+      episode.id === episodeId
+        ? { ...episode, endedAtMs: Math.max(episode.startedAtMs, endedAtMs) }
+        : episode
+    )
+  })
+  return true
 }
 
 export function finishNarratedTraceSession() {
@@ -162,7 +205,15 @@ export function finishNarratedTraceSession() {
   stopClock()
   const session = narratedTraceSession.value
   if (session) {
-    narratedTraceSession.value = { ...session, durationMs: narratedTraceElapsedMs.value }
+    narratedTraceSession.value = {
+      ...session,
+      durationMs: narratedTraceElapsedMs.value,
+      episodes: session.episodes?.map((episode) =>
+        episode.endedAtMs === undefined
+          ? { ...episode, endedAtMs: narratedTraceElapsedMs.value }
+          : episode
+      )
+    }
   }
   narratedTraceStatus.value = 'review'
   narratedTraceInterimText.value = ''
@@ -198,6 +249,7 @@ export function appendNarratedTraceEvent(
       }
       const nextSession = {
         ...session,
+        durationMs: Math.max(session.durationMs, atMs + Math.max(0, nextEvent.durationMs ?? 0)),
         events: session.events.map((event) => (event.id === existing.id ? nextEvent : event))
       }
       replaceSession(nextSession)
@@ -217,7 +269,7 @@ export function appendNarratedTraceEvent(
       ...session.contextDraft,
       { included: true, removed: false, sourceEventId: event.id }
     ],
-    durationMs: Math.max(session.durationMs, atMs),
+    durationMs: Math.max(session.durationMs, atMs + Math.max(0, event.durationMs ?? 0)),
     events: [...session.events, event]
   })
   replaceSession(nextSession)
@@ -280,6 +332,22 @@ export async function renameNarratedTraceTitle(sessionId: string, title: string)
 
   const renamedRecord = await renameNarratedTraceRecord(sessionId, compact)
   return isCurrent || renamedRecord
+}
+
+export function setNarratedTraceSessionTag(value: string) {
+  const session = narratedTraceSession.value
+  if (!session) return null
+  const tag = uniqueNarratedTraceTag(value, session.id)
+  const previous = session.tag
+  if (previous === tag) return tag
+  replaceSession({
+    ...session,
+    aliases: previous
+      ? [...new Set([...(session.aliases ?? []), previous])].filter((alias) => alias !== tag)
+      : (session.aliases ?? []),
+    tag
+  })
+  return tag
 }
 
 export const narratedTraceIncludedCount = computed(() => {

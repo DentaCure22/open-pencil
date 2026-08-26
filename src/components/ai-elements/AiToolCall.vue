@@ -62,16 +62,16 @@ const statusLabel = computed(() => {
         aria-hidden="true"
         data-test-id="ai-tool-kind-icon"
       >
-        <icon-lucide-search v-if="kind === 'search'" class="size-3.5 stroke-[1.6]" />
+        <IconlyIcon name="search" v-if="kind === 'search'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-mail v-else-if="kind === 'mail'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-terminal v-else-if="kind === 'command'" class="size-3.5 stroke-[1.6]" />
-        <icon-lucide-file-text v-else-if="kind === 'read'" class="size-3.5 stroke-[1.6]" />
+        <IconlyIcon name="document" v-else-if="kind === 'read'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-pencil-line v-else-if="kind === 'edit'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-list-tree v-else-if="kind === 'list'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-plug-zap v-else-if="kind === 'connected-app'" class="size-3.5 stroke-[1.6]" />
-        <icon-lucide-message-square v-else-if="kind === 'message'" class="size-3.5 stroke-[1.6]" />
+        <IconlyIcon name="chat" v-else-if="kind === 'message'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-git-fork v-else-if="kind === 'handoff'" class="size-3.5 stroke-[1.6]" />
-        <icon-lucide-image v-else-if="kind === 'image'" class="size-3.5 stroke-[1.6]" />
+        <IconlyIcon name="image" v-else-if="kind === 'image'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-globe-2 v-else-if="kind === 'web'" class="size-3.5 stroke-[1.6]" />
         <icon-lucide-wrench v-else class="size-3.5 stroke-[1.6]" />
       </span>
@@ -81,7 +81,7 @@ const statusLabel = computed(() => {
       }}</span>
       <span
         v-if="detailInput"
-        class="min-w-0 flex-1 truncate font-mono text-[11px] text-muted"
+        class="min-w-0 flex-1 truncate font-sans text-[12px] font-normal text-muted"
         data-test-id="ai-tool-input"
         >{{ detailInput }}</span
       >
@@ -95,13 +95,15 @@ const statusLabel = computed(() => {
         :aria-label="expanded ? 'Hide tool details' : 'Show tool details'"
         @click="expanded = !expanded"
       >
-        <icon-lucide-chevron-down
+        <IconlyIcon
+          name="arrow-down"
           v-if="expanded"
           class="size-3.5"
           data-direction="down"
           data-test-id="ai-disclosure-chevron"
         />
-        <icon-lucide-chevron-right
+        <IconlyIcon
+          name="arrow-right"
           v-else
           class="size-3.5"
           data-direction="right"

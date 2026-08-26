@@ -16,6 +16,19 @@ interface FakeAppServer {
   requestLog: string
 }
 
+type LoggedAppServerRequest = {
+  [key: string]: unknown
+  method?: string
+}
+
+function loggedRequest(line: string): LoggedAppServerRequest {
+  const value: unknown = JSON.parse(line)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Expected logged app-server request object')
+  }
+  return value as LoggedAppServerRequest
+}
+
 async function fakeAppServer(
   options: {
     missingCacheWriteUsage?: boolean
@@ -156,10 +169,7 @@ describe('isolated Codex app-server straight-through transport', () => {
     })
     expect(rawLines.some((line) => line.includes('thread/tokenUsage/updated'))).toBeTrue()
     expect(exit).toEqual({ code: 0, signal: null })
-    const requests = (await Bun.file(fake.requestLog).text())
-      .trim()
-      .split(/\n/u)
-      .map((line) => JSON.parse(line) as Record<string, unknown>)
+    const requests = (await Bun.file(fake.requestLog).text()).trim().split(/\n/u).map(loggedRequest)
     expect(requests.find(({ method }) => method === 'thread/start')).toMatchObject({
       params: { approvalPolicy: 'never', sandbox: 'workspace-write' }
     })
@@ -230,10 +240,7 @@ describe('isolated Codex app-server straight-through transport', () => {
       'Unsupported Codex app-server request: item/commandExecution/requestApproval.'
     )
     await session.close()
-    const requests = (await Bun.file(fake.requestLog).text())
-      .trim()
-      .split(/\n/u)
-      .map((line) => JSON.parse(line) as Record<string, unknown>)
+    const requests = (await Bun.file(fake.requestLog).text()).trim().split(/\n/u).map(loggedRequest)
     expect(requests).toContainEqual({
       error: {
         code: -32601,

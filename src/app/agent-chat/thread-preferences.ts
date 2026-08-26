@@ -1,6 +1,6 @@
 import { useLocalStorage } from '@vueuse/core'
 
-import type { AgentConversationThread } from './client'
+import type { AgentConversationState, AgentConversationThread } from './conversations'
 import { agentConversationTitle } from './presentation'
 import type { AiMessage, AiMessagePart } from './types'
 
@@ -17,16 +17,10 @@ const preferences = useLocalStorage<Record<string, AgentConversationPreference>>
 )
 
 function updatePreference(threadId: string, patch: AgentConversationPreference): void {
-  const next = { ...preferences.value[threadId], ...patch }
-  if (!next.archived) delete next.archived
-  if (!next.pinned) delete next.pinned
-  if (!next.title) delete next.title
-  if (!next.unread) delete next.unread
-
-  const record = { ...preferences.value }
-  if (Object.keys(next).length) record[threadId] = next
-  else delete record[threadId]
-  preferences.value = record
+  const merged = { ...preferences.value[threadId], ...patch }
+  const next = Object.fromEntries(Object.entries(merged).filter(([, value]) => Boolean(value)))
+  const { [threadId]: _current, ...remaining } = preferences.value
+  preferences.value = Object.keys(next).length ? { ...remaining, [threadId]: next } : remaining
 }
 
 export function agentConversationPreference(threadId: string): AgentConversationPreference {
@@ -66,6 +60,14 @@ export function setAgentConversationTitle(thread: AgentConversationThread, title
 
 export function setAgentConversationUnread(thread: AgentConversationThread, unread: boolean): void {
   updatePreference(thread.nativeThreadId, { unread })
+}
+
+export function shouldMarkFinishedConversationUnread(input: {
+  open: boolean
+  previousState?: AgentConversationState
+  state: AgentConversationState
+}): boolean {
+  return !input.open && input.previousState === 'running' && input.state === 'completed'
 }
 
 export function agentConversationLastUserMessageAt(

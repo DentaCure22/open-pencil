@@ -31,10 +31,11 @@ function isExpanded() {
     :class="switcher.row(false)"
     @click="emit('toggleProject', project.id)"
   >
-    <icon-lucide-chevron-right
+    <IconlyIcon
+      name="arrow-right"
       :class="[switcher.projectChevron, isExpanded() ? 'rotate-90' : '']"
     />
-    <icon-lucide-folder :class="switcher.projectIcon" />
+    <IconlyIcon name="folder" :class="switcher.projectIcon" />
     <span class="min-w-0 flex-1 truncate font-medium">{{ project.name }}</span>
   </button>
 

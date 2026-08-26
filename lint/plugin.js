@@ -465,7 +465,7 @@ const noRawTestIdStringProps = {
 
     function isTestIdKey(key) {
       if (key?.type !== 'Identifier') return false
-      return key.name === 'testId' || /TestId$/u.test(key.name)
+      return key.name === 'testId' || key.name.endsWith('TestId')
     }
 
     return {
@@ -838,7 +838,7 @@ function isNumericLiteral(node, value) {
   return node?.type === 'Literal' && node.value === value
 }
 
-function colorObjectLiteral(node, color) {
+function colorObjectLiteral(node, alpha) {
   if (node?.type !== 'ObjectExpression') return false
   const props = new Map()
   for (const prop of node.properties ?? []) {
@@ -846,7 +846,12 @@ function colorObjectLiteral(node, color) {
     const key = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value
     props.set(key, prop.value)
   }
-  return Object.entries(color).every(([key, value]) => isNumericLiteral(props.get(key), value))
+  return (
+    isNumericLiteral(props.get('r'), 0) &&
+    isNumericLiteral(props.get('g'), 0) &&
+    isNumericLiteral(props.get('b'), 0) &&
+    isNumericLiteral(props.get('a'), alpha)
+  )
 }
 
 const noHardcodedColorConstants = {
@@ -862,13 +867,13 @@ const noHardcodedColorConstants = {
 
     return {
       ObjectExpression(node) {
-        if (colorObjectLiteral(node, { r: 0, g: 0, b: 0, a: 1 })) {
+        if (colorObjectLiteral(node, 1)) {
           context.report({
             node,
             message: 'Use BLACK from constants instead of an inline black Color literal.'
           })
         }
-        if (colorObjectLiteral(node, { r: 0, g: 0, b: 0, a: 0 })) {
+        if (colorObjectLiteral(node, 0)) {
           context.report({
             node,
             message:
@@ -1864,11 +1869,7 @@ const noSiblingDomainPrefixedFiles = createProgramFilenameRule({
 
     const prefix = parts[0]
     const suffix = parts.at(-1)
-    const domain = existsSync(`${dir}${prefix}`)
-      ? prefix
-      : suffix && existsSync(`${dir}${suffix}`)
-        ? suffix
-        : null
+    const domain = [prefix, suffix].find((part) => part && existsSync(`${dir}${part}`))
     if (!domain) return false
 
     const filename = file.slice(dir.length)

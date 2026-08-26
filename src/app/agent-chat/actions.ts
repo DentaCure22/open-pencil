@@ -2,15 +2,17 @@ import { toast } from '@/app/shell/ui'
 
 import { promptWithAnnotations } from './annotations'
 import {
-  dispatchAgentPrompt,
   attachmentImagePaths,
-  followUpAgentConversation,
   promptWithAttachments,
+  uploadAgentAttachments
+} from './attachment-transfer'
+import {
+  dispatchAgentPrompt,
+  followUpAgentConversation,
   steerAgentConversation,
   stopAgentThread,
-  uploadAgentAttachments,
   waitForAgentJob
-} from './client'
+} from './conversations'
 import type { AgentPromptSubmission } from './models'
 import {
   acceptOptimisticConversation,
@@ -79,9 +81,7 @@ export async function submitAgentConversation(input: {
     if (!input.nativeThreadId) {
       const receipt = await dispatchAgentPrompt(prompt, input.selection, media)
       input.onAccepted?.(receipt)
-      toast.info('Task started')
       acceptOptimisticConversation(input.threadId, requestId)
-      completeOptimisticConversation(input.threadId, requestId, 'Task started.')
       await input.refresh(true)
       return { jobId: receipt.jobId, threadId: receipt.threadId }
     }

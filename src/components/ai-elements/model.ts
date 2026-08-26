@@ -56,6 +56,7 @@ type ToolInputRecord = {
   TargetFile?: unknown
   ToolName?: unknown
   action?: unknown
+  args?: unknown
   changes?: unknown
   cmd?: unknown
   command?: unknown
@@ -189,38 +190,45 @@ export function shortToolInput(input?: string): string {
 
 function bridgedToolName(value: ToolInputRecord): string {
   const name = stringField(value.ToolName)
-  if (!name) return ''
-  if (name !== 'mcp') return name
-  if (!isToolInputRecord(value.Arguments)) return name
-  const tool = stringField(value.Arguments.tool)
+  if (name && name !== 'mcp') return name
+  const args = isToolInputRecord(value.Arguments) ? value.Arguments : value
+  const tool = stringField(args.tool)
   if (tool) return tool
-  if (typeof value.Arguments.search === 'string' && value.Arguments.search.trim()) {
+  if (typeof args.search === 'string' && args.search.trim()) {
     return 'connected_app_search'
   }
-  if (typeof value.Arguments.describe === 'string' && value.Arguments.describe.trim()) {
+  if (typeof args.describe === 'string' && args.describe.trim()) {
     return 'connected_app_search'
   }
   return name
 }
 
+function isMcpBridgeToolName(value: string): boolean {
+  const normalized = value
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase()
+  return (
+    normalized === 'mcp' || normalized === 'call_mcp_tool' || normalized.endsWith('_bridge_mcp')
+  )
+}
+
 function displayToolName(name: string, input?: string): string {
   const normalizedName = name.trim().replaceAll(' ', '_').toLowerCase()
   const parsed = input?.trim() ? parseJsonInput(input.trim()) : undefined
-  if (isToolInputRecord(parsed) && normalizedName === 'call_mcp_tool') {
+  if (isToolInputRecord(parsed) && isMcpBridgeToolName(normalizedName)) {
     const bridged = bridgedToolName(parsed)
     if (bridged) return bridged
   }
   if (normalizedName === 'connected_app_search') return 'connected_app_search'
-  if (normalizedName !== 'mcp') return name
-  if (!isToolInputRecord(parsed)) return 'connected app'
-  const tool = stringField(parsed.tool)
-  if (tool) return tool
+  if (!isMcpBridgeToolName(normalizedName)) return name
+  if (!isToolInputRecord(parsed)) return normalizedName === 'mcp' ? 'connected app' : name
   const action = stringField(parsed.action)
   if (action) return action
   if (typeof parsed.search === 'string' || typeof parsed.describe === 'string') {
     return 'connected_app_search'
   }
-  return 'connected app'
+  return normalizedName === 'mcp' ? 'connected app' : name
 }
 
 function normalizedDisplayName(name: string, input?: string): string {
@@ -250,7 +258,8 @@ export function isRetiredMemoryTool(name: string): boolean {
 function mediaToolInput(input?: string): ToolInputRecord | null {
   const parsed = input?.trim() ? parseJsonInput(input.trim()) : undefined
   if (!isToolInputRecord(parsed)) return null
-  return isToolInputRecord(parsed.Arguments) ? parsed.Arguments : parsed
+  if (isToolInputRecord(parsed.Arguments)) return parsed.Arguments
+  return isToolInputRecord(parsed.args) ? parsed.args : parsed
 }
 
 export function isImageGenerationTool(name: string, input?: string): boolean {
@@ -261,6 +270,36 @@ export function isImageGenerationTool(name: string, input?: string): boolean {
     normalized.includes('edit image') ||
     normalized === 'imagegen'
   )
+}
+
+export function isImageEditTool(name: string, input?: string): boolean {
+  return normalizedDisplayName(name, input).includes('edit image')
+}
+
+type ImageGenerationAttempt = {
+  imageCount: number
+  input?: string
+  key: string
+  name: string
+  state: AiToolState | 'stopped'
+}
+
+export function compactImageEditAttempts<T extends ImageGenerationAttempt>(
+  attempts: readonly T[]
+): { earlier: T[]; visible: T[] } {
+  const completedEdits = attempts.filter(
+    (attempt) =>
+      attempt.state === 'success' &&
+      attempt.imageCount > 0 &&
+      isImageEditTool(attempt.name, attempt.input)
+  )
+  if (completedEdits.length < 2) return { earlier: [], visible: [...attempts] }
+  const earlier = completedEdits.slice(0, -1)
+  const earlierKeys = new Set(earlier.map((attempt) => attempt.key))
+  return {
+    earlier,
+    visible: attempts.filter((attempt) => !earlierKeys.has(attempt.key))
+  }
 }
 
 export function imageGenerationPrompt(input?: string): string {
@@ -309,6 +348,7 @@ export function toolCallKind(name: string, input?: string): AiToolKind {
   if (isAppLookup(name, input)) return 'connected-app'
   if (isMailTool(name, input)) return 'mail'
   if (isSendText(name, input)) return 'tool'
+  if (includesToolTerm(normalized, ['web search', 'fetch', 'url'])) return 'web'
   if (includesToolTerm(normalized, ['search', 'grep'])) return 'search'
   if (
     includesToolTerm(normalized, ['command', 'shell']) ||
@@ -335,6 +375,7 @@ export function toolCallKind(name: string, input?: string): AiToolKind {
 
 export function toolCallLabel(name: string, input?: string): string {
   const displayName = displayToolName(name, input)
+  const normalized = displayName.replaceAll('_', ' ').toLowerCase()
   const kind = toolCallKind(name, input)
   if (isAppLookup(name, input)) return 'Looked up apps'
   if (kind === 'mail') return 'Read mail'
@@ -349,11 +390,13 @@ export function toolCallLabel(name: string, input?: string): string {
   if (kind === 'handoff') return 'Created worker handoff'
   if (kind === 'image' && isImageGenerationTool(name, input)) return 'Generated image'
   if (kind === 'video') return 'Generated video'
+  if (kind === 'web') return normalized.includes('search') ? 'Searched the web' : 'Fetched web'
   return displayName.replaceAll('_', ' ')
 }
 
 export function toolCallProgressLabel(name: string, input?: string): string {
   const displayName = displayToolName(name, input)
+  const normalized = displayName.replaceAll('_', ' ').toLowerCase()
   const kind = toolCallKind(name, input)
   if (isAppLookup(name, input)) return 'Looking up apps'
   if (kind === 'mail') return 'Reading mail'
@@ -368,6 +411,7 @@ export function toolCallProgressLabel(name: string, input?: string): string {
   if (kind === 'handoff') return 'Creating worker handoff'
   if (kind === 'image' && isImageGenerationTool(name, input)) return 'Generating image'
   if (kind === 'video') return 'Generating video'
+  if (kind === 'web') return normalized.includes('search') ? 'Searching the web' : 'Fetching web'
   return `Running ${displayName.replaceAll('_', ' ')}`
 }
 

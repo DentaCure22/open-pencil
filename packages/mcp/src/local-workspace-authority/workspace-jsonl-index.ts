@@ -7,8 +7,12 @@ import type { Rect, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { readAuthorityBoardDocument } from './document'
 import { writeBinaryFile } from './json-file'
-import { nodePairs } from './mermaid-presence'
 import type { LocalWorkspaceAuthorityHead } from './types'
+import {
+  planWorkspaceJsonlIndexPatch,
+  type WorkspaceJsonlIndexPatchNode,
+  type WorkspaceJsonlIndexPatchPlan
+} from './workspace-jsonl-index/patch-plan'
 
 export const WORKSPACE_JSONL_INDEX_CONTRACT = 'workspace-jsonl-index/v1'
 export const WORKSPACE_JSONL_INDEX_FILE = 'workspace.index.jsonl'
@@ -209,62 +213,11 @@ export type WorkspaceJsonlIndexPrevious = {
   index: WorkspaceJsonlIndex
 }
 
-type IndexableNode = {
-  childIds?: unknown
-  flipX?: unknown
-  flipY?: unknown
-  height?: unknown
-  mermaidSource?: unknown
-  name?: unknown
-  parentId?: unknown
-  pluginData?: unknown
-  rotation?: unknown
-  text?: unknown
-  type?: unknown
-  width?: unknown
-  x?: unknown
-  y?: unknown
-}
-
-function nodeMap(document: unknown): Map<string, IndexableNode> | null {
-  const pairs = nodePairs(document)
-  if (!pairs) return null
-  return new Map(pairs)
-}
-
-function sameIdList(left: unknown, right: unknown): boolean {
-  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
-  return left.every((id, index) => id === right[index])
-}
-
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function localDelta(previous: IndexableNode, next: IndexableNode): { dx: number; dy: number } {
-  return {
-    dx: (finiteNumber(next.x) ?? 0) - (finiteNumber(previous.x) ?? 0),
-    dy: (finiteNumber(next.y) ?? 0) - (finiteNumber(previous.y) ?? 0)
-  }
-}
-
-function hasNonTranslationTransform(node: IndexableNode): boolean {
-  const rotation = finiteNumber(node.rotation)
-  return (rotation !== null && rotation !== 0) || node.flipX === true || node.flipY === true
-}
-
-function structureEquals(previous: IndexableNode, next: IndexableNode): boolean {
-  return (
-    previous.parentId === next.parentId &&
-    previous.type === next.type &&
-    previous.rotation === next.rotation &&
-    previous.flipX === next.flipX &&
-    previous.flipY === next.flipY &&
-    sameIdList(previous.childIds, next.childIds)
-  )
-}
-
-function indexNode(id: string, node: IndexableNode): SceneNode {
+function indexNode(id: string, node: WorkspaceJsonlIndexPatchNode): SceneNode {
   return {
     id,
     mermaidSource: typeof node.mermaidSource === 'string' ? node.mermaidSource : undefined,
@@ -277,7 +230,7 @@ function indexNode(id: string, node: IndexableNode): SceneNode {
 
 function patchedRecord(
   record: WorkspaceJsonlIndexRecord,
-  node: IndexableNode,
+  node: WorkspaceJsonlIndexPatchNode,
   dx: number,
   dy: number
 ): WorkspaceJsonlIndexRecord {
@@ -308,119 +261,107 @@ function patchedRecord(
   return patched
 }
 
+function metadataSupportsPatch(
+  source: WorkspaceJsonlIndexSource,
+  previous: WorkspaceJsonlIndexPrevious
+): boolean {
+  const metadata = previous.index.metadata
+  return (
+    metadata.contract === WORKSPACE_JSONL_INDEX_CONTRACT &&
+    metadata.projectionVersion === WORKSPACE_JSONL_INDEX_PROJECTION_VERSION &&
+    metadata.documentId === source.identity.documentId &&
+    metadata.workspaceId === source.identity.workspaceId &&
+    previous.index.records.length === metadata.recordCount
+  )
+}
+
+function indexRecordChanged(
+  previous: WorkspaceJsonlIndexRecord,
+  next: WorkspaceJsonlIndexRecord
+): boolean {
+  return (
+    next.bounds.x !== previous.bounds.x ||
+    next.bounds.y !== previous.bounds.y ||
+    next.bounds.width !== previous.bounds.width ||
+    next.bounds.height !== previous.bounds.height ||
+    next.name !== previous.name ||
+    next.searchable !== previous.searchable
+  )
+}
+
+function patchIndexRecords(
+  records: readonly WorkspaceJsonlIndexRecord[],
+  plan: WorkspaceJsonlIndexPatchPlan
+): { dirtyPageIds: Set<string>; records: WorkspaceJsonlIndexRecord[] } | null {
+  const dirtyPageIds = new Set<string>()
+  const patchedRecords: WorkspaceJsonlIndexRecord[] = []
+
+  for (const record of records) {
+    const entry = plan.get(record.id)
+    if (!entry) return null
+    const patched = patchedRecord(record, entry.node, entry.dx, entry.dy)
+    if (record.kind === 'page') patched.pageName = patched.name
+    patchedRecords.push(patched)
+    if (indexRecordChanged(record, patched)) dirtyPageIds.add(record.pageId)
+  }
+
+  return { dirtyPageIds, records: patchedRecords }
+}
+
+function refreshDirtyPageBounds(
+  records: WorkspaceJsonlIndexRecord[],
+  dirtyPageIds: ReadonlySet<string>
+): void {
+  for (const pageId of dirtyPageIds) {
+    const page = records.find((record) => record.kind === 'page' && record.id === pageId)
+    if (!page) continue
+    const contentBounds = unionBounds(
+      records
+        .filter((record) => record.kind === 'node' && record.pageId === pageId)
+        .map((record) => record.bounds)
+    )
+    if (contentBounds) page.bounds = contentBounds
+  }
+}
+
+function refreshNodePageNames(records: WorkspaceJsonlIndexRecord[]): void {
+  const pageNames = new Map(
+    records.flatMap((record) =>
+      record.kind === 'page' ? ([[record.id, record.pageName]] as const) : []
+    )
+  )
+  for (const record of records) {
+    if (record.kind !== 'node') continue
+    const pageName = pageNames.get(record.pageId)
+    if (pageName) record.pageName = pageName
+  }
+}
+
 export function patchWorkspaceJsonlIndex(
   source: WorkspaceJsonlIndexSource,
   previous: WorkspaceJsonlIndexPrevious | null | undefined
 ): WorkspaceJsonlIndex | null {
-  if (!previous) return null
-  const previousMetadata = previous.index.metadata
-  if (
-    previousMetadata.contract !== WORKSPACE_JSONL_INDEX_CONTRACT ||
-    previousMetadata.projectionVersion !== WORKSPACE_JSONL_INDEX_PROJECTION_VERSION ||
-    previousMetadata.documentId !== source.identity.documentId ||
-    previousMetadata.workspaceId !== source.identity.workspaceId ||
-    previous.index.records.length !== previousMetadata.recordCount
-  ) {
-    return null
-  }
-
-  const previousNodes = nodeMap(previous.document)
-  const nextNodes = nodeMap(source.document)
-  const nextRootId =
-    source.document && typeof source.document === 'object' && !Array.isArray(source.document)
-      ? (source.document as { rootId?: unknown }).rootId
-      : null
-  if (
-    !previousNodes ||
-    !nextNodes ||
-    typeof nextRootId !== 'string' ||
-    nextRootId !== previousMetadata.rootId
-  ) {
-    return null
-  }
-
-  const records = previous.index.records
-  const parentById = new Map(records.map((record) => [record.id, record.parentId] as const))
-  for (const record of records) {
-    const previousNode = previousNodes.get(record.id)
-    const nextNode = nextNodes.get(record.id)
-    if (!previousNode || !nextNode || !structureEquals(previousNode, nextNode)) return null
-  }
-
-  const ancestorDelta = new Map<string, { dx: number; dy: number }>()
-  const deltaFor = (id: string): { dx: number; dy: number } => {
-    const cached = ancestorDelta.get(id)
-    if (cached) return cached
-    const previousNode = previousNodes.get(id)
-    const nextNode = nextNodes.get(id)
-    if (!previousNode || !nextNode) {
-      const empty = { dx: 0, dy: 0 }
-      ancestorDelta.set(id, empty)
-      return empty
-    }
-    if (
-      (finiteNumber(nextNode.x) !== finiteNumber(previousNode.x) ||
-        finiteNumber(nextNode.y) !== finiteNumber(previousNode.y) ||
-        finiteNumber(nextNode.width) !== finiteNumber(previousNode.width) ||
-        finiteNumber(nextNode.height) !== finiteNumber(previousNode.height)) &&
-      (hasNonTranslationTransform(previousNode) || hasNonTranslationTransform(nextNode))
-    ) {
-      ancestorDelta.set(id, { dx: Number.NaN, dy: Number.NaN })
-      return { dx: Number.NaN, dy: Number.NaN }
-    }
-    const local = localDelta(previousNode, nextNode)
-    const parentId = parentById.get(id)
-    const parent = parentId ? deltaFor(parentId) : { dx: 0, dy: 0 }
-    const next = { dx: local.dx + parent.dx, dy: local.dy + parent.dy }
-    ancestorDelta.set(id, next)
-    return next
-  }
-
-  const nextRecords: WorkspaceJsonlIndexRecord[] = []
-  const dirtyPageIds = new Set<string>()
-  for (const record of records) {
-    const nextNode = nextNodes.get(record.id)
-    if (!nextNode) return null
-    const delta = deltaFor(record.id)
-    if (!Number.isFinite(delta.dx) || !Number.isFinite(delta.dy)) return null
-    const patched = patchedRecord(record, nextNode, delta.dx, delta.dy)
-    if (record.kind === 'page') patched.pageName = patched.name
-    nextRecords.push(patched)
-    if (
-      patched.bounds.x !== record.bounds.x ||
-      patched.bounds.y !== record.bounds.y ||
-      patched.bounds.width !== record.bounds.width ||
-      patched.bounds.height !== record.bounds.height ||
-      patched.name !== record.name ||
-      patched.searchable !== record.searchable
-    ) {
-      dirtyPageIds.add(record.pageId)
-    }
-  }
-
-  for (const record of nextRecords) {
-    if (record.kind === 'page' && dirtyPageIds.has(record.id)) {
-      const contentBounds = unionBounds(
-        nextRecords
-          .filter((entry) => entry.pageId === record.id && entry.kind === 'node')
-          .map((entry) => entry.bounds)
-      )
-      if (contentBounds) record.bounds = contentBounds
-    }
-    if (record.kind === 'node') {
-      const page = nextRecords.find((entry) => entry.id === record.pageId)
-      if (page) record.pageName = page.pageName
-    }
-  }
+  if (!previous || !metadataSupportsPatch(source, previous)) return null
+  const plan = planWorkspaceJsonlIndexPatch({
+    expectedRootId: previous.index.metadata.rootId,
+    nextDocument: source.document,
+    previousDocument: previous.document,
+    records: previous.index.records
+  })
+  if (!plan) return null
+  const patched = patchIndexRecords(previous.index.records, plan)
+  if (!patched) return null
+  refreshDirtyPageBounds(patched.records, patched.dirtyPageIds)
+  refreshNodePageNames(patched.records)
 
   return {
     metadata: {
-      ...previousMetadata,
+      ...previous.index.metadata,
       contentHash: source.contentHash,
-      recordCount: nextRecords.length,
+      recordCount: patched.records.length,
       revision: source.revision
     },
-    records: nextRecords
+    records: patched.records
   }
 }
 

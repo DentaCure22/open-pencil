@@ -61,7 +61,7 @@ function startCodeObject(id: CodeComponentPresetId) {
           data-test-id="code-object-start-document"
           @click="startCodeObject('office-document')"
         >
-          <icon-lucide-file-text class="size-3" />
+          <IconlyIcon name="document" class="size-3" />
           Document
         </button>
         <button

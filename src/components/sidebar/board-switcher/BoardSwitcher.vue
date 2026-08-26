@@ -111,7 +111,7 @@ defineExpose({ focusSearch })
   <div :class="switcher.root">
     <div :class="switcher.scrollArea">
       <label data-test-id="board-switcher-search-field" :class="switcher.search">
-        <icon-lucide-search :class="switcher.searchIcon" />
+        <IconlyIcon name="search" :class="switcher.searchIcon" />
         <input
           ref="searchInput"
           v-model="boardQuery"
@@ -219,7 +219,7 @@ defineExpose({ focusSearch })
         :class="switcher.footerPrimaryAction"
         @click="emit('createBoard')"
       >
-        <icon-lucide-plus class="size-3.5 stroke-[1.6]" />
+        <IconlyIcon name="plus" class="size-3.5 stroke-[1.6]" />
         <span>New board</span>
       </button>
       <button

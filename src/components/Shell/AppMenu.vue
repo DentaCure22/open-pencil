@@ -19,20 +19,23 @@ import {
   PopoverTrigger
 } from 'reka-ui'
 
-import IconChevronRight from '~icons/lucide/chevron-right'
-import IconFile from '~icons/lucide/file'
 import IconMonitor from '~icons/lucide/monitor'
 import IconMoon from '~icons/lucide/moon'
-import IconSettings from '~icons/lucide/settings'
 import IconSlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import IconSun from '~icons/lucide/sun'
 
 import { vTestId } from '@open-pencil/vue'
 import AppShortcutText from '@/components/ui/AppShortcutText.vue'
+import {
+  IconlyArrowRight as IconChevronRight,
+  IconlyDocument as IconFile,
+  IconlySetting as IconSettings
+} from '@/components/icons/iconly'
 import { useMenuUI } from '@/components/ui/menu'
 import { usePopoverUI } from '@/components/ui/popover'
 import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
+import { agentRightPanelState, toggleAgentRightPanel } from '@/app/agent-chat/right-panel'
 import { useAppMenu } from '@/app/shell/menu/app-menu'
 import {
   hasMenuSubItems,
@@ -51,6 +54,10 @@ import { useAppTheme, type AppTheme } from '@/app/shell/theme'
 
 import type { MenuEntry } from '@open-pencil/vue'
 import type { Component } from 'vue'
+
+const { side = 'right' } = defineProps<{
+  side?: 'right' | 'top'
+}>()
 
 const store = useEditorStore()
 const open = ref(false)
@@ -85,6 +92,11 @@ const settingsMenus = computed(() => {
 
   return [{ ...file, items: fileItems }, preferences]
 })
+
+function toggleActivityPanel() {
+  toggleAgentRightPanel('activity')
+  open.value = false
+}
 </script>
 
 <template>
@@ -103,7 +115,7 @@ const settingsMenus = computed(() => {
       <PopoverContent
         data-test-id="app-settings-menu"
         :class="popover.content"
-        side="right"
+        :side="side"
         align="end"
         :align-offset="-9"
         :side-offset="10"
@@ -136,10 +148,25 @@ const settingsMenus = computed(() => {
           </div>
         </div>
 
-        <MenubarRoot
-          aria-label="Application settings"
-          class="border-border/70 mt-2 grid grid-cols-2 gap-1 border-t pt-2"
+        <button
+          type="button"
+          data-test-id="settings-activity-toggle"
+          :aria-pressed="agentRightPanelState.open && agentRightPanelState.surface === 'activity'"
+          class="border-border/70 mt-2 flex h-10 w-full items-center gap-2 border-t px-3 pt-2 text-[10.5px] text-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          @click="toggleActivityPanel"
         >
+          <icon-lucide-activity class="size-3.5 opacity-70" />
+          <span class="flex-1 text-left">Activity</span>
+          <span class="text-[9.5px] text-muted/70">
+            {{
+              agentRightPanelState.open && agentRightPanelState.surface === 'activity'
+                ? 'Shown'
+                : 'Show'
+            }}
+          </span>
+        </button>
+
+        <MenubarRoot aria-label="Application settings" class="mt-1 grid grid-cols-2 gap-1">
           <MenubarMenu v-for="(menu, index) in settingsMenus" :key="menu.label">
             <MenubarTrigger
               v-test-id="`menubar-${menu.label.toLowerCase()}`"

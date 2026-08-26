@@ -51,6 +51,10 @@ import type {
 import { useButtonUI } from '@/components/ui/button'
 import { useDialogUI } from '@/components/ui/dialog'
 
+const { scope = 'global', workspace = false } = defineProps<{
+  scope?: 'global' | 'project'
+  workspace?: boolean
+}>()
 const emit = defineEmits<{ assetInserted: [nodeId: string] }>()
 const editor = useEditorStore()
 const { panels } = useI18n()
@@ -80,7 +84,7 @@ type AssetGroup = {
 const expandedGroups = ref<Record<AssetGroupId, boolean>>({
   features: false,
   layout: false,
-  local: false,
+  local: workspace,
   primitives: false,
   shared: false
 })
@@ -334,10 +338,14 @@ function assetSearchValues(asset: LocalAsset) {
   return [asset.name, asset.description, asset.sourcePath]
 }
 
+const scopedAssets = computed(() =>
+  scope === 'project' ? assets.value.filter((asset) => asset.kind === 'scene') : assets.value
+)
+
 const filteredAssets = computed(() => {
   const normalized = query.value.trim().toLowerCase()
-  if (!normalized) return assets.value
-  return assets.value.filter((asset) =>
+  if (!normalized) return scopedAssets.value
+  return scopedAssets.value.filter((asset) =>
     assetSearchValues(asset).some((value) => value?.toLowerCase().includes(normalized))
   )
 })
@@ -593,7 +601,10 @@ async function insertSelectedAsset() {
 
 <template>
   <section data-test-id="assets-panel" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <header class="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1.5">
+    <header
+      v-if="!workspace"
+      class="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1.5"
+    >
       <span class="shrink-0 text-[11.5px] leading-4 font-semibold text-surface"> Assets </span>
       <div class="flex items-center gap-1">
         <Tip label="Import library">
@@ -604,7 +615,7 @@ async function insertSelectedAsset() {
             :class="insertButton.base"
             @click="importLibrary"
           >
-            <icon-lucide-upload class="size-3" />
+            <IconlyIcon name="upload" class="size-3" />
           </button>
         </Tip>
         <Tip label="Publish local library">
@@ -635,7 +646,11 @@ async function insertSelectedAsset() {
         placeholder="Search assets"
         class="rounded-[5px] bg-transparent"
       />
-      <p data-test-id="assets-coverage-summary" class="px-1 pt-1 text-[9px] text-muted/70">
+      <p
+        v-if="!workspace"
+        data-test-id="assets-coverage-summary"
+        class="px-1 pt-1 text-[9px] text-muted/70"
+      >
         {{ assetCoverageLabel }}
       </p>
       <p
@@ -648,8 +663,19 @@ async function insertSelectedAsset() {
     </div>
 
     <div class="flex-1 scrollbar-thin overflow-x-hidden overflow-y-auto px-2.5 pb-3">
-      <BoardExperienceAssets :query="query" />
-      <CodeObjectAssets :query="query" @asset-inserted="emit('assetInserted', $event)" />
+      <template v-if="scope === 'global'">
+        <BoardExperienceAssets :query="query" />
+        <CodeObjectAssets :query="query" @asset-inserted="emit('assetInserted', $event)" />
+      </template>
+
+      <div
+        v-if="workspace && scope === 'project' && assetGroups.length === 0"
+        data-test-id="assets-project-empty"
+        class="px-3 py-8 text-center text-[11px] leading-5 text-muted"
+      >
+        <div class="font-medium text-surface/80">No project assets yet</div>
+        <div>Components created on this board will appear here.</div>
+      </div>
 
       <section v-for="group in assetGroups" :key="group.id" class="mb-1">
         <button
@@ -657,15 +683,17 @@ async function insertSelectedAsset() {
           data-test-id="asset-group-trigger"
           :data-asset-group="group.id"
           :aria-expanded="groupIsOpen(group.id)"
-          class="text-muted hover:text-surface flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[9.5px] font-semibold tracking-wide uppercase"
+          class="text-muted hover:text-surface flex w-full items-center gap-1.5 px-2 py-1.5 text-left font-medium"
+          :class="workspace ? 'h-8 text-[11px]' : 'text-[9.5px] tracking-wide uppercase'"
           @click="toggleGroup(group.id)"
         >
-          <icon-lucide-chevron-right
+          <IconlyIcon
+            name="arrow-right"
             class="size-3 transition-transform"
             :class="groupIsOpen(group.id) ? 'rotate-90' : ''"
           />
           <icon-lucide-folder-open v-if="groupIsOpen(group.id)" class="text-component size-3" />
-          <icon-lucide-folder v-else class="text-component size-3" />
+          <IconlyIcon name="folder" v-else class="text-component size-3" />
           <span class="flex-1">{{ group.label }}</span>
           <span class="font-normal tracking-normal text-muted/70">{{ group.assets.length }}</span>
         </button>
@@ -740,7 +768,8 @@ async function insertSelectedAsset() {
                     class="text-muted/70 group-hover/asset-open:text-component flex size-5 shrink-0 items-center justify-center transition-colors"
                     aria-hidden="true"
                   >
-                    <icon-lucide-chevron-down
+                    <IconlyIcon
+                      name="arrow-down"
                       class="size-3 transition-transform"
                       :class="variantsOpen ? 'rotate-180' : ''"
                     />
@@ -755,7 +784,7 @@ async function insertSelectedAsset() {
                   class="text-component hover:text-component/80 flex items-center gap-1 transition-colors"
                   @click.stop="insertAsset(asset)"
                 >
-                  <icon-lucide-plus class="size-3" />
+                  <IconlyIcon name="plus" class="size-3" />
                   Add to board
                 </button>
                 <button
@@ -765,7 +794,7 @@ async function insertSelectedAsset() {
                   class="text-muted hover:text-surface flex items-center gap-1 transition-colors"
                   @click.stop="openDetails(asset)"
                 >
-                  <icon-lucide-info class="size-3" />
+                  <IconlyIcon name="info" class="size-3" />
                   Details
                 </button>
                 <button

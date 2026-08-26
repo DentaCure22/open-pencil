@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
       class="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#111218]/94 px-6 text-center text-[11px] text-[#d7d4e2]"
       data-test-id="media-evidence-pdf-status"
     >
-      <icon-lucide-circle-alert v-if="state === 'error'" class="size-5 text-[#f0a7a7]" />
+      <IconlyIcon name="danger" v-if="state === 'error'" class="size-5 text-[#f0a7a7]" />
       <icon-lucide-loader-circle v-else class="size-5 animate-spin text-[#a995f1]" />
       <span>{{ state === 'error' ? errorMessage : 'Loading PDF preview' }}</span>
       <a
@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
           @keydown.enter.stop.prevent="goToPage(pageNumber - 1)"
           @keydown.space.stop.prevent="goToPage(pageNumber - 1)"
         >
-          <icon-lucide-chevron-left class="size-3.5" />
+          <IconlyIcon name="arrow-left" class="size-3.5" />
         </button>
         <label class="flex items-center gap-1 text-[#bcb9c5]">
           <span class="sr-only">PDF page</span>
@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
           @keydown.enter.stop.prevent="goToPage(pageNumber + 1)"
           @keydown.space.stop.prevent="goToPage(pageNumber + 1)"
         >
-          <icon-lucide-chevron-right class="size-3.5" />
+          <IconlyIcon name="arrow-right" class="size-3.5" />
         </button>
       </div>
 

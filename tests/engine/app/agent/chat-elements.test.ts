@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test'
 
 import type { AiMessage, AiMessagePart } from '@/app/agent-chat/types'
 import {
+  compactImageEditAttempts,
   conversationStatus,
   formatAttachmentSize,
   formatElapsedDuration,
   imageGenerationPrompt,
   imageGenerationProvider,
+  isImageEditTool,
   isImageGenerationTool,
   isVideoGenerationTool,
   latestMessageCreatedAt,
@@ -145,7 +147,7 @@ describe('AI Elements Vue chat model', () => {
         'call_mcp_tool',
         '{"Arguments":{"tool":"codex_apps_gmail_get_profile"},"ToolName":"mcp","toolSummary":"Check Gmail profile"}'
       )
-      ).toBe('Read mail')
+    ).toBe('Read mail')
     expect(toolCallKind('read_file')).toBe('read')
     expect(toolCallKind('bash')).toBe('command')
     expect(toolCallKind('connected_app_search')).toBe('connected-app')
@@ -155,13 +157,18 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallKind('codex_apps_gmail_search_emails')).toBe('mail')
     expect(toolCallKind('mcp', '{"server":"codex_apps"}')).toBe('connected-app')
     expect(toolCallKind('openpencil_board_screenshot')).toBe('image')
+    expect(toolCallKind('web_search')).toBe('web')
     expect(toolCallKind('codex_apps_exa_web_fetch_exa')).toBe('web')
+    expect(toolCallLabel('web_search')).toBe('Searched the web')
+    expect(toolCallProgressLabel('web_search')).toBe('Searching the web')
     expect(
       isImageGenerationTool(
         'call_mcp_tool',
         '{"Arguments":{"prompt":"A clean tooth cutout"},"ToolName":"ima2-media_generate_image"}'
       )
     ).toBe(true)
+    expect(isImageEditTool('ima2-media_edit_image')).toBe(true)
+    expect(isImageEditTool('ima2-media_generate_image')).toBe(false)
     expect(
       imageGenerationPrompt(
         '{"Arguments":{"prompt":"A clean tooth cutout"},"ToolName":"ima2-media_generate_image"}'
@@ -189,6 +196,13 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallProgressLabel('read_file')).toBe('Reading')
     expect(toolCallProgressLabel('search')).toBe('Searching')
     expect(toolCallProgressLabel('ima2-media_generate_image')).toBe('Generating image')
+    const bridgedImageInput =
+      '{"args":{"prompt":"A transparent bird","provider":"oauth"},"tool":"ima2-media_generate_image","toolSummary":"Generate bird image"}'
+    expect(isImageGenerationTool('mcp_pi-antigravity-bridge_mcp', bridgedImageInput)).toBe(true)
+    expect(imageGenerationPrompt(bridgedImageInput)).toBe('A transparent bird')
+    expect(toolCallProgressLabel('mcp_pi-antigravity-bridge_mcp', bridgedImageInput)).toBe(
+      'Generating image'
+    )
     expect(
       isVideoGenerationTool(
         'call_mcp_tool',
@@ -203,6 +217,40 @@ describe('AI Elements Vue chat model', () => {
     expect(toolCallKind('ima2-media_edit_video')).toBe('video')
     expect(toolCallLabel('ima2-media_generate_video')).toBe('Generated video')
     expect(toolCallProgressLabel('ima2-media_generate_video')).toBe('Generating video')
+  })
+
+  test('keeps the latest completed image edit prominent without hiding generated variants', () => {
+    const attempts = [
+      {
+        imageCount: 1,
+        key: 'generated-1',
+        name: 'ima2-media_generate_image',
+        state: 'success' as const
+      },
+      {
+        imageCount: 1,
+        key: 'edit-1',
+        name: 'ima2-media_edit_image',
+        state: 'success' as const
+      },
+      {
+        imageCount: 1,
+        key: 'edit-2',
+        name: 'ima2-media_edit_image',
+        state: 'success' as const
+      },
+      {
+        imageCount: 1,
+        key: 'generated-2',
+        name: 'ima2-media_generate_image',
+        state: 'success' as const
+      }
+    ]
+
+    expect(compactImageEditAttempts(attempts)).toEqual({
+      earlier: [attempts[1]],
+      visible: [attempts[0], attempts[2], attempts[3]]
+    })
   })
 
   test('uses the whole turn for one elapsed-time divider', () => {

@@ -257,7 +257,8 @@ onUnmounted(() => {
           class="flex shrink-0 items-center gap-1 px-3 pt-1 pb-1.5"
         >
           <label class="relative min-w-0 flex-1">
-            <icon-lucide-search
+            <IconlyIcon
+              name="search"
               class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted/75"
             />
             <input

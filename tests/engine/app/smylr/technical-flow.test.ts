@@ -46,8 +46,16 @@ function connectorNode(graph: SceneGraph, ownerId: string, elementId: string): S
   return node
 }
 
+function connectorStroke(graph: SceneGraph, ownerId: string, elementId: string) {
+  const stroke = connectorNode(graph, ownerId, elementId).strokes[0]
+  if (!stroke) throw new Error(`Missing ${elementId} stroke`)
+  return stroke
+}
+
 function connectorVertices(graph: SceneGraph, ownerId: string, elementId: string) {
-  return connectorNode(graph, ownerId, elementId).vectorNetwork?.vertices.map(({ x, y }) => ({
+  const vertices = connectorNode(graph, ownerId, elementId).vectorNetwork?.vertices
+  if (!vertices) throw new Error(`Missing ${elementId} vertices`)
+  return vertices.map(({ x, y }) => ({
     x,
     y
   }))
@@ -56,10 +64,18 @@ function connectorVertices(graph: SceneGraph, ownerId: string, elementId: string
 function absoluteConnectorVertices(graph: SceneGraph, ownerId: string, elementId: string) {
   const connector = connectorNode(graph, ownerId, elementId)
   const origin = absolutePosition(graph, connector)
-  return connector.vectorNetwork?.vertices.map(({ x, y }) => ({
+  const vertices = connector.vectorNetwork?.vertices
+  if (!vertices) throw new Error(`Missing ${elementId} vertices`)
+  return vertices.map(({ x, y }) => ({
     x: x + origin.x,
     y: y + origin.y
   }))
+}
+
+function elementLabel(graph: SceneGraph, ownerId: string, node: SceneNode): string | undefined {
+  const id = pluginValue(node, OPEN_PENCIL_PLUGIN_ID, 'mermaid/element-id')
+  if (!id) throw new Error(`Missing Mermaid element id for ${node.id}`)
+  return elementNode(graph, ownerId, id, 'TEXT').text
 }
 
 function absolutePosition(graph: SceneGraph, node: SceneNode): AbsolutePosition {
@@ -85,22 +101,17 @@ describe('Technical Flow visual projection', () => {
     const owner = first.ownerId ? graph.getNode(first.ownerId) : null
     if (!owner) throw new Error('Expected a Technical Flow Mermaid owner')
 
-    const nodeTypes: Array<[string, SceneNode['type']]> = [
-      ['submit', 'RECTANGLE'],
-      ['resolve', 'RECTANGLE'],
-      ['batch', 'RECTANGLE'],
-      ['post', 'RECTANGLE'],
-      ['write', 'RECTANGLE'],
-      ['insert', 'ELLIPSE'],
-      ['update', 'RECTANGLE']
-    ]
-    const nodes = nodeTypes.map(([id, type]) => elementNode(graph, owner.id, id, type))
-    const positions = new Map(
-      nodeTypes.map(([id, type]) => [
-        id,
-        absolutePosition(graph, elementNode(graph, owner.id, id, type))
-      ])
-    )
+    const nodes = {
+      submit: elementNode(graph, owner.id, 'submit', 'RECTANGLE'),
+      resolve: elementNode(graph, owner.id, 'resolve', 'RECTANGLE'),
+      batch: elementNode(graph, owner.id, 'batch', 'RECTANGLE'),
+      post: elementNode(graph, owner.id, 'post', 'RECTANGLE'),
+      write: elementNode(graph, owner.id, 'write', 'RECTANGLE'),
+      insert: elementNode(graph, owner.id, 'insert', 'ELLIPSE'),
+      update: elementNode(graph, owner.id, 'update', 'RECTANGLE')
+    }
+    const nodeList = Object.values(nodes)
+    const at = (node: SceneNode) => absolutePosition(graph, node)
 
     expect(first.ownerId).toBe('smylr-technical-flow-save-finding-mermaid')
     expect(first.screenIds).toEqual([])
@@ -115,18 +126,18 @@ describe('Technical Flow visual projection', () => {
     expect(TECHNICAL_FLOW_SAVE_FINDING_MERMAID_SOURCE).toContain('recovery -.-> batch')
     expect(TECHNICAL_FLOW_SAVE_FINDING_MERMAID_SOURCE).toContain('insert --> update')
     expect(TECHNICAL_FLOW_SAVE_FINDING_MERMAID_SOURCE).not.toContain('insert -->|201| update')
-    expect(new Set(nodes.map((node) => absolutePosition(graph, node).y)).size).toBe(3)
-    expect(positions.get('submit')?.y).toBeLessThan(positions.get('resolve')?.y ?? 0)
-    expect(positions.get('submit')?.x).toBe(positions.get('resolve')?.x)
-    expect(positions.get('resolve')?.y).toBe(positions.get('batch')?.y)
-    expect(positions.get('batch')?.y).toBe(positions.get('post')?.y)
+    expect(new Set(nodeList.map((node) => absolutePosition(graph, node).y)).size).toBe(3)
+    expect(at(nodes.submit).y).toBeLessThan(at(nodes.resolve).y)
+    expect(at(nodes.submit).x).toBe(at(nodes.resolve).x)
+    expect(at(nodes.resolve).y).toBe(at(nodes.batch).y)
+    expect(at(nodes.batch).y).toBe(at(nodes.post).y)
     expect(
       absolutePosition(graph, elementNode(graph, owner.id, 'recovery', 'RECTANGLE')).y
-    ).toBeGreaterThan(positions.get('post')?.y ?? 0)
-    expect(positions.get('write')?.y).toBe(positions.get('insert')?.y)
-    expect(positions.get('insert')?.y).toBe(positions.get('update')?.y)
-    expect(positions.get('write')?.x).toBeGreaterThan(positions.get('insert')?.x ?? 0)
-    expect(positions.get('insert')?.x).toBeGreaterThan(positions.get('update')?.x ?? 0)
+    ).toBeGreaterThan(at(nodes.post).y)
+    expect(at(nodes.write).y).toBe(at(nodes.insert).y)
+    expect(at(nodes.insert).y).toBe(at(nodes.update).y)
+    expect(at(nodes.write).x).toBeGreaterThan(at(nodes.insert).x)
+    expect(at(nodes.insert).x).toBeGreaterThan(at(nodes.update).x)
     expect(owner.width).toBeGreaterThan(800)
     expect(owner.width).toBeLessThan(1_000)
     expect(owner.height).toBeGreaterThanOrEqual(700)
@@ -145,8 +156,8 @@ describe('Technical Flow visual projection', () => {
     expect(
       persistenceBoundaryPosition.y - (serviceBoundaryPosition.y + serviceBoundary.height)
     ).toBe(48)
-    expect((positions.get('resolve')?.y ?? 0) - serviceBoundaryPosition.y).toBe(48)
-    expect((positions.get('write')?.y ?? 0) - persistenceBoundaryPosition.y).toBe(48)
+    expect(at(nodes.resolve).y - serviceBoundaryPosition.y).toBe(48)
+    expect(at(nodes.write).y - persistenceBoundaryPosition.y).toBe(48)
     expect(clientBoundary.width).toBe(serviceBoundary.width)
     expect(serviceBoundary.width).toBe(persistenceBoundary.width)
     expect(clientBoundary.strokes).toEqual([])
@@ -170,20 +181,7 @@ describe('Technical Flow visual projection', () => {
           pluginValue(node, OPEN_PENCIL_PLUGIN_ID, 'mermaid/element-id') === 'insert-to-update'
       )
     ).toBe(false)
-    expect(
-      nodes.map(
-        (node) =>
-          elementNode(
-            graph,
-            owner.id,
-            node.pluginData.find(
-              (entry) =>
-                entry.pluginId === OPEN_PENCIL_PLUGIN_ID && entry.key === 'mermaid/element-id'
-            )?.value ?? '',
-            'TEXT'
-          ).text
-      )
-    ).toEqual([
+    expect(nodeList.map((node) => elementLabel(graph, owner.id, node))).toEqual([
       'Save finding\nDental Chart',
       'Resolve chart codes\nConditional resolver',
       'Build payload\nBatch conditions',
@@ -202,32 +200,32 @@ describe('Technical Flow visual projection', () => {
       'insert-to-update'
     ]
     for (const id of primaryConnectorIds) {
-      const stroke = connectorNode(graph, owner.id, id).strokes[0]
+      const stroke = connectorStroke(graph, owner.id, id)
       expect(stroke).toMatchObject({ cap: 'ROUND', dashPattern: [], join: 'ROUND', weight: 2.5 })
     }
-    expect(connectorNode(graph, owner.id, 'resolve-to-batch').strokes[0]?.color).toEqual(
+    expect(connectorStroke(graph, owner.id, 'resolve-to-batch').color).toEqual(
       parseColor('#837dc4')
     )
-    expect(connectorNode(graph, owner.id, 'insert-to-update').strokes[0]?.color).toEqual(
+    expect(connectorStroke(graph, owner.id, 'insert-to-update').color).toEqual(
       parseColor('#45ad70')
     )
 
     const recovery = elementNode(graph, owner.id, 'recovery', 'RECTANGLE')
     expect(absolutePosition(graph, recovery).y).toBeGreaterThan(
-      absolutePosition(graph, nodes[0] ?? recovery).y
+      absolutePosition(graph, nodes.submit).y
     )
     expect(elementNode(graph, owner.id, 'recovery', 'TEXT').text).toBe(
       'Save failed\nPreserve & retry'
     )
     for (const id of ['post-to-recovery', 'recovery-to-batch']) {
-      const stroke = connectorNode(graph, owner.id, id).strokes[0]
+      const stroke = connectorStroke(graph, owner.id, id)
       expect(stroke).toMatchObject({
         cap: 'ROUND',
         dashPattern: [8, 6],
         join: 'ROUND',
         weight: 2.25
       })
-      expect(stroke?.color).toEqual(parseColor('#e16675'))
+      expect(stroke.color).toEqual(parseColor('#e16675'))
     }
     expect(connectorVertices(graph, owner.id, 'post-to-recovery')).toEqual([
       { x: 52, y: 0 },
@@ -245,16 +243,17 @@ describe('Technical Flow visual projection', () => {
     ])
     const failureVertices = absoluteConnectorVertices(graph, owner.id, 'post-to-recovery')
     const retryVertices = absoluteConnectorVertices(graph, owner.id, 'recovery-to-batch')
-    expect(Math.abs((failureVertices?.[1]?.x ?? 0) - (retryVertices?.[0]?.x ?? 0))).toBeGreaterThan(
-      48
-    )
+    const failureBend = failureVertices[1]
+    const retryStart = retryVertices[0]
+    if (!failureBend || !retryStart) throw new Error('Missing failure connector bend')
+    expect(Math.abs(failureBend.x - retryStart.x)).toBeGreaterThan(48)
 
     const clientFill = parseColor('#1d2130')
     const neutralFill = parseColor('#191d26')
     const requestFill = parseColor('#272345')
     const dataFill = parseColor('#16232c')
     const successFill = parseColor('#153027')
-    expect(nodes.map((node) => node.fills[0]?.color)).toEqual([
+    expect(nodeList.map((node) => node.fills[0]?.color)).toEqual([
       clientFill,
       neutralFill,
       neutralFill,

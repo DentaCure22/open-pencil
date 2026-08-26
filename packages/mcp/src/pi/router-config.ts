@@ -1,21 +1,21 @@
 import type { AgentModelDefinition } from '#mcp/agent-models/catalog'
 
-import type { AntigravityTokenUsage, AntigravityUsageCursor } from './antigravity-usage'
+import type { PiProviderRuntime } from './providers'
+import type { ConversationTitleGenerator } from './title-generator'
 
 export type PiRouterConfig = {
-  captureAntigravityUsageCursor?: (
-    sessionIds: readonly string[]
-  ) => Promise<AntigravityUsageCursor | null>
+  boardWarmEffort?: string
+  boardWarmModel?: string
+  boardWarmPoolSize?: number
+  boardWorkerWorkspaceRoot?: string
   executable: string
   historyPath?: string
   mcpConfigPath?: string
   models?: AgentModelDefinition[]
-  readAntigravityTurnUsage?: (
-    sessionIds: readonly string[],
-    cursor: AntigravityUsageCursor
-  ) => Promise<AntigravityTokenUsage | null>
+  providers?: PiProviderRuntime
   sessionDir?: string
   stallTimeoutMs?: number
+  titleGenerator?: ConversationTitleGenerator
   watchdogProbeMs?: number
   warmPoolSize?: number
   workspaceRoot: string

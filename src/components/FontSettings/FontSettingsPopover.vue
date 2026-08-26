@@ -77,7 +77,7 @@ onMounted(() => {
   <PopoverRoot v-model:open="popoverOpen" @update:open="setPopoverOpen">
     <Tip :label="dialogs.fontSettings" :disabled="popoverOpen">
       <PopoverTrigger data-test-id="font-settings-trigger" :class="trigger.base">
-        <icon-lucide-settings class="size-3.5" />
+        <IconlyIcon name="setting" class="size-3.5" />
       </PopoverTrigger>
     </Tip>
 

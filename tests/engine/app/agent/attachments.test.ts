@@ -4,7 +4,7 @@ import {
   attachmentImagePaths,
   promptWithAttachments,
   type AgentPromptAttachment
-} from '@/app/agent-chat/client'
+} from '@/app/agent-chat/attachment-transfer'
 
 const attachments: AgentPromptAttachment[] = [
   {

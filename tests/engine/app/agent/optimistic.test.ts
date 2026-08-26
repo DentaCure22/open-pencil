@@ -7,6 +7,7 @@ import {
   completeOptimisticConversation,
   failOptimisticConversation,
   mergeOptimisticMessages,
+  moveOptimisticConversation,
   optimisticConversation
 } from '@/app/agent-chat/optimistic'
 
@@ -29,6 +30,22 @@ describe('agent chat optimistic lifecycle', () => {
       }
     ]
     expect(mergeOptimisticMessages(threadId, authoritative)).toHaveLength(1)
+  })
+
+  test('moves a new-task prompt into its accepted thread without an empty frame', () => {
+    const draftId = `new-task:${crypto.randomUUID()}`
+    const threadId = `agent:${crypto.randomUUID()}`
+    const requestId = beginOptimisticConversation(draftId, 'Keep this prompt visible')
+    acceptOptimisticConversation(draftId, requestId)
+
+    expect(moveOptimisticConversation(draftId, threadId)).toBe(true)
+    expect(optimisticConversation(draftId)).toBeUndefined()
+    expect(optimisticConversation(threadId)?.state).toBe('thinking')
+    expect(mergeOptimisticMessages(threadId, [])).toMatchObject([
+      { role: 'user', text: 'Keep this prompt visible' }
+    ])
+
+    clearOptimisticConversation(threadId)
   })
 
   test('moves files into the optimistic user turn until authoritative parts arrive', () => {

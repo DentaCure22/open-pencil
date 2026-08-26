@@ -48,7 +48,8 @@ function closeAndRestoreRename(event: Event) {
         @click.stop
       >
         <BoardIcon :icon="modelValue" class="size-[14px] stroke-[1.5]" />
-        <icon-lucide-chevron-down
+        <IconlyIcon
+          name="arrow-down"
           class="absolute right-0.5 bottom-0.5 size-[7px] stroke-[2] text-current/65"
         />
       </button>

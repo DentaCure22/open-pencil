@@ -30,10 +30,12 @@ function turnCachePercent(turn: UsageTurn): number {
 
 function downsampleTurns(turns: UsageTurn[]): UsageTurn[] {
   if (turns.length <= MAX_SERIES_POINTS) return turns
+  const fallback = turns.at(-1)
+  if (!fallback) return turns
   const step = (turns.length - 1) / (MAX_SERIES_POINTS - 1)
   return Array.from({ length: MAX_SERIES_POINTS }, (_, index) => {
     const turn = turns[Math.round(index * step)]
-    return turn ?? turns[turns.length - 1]!
+    return turn ?? fallback
   })
 }
 
@@ -106,9 +108,9 @@ export function rollupModelMeterTurns(turns: UsageTurn[], days = 7): ModelMeterS
         callHitPercent: group.length ? percentage((hits / group.length) * 100) : 0,
         estimatedPercent: group.length ? percentage((estimated / group.length) * 100) : 0,
         lastAt,
-        model: slash >= 0 ? key.slice(slash + 1) : key,
+        model: slash !== -1 ? key.slice(slash + 1) : key,
         promptTokens,
-        provider: slash >= 0 ? key.slice(0, slash) : key,
+        provider: slash !== -1 ? key.slice(0, slash) : key,
         tokenCachePercent: promptTokens ? percentage((cacheRead / promptTokens) * 100) : 0,
         turns: group.length
       }

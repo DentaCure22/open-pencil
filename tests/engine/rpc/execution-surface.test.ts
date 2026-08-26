@@ -12,6 +12,7 @@ describe('RPC execution-surface classifier', () => {
       'persisted_authority'
     )
     expect(classifyRpcExecutionSurface('board_read')).toBe('persisted_authority')
+    expect(classifyRpcExecutionSurface('board_apply')).toBe('persisted_authority')
   })
 
   test('keeps durable read commands on authority even with a stale live identity', () => {

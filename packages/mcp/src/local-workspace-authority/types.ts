@@ -2,6 +2,7 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 export const LOCAL_WORKSPACE_AUTHORITY_VERSION = 1
 export const LOCAL_WORKSPACE_NAVIGATION_INTENT_VERSION = 1
+export const LOCAL_WORKSPACE_SCREENSHOT_INTENT_VERSION = 1
 export const LOCAL_WORKSPACE_PRESENCE_SELECTION_LIMIT = 24
 export const LOCAL_AUTHORITY_BOARD_CAPABILITIES = [
   'board.open.queued_navigation',
@@ -11,6 +12,7 @@ export const LOCAL_AUTHORITY_BOARD_CAPABILITIES = [
   'board.read.mermaid_source',
   'board.read.memory_search',
   'board.read.screenshot.persisted',
+  'board.write.batch',
   'trace.read.persisted'
 ] as const
 
@@ -84,6 +86,49 @@ export type QueueLocalWorkspaceNavigationRequest = {
   runtimeInstanceId?: string
   ttlMs?: number
   workspaceId: string
+}
+
+export type LocalWorkspaceScreenshotIntent = {
+  authorityId: string
+  contentDocumentId: string
+  createdAt: string
+  expiresAt: string
+  objectIds: string[]
+  pageId: string
+  requestId: string
+  sequence: number
+  version: typeof LOCAL_WORKSPACE_SCREENSHOT_INTENT_VERSION
+  workspaceId: string
+}
+
+export type QueueLocalWorkspaceScreenshotRequest = {
+  contentDocumentId: string
+  objectIds: string[]
+  pageId: string
+  ttlMs?: number
+  workspaceId: string
+}
+
+export type LocalWorkspaceScreenshotResult = {
+  base64?: string
+  bounds?: Rect
+  byteLength?: number
+  completedAt: string
+  error?: string
+  mimeType?: 'image/png'
+  objectIds: string[]
+  pixelHeight?: number
+  pixelWidth?: number
+  requestId: string
+  source?: 'live_board'
+  status: 'completed' | 'failed'
+}
+
+export type CompleteLocalWorkspaceScreenshotRequest = Omit<
+  LocalWorkspaceScreenshotResult,
+  'completedAt' | 'status'
+> & {
+  status?: LocalWorkspaceScreenshotResult['status']
 }
 
 export type LocalWorkspacePresenceViewport = {

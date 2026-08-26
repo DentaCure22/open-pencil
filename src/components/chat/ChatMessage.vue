@@ -73,7 +73,7 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
                     class="size-3 animate-spin"
                   />
                   <icon-lucide-check v-else-if="toolState(part) === 'done'" class="size-3" />
-                  <icon-lucide-triangle-alert v-else class="size-3" />
+                  <IconlyIcon name="danger" v-else class="size-3" />
                 </div>
                 <span class="text-[11px] text-surface">
                   {{ toolDisplayName(part) }}
@@ -87,7 +87,8 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
                         : 'Error'
                   }}
                 </span>
-                <icon-lucide-chevron-down
+                <IconlyIcon
+                  name="arrow-down"
                   v-if="toolState(part) !== 'pending'"
                   class="ml-auto size-3 text-muted transition-transform [[data-state=open]>&]:rotate-180"
                 />

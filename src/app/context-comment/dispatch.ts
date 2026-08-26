@@ -30,7 +30,12 @@ async function dispatchDirectly(
     response = await localWorkspaceAuthorityFetch('/agent-router/v1/pi/dispatch', {
       body: JSON.stringify({
         displayPrompt: draft.capture ? contextCommentImageInstructions(draft) : draft.text,
-        ...(draft.capture ? { evidenceId: draft.capture.evidenceId } : {}),
+        ...(draft.capture
+          ? {
+              evidenceAlt: draft.imageEdit ? 'Image being edited' : 'Board screenshot',
+              evidenceId: draft.capture.evidenceId
+            }
+          : {}),
         effort: selection.effort,
         model: selection.model,
         ...boardWorkerLaunchFields(prompt)
@@ -70,6 +75,7 @@ async function dispatchToConversation(
         body: JSON.stringify({
           displayPrompt: `Edit image\n\n${contextCommentImageInstructions(draft)}`,
           effort: selection.effort,
+          evidenceAlt: 'Image being edited',
           evidenceId: draft.capture.evidenceId,
           message: prompt,
           model: selection.model

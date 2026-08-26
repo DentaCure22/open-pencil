@@ -10,7 +10,13 @@ import { persistLocalWorkspaceTraceSpokenTurns } from '@/app/workspace-document/
 import { saveNarratedTraceRecord } from './history'
 import { scrubNarratedTraceQueryReceiptForMicTurns } from './retrieval'
 import { narratedTraceRuntimeTabBindingForStore } from './runtime-binding'
-import { narratedTraceSession } from './state'
+import {
+  appendNarratedTraceEvent,
+  beginNarratedTraceEpisode,
+  finishNarratedTraceEpisode,
+  narratedTraceSession,
+  narratedTraceStatus
+} from './state'
 import type { NarratedTraceScope, NarratedTraceSession } from './types'
 
 const MIC_LANGUAGE = 'en-US'
@@ -198,6 +204,45 @@ function sessionSpokenTurns(
   )
 }
 
+function recordSpokenTurnInActiveTrace(turn: NarratedTraceMicTurn) {
+  const session = narratedTraceSession.value
+  if (
+    !session ||
+    narratedTraceStatus.value !== 'recording' ||
+    !sameExactScope(turn.scope, session.scope)
+  ) {
+    return session
+  }
+  const sessionStartedAtMs = Date.parse(session.startedAt)
+  if (!Number.isFinite(sessionStartedAtMs)) return session
+  const startedAtMs = Math.max(0, turn.startedAtEpochMs - sessionStartedAtMs)
+  const endedAtMs = Math.max(startedAtMs, turn.endedAtEpochMs - sessionStartedAtMs)
+  const episodeId = `voice:${turn.id}`
+  beginNarratedTraceEpisode({
+    id: episodeId,
+    kind: 'voice',
+    label: 'Voice note',
+    sourceSessionId: turn.id,
+    startedAtMs
+  })
+  appendNarratedTraceEvent({
+    atMs: startedAtMs,
+    durationMs: endedAtMs - startedAtMs,
+    kind: 'transcript',
+    label: turn.text,
+    origin: {
+      episodeId,
+      kind: 'voice',
+      reference: `Voice #${String(turn.sequence)}`,
+      sequence: turn.sequence,
+      sourceSessionId: turn.id
+    },
+    text: turn.text
+  })
+  finishNarratedTraceEpisode(episodeId, endedAtMs)
+  return narratedTraceSession.value
+}
+
 function finalizeTurn(store: EditorStore, text: string) {
   const compact = text.replace(/\s+/g, ' ').trim()
   const start = speechStartedAt ?? recognitionStartedAt
@@ -246,7 +291,7 @@ function finalizeTurn(store: EditorStore, text: string) {
       error instanceof Error ? error.message : error
     )
   })
-  const traceSession = narratedTraceSession.value
+  const traceSession = recordSpokenTurnInActiveTrace(turn)
   const spokenTurns = traceSession
     ? sessionSpokenTurns(traceSession, narratedTraceMicTurns.value)
     : []
@@ -408,7 +453,7 @@ export async function startNarratedTraceMic(store: EditorStore) {
     const interim: string[] = []
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index]
-      const transcript = result[0]?.transcript.trim() ?? ''
+      const transcript = result[0].transcript.trim()
       if (!transcript) continue
       if (result.isFinal) {
         if (finalizeTurn(store, transcript)) continue

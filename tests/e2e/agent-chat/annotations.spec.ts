@@ -280,6 +280,7 @@ test('drops files, accepts video, and atomically sends the draft with attachment
   await page.getByTestId('agent-thread-selector').getByText('Annotation interaction').click()
 
   const conversation = page.getByTestId('agent-selected-conversation')
+  const surface = conversation.getByTestId('ai-conversation-surface')
   const composer = conversation.getByTestId('ai-prompt-input')
   const fileInput = composer.getByTestId('ai-prompt-file-input')
   await expect(fileInput).not.toHaveAttribute('accept')
@@ -291,7 +292,7 @@ test('drops files, accepts video, and atomically sends the draft with attachment
   await expect(composer.getByText('MP4', { exact: true })).toBeVisible()
   await expect(composer.getByText('TS', { exact: true })).toBeVisible()
 
-  await composer.evaluate((element, imageBase64) => {
+  await surface.evaluate((element, imageBase64) => {
     const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
     const transfer = new DataTransfer()
     transfer.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
@@ -299,17 +300,39 @@ test('drops files, accepts video, and atomically sends the draft with attachment
       new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: transfer })
     )
   }, TINY_PNG_BASE64)
-  await expect(composer).toHaveAttribute('data-drag-active', 'true')
-  await expect(composer.getByText('Drop files to attach')).toBeVisible()
+  await expect(surface).toHaveAttribute('data-drag-active', 'true')
+  await expect(surface.getByText('Drop to attach files')).toBeVisible()
+
+  await surface.evaluate((element) => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File(['cancelled'], 'cancelled.txt', { type: 'text/plain' }))
+    element.dispatchEvent(
+      new DragEvent('dragleave', {
+        bubbles: true,
+        cancelable: true,
+        clientX: -1,
+        clientY: -1,
+        dataTransfer: transfer,
+        relatedTarget: null
+      })
+    )
+  })
+  await expect(surface).toHaveAttribute('data-drag-active', 'false')
+  await expect(surface.getByTestId('ai-conversation-drop-overlay')).toHaveCount(0)
+
   await composer.evaluate((element, imageBase64) => {
     const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
     const transfer = new DataTransfer()
     transfer.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }))
     element.dispatchEvent(
+      new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: transfer })
+    )
+    element.dispatchEvent(
       new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })
     )
   }, TINY_PNG_BASE64)
-  await expect(composer).toHaveAttribute('data-drag-active', 'false')
+  await expect(surface).toHaveAttribute('data-drag-active', 'false')
+  await expect(surface.getByTestId('ai-conversation-drop-overlay')).toHaveCount(0)
   await expect(composer.getByTestId('ai-prompt-attachment')).toHaveCount(3)
   const draftImage = composer.getByRole('button', { name: 'Annotate dropped.png' })
   const draftThumbnail = draftImage.getByRole('img', { name: 'Preview dropped.png' })
@@ -367,9 +390,13 @@ test('drops files, accepts video, and atomically sends the draft with attachment
   const sentAttachments = pendingTurn.getByTestId('ai-attachments')
   const sentMessageBubble = pendingTurn.getByTestId('ai-message-content')
   await expect(sentMessageBubble.getByTestId('ai-attachments')).toHaveCount(0)
-  await expect(
-    pendingTurn.locator('[data-test-id="ai-attachments"] + [data-test-id="ai-message-content"]')
-  ).toHaveCount(1)
+  await expect
+    .poll(() =>
+      sentAttachments.evaluate((element) =>
+        element.nextElementSibling?.getAttribute('data-test-id')
+      )
+    )
+    .toBe('ai-message-content')
   await expect(sentAttachments).toBeVisible()
 
   releaseUpload()

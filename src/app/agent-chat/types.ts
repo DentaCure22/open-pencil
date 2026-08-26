@@ -8,6 +8,23 @@ export type AiConversationStatus =
 
 export type AiToolState = 'approval' | 'error' | 'pending' | 'running' | 'success'
 
+export type AiFileChange = {
+  additions: number
+  deletions: number
+  patch?: string
+  path: string
+  previousPath?: string
+  status: 'added' | 'copied' | 'deleted' | 'modified' | 'renamed'
+}
+
+export type AiTurnChanges = {
+  additions: number
+  capturedAt: string
+  deletions: number
+  files: AiFileChange[]
+  truncated?: boolean
+}
+
 export type AiMessagePart =
   | { text: string; type: 'text' }
   | { state?: 'complete' | 'streaming'; text: string; type: 'commentary' }
@@ -29,6 +46,7 @@ export type AiMessagePart =
   | { label?: string; title: string; type: 'source'; url: string }
 
 export type AiMessage = {
+  changes?: AiTurnChanges
   completedAt?: string
   createdAt: string
   id: string

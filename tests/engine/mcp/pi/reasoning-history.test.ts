@@ -100,4 +100,33 @@ describe('Pi provider activity history migration', () => {
     expect(migrateProviderActivityHistory(target)).toBe(false)
     expect(target.messages[0]?.parts?.[0]?.type).toBe('reasoning')
   })
+
+  test('reopens persisted Antigravity heartbeat rows that were incorrectly marked successful', () => {
+    const target = thread()
+    target.messages = [
+      {
+        completedAt: '2026-08-21T00:00:05.000Z',
+        createdAt: '2026-08-21T00:00:00.000Z',
+        id: 'pi-agy-tool:job-1:0:0',
+        parts: [
+          {
+            name: 'openpencil_board_where',
+            output: 'Step is still running.',
+            state: 'success',
+            type: 'tool'
+          }
+        ],
+        role: 'assistant',
+        text: ''
+      }
+    ]
+
+    expect(migrateProviderActivityHistory(target)).toBe(true)
+    expect(target.messages[0]).not.toHaveProperty('completedAt')
+    expect(target.messages[0]?.parts?.[0]).toMatchObject({
+      output: 'Step is still running.',
+      state: 'running',
+      type: 'tool'
+    })
+  })
 })

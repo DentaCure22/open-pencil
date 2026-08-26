@@ -77,8 +77,8 @@ test('floating editor chrome follows themes with a more opaque sidebar', async (
 
   expect(lightChrome).toEqual(['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.9)'])
   expect(darkChrome).toEqual(['rgba(21, 22, 26, 0.98)', 'rgba(21, 22, 26, 0.96)'])
-  expect(lightUtilityTabs).not.toBe(darkUtilityTabs)
-  expect(darkUtilityTabs).toBe('rgba(0, 0, 0, 0.3)')
+  expect(lightUtilityTabs).toBe('rgba(0, 0, 0, 0)')
+  expect(darkUtilityTabs).toBe('rgba(0, 0, 0, 0)')
 })
 
 test('Code Objects stay ordinary frames without native scene effects', async () => {
@@ -107,11 +107,18 @@ test('Code Objects stay ordinary frames without native scene effects', async () 
 })
 
 test('Smylr switches sidebar utilities without competing panel animations', async () => {
+  const chatsTrigger = editor.page.getByTestId('left-panel-chats-tab')
+  const chatsContent = editor.page.getByTestId('left-panel-chats-content')
   const layersTrigger = editor.page.getByTestId('left-panel-layers-tab')
   const layersContent = editor.page.getByTestId('left-panel-layers-content')
   const assetsTrigger = editor.page.getByTestId('left-panel-assets-tab')
   const assetsContent = editor.page.getByTestId('left-panel-assets-content')
 
+  await expect(chatsTrigger).toHaveAttribute('data-state', 'active')
+  await expect(chatsContent).toBeVisible()
+
+  await layersTrigger.click()
+  await expect(chatsTrigger).toHaveAttribute('data-state', 'inactive')
   await expect(layersTrigger).toHaveAttribute('data-state', 'active')
   await expect(layersContent).toBeVisible()
 
@@ -130,7 +137,7 @@ test('Smylr switches sidebar utilities without competing panel animations', asyn
   await expect(assetsContent).toBeVisible()
 })
 
-test('Workspace switcher opens from the integrated toolbar', async () => {
+test('Workspace switcher opens from the bottom canvas toolbar', async () => {
   const workspaceButton = editor.page.getByTestId('workspace-toolbar-button')
   await expect(workspaceButton).toBeVisible()
 
@@ -140,18 +147,22 @@ test('Workspace switcher opens from the integrated toolbar', async () => {
   await expect(editor.page.getByTestId('board-project-browser')).toBeHidden()
 })
 
-test('Smylr uses one integrated contextual sidebar', async () => {
+test('Smylr keeps the contextual sidebar separate from the bottom canvas toolbar', async () => {
   await letAppReceivePointerEvents()
   await expect(editor.page.getByTestId('properties-panel')).toHaveCount(0)
   await expect(editor.page.getByTestId('left-panel-layers-tab')).toHaveText('LAYERS')
   await expect(editor.page.getByTestId('left-panel-chats-tab')).toHaveText('CHATS')
   await expect(editor.page.getByTestId('left-panel-assets-tab')).toHaveText('ASSETS')
   await expect(editor.page.getByTestId('left-panel-trace-tab')).toHaveText('ACTIVITY')
-  await expect(editor.page.getByTestId('left-panel-cache-tab')).toHaveText('CACHE')
+  await expect(editor.page.getByTestId('left-panel-cache-tab')).toHaveCount(0)
 
   const toolbarMotion = editor.page.getByTestId('toolbar-motion')
-  await expect(toolbarMotion).toHaveAttribute('data-sidebar-integrated', 'true')
-  await expect(toolbarMotion).toHaveAttribute('data-toolbar-orientation', 'vertical')
+  await expect(toolbarMotion).toHaveAttribute('data-sidebar-integrated', 'false')
+  await expect(toolbarMotion).toHaveAttribute('data-toolbar-orientation', 'horizontal')
+  await expect(editor.page.getByTestId('sidebar-toggle-motion')).toHaveAttribute(
+    'data-sidebar-integrated',
+    'true'
+  )
   await expect(editor.page.getByTestId('workspace-toolbar-button')).toBeVisible()
   await expect(editor.page.getByTestId('toolbar-collaboration')).toBeVisible()
 

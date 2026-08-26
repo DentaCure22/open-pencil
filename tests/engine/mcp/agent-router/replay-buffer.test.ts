@@ -5,6 +5,8 @@ import { pageAgentConversation } from '#mcp/agent-router/conversation-page'
 import { clipReplayText } from '#mcp/agent-router/replay-buffer'
 import { compactAgentThreadMemory } from '#mcp/pi/thread-memory'
 
+import { expectDefined } from '#tests/helpers/assert'
+
 describe('replay buffer', () => {
   test('keeps the start and end of a fat dump inside the budget', () => {
     const clipped = clipReplayText(`HEAD${'x'.repeat(8_000)}TAIL`, 8, 8)
@@ -68,12 +70,12 @@ describe('replay buffer', () => {
       {
         ...conversation,
         messages: [
-          conversation.messages[0]!,
+          expectDefined(conversation.messages[0], 'first conversation message'),
           {
-            ...conversation.messages[1]!,
+            ...expectDefined(conversation.messages[1], 'second conversation message'),
             parts: [{ name: 'read', output: fat, state: 'success', type: 'tool' }]
           },
-          conversation.messages[2]!
+          expectDefined(conversation.messages[2], 'third conversation message')
         ]
       },
       { turnLimit: 5 }

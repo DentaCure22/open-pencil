@@ -11,6 +11,7 @@ export const BROWSER_CAPTURE_ATTACHMENT_TYPE =
 
 type BrowserCaptureAttachmentDescriptor = {
   agentContext: string
+  annotationCount: number
   captureCount: number
   contract: 'openpencil-browser-capture-attachment/v1'
   recordingCount: number
@@ -21,11 +22,32 @@ type BrowserCaptureAttachmentDescriptor = {
   traceSessionId?: string
 }
 
-const attachedSessions = new WeakMap<File, BrowserCaptureSession>()
-const attachedDescriptors = new WeakMap<File, BrowserCaptureAttachmentDescriptor>()
+type AttachedBrowserCapture = {
+  descriptor: BrowserCaptureAttachmentDescriptor
+  session: BrowserCaptureSession
+}
+
+const attachedCaptures = new WeakMap<File, AttachedBrowserCapture>()
+const MAX_SESSION_CONTEXT_SELECTIONS = 5
+
+function captureSequence(selection: BrowserCaptureSession['selections'][number]) {
+  return selection.session.sequence ?? Number.MAX_SAFE_INTEGER
+}
+
+function boundedSessionSelections(session: BrowserCaptureSession, maximum: number) {
+  const ordered = [...session.selections].sort(
+    (left, right) => captureSequence(left) - captureSequence(right)
+  )
+  const prioritized = [
+    ...ordered.filter((selection) => selection.annotations?.length),
+    ...ordered.filter((selection) => !selection.annotations?.length)
+  ].slice(0, Math.max(0, maximum))
+  const selectedIds = new Set(prioritized.map((selection) => selection.id))
+  return ordered.filter((selection) => selectedIds.has(selection.id))
+}
 
 function compactAgentContext(session: BrowserCaptureSession) {
-  const visibleSelections = session.selections.slice(0, 3)
+  const visibleSelections = boundedSessionSelections(session, MAX_SESSION_CONTEXT_SELECTIONS)
   const context = browserCaptureSessionAgentContext({ ...session, selections: visibleSelections })
   const omitted = session.selections.length - visibleSelections.length
   return omitted > 0
@@ -56,6 +78,10 @@ function descriptorFor(
 ): BrowserCaptureAttachmentDescriptor {
   return {
     agentContext: compactAgentContext(session),
+    annotationCount: session.selections.reduce(
+      (total, selection) => total + (selection.annotations?.length ?? 0),
+      0
+    ),
     captureCount: session.selections.length,
     contract: 'openpencil-browser-capture-attachment/v1',
     recordingCount: session.recordings.length,
@@ -86,8 +112,7 @@ export function createBrowserCaptureAttachment(
       type: BROWSER_CAPTURE_ATTACHMENT_TYPE
     }
   )
-  attachedSessions.set(file, attached)
-  attachedDescriptors.set(file, descriptor)
+  attachedCaptures.set(file, { descriptor, session: attached })
   return file
 }
 
@@ -103,21 +128,29 @@ export function isBrowserCaptureAttachment(file: File): boolean {
 }
 
 export function browserCaptureAttachmentSummary(file: File): {
+  annotationCount: number
   captureCount: number
   recordingCount: number
   title: string
   traceLinked: boolean
 } | null {
   if (!isBrowserCaptureAttachment(file)) return null
-  const descriptor = attachedDescriptors.get(file)
+  const descriptor = attachedCaptures.get(file)?.descriptor
   return descriptor
     ? {
+        annotationCount: descriptor.annotationCount,
         captureCount: descriptor.captureCount,
         recordingCount: descriptor.recordingCount,
         title: descriptor.title,
         traceLinked: Boolean(descriptor.traceSessionId)
       }
-    : { captureCount: 1, recordingCount: 0, title: 'Chrome capture', traceLinked: true }
+    : {
+        annotationCount: 0,
+        captureCount: 1,
+        recordingCount: 0,
+        title: 'Chrome capture',
+        traceLinked: true
+      }
 }
 
 export type BrowserCaptureAttachmentPreview = {
@@ -131,10 +164,10 @@ export function browserCaptureAttachmentPreview(
   file: File
 ): BrowserCaptureAttachmentPreview | null {
   if (!isBrowserCaptureAttachment(file)) return null
-  const session = attachedSessions.get(file)
-  if (!session) return null
-  const descriptor = attachedDescriptors.get(file)
-  const selection = descriptor?.selectionId
+  const attached = attachedCaptures.get(file)
+  if (!attached) return null
+  const { descriptor, session } = attached
+  const selection = descriptor.selectionId
     ? session.selections.find((candidate) => candidate.id === descriptor.selectionId)
     : session.selections[0]
   const snapshot = selection?.snapshot
@@ -142,33 +175,42 @@ export function browserCaptureAttachmentPreview(
   return {
     height: snapshot.height,
     imageUrl: snapshot.dataUrl,
-    title: descriptor?.title ?? session.title,
+    title: descriptor.title,
     width: snapshot.width
   }
 }
 
 export function browserCaptureAttachmentKey(file: File): string | null {
   if (!isBrowserCaptureAttachment(file)) return null
-  const descriptor = attachedDescriptors.get(file)
+  const descriptor = attachedCaptures.get(file)?.descriptor
   return descriptor
     ? `${descriptor.sessionId}:${descriptor.selectionId ?? descriptor.recordingId ?? '*'}`
     : `${file.name}:${String(file.lastModified)}`
 }
 
 export function browserCaptureAttachmentAgentContext(file: File): string | null {
-  const session = attachedSessions.get(file)
+  const session = attachedCaptures.get(file)?.session
   return session ? compactAgentContext(session) : null
 }
 
-export async function browserCaptureAttachmentEvidenceFiles(file: File): Promise<File[]> {
-  const session = attachedSessions.get(file)
-  if (!session) return []
-  const snapshots = await browserCaptureSessionSnapshotFiles(session)
-  const descriptor = attachedDescriptors.get(file)
-  const recording = descriptor?.selectionId ? undefined : session.recordings.at(-1)
-  if (!recording) return snapshots.slice(0, 2)
-  const recordingFile = await browserCaptureRecordingFile(recording).catch(() => null)
-  return recordingFile ? [...snapshots.slice(0, 1), recordingFile] : snapshots.slice(0, 2)
+export async function browserCaptureAttachmentEvidenceFiles(
+  file: File,
+  maximumFiles = 5
+): Promise<File[]> {
+  const attached = attachedCaptures.get(file)
+  const limit = Math.max(0, Math.floor(maximumFiles))
+  if (!attached || !limit) return []
+  const { descriptor, session } = attached
+  const recording = descriptor.selectionId ? undefined : session.recordings.at(-1)
+  const recordingFile = recording
+    ? await browserCaptureRecordingFile(recording).catch(() => null)
+    : null
+  const snapshotLimit = limit - (recordingFile ? 1 : 0)
+  const snapshots = await browserCaptureSessionSnapshotFiles({
+    ...session,
+    selections: boundedSessionSelections(session, snapshotLimit)
+  })
+  return recordingFile ? [...snapshots, recordingFile] : snapshots
 }
 
 export async function resolveBrowserCaptureAttachments(
@@ -189,10 +231,11 @@ export async function resolveBrowserCaptureAttachments(
     context ? [{ context, file }] : []
   )
   const contexts = resolvedCaptures.map(({ context }) => context)
+  const evidenceLimit = Math.max(0, maximumFiles - ordinary.length)
   const evidence = (
     await Promise.all(
       resolvedCaptures.map(({ file }) =>
-        browserCaptureAttachmentEvidenceFiles(file).catch(() => [])
+        browserCaptureAttachmentEvidenceFiles(file, evidenceLimit).catch(() => [])
       )
     )
   )
@@ -202,7 +245,7 @@ export async function resolveBrowserCaptureAttachments(
         ordinary.every((candidate) => candidate.name !== file.name) &&
         files.findIndex((candidate) => candidate.name === file.name) === index
     )
-    .slice(0, Math.max(0, maximumFiles - ordinary.length))
+    .slice(0, evidenceLimit)
   return {
     attachments: [...ordinary, ...evidence],
     ...(contexts.length ? { contextPrompt: contexts.join('\n\n') } : {})

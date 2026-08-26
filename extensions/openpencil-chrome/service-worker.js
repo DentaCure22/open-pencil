@@ -9,13 +9,27 @@ const ACTIVE_CAPTURE_SESSION_KEY = 'openpencil-active-capture-session-v1'
 const PENDING_EVENTS_KEY = 'openpencil-pending-browser-events-v3'
 const RECORDING_SOURCES_KEY = 'openpencil-recording-sources-v1'
 const OFFSCREEN_PATH = 'offscreen.html'
+const PICKER_ICON_NAMES = ['message-circle-filled', 'mic', 'mic-off', 'trash-2', 'video']
 const MAX_PENDING_EVENTS = 100
 const MAX_RECORDING_BYTES = 11_500_000
 let creatingOffscreenDocument = null
 let captureSessionMutation = Promise.resolve()
+let pickerIconDataPromise = null
 
 function isWebPage(url) {
   return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
+}
+
+function pickerIconData() {
+  pickerIconDataPromise ??= Promise.all(
+    PICKER_ICON_NAMES.map(async (name) => {
+      const response = await fetch(chrome.runtime.getURL(`icons/${name}.svg`))
+      if (!response.ok) throw new Error(`Unable to load picker icon: ${name}`)
+      const source = await response.text()
+      return [name, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`]
+    })
+  ).then((entries) => Object.fromEntries(entries))
+  return pickerIconDataPromise
 }
 
 async function sessionValue(key, fallback) {
@@ -209,7 +223,7 @@ async function receiveSelection(sender, message) {
 
 async function receivePickerEnded(sender, message) {
   const recordingSources = await sessionValue(RECORDING_SOURCES_KEY, {})
-  if (typeof recordingSources?.[message.captureSessionId] === 'number') {
+  if (normalizeRecordingSource(recordingSources?.[message.captureSessionId])) {
     await stopMotionRecording(message).catch(() => undefined)
   }
   const session = await serializeCaptureSession(async () => {
@@ -256,6 +270,35 @@ async function receiveAnnotateRequested(message) {
   })
 }
 
+async function receiveAnnotationsUpdated(message) {
+  if (
+    typeof message.captureSessionId !== 'string' ||
+    typeof message.selectionId !== 'string' ||
+    !Array.isArray(message.annotations)
+  ) {
+    return false
+  }
+  return sendEventToOpenPencil({
+    annotations: structuredClone(message.annotations),
+    captureSessionId: message.captureSessionId,
+    contract: EVENT_CONTRACT,
+    kind: 'annotations-updated',
+    selectionId: message.selectionId
+  })
+}
+
+async function receiveSelectionRemoved(message) {
+  if (typeof message.captureSessionId !== 'string' || typeof message.selectionId !== 'string') {
+    return false
+  }
+  return sendEventToOpenPencil({
+    captureSessionId: message.captureSessionId,
+    contract: EVENT_CONTRACT,
+    kind: 'selection-removed',
+    selectionId: message.selectionId
+  })
+}
+
 async function hasOffscreenDocument() {
   if (typeof chrome.runtime.getContexts === 'function') {
     const contexts = await chrome.runtime.getContexts({
@@ -284,49 +327,101 @@ async function ensureOffscreenDocument() {
   await creatingOffscreenDocument
 }
 
-async function rememberRecordingSource(captureSessionId, tabId) {
+function normalizeRecordingSource(value) {
+  if (typeof value === 'number') return { mode: 'tab-capture', tabId: value }
+  if (!value || typeof value !== 'object' || typeof value.tabId !== 'number') return null
+  return {
+    mode: value.mode === 'frame-sampling' ? 'frame-sampling' : 'tab-capture',
+    tabId: value.tabId,
+    ...(typeof value.windowId === 'number' ? { windowId: value.windowId } : {})
+  }
+}
+
+async function rememberRecordingSource(captureSessionId, source) {
   const sources = await sessionValue(RECORDING_SOURCES_KEY, {})
   await chrome.storage.session.set({
-    [RECORDING_SOURCES_KEY]: { ...sources, [captureSessionId]: tabId }
+    [RECORDING_SOURCES_KEY]: { ...sources, [captureSessionId]: source }
   })
+}
+
+async function forgetRecordingSource(captureSessionId) {
+  const sources = await sessionValue(RECORDING_SOURCES_KEY, {})
+  const next = Object.fromEntries(
+    Object.entries(sources).filter(([sessionId]) => sessionId !== captureSessionId)
+  )
+  if (Object.keys(next).length) {
+    await chrome.storage.session.set({ [RECORDING_SOURCES_KEY]: next })
+  } else {
+    await chrome.storage.session.remove(RECORDING_SOURCES_KEY)
+  }
 }
 
 async function notifyRecordingStopped(captureSessionId) {
   const sources = await sessionValue(RECORDING_SOURCES_KEY, {})
-  const tabId = sources?.[captureSessionId]
-  if (typeof tabId === 'number') {
+  const source = normalizeRecordingSource(sources?.[captureSessionId])
+  if (source) {
     await chrome.tabs
-      .sendMessage(tabId, { captureSessionId, kind: 'browser-motion-recording-ended' })
+      .sendMessage(source.tabId, { captureSessionId, kind: 'browser-motion-recording-ended' })
       .catch(() => undefined)
   }
-  if (sources && typeof sources === 'object') {
-    const next = Object.fromEntries(
-      Object.entries(sources).filter(([sessionId]) => sessionId !== captureSessionId)
-    )
-    if (Object.keys(next).length) {
-      await chrome.storage.session.set({ [RECORDING_SOURCES_KEY]: next })
-    } else {
-      await chrome.storage.session.remove(RECORDING_SOURCES_KEY)
-    }
-  }
+  await forgetRecordingSource(captureSessionId)
 }
 
 async function startMotionRecording(sender, message) {
   if (!sender.tab?.id || typeof message.captureSessionId !== 'string') {
     return { ok: false, reason: 'source-tab-required' }
   }
+  await ensureOffscreenDocument()
+  const startedAt = new Date().toISOString()
+  let tabCaptureReason = 'tab-capture-unavailable'
   try {
-    await ensureOffscreenDocument()
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: sender.tab.id })
     const result = await chrome.runtime.sendMessage({
       captureSessionId: message.captureSessionId,
       kind: 'start-recording',
-      startedAt: new Date().toISOString(),
+      startedAt,
       streamId,
       target: 'offscreen'
     })
-    if (!result?.ok) return result
-    await rememberRecordingSource(message.captureSessionId, sender.tab.id)
+    if (!result?.ok) tabCaptureReason = result?.reason || tabCaptureReason
+    else {
+      await rememberRecordingSource(message.captureSessionId, {
+        mode: 'tab-capture',
+        tabId: sender.tab.id,
+        windowId: sender.tab.windowId
+      })
+      await sendEventToOpenPencil({
+        captureSessionId: message.captureSessionId,
+        contract: EVENT_CONTRACT,
+        kind: 'recording-started',
+        mimeType: result.mimeType,
+        startedAt: result.startedAt
+      })
+      return { ...result, mode: 'tab-capture' }
+    }
+  } catch (error) {
+    tabCaptureReason = error instanceof Error ? error.message : tabCaptureReason
+  }
+
+  try {
+    if (typeof sender.tab.windowId !== 'number') {
+      return { ok: false, reason: tabCaptureReason }
+    }
+    await rememberRecordingSource(message.captureSessionId, {
+      mode: 'frame-sampling',
+      tabId: sender.tab.id,
+      windowId: sender.tab.windowId
+    })
+    const result = await chrome.runtime.sendMessage({
+      captureSessionId: message.captureSessionId,
+      kind: 'start-frame-recording',
+      startedAt,
+      target: 'offscreen'
+    })
+    if (!result?.ok) {
+      await forgetRecordingSource(message.captureSessionId)
+      return { ok: false, reason: result?.reason || tabCaptureReason }
+    }
     await sendEventToOpenPencil({
       captureSessionId: message.captureSessionId,
       contract: EVENT_CONTRACT,
@@ -334,12 +429,37 @@ async function startMotionRecording(sender, message) {
       mimeType: result.mimeType,
       startedAt: result.startedAt
     })
-    return result
+    return { ...result, mode: 'frame-sampling' }
   } catch (error) {
+    await forgetRecordingSource(message.captureSessionId)
     return {
       ok: false,
-      reason: error instanceof Error ? error.message : 'motion-recording-unavailable'
+      reason: error instanceof Error ? error.message : tabCaptureReason
     }
+  }
+}
+
+async function captureMotionFrame(message) {
+  if (typeof message.captureSessionId !== 'string') {
+    return { ok: false, reason: 'capture-session-required' }
+  }
+  const sources = await sessionValue(RECORDING_SOURCES_KEY, {})
+  const source = normalizeRecordingSource(sources?.[message.captureSessionId])
+  if (!source || source.mode !== 'frame-sampling' || typeof source.windowId !== 'number') {
+    return { ok: false, reason: 'frame-recording-inactive' }
+  }
+  const tab = await chrome.tabs.get(source.tabId)
+  if (!tab.active || tab.windowId !== source.windowId) {
+    return { ok: false, reason: 'source-tab-not-visible' }
+  }
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(source.windowId, {
+      format: 'jpeg',
+      quality: 82
+    })
+    return { dataUrl, ok: true }
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'frame-capture-failed' }
   }
 }
 
@@ -368,6 +488,13 @@ function validLiveSurfaceSource(source) {
   )
 }
 
+function fallbackLiveSurfaceViewport(source) {
+  return {
+    height: source.window?.innerHeight || source.element.bounds.height,
+    width: source.window?.innerWidth || source.element.bounds.width
+  }
+}
+
 async function startLiveSurfaceCapture(message) {
   const command = message?.command
   const source = command?.source
@@ -385,12 +512,7 @@ async function startLiveSurfaceCapture(message) {
   try {
     const measured = await measureBrowserLiveSurface(source).catch(() => null)
     const bounds = measured?.ok ? measured.bounds : source.element.bounds
-    const viewport = measured?.ok
-      ? measured.viewport
-      : {
-          height: source.window?.innerHeight || source.element.bounds.height,
-          width: source.window?.innerWidth || source.element.bounds.width
-        }
+    const viewport = measured?.ok ? measured.viewport : fallbackLiveSurfaceViewport(source)
     await ensureOffscreenDocument()
     await chrome.runtime.sendMessage({
       kind: 'stop-live-surfaces-for-tab',
@@ -469,6 +591,7 @@ async function receiveRecordingComplete(message) {
     return false
   }
   if (Number(message.byteLength) > MAX_RECORDING_BYTES) {
+    await notifyRecordingStopped(message.captureSessionId)
     return sendEventToOpenPencil({
       captureSessionId: message.captureSessionId,
       contract: EVENT_CONTRACT,
@@ -510,16 +633,20 @@ async function injectPicker(tabId, session) {
     if (!page) return { ok: false, reason: 'restricted-page' }
     const joined = await joinCaptureSession(tabId, session.captureSessionId, page)
     if (!joined) return { ok: false, reason: 'capture-session-ended' }
+    const iconData = await pickerIconData()
     await chrome.scripting.executeScript({
       args: [
         {
           captureSessionId: joined.captureSessionId,
           captureStartedAt: joined.captureStartedAt,
+          iconData,
           selectedCount: joined.sequence
         }
       ],
       func: (config) => {
-        globalThis.__openpencilPickerSessionConfig = config
+        const { iconData, ...sessionConfig } = config
+        globalThis.__openpencilPickerIconData = iconData
+        globalThis.__openpencilPickerSessionConfig = sessionConfig
       },
       target: { tabId }
     })
@@ -650,10 +777,13 @@ chrome.tabs.onRemoved.addListener((tabId) => void forgetClosedCaptureTab(tabId))
 
 const runtimeMessageHandlers = {
   'activate-browser-element-picker': (_message, sender) => armPickerFromOpenPencil(sender),
+  'browser-element-annotations-updated': (message) => receiveAnnotationsUpdated(message),
   'browser-element-annotate-requested': (message) => receiveAnnotateRequested(message),
   'browser-element-picker-ended': (message, sender) => receivePickerEnded(sender, message),
   'browser-element-picker-started': (message, sender) => receivePickerStarted(sender, message),
   'browser-element-selection': (message, sender) => receiveSelection(sender, message),
+  'browser-element-selection-removed': (message) => receiveSelectionRemoved(message),
+  'capture-motion-frame': (message) => captureMotionFrame(message),
   'capture-visible-browser-element': (_message, sender) => captureVisibleSource(sender),
   'openpencil-ready': () => openPencilReady(),
   'live-surface-ended': (message) => receiveLiveSurfaceEvent(message),

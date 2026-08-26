@@ -39,6 +39,12 @@
       "bun": "./src/local-workspace-authority.ts",
       "import": "./dist/local-workspace-authority.mjs",
       "default": "./dist/local-workspace-authority.mjs"
+    },
+    "./usage-ledger-schema": {
+      "types": "./dist/usage-ledger-schema.d.mts",
+      "bun": "./src/usage-ledger-schema.ts",
+      "import": "./dist/usage-ledger-schema.mjs",
+      "default": "./dist/usage-ledger-schema.mjs"
     }
   },
   "publishConfig": {

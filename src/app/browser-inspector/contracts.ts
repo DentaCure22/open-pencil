@@ -68,6 +68,13 @@ export type BrowserCaptureRecording = {
 
 export type BrowserElementEvent =
   | {
+      annotations: BrowserElementAnnotation[]
+      captureSessionId: string
+      contract: typeof BROWSER_ELEMENT_EVENT_CONTRACT
+      kind: 'annotations-updated'
+      selectionId: string
+    }
+  | {
       captureSessionId: string
       captureStartedAt: string
       contract: typeof BROWSER_ELEMENT_EVENT_CONTRACT
@@ -86,6 +93,12 @@ export type BrowserElementEvent =
       contract: typeof BROWSER_ELEMENT_EVENT_CONTRACT
       kind: 'selection'
       selection: BrowserElementSelection
+    }
+  | {
+      captureSessionId: string
+      contract: typeof BROWSER_ELEMENT_EVENT_CONTRACT
+      kind: 'selection-removed'
+      selectionId: string
     }
   | {
       contract: typeof BROWSER_ELEMENT_EVENT_CONTRACT
@@ -345,6 +358,43 @@ function parseAnnotateRequested(candidate: UnknownRecord): BrowserElementEvent |
   }
 }
 
+function parseAnnotationsUpdated(candidate: UnknownRecord): BrowserElementEvent | null {
+  if (
+    !boundedString(candidate.captureSessionId, 128) ||
+    !candidate.captureSessionId ||
+    !boundedString(candidate.selectionId, 128) ||
+    !candidate.selectionId ||
+    !Array.isArray(candidate.annotations) ||
+    !validAnnotations(candidate.annotations)
+  ) {
+    return null
+  }
+  return {
+    annotations: structuredClone(candidate.annotations),
+    captureSessionId: candidate.captureSessionId,
+    contract: BROWSER_ELEMENT_EVENT_CONTRACT,
+    kind: 'annotations-updated',
+    selectionId: candidate.selectionId
+  }
+}
+
+function parseSelectionRemoved(candidate: UnknownRecord): BrowserElementEvent | null {
+  if (
+    !boundedString(candidate.captureSessionId, 128) ||
+    !candidate.captureSessionId ||
+    !boundedString(candidate.selectionId, 128) ||
+    !candidate.selectionId
+  ) {
+    return null
+  }
+  return {
+    captureSessionId: candidate.captureSessionId,
+    contract: BROWSER_ELEMENT_EVENT_CONTRACT,
+    kind: 'selection-removed',
+    selectionId: candidate.selectionId
+  }
+}
+
 function parsePickerStarted(candidate: UnknownRecord): BrowserElementEvent | null {
   const captureStartedAt = candidate.captureStartedAt ?? candidate.startedAt
   if (
@@ -440,12 +490,14 @@ function parseSelection(candidate: UnknownRecord): BrowserElementEvent | null {
 export function parseBrowserElementEvent(value: unknown): BrowserElementEvent | null {
   const candidate = record(value)
   if (candidate?.contract !== BROWSER_ELEMENT_EVENT_CONTRACT) return null
+  if (candidate.kind === 'annotations-updated') return parseAnnotationsUpdated(candidate)
   if (candidate.kind === 'annotate-requested') return parseAnnotateRequested(candidate)
   if (candidate.kind === 'picker-started') return parsePickerStarted(candidate)
   if (candidate.kind === 'picker-ended') return parsePickerEnded(candidate)
   if (candidate.kind === 'recording-started') return parseRecordingStarted(candidate)
   if (candidate.kind === 'recording-failed') return parseRecordingFailed(candidate)
   if (candidate.kind === 'recording') return parseRecording(candidate)
+  if (candidate.kind === 'selection-removed') return parseSelectionRemoved(candidate)
   return candidate.kind === 'selection' ? parseSelection(candidate) : null
 }
 

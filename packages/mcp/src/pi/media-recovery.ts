@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { AgentConversationMessage, AgentConversationThread } from '#mcp/agent-router/contracts'
 
 import { imagePreviewFromPath } from './image-preview'
+import { isProviderMediaToolName } from './providers/media'
 
 type MediaKind = 'image' | 'video'
 
@@ -83,7 +84,7 @@ function mediaToolKind(name: string): MediaKind | null {
     normalized.includes('edit video') ||
     normalized.includes('extend video') ||
     normalized.includes('video gen') ||
-    normalized.includes('grok video')
+    isProviderMediaToolName(normalized)
   ) {
     return 'video'
   }

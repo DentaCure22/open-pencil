@@ -50,7 +50,7 @@ const collab = useCollabPanelContext()
     :disabled="collab.creatingInvite"
     @click="collab.copyCofounderInvite"
   >
-    <icon-lucide-user-plus class="size-3.5" />
+    <IconlyIcon name="add-user" class="size-3.5" />
     {{ collab.creatingInvite ? 'Creating invite…' : 'Copy cofounder invite' }}
   </button>
 

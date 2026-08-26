@@ -13,6 +13,7 @@ const DEFAULT_WARM_POOL_SIZE = 1
 export type PiWarmProcess = {
   effort: string
   model: string
+  poolSessionId: string
   process: PiRpcProcess
   sessionId: string
   state: unknown
@@ -22,6 +23,7 @@ export type PiProcessPoolOptions = {
   cwd: string
   effort: string
   env: NodeJS.ProcessEnv
+  envForSession?: (sessionId: string) => NodeJS.ProcessEnv
   executable: string
   mcpConfigPath?: string
   model: string
@@ -123,7 +125,7 @@ export class PiProcessPool {
       rpc = await PiRpcProcess.start({
         args,
         cwd: this.options.cwd,
-        env: this.options.env,
+        env: this.options.envForSession?.(sessionId) ?? this.options.env,
         executable: this.options.executable,
         onEvent: (event) => this.handleIdleEvent(rpc, event),
         onExit: () => this.handleIdleExit(rpc)
@@ -140,6 +142,7 @@ export class PiProcessPool {
       this.ready.push({
         effort: this.options.effort,
         model: this.options.model,
+        poolSessionId: sessionId,
         process: rpc,
         sessionId:
           isRecord(state.data) && typeof state.data.sessionId === 'string'

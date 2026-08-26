@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 
-import type { AgentConversationThread } from './client'
+import type { AgentConversationThread } from './conversations'
 import { useAgentConversationHistory } from './history-store'
 import { agentConversationTitle } from './presentation'
 
@@ -9,6 +9,7 @@ const HEARTBEAT_ELAPSED_SUFFIX = / · (\d+)s$/
 const ELLIPSIS_ELAPSED_SUFFIX = /^(.*?(?:…|\.\.\.)) (\d+)s$/
 
 type LiveWorkingLabelInput = {
+  activeTurnStartedAt?: string
   lastMessageAt?: string
   now: number
   recentUpdate?: string
@@ -69,6 +70,11 @@ export function liveWorkingLabel(input: LiveWorkingLabelInput): string | undefin
   const recent = input.recentUpdate?.trim() ?? ''
   const split = splitElapsedActivity(recent)
   const activity = shortWorkingActivity(split.activity || conversationStateLabel(input.state))
+  const activeTurnStartedAt = Date.parse(input.activeTurnStartedAt ?? '')
+  if (Number.isFinite(activeTurnStartedAt)) {
+    const wholeTurnSeconds = Math.max(0, Math.floor((input.now - activeTurnStartedAt) / 1_000))
+    return `${activity} · ${String(wholeTurnSeconds)}s`
+  }
   const origin = activityOriginMs(input)
   const sinceUpdate =
     origin === undefined ? 0 : Math.max(0, Math.floor((input.now - origin) / 1_000))
@@ -86,6 +92,7 @@ export function boardConversationStatusLabel(input: LiveWorkingLabelInput): stri
 
 export function threadLiveWorkingLabel(
   thread: {
+    activeTurnStartedAt?: string
     messages?: Array<{ createdAt: string }>
     recentUpdate?: string
     state?: string
@@ -95,6 +102,7 @@ export function threadLiveWorkingLabel(
 ): string {
   return (
     liveWorkingLabel({
+      activeTurnStartedAt: thread.activeTurnStartedAt,
       lastMessageAt: thread.messages?.at(-1)?.createdAt,
       now,
       recentUpdate: thread.recentUpdate,

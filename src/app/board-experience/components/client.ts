@@ -14,9 +14,9 @@ import {
   type BoardPermissionDescriptor
 } from '@/app/board-permissions'
 import {
+  codeObjectDocument,
+  codeObjectPluginData,
   createUserCodeObjectDocument,
-  reactShapeDocument as codeObjectDocument,
-  reactShapePluginData as codeObjectPluginData
 } from '@/app/code-object/implementation'
 import type { EditorStore } from '@/app/editor/active-store'
 

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 describe('Pi worker MCP config', () => {
-  test('exposes only read-only Board context tools to workers', async () => {
+  test('exposes Board context and direct navigation tools to workers', async () => {
     const config = JSON.parse(
       await readFile(path.join(process.cwd(), '.pi', 'mcp.json'), 'utf8')
     ) as {
@@ -21,16 +21,31 @@ describe('Pi worker MCP config', () => {
     expect(config).toEqual({
       mcpServers: {
         openpencil: {
-          directTools: false,
-          disabled: false,
-          includeTools: [
+          directTools: [
+            'board_apply',
+            'board_go',
+            'board_query',
             'board_screenshot',
             'board_where',
             'get_agent_chat_context',
             'list_agent_chats',
-            'set_theme'
+            'set_theme',
+            'trace_query'
           ],
-          lifecycle: 'lazy'
+          disabled: false,
+          includeTools: [
+            'board_apply',
+            'board_go',
+            'board_query',
+            'board_screenshot',
+            'board_where',
+            'get_agent_chat_context',
+            'list_agent_chats',
+            'set_theme',
+            'trace_query'
+          ],
+          lifecycle: 'lazy',
+          toolPrefix: 'server'
         }
       }
     })

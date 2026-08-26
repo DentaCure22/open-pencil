@@ -8,6 +8,7 @@ import {
   shouldRouteKeyToAgentComposer
 } from '@/app/agent-chat/composer-focus'
 import { useAgentBoardConversation } from '@/app/agent-chat/board-conversation'
+import { useAgentComposerDraft } from '@/app/agent-chat/composer-drafts'
 import {
   loadOlderAgentConversationTranscript,
   releaseAgentConversationTranscript,
@@ -15,14 +16,15 @@ import {
   revealAgentConversationChapter
 } from '@/app/agent-chat/history-store'
 import {
-  cancelScheduledTranscriptHydration,
   planBoardTranscriptRetain,
-  scheduleTranscriptHydration
+  scheduleTranscriptHydration,
+  type TranscriptHydrationHandle
 } from '@/app/agent-chat/transcript-hydration'
 import { mergeOptimisticMessages, optimisticConversation } from '@/app/agent-chat/optimistic'
 import { AiConversationSurface, conversationStatus } from '@/components/ai-elements'
 import { plainConversationPreview } from '@/app/agent-chat/presentation'
 import { agentConversationDisplayTitle } from '@/app/agent-chat/thread-preferences'
+import { appendDraftAttachments } from '@/app/agent-chat/attachments'
 import { resolveBrowserCaptureAttachments } from '@/app/browser-inspector/attachment'
 import {
   isAgentConversationDraftId,
@@ -56,7 +58,7 @@ const { historyError, refresh, resolvedThreadId, thread, title, workerThreads } 
   })
 const loadingOlder = ref(false)
 let idleRetainId: string | null = null
-let retainIdleHandle: number | null = null
+let retainIdleHandle: TranscriptHydrationHandle | null = null
 let retainedTranscriptId: string | null = null
 async function loadOlderTranscript() {
   const threadId = resolvedThreadId.value
@@ -79,7 +81,7 @@ async function revealChapter(chapterId: string) {
   }
 }
 function cancelIdleRetain() {
-  cancelScheduledTranscriptHydration(retainIdleHandle)
+  retainIdleHandle?.()
   retainIdleHandle = null
   idleRetainId = null
 }
@@ -145,6 +147,12 @@ const isDraft = computed(() => isAgentConversationDraftId(workerConversationId))
 const conversationIdentity = computed(
   () => resolvedThreadId.value || workerConversationId || `draft:${frameId}`
 )
+const composerDraft = useAgentComposerDraft({
+  annotations,
+  attachments,
+  identity: conversationIdentity,
+  text: message
+})
 const displayTitle = computed(() =>
   thread.value ? agentConversationDisplayTitle(thread.value) : title.value
 )
@@ -154,16 +162,16 @@ const optimisticSending = computed(
     optimistic.value?.state === 'submitted' ||
     (optimistic.value?.state === 'thinking' && thread.value?.state !== 'running')
 )
+const conversationState = computed(() => {
+  if (thread.value?.state === 'running') return 'running'
+  if (optimistic.value?.state === 'completed') return 'completed'
+  return thread.value?.state
+})
 const uiStatus = computed(() =>
   conversationStatus({
     error: optimistic.value?.error || error.value,
     sending: optimisticSending.value,
-    state:
-      thread.value?.state === 'running'
-        ? 'running'
-        : optimistic.value?.state === 'completed'
-          ? 'completed'
-          : thread.value?.state
+    state: conversationState.value
   })
 )
 const statusMessage = computed(() => {
@@ -213,9 +221,7 @@ async function send(submission: AgentPromptSubmission) {
   lastMessage.value = draft
   lastAnnotations.value = submission.annotations.map((annotation) => ({ ...annotation }))
   lastAttachments.value = [...submission.attachments]
-  message.value = ''
-  annotations.value = []
-  attachments.value = []
+  composerDraft.clear()
   try {
     await submitAgentConversation({
       ...(captureResolution.contextPrompt
@@ -278,6 +284,22 @@ useEventListener(
   },
   { capture: true }
 )
+useEventListener(window, 'openpencil:agent-card-attach', (event: Event) => {
+  const detail = (
+    event as CustomEvent<{
+      files: File[]
+      frameId?: string
+      workerConversationId?: string
+    }>
+  ).detail
+  if (!detail?.files?.length) return
+  if (detail.frameId !== frameId && detail.workerConversationId !== workerConversationId) return
+  const result = appendDraftAttachments(attachments.value, detail.files)
+  attachments.value = result.attachments
+  if (result.error) {
+    error.value = result.error
+  }
+})
 watch(
   thread,
   (next) => {

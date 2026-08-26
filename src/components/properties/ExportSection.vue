@@ -120,7 +120,7 @@ onScopeDispose(() => {
   <PanelSection :label="panels.export" data-test-id="export-section">
     <template #actions>
       <IconButton :label="panels.addExport" data-test-id="export-section-add" @click="addSetting">
-        <icon-lucide-plus class="size-3.5" />
+        <IconlyIcon name="plus" class="size-3.5" />
       </IconButton>
     </template>
     <p v-if="mixed" class="text-[11px] text-muted">
@@ -171,8 +171,8 @@ onScopeDispose(() => {
         class="mt-1 flex w-full cursor-pointer items-center gap-1 rounded border-none bg-transparent px-0 py-1 text-[11px] text-muted hover:text-surface"
         @click="showPreview = !showPreview"
       >
-        <icon-lucide-chevron-down v-if="showPreview" class="size-3" />
-        <icon-lucide-chevron-right v-else class="size-3" />
+        <IconlyIcon name="arrow-down" v-if="showPreview" class="size-3" />
+        <IconlyIcon name="arrow-right" v-else class="size-3" />
         {{ panels.exportPreview }}
       </button>
     </Tip>

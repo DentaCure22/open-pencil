@@ -35,6 +35,18 @@ describe('board conversation live status', () => {
     ).toBe('Run command… · 60s')
   })
 
+  test('uses the whole active turn instead of the current action timer', () => {
+    expect(
+      liveWorkingLabel({
+        activeTurnStartedAt: '2026-08-16T00:00:00.000Z',
+        now: NOW,
+        recentUpdate: 'Run command… · 7s',
+        state: 'running',
+        updatedAt: '2026-08-16T00:00:53.000Z'
+      })
+    ).toBe('Run command… · 60s')
+  })
+
   test('does not reset the timer when updatedAt churns on a prose update', () => {
     expect(
       liveWorkingLabel({
@@ -134,12 +146,13 @@ describe('board conversation live status', () => {
     expect(
       threadLiveWorkingLabel(
         {
+          activeTurnStartedAt: '2026-08-16T00:00:35.000Z',
           messages: [{ createdAt: '2026-08-16T00:00:40.000Z' }],
           recentUpdate: '',
           state: 'running'
         },
         NOW
       )
-    ).toBe('running · 20s')
+    ).toBe('running · 25s')
   })
 })

@@ -74,6 +74,60 @@ export function conversationWindowFollowsLatest(
   return scrollTop + viewportHeight >= total - lastHeight - 48
 }
 
+function sumRunHeights(heights: readonly number[], start = 0, end = heights.length): number {
+  let total = 0
+  for (let index = start; index < end; index += 1) total += heights[index] ?? 0
+  return total
+}
+
+function completeRunWindow(count: number): ConversationRunWindow {
+  return { end: count, leading: 0, start: 0, trailing: 0 }
+}
+
+function trailingRunWindow(heights: readonly number[], limit: number): ConversationRunWindow {
+  const end = heights.length
+  const start = Math.max(0, end - limit)
+  return { end, leading: sumRunHeights(heights, 0, start), start, trailing: 0 }
+}
+
+function visibleRunRange(
+  heights: readonly number[],
+  viewStart: number,
+  viewEnd: number
+): Pick<ConversationRunWindow, 'end' | 'start'> {
+  let prefix = 0
+  let start = 0
+  let end = heights.length
+  let foundStart = false
+  for (let index = 0; index < heights.length; index += 1) {
+    const next = prefix + (heights[index] ?? 0)
+    if (!foundStart && next > viewStart) {
+      start = index
+      foundStart = true
+    }
+    if (foundStart && prefix >= viewEnd) {
+      end = index
+      break
+    }
+    prefix = next
+  }
+  return { end, start: foundStart ? start : Math.max(0, heights.length - 1) }
+}
+
+function includeAlwaysPaintedRuns(
+  range: Pick<ConversationRunWindow, 'end' | 'start'>,
+  count: number,
+  indexes: readonly number[]
+): Pick<ConversationRunWindow, 'end' | 'start'> {
+  let { end, start } = range
+  for (const index of indexes) {
+    if (index < 0 || index >= count) continue
+    start = Math.min(start, index)
+    end = Math.max(end, index + 1)
+  }
+  return { end, start }
+}
+
 export function conversationRunWindow(
   heights: readonly number[],
   options: {
@@ -87,29 +141,21 @@ export function conversationRunWindow(
   const count = heights.length
   if (count === 0) return { end: 0, leading: 0, start: 0, trailing: 0 }
 
-  const total = heights.reduce((sum, height) => sum + height, 0)
   const viewport = Math.max(0, options.viewportHeight)
-  const lastHeight = heights.at(-1) ?? 0
   if (options.live) {
-    if (count <= CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT) {
-      return { end: count, leading: 0, start: 0, trailing: 0 }
-    }
-    const start = Math.max(0, count - CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT)
-    let leading = 0
-    for (let index = 0; index < start; index += 1) leading += heights[index] ?? 0
-    return { end: count, leading, start, trailing: 0 }
+    return count <= CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT
+      ? completeRunWindow(count)
+      : trailingRunWindow(heights, CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT)
   }
   if (viewport <= 0) {
-    const start = Math.max(0, count - CONVERSATION_WINDOW_UNMEASURED_PAINT_LIMIT)
-    let leading = 0
-    for (let index = 0; index < start; index += 1) leading += heights[index] ?? 0
-    return { end: count, leading, start, trailing: 0 }
+    return trailingRunWindow(heights, CONVERSATION_WINDOW_UNMEASURED_PAINT_LIMIT)
   }
-  if (count <= CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT) {
-    return { end: count, leading: 0, start: 0, trailing: 0 }
-  }
-  if (total <= viewport + lastHeight) {
-    return { end: count, leading: 0, start: 0, trailing: 0 }
+  const total = sumRunHeights(heights)
+  if (
+    count <= CONVERSATION_WINDOW_ALWAYS_PAINT_LIMIT ||
+    total <= viewport + (heights.at(-1) ?? 0)
+  ) {
+    return completeRunWindow(count)
   }
 
   const overscan = options.overscan ?? CONVERSATION_RUN_OVERSCAN
@@ -118,35 +164,17 @@ export function conversationRunWindow(
   const viewStart = Math.max(0, scrollTop - overscanPx)
   const viewEnd = scrollTop + viewport + overscanPx
 
-  let prefix = 0
-  let start = 0
-  let end = count
-  let foundStart = false
-  for (let index = 0; index < count; index += 1) {
-    const next = prefix + (heights[index] ?? 0)
-    if (!foundStart && next > viewStart) {
-      start = index
-      foundStart = true
-    }
-    if (foundStart && prefix >= viewEnd) {
-      end = index
-      break
-    }
-    prefix = next
+  const { end, start } = includeAlwaysPaintedRuns(
+    visibleRunRange(heights, viewStart, viewEnd),
+    count,
+    options.alwaysIndexes ?? []
+  )
+  return {
+    end,
+    leading: sumRunHeights(heights, 0, start),
+    start,
+    trailing: sumRunHeights(heights, end)
   }
-  if (!foundStart) start = Math.max(0, count - 1)
-
-  for (const index of options.alwaysIndexes ?? []) {
-    if (index < 0 || index >= count) continue
-    start = Math.min(start, index)
-    end = Math.max(end, index + 1)
-  }
-
-  let leading = 0
-  for (let index = 0; index < start; index += 1) leading += heights[index] ?? 0
-  let trailing = 0
-  for (let index = end; index < count; index += 1) trailing += heights[index] ?? 0
-  return { end, leading, start, trailing }
 }
 
 export function conversationPaintedRuns<T>(

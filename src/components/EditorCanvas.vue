@@ -22,10 +22,7 @@ import {
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
 import { isCodeObjectFrame } from '@/app/code-object/model'
-import {
-  isAgentConversationDragActive,
-  useAgentConversationDrop
-} from '@/app/agent-terminal/drag'
+import { isAgentConversationDragActive, useAgentConversationDrop } from '@/app/agent-terminal/drag'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useAssetVariantDrop } from '@/app/editor/assets/drag'
 import { useCanvasCollaborationAwareness } from '@/app/editor/canvas/collaboration-awareness'
@@ -158,12 +155,8 @@ const {
   onDragOver: onAssetVariantDragOver,
   onDrop: onAssetVariantDrop
 } = useAssetVariantDrop(canvasAreaRef, store)
-const {
-  onDragEnter: onAgentConversationDragEnter,
-  onDragLeave: onAgentConversationDragLeave,
-  onDragOver: onAgentConversationDragOver,
-  onDrop: onAgentConversationDrop
-} = useAgentConversationDrop(canvasAreaRef, store)
+const { onDragOver: onAgentConversationDragOver, onDrop: onAgentConversationDrop } =
+  useAgentConversationDrop(canvasAreaRef, store)
 const {
   isDraggingExternalLiveSurface,
   onDragEnter: onExternalLiveSurfaceDragEnter,
@@ -174,13 +167,11 @@ const {
 
 function onCanvasDragEnter(event: DragEvent) {
   onAssetVariantDragEnter(event)
-  onAgentConversationDragEnter(event)
   onExternalLiveSurfaceDragEnter(event)
 }
 
 function onCanvasDragLeave(event: DragEvent) {
   onAssetVariantDragLeave(event)
-  onAgentConversationDragLeave(event)
   onExternalLiveSurfaceDragLeave(event)
 }
 
@@ -361,7 +352,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           <div
             class="border-border/70 bg-panel max-w-sm rounded-xl border p-5 text-center shadow-xl"
           >
-            <icon-lucide-triangle-alert class="mx-auto size-6 text-[var(--color-warning-text)]" />
+            <IconlyIcon name="danger" class="mx-auto size-6 text-[var(--color-warning-text)]" />
             <h2 class="mt-3 text-sm font-semibold text-surface">Canvas didn’t start</h2>
             <p class="mt-1.5 text-[11px] leading-4 text-muted">{{ canvasLoadError }}</p>
             <button

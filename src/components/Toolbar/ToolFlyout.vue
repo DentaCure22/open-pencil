@@ -12,7 +12,7 @@ import {
 } from 'reka-ui'
 import { ref } from 'vue'
 
-import IconChevronDown from '~icons/lucide/chevron-down'
+import { IconlyArrowDown as IconChevronDown } from '@/components/icons/iconly'
 
 import AppShortcutText from '@/components/ui/AppShortcutText.vue'
 import { menu } from '@/components/ui/menu'
@@ -37,7 +37,8 @@ const {
   toolShortcuts,
   ui,
   mobile = false,
-  suppressActive = false
+  suppressActive = false,
+  side = 'right'
 } = defineProps<{
   tool: EditorToolDef
   activeTool: Tool
@@ -46,6 +47,7 @@ const {
   toolShortcuts: Record<Tool, string>
   ui?: ToolbarUi
   mobile?: boolean
+  side?: 'right' | 'top'
   suppressActive?: boolean
 }>()
 
@@ -148,7 +150,7 @@ function selectTool(key: Tool) {
 
     <HoverCardPortal>
       <HoverCardContent
-        side="right"
+        :side="side"
         :side-offset="8"
         align="center"
         :class="

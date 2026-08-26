@@ -45,7 +45,7 @@ const indicator = ui?.indicator ?? 'absolute left-1.5 inline-flex items-center j
   <SelectRoot v-model="modelValue">
     <SelectTrigger v-bind="$attrs" :class="select.trigger" :aria-label="label">
       <SelectValue :placeholder="placeholder" />
-      <icon-lucide-chevron-down class="ml-1 size-3 shrink-0 text-muted" />
+      <IconlyIcon name="arrow-down" class="ml-1 size-3 shrink-0 text-muted" />
     </SelectTrigger>
     <SelectPortal>
       <SelectContent position="popper" :side-offset="2" :class="select.content">

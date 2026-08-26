@@ -1,6 +1,6 @@
 import { composeDirectedWorkPrompt } from '@/app/agent-chat/directed-work-prompt'
 
-import { contextCommentAnnotationAnchorLines } from './anchor-format'
+import { contextCommentAnnotationAnchorLines } from './anchor/format'
 import { contextCommentTargetLines } from './selection-brief'
 import type { ContextCommentDraft } from './types'
 

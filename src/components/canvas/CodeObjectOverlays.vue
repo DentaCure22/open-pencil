@@ -66,6 +66,7 @@ import {
   setLiveInspectorInteractionMode
 } from '@/app/smylr-live-inspector/session'
 import { readOpenPencilWorkspaceIdentity } from '@/app/workspace-document/identity'
+import { carriesAttachmentDrag, readAttachmentDrag } from '@/app/agent-chat/attachments'
 import { agentBoardObjectDocument } from '@/app/agent-terminal/board-object'
 import AgentConversationBoardSurface from '@/components/agent-terminal/AgentConversationBoardSurface.vue'
 import SmylrTrustedWebApp from '@/components/code-object/SmylrTrustedWebApp.vue'
@@ -237,7 +238,6 @@ function paintOwnedHoverChrome(frameId: string | null) {
     isCodeObjectFrame(store.graph.getNode(frameId))
   ) {
     boundSurfaceHosts.get(frameId)?.setAttribute('data-hovered', '')
-    return
   }
 }
 
@@ -599,6 +599,53 @@ function handleRecentSurfaceDoubleClick(event: MouseEvent) {
   }
 }
 
+const agentCardDropHoverId = ref<string | null>(null)
+
+function handleDesignHitTargetDragEnter(frame: SceneNode, event: DragEvent) {
+  if (!agentDocumentFor(frame) || !carriesAttachmentDrag(event.dataTransfer)) return
+  event.preventDefault()
+  event.stopPropagation()
+  agentCardDropHoverId.value = frame.id
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleDesignHitTargetDragOver(frame: SceneNode, event: DragEvent) {
+  if (!agentDocumentFor(frame) || !carriesAttachmentDrag(event.dataTransfer)) return
+  event.preventDefault()
+  event.stopPropagation()
+  agentCardDropHoverId.value = frame.id
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function handleDesignHitTargetDragLeave(frame: SceneNode, event: DragEvent) {
+  if (agentCardDropHoverId.value !== frame.id) return
+  const current = event.currentTarget
+  const related = event.relatedTarget
+  if (current instanceof HTMLElement && related instanceof Node && current.contains(related)) {
+    return
+  }
+  agentCardDropHoverId.value = null
+}
+
+function handleDesignHitTargetDrop(frame: SceneNode, event: DragEvent) {
+  if (!agentDocumentFor(frame) || !carriesAttachmentDrag(event.dataTransfer)) return
+  agentCardDropHoverId.value = null
+  event.preventDefault()
+  event.stopPropagation()
+  const files = readAttachmentDrag(event.dataTransfer)
+  if (!files.length) return
+  enterSurfaceInteraction(frame, true)
+  window.dispatchEvent(
+    new CustomEvent('openpencil:agent-card-attach', {
+      detail: {
+        files,
+        frameId: frame.id,
+        workerConversationId: agentWorkerConversationId(frame)
+      }
+    })
+  )
+}
+
 function beginShapeMove(frameId: string, event: PointerEvent) {
   const frame = store.graph.getNode(frameId)
   if (!frame || event.button !== 0) return
@@ -934,9 +981,18 @@ onUnmounted(() => {
       <div
         v-if="modeFor(frame.id) === 'design' && !isSmylrContainerMode(frame)"
         class="absolute inset-0 z-[1] cursor-pointer hover:outline hover:outline-2 hover:outline-offset-0 hover:outline-component/70"
-        :class="store.state.activeTool === 'SELECT' ? 'pointer-events-auto' : 'pointer-events-none'"
+        :class="[
+          store.state.activeTool === 'SELECT' ? 'pointer-events-auto' : 'pointer-events-none',
+          agentCardDropHoverId === frame.id
+            ? 'ring-2 ring-accent/80 bg-accent/10 border-accent/60'
+            : ''
+        ]"
         :aria-label="`${frame.name}. Click to interact or drag to move.`"
         data-test-id="code-object-design-hit-target"
+        @dragenter="handleDesignHitTargetDragEnter(frame, $event)"
+        @dragover="handleDesignHitTargetDragOver(frame, $event)"
+        @dragleave="handleDesignHitTargetDragLeave(frame, $event)"
+        @drop="handleDesignHitTargetDrop(frame, $event)"
         @pointercancel.stop="cancelShapeMove"
         @pointerdown.stop="beginSurfacePointerInteraction(frame, $event)"
         @pointermove.stop.prevent="moveShape"

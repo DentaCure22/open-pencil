@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import {
   readPublishedLocalAuthorityToken,
   resolveDevLocalAuthorityAuthToken
-} from '../../../vite/local-workspace-authority'
+} from '#vite/local-workspace-authority'
 
 describe('local workspace authority Vite plugin', () => {
   test('prefers an explicit dev token, then the published live token', () => {

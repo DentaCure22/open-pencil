@@ -2,12 +2,12 @@ import type { Canvas, Path, PathOp } from 'canvaskit-wasm'
 
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { textNodeToOutlinePath } from '#core/canvas/text/outlines'
 import { getTextOutlineSupport } from '#core/text/outlines'
 
 import { makeArcPath } from './fills'
 import type { SkiaRenderer } from './renderer'
 import { nodeHasRadius } from './shapes'
-import { textNodeToOutlinePath } from './text-outlines'
 
 const BOOLEAN_PATH_OP: Record<
   NonNullable<SceneNode['booleanOperation']>,

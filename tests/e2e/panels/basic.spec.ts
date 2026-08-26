@@ -14,13 +14,52 @@ test('layers panel resize increases width', async () => {
 
   const handleBounds = expectDefined(handleBox, 'splitter handle bounds')
   const beforeBounds = expectDefined(before, 'layers panel bounds')
-  const cx = handleBounds.x + handleBounds.width / 2
+  expect(handleBounds.width).toBeGreaterThanOrEqual(40)
+  expect(
+    await handle.evaluate((element) => {
+      let ancestor = element.parentElement
+      while (ancestor) {
+        if (getComputedStyle(ancestor).pointerEvents === 'none') return false
+        ancestor = ancestor.parentElement
+      }
+      return true
+    })
+  ).toBe(true)
+
+  const edgeHits = await editor.page.evaluate(
+    ({ left, right, y }) =>
+      [left + 2, right - 2].map((x) =>
+        document.elementFromPoint(x, y)?.getAttribute('data-test-id')
+      ),
+    {
+      left: handleBounds.x,
+      right: handleBounds.x + handleBounds.width,
+      y: handleBounds.y + handleBounds.height / 2
+    }
+  )
+  expect(edgeHits).toEqual(['left-splitter-handle', 'left-splitter-handle'])
+
+  const cx = handleBounds.x + 2
   const cy = handleBounds.y + handleBounds.height / 2
 
   await editor.page.mouse.move(cx, cy)
   await editor.page.mouse.down()
+  await expect(editor.page.locator('html')).toHaveAttribute('data-horizontal-resizing', '')
+  await expect(editor.page.getByTestId('layers-splitter-panel')).toHaveAttribute(
+    'data-resizing',
+    'true'
+  )
+  await expect(editor.page.getByTestId('layers-shell-motion')).toHaveCSS(
+    'transition-property',
+    'none'
+  )
   await editor.page.mouse.move(cx + 80, cy, { steps: 10 })
   await editor.page.mouse.up()
+  await expect(editor.page.locator('html')).not.toHaveAttribute('data-horizontal-resizing')
+  await expect(editor.page.getByTestId('layers-splitter-panel')).toHaveAttribute(
+    'data-resizing',
+    'false'
+  )
   await editor.canvas.waitForRender()
 
   const after = expectDefined(await panel.boundingBox(), 'resized layers panel bounds')

@@ -26,7 +26,7 @@ const selectCls = useSelectUI({
     <SelectTrigger data-test-id="chat-model-selector" :class="selectCls.trigger">
       <icon-lucide-bot class="size-3" />
       <slot name="value" />
-      <icon-lucide-chevron-down class="size-2.5" />
+      <IconlyIcon name="arrow-down" class="size-2.5" />
     </SelectTrigger>
     <SelectPortal>
       <SelectContent position="popper" side="top" :side-offset="4" :class="selectCls.content">

@@ -17,13 +17,16 @@ import {
 } from '@/app/agent-chat/models'
 import { openAgentImageAnnotation, readImagePreviewSize } from '@/app/context-comment'
 import {
-  browserCaptureAttachmentFromDrag,
+  appendDraftAttachments,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_COUNT
+} from '@/app/agent-chat/attachments'
+import {
   browserCaptureAttachmentPreview,
   browserCaptureAttachmentSummary,
   createBrowserCaptureAttachment,
   isBrowserCaptureAttachment
 } from '@/app/browser-inspector/attachment'
-import { hasBrowserCaptureDrag, readBrowserCaptureDrag } from '@/app/browser-inspector/drag'
 import { browserCaptureSessions } from '@/app/browser-inspector/state'
 import {
   speechDictationActiveOwner,
@@ -32,6 +35,8 @@ import {
   stopSpeechDictation
 } from '@/app/speech-dictation'
 import { toast } from '@/app/shell/ui'
+import { searchAgentWorkspaceFiles } from '@/app/agent-chat/workspace'
+import AiComposerCommandMenu from './AiComposerCommandMenu.vue'
 import AiModelAndEffortSelect from './AiModelAndEffortSelect.vue'
 import AiContextIndicator from './AiContextIndicator.vue'
 import {
@@ -40,8 +45,16 @@ import {
   shouldAttachPastedText
 } from './prompt-paste'
 
-import type { AgentConversationContextUsage } from '@/app/agent-chat/client'
+import type { AgentConversationContextUsage } from '@/app/agent-chat/conversations'
 import type { AiConversationStatus } from './types'
+import {
+  detectT3ComposerTrigger,
+  filterT3ComposerItems,
+  replaceT3ComposerTrigger,
+  T3_COMPOSER_COMMANDS,
+  T3_COMPOSER_SKILLS,
+  type T3ComposerCommandItem
+} from './t3-chat-chrome.logic'
 
 const {
   canRetry = false,
@@ -91,10 +104,17 @@ const captureSessions = browserCaptureSessions
 const attachmentError = ref('')
 const annotatingImage = ref<File | null>(null)
 const imagePreviewUrls = ref(new Map<File, string>())
-const fileDragDepth = ref(0)
-const draggingBrowserCapture = ref(false)
 const dictating = computed(() => speechDictationActiveOwner.value === dictationOwner)
 const textarea = ref<HTMLTextAreaElement | null>(null)
+const composerCursor = ref(modelValue.length)
+const composerFocused = ref(false)
+const dismissedTriggerSignature = ref('')
+const pathItems = ref<T3ComposerCommandItem[]>([])
+const pathSearchLoading = ref(false)
+const pathSearchError = ref(false)
+const activeCommandItemId = ref<string | null>(null)
+let pathSearchTimer: ReturnType<typeof setTimeout> | null = null
+let pathSearchSequence = 0
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
 const hasDraft = computed(() => Boolean(modelValue.trim()))
 const hasAnnotations = computed(() => annotations.length > 0)
@@ -125,7 +145,64 @@ const showRetry = computed(
     (status === 'error' || status === 'stopped') &&
     canRetry
 )
+
+const composerTrigger = computed(() => detectT3ComposerTrigger(modelValue, composerCursor.value))
+const composerTriggerSignature = computed(() => {
+  const trigger = composerTrigger.value
+  return trigger ? `${trigger.kind}:${trigger.rangeStart}:${trigger.rangeEnd}:${trigger.query}` : ''
+})
+const commandItems = computed<T3ComposerCommandItem[]>(() => {
+  const trigger = composerTrigger.value
+  if (!trigger) return []
+  if (trigger.kind === 'path') return pathItems.value
+  if (trigger.kind === 'skill') return filterT3ComposerItems(T3_COMPOSER_SKILLS, trigger.query)
+  return filterT3ComposerItems(T3_COMPOSER_COMMANDS, trigger.query)
+})
+const commandMenuOpen = computed(
+  () =>
+    composerFocused.value &&
+    Boolean(composerTrigger.value) &&
+    composerTriggerSignature.value !== dismissedTriggerSignature.value
+)
+const commandEmptyText = computed(() => {
+  if (composerTrigger.value?.kind === 'path') {
+    return pathSearchError.value ? 'Workspace file search is unavailable.' : 'No matching files.'
+  }
+  if (composerTrigger.value?.kind === 'skill') return 'No matching skills.'
+  return 'No matching command.'
+})
+
+function moveCommandHighlight(delta: number) {
+  const items = commandItems.value
+  if (!items.length) return
+  const current = items.findIndex((item) => item.id === activeCommandItemId.value)
+  const next = current === -1 ? 0 : (current + delta + items.length) % items.length
+  activeCommandItemId.value = items[next]?.id ?? null
+}
+
 function keydown(event: KeyboardEvent) {
+  if (commandMenuOpen.value) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveCommandHighlight(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      dismissedTriggerSignature.value = composerTriggerSignature.value
+      return
+    }
+    if ((event.key === 'Enter' || event.key === 'Tab') && !event.isComposing) {
+      const item = commandItems.value.find(
+        (candidate) => candidate.id === activeCommandItemId.value
+      )
+      if (item) {
+        event.preventDefault()
+        selectCommandItem(item.id)
+        return
+      }
+    }
+  }
   if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'd') {
     event.preventDefault()
     toggleDictation()
@@ -134,6 +211,61 @@ function keydown(event: KeyboardEvent) {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
   event.preventDefault()
   submitPrompt()
+}
+
+function applyComposerReplacement(replacement: string) {
+  const trigger = composerTrigger.value
+  if (!trigger) return
+  const next = replaceT3ComposerTrigger(modelValue, trigger, replacement)
+  dismissedTriggerSignature.value = ''
+  emit('update:modelValue', next.text)
+  composerCursor.value = next.cursor
+  void nextTick(() => {
+    textarea.value?.focus({ preventScroll: true })
+    textarea.value?.setSelectionRange(next.cursor, next.cursor)
+    syncComposerSize()
+  })
+}
+
+function selectCommandItem(id: string) {
+  const item = commandItems.value.find((candidate) => candidate.id === id)
+  if (!item) return
+  if (item.kind === 'path') {
+    applyComposerReplacement(`@${item.value} `)
+    return
+  }
+  if (item.kind === 'skill') {
+    applyComposerReplacement(`/skill:${item.value} `)
+    return
+  }
+  if (item.value === 'skills') {
+    applyComposerReplacement('/skill:')
+    return
+  }
+  if (item.value === 'model') {
+    applyComposerReplacement('')
+    void nextTick(() => {
+      const form = textarea.value?.closest('form')
+      form?.querySelector<HTMLButtonElement>('[data-test-id="agent-model-trigger"]')?.click()
+    })
+    return
+  }
+  applyComposerReplacement('')
+  if (item.value === 'retry') emit('retry')
+  if (item.value === 'stop') emit('stop')
+}
+
+function updateComposerCursor() {
+  composerCursor.value = textarea.value?.selectionStart ?? modelValue.length
+}
+
+function composerFocus() {
+  composerFocused.value = true
+  updateComposerCursor()
+}
+
+function composerBlur() {
+  composerFocused.value = false
 }
 
 function toggleDictation() {
@@ -162,45 +294,14 @@ function clearAnnotations() {
   emit('update:annotations', [])
 }
 
-const MAX_ATTACHMENT_COUNT = 5
-const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
-const MAX_TOTAL_ATTACHMENT_BYTES = 250 * 1024 * 1024
-
-function sameFile(left: File, right: File): boolean {
-  return (
-    left.name === right.name && left.size === right.size && left.lastModified === right.lastModified
-  )
-}
-
 function addFiles(files: File[]) {
   if (!files.length || disabled) return
-  const firstOversized = files.find((file) => file.size > MAX_ATTACHMENT_BYTES)
-  const unique = [...attachments.value]
-  let totalBytes = unique.reduce((total, file) => total + file.size, 0)
-  let exceedsTotal = false
-  for (const file of files) {
-    if (file.size > MAX_ATTACHMENT_BYTES || unique.some((candidate) => sameFile(candidate, file))) {
-      continue
-    }
-    if (unique.length === MAX_ATTACHMENT_COUNT) break
-    if (totalBytes + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
-      exceedsTotal = true
-      continue
-    }
-    unique.push(file)
-    totalBytes += file.size
-  }
-  attachments.value = unique
-  if (firstOversized) {
-    attachmentError.value = `${firstOversized.name} is larger than 100 MB.`
-  } else if (exceedsTotal) {
-    attachmentError.value = 'Attachments must be 250 MB or smaller in total.'
-  } else if (files.some((file) => !unique.some((candidate) => sameFile(candidate, file)))) {
-    attachmentError.value = 'You can attach up to 5 files.'
-  } else {
-    attachmentError.value = ''
-  }
+  const result = appendDraftAttachments(attachments.value, files)
+  attachments.value = result.attachments
+  attachmentError.value = result.error ?? ''
 }
+
+defineExpose({ addFiles })
 
 function addAttachments(event: Event) {
   const target = event.target
@@ -255,50 +356,6 @@ function sessionItemCount(session: (typeof captureSessions.value)[number]) {
 function removeAttachment(file: File) {
   attachments.value = attachments.value.filter((candidate) => candidate !== file)
   attachmentError.value = ''
-}
-
-function carriesAttachment(event: DragEvent): boolean {
-  return (
-    [...(event.dataTransfer?.types ?? [])].includes('Files') ||
-    hasBrowserCaptureDrag(event.dataTransfer)
-  )
-}
-
-function fileDragEnter(event: DragEvent) {
-  if (!carriesAttachment(event) || disabled) return
-  event.preventDefault()
-  event.stopPropagation()
-  fileDragDepth.value += 1
-  draggingBrowserCapture.value = hasBrowserCaptureDrag(event.dataTransfer)
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-function fileDragOver(event: DragEvent) {
-  if (!carriesAttachment(event) || disabled) return
-  event.preventDefault()
-  event.stopPropagation()
-  draggingBrowserCapture.value = hasBrowserCaptureDrag(event.dataTransfer)
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-function fileDragLeave(event: DragEvent) {
-  if (disabled || fileDragDepth.value === 0) return
-  event.preventDefault()
-  event.stopPropagation()
-  fileDragDepth.value = Math.max(0, fileDragDepth.value - 1)
-  if (fileDragDepth.value === 0) draggingBrowserCapture.value = false
-}
-
-function dropFiles(event: DragEvent) {
-  const capture = readBrowserCaptureDrag(event.dataTransfer)
-  const captureAttachment = capture ? browserCaptureAttachmentFromDrag(capture) : null
-  const files = captureAttachment ? [captureAttachment] : [...(event.dataTransfer?.files ?? [])]
-  if (!files.length || disabled) return
-  event.preventDefault()
-  event.stopPropagation()
-  fileDragDepth.value = 0
-  draggingBrowserCapture.value = false
-  addFiles(files)
 }
 
 function paste(event: ClipboardEvent) {
@@ -417,6 +474,8 @@ function input(event: Event) {
   const target = event.target
   if (!(target instanceof HTMLTextAreaElement)) return
   emit('update:modelValue', target.value)
+  composerCursor.value = target.selectionStart
+  dismissedTriggerSignature.value = ''
   syncComposerSize()
 }
 
@@ -427,6 +486,57 @@ watch(
     await nextTick()
     syncComposerSize()
   }
+)
+
+watch(
+  () => {
+    const trigger = composerTrigger.value
+    return trigger?.kind === 'path' ? trigger.query : null
+  },
+  (query) => {
+    if (pathSearchTimer) clearTimeout(pathSearchTimer)
+    pathSearchTimer = null
+    pathSearchSequence += 1
+    const sequence = pathSearchSequence
+    pathItems.value = []
+    pathSearchError.value = false
+    pathSearchLoading.value = query !== null
+    if (query === null) return
+    pathSearchTimer = setTimeout(() => {
+      pathSearchTimer = null
+      void searchAgentWorkspaceFiles(query).then(
+        (files) => {
+          if (sequence !== pathSearchSequence) return
+          pathItems.value = files.map((file) => ({
+            description: 'Workspace file',
+            id: `path:${file.path}`,
+            kind: 'path',
+            label: file.path.split('/').at(-1) ?? file.path,
+            value: file.path
+          }))
+          pathSearchLoading.value = false
+          return undefined
+        },
+        () => {
+          if (sequence !== pathSearchSequence) return
+          pathSearchError.value = true
+          pathSearchLoading.value = false
+          return undefined
+        }
+      )
+    }, 90)
+  },
+  { immediate: true }
+)
+
+watch(
+  commandItems,
+  (items) => {
+    if (!items.some((item) => item.id === activeCommandItemId.value)) {
+      activeCommandItemId.value = items[0]?.id ?? null
+    }
+  },
+  { immediate: true }
 )
 
 onMounted(syncComposerSize)
@@ -443,23 +553,27 @@ function focusComposer(event: PointerEvent) {
 }
 
 onBeforeUnmount(() => {
+  if (pathSearchTimer) clearTimeout(pathSearchTimer)
+  pathSearchSequence += 1
   stopSpeechDictation(dictationOwner)
   releaseImagePreviewUrls()
 })
 </script>
 
 <template>
+  <AiComposerCommandMenu
+    v-if="commandMenuOpen && composerTrigger"
+    :active-item-id="activeCommandItemId"
+    :empty-state-text="commandEmptyText"
+    :is-loading="composerTrigger.kind === 'path' && pathSearchLoading"
+    :items="commandItems"
+    :trigger-kind="composerTrigger.kind"
+    @highlight="activeCommandItemId = $event"
+    @select="selectCommandItem"
+  />
   <form
     data-test-id="ai-prompt-input"
-    :data-drag-active="fileDragDepth > 0 ? 'true' : 'false'"
     class="agent-conversation-column border-chrome-control-border bg-agent-composer focus-within:bg-agent-composer-active relative mb-3 flex shrink-0 flex-col rounded-[12px] border p-1 shadow-agent-composer focus-within:border-surface/15"
-    :class="
-      fileDragDepth > 0 ? 'border-accent/70 bg-agent-composer-active ring-2 ring-accent/15' : ''
-    "
-    @dragenter="fileDragEnter"
-    @dragleave="fileDragLeave"
-    @dragover="fileDragOver"
-    @drop="dropFiles"
     @paste="paste"
     @pointerdown="focusComposer"
     @submit.prevent="submitPrompt"
@@ -578,6 +692,11 @@ onBeforeUnmount(() => {
                   browserCaptureAttachmentSummary(file)?.recordingCount === 1 ? '' : 's'
                 }}
               </template>
+              <template v-if="browserCaptureAttachmentSummary(file)?.annotationCount">
+                · {{ browserCaptureAttachmentSummary(file)?.annotationCount }} note{{
+                  browserCaptureAttachmentSummary(file)?.annotationCount === 1 ? '' : 's'
+                }}
+              </template>
               <template v-if="browserCaptureAttachmentSummary(file)?.traceLinked">
                 · Trace linked
               </template>
@@ -605,6 +724,11 @@ onBeforeUnmount(() => {
                 <template v-if="browserCaptureAttachmentSummary(file)?.captureCount"> · </template>
                 {{ browserCaptureAttachmentSummary(file)?.recordingCount }} video{{
                   browserCaptureAttachmentSummary(file)?.recordingCount === 1 ? '' : 's'
+                }}
+              </template>
+              <template v-if="browserCaptureAttachmentSummary(file)?.annotationCount">
+                · {{ browserCaptureAttachmentSummary(file)?.annotationCount }} note{{
+                  browserCaptureAttachmentSummary(file)?.annotationCount === 1 ? '' : 's'
                 }}
               </template>
               <template v-if="browserCaptureAttachmentSummary(file)?.traceLinked">
@@ -673,7 +797,7 @@ onBeforeUnmount(() => {
             aria-hidden="true"
           >
             <icon-lucide-film v-if="attachmentKind(file) === 'video'" class="size-3.5" />
-            <icon-lucide-file v-else class="size-3.5" />
+            <IconlyIcon name="document" v-else class="size-3.5" />
           </span>
           <span class="min-w-0 leading-none">
             <span class="block truncate text-[12px] font-medium">{{ file.name }}</span>
@@ -695,14 +819,6 @@ onBeforeUnmount(() => {
     <p v-if="attachmentError" class="px-2 pt-1 text-[10px] leading-4 text-red-400" role="status">
       {{ attachmentError }}
     </p>
-    <div
-      v-if="fileDragDepth > 0"
-      aria-hidden="true"
-      class="bg-agent-composer-active/95 pointer-events-none absolute inset-1 z-10 flex items-center justify-center gap-2 rounded-[9px] text-[12px] font-medium text-surface backdrop-blur-sm"
-    >
-      <icon-lucide-upload class="size-4 text-accent" />
-      <span>{{ draggingBrowserCapture ? 'Drop capture to attach' : 'Drop files to attach' }}</span>
-    </div>
     <textarea
       ref="textarea"
       :aria-label="label"
@@ -712,7 +828,12 @@ onBeforeUnmount(() => {
       rows="1"
       class="max-h-40 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 font-sans text-[13px] leading-5 text-agent-ink outline-none select-text placeholder:text-muted/80 disabled:cursor-default disabled:text-muted disabled:placeholder:text-muted"
       @input="input"
+      @blur="composerBlur"
+      @click="updateComposerCursor"
+      @focus="composerFocus"
       @keydown="keydown"
+      @keyup="updateComposerCursor"
+      @select="updateComposerCursor"
     />
     <div data-test-id="ai-prompt-toolbar" class="flex h-8 min-w-0 items-center gap-0.5 px-0.5">
       <DropdownMenuRoot :modal="false" @update:open="onAttachMenuOpenChange">
@@ -724,7 +845,7 @@ onBeforeUnmount(() => {
             :disabled="disabled"
             class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 disabled:text-muted/45 data-[state=open]:bg-hover data-[state=open]:text-surface"
           >
-            <icon-lucide-plus class="size-4" />
+            <IconlyIcon name="plus" class="size-4" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuPortal>
@@ -744,7 +865,7 @@ onBeforeUnmount(() => {
                 @pointerenter="attachSessionsOpen = false"
                 @select="openFilePicker"
               >
-                <icon-lucide-file class="size-3.5 text-muted" />
+                <IconlyIcon name="document" class="size-3.5 text-muted" />
                 <span>Files</span>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -753,7 +874,7 @@ onBeforeUnmount(() => {
                 @pointerenter="attachSessionsOpen = false"
                 @select="openFolderPicker"
               >
-                <icon-lucide-folder class="size-3.5 text-muted" />
+                <IconlyIcon name="folder" class="size-3.5 text-muted" />
                 <span>Folders</span>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -767,7 +888,7 @@ onBeforeUnmount(() => {
               >
                 <icon-lucide-scan-search class="size-3.5 text-muted" />
                 <span class="flex-1">Sessions</span>
-                <icon-lucide-chevron-right class="size-3.5 text-muted" />
+                <IconlyIcon name="arrow-right" class="size-3.5 text-muted" />
               </DropdownMenuItem>
             </div>
             <div
@@ -865,7 +986,7 @@ onBeforeUnmount(() => {
         @click="toggleDictation"
       >
         <icon-lucide-mic-off v-if="dictating" class="size-4 stroke-[1.8]" />
-        <icon-lucide-mic v-else class="size-4 stroke-[1.8]" />
+        <IconlyIcon name="voice" v-else class="size-4 stroke-[1.8]" />
       </button>
       <button
         v-else

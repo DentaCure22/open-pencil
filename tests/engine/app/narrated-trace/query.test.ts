@@ -21,6 +21,7 @@ const PRIMARY_SCOPE: NarratedTraceScope = {
 const RUNTIME_TAB_BINDING_ID = 'trace-runtime-tab:test'
 
 function traceSession(input: {
+  aliases?: string[]
   anchor?: NarratedTraceSpatialAnchor
   bounds?: Rect
   id: string
@@ -28,9 +29,11 @@ function traceSession(input: {
   startedAt?: string
   targetId?: string
   targetPath?: string[]
+  tag?: string
   text: string
 }): NarratedTraceSession {
   return {
+    ...(input.aliases ? { aliases: input.aliases } : {}),
     contextDraft: [{ included: true, removed: false, sourceEventId: `${input.id}-event` }],
     durationMs: 30_000,
     events: [
@@ -51,6 +54,7 @@ function traceSession(input: {
     id: input.id,
     scope: input.scope,
     startedAt: input.startedAt ?? '2026-07-20T12:00:00.000Z',
+    ...(input.tag ? { tag: input.tag } : {}),
     title: input.text
   }
 }
@@ -106,6 +110,40 @@ function spokenTurn(
 }
 
 describe('Narrated Trace assistant query', () => {
+  test('resolves a voice-friendly session tag exactly across scopes', async () => {
+    const tagged = traceSession({
+      aliases: ['old-patient-flow'],
+      id: 'tagged-session',
+      scope: PRIMARY_SCOPE,
+      tag: 'patient-flow',
+      text: 'Selected patient header'
+    })
+    const unrelated = traceSession({
+      id: 'unrelated-session',
+      scope: { ...PRIMARY_SCOPE, pageId: 'page-b' },
+      tag: 'billing-flow',
+      text: 'Selected invoice list'
+    })
+    const fixture = queryFixture([unrelated, tagged])
+
+    const result = await queryNarratedTraceRecords(
+      { sessionTag: 'Patient Flow' },
+      fixture.dependencies
+    )
+
+    expect(result).toMatchObject({
+      matches: [
+        {
+          matchedBy: ['session-tag'],
+          sessionId: 'tagged-session',
+          tag: 'patient-flow'
+        }
+      ],
+      status: 'matched'
+    })
+    expect(fixture.reads).toEqual(['tagged-session'])
+  })
+
   test('reads only the exact Trace window linked to the latest scoped spoken turn', async () => {
     const exact = traceSession({
       id: 'exact-spoken-window',

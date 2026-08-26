@@ -3,58 +3,26 @@ import { createHash } from 'node:crypto'
 import type { AgentConversationMessage, AgentConversationThread } from '#mcp/agent-router/contracts'
 
 import {
-  antigravityActivities,
-  antigravityResolvedOutput,
-  antigravityThoughtText,
-  antigravityToolImages,
-  type AntigravityActivity
-} from './antigravity-activity'
-import { closingTextForFamily, piClosingFamily } from './closing-text'
+  isRecord,
+  latestUserTurnStart,
+  piEventText,
+  safeActivityText,
+  upsertMessage
+} from './event-core'
 import { MAX_IMAGE_BASE64_LENGTH } from './image-preview'
+import { closingTextForFamily, piClosingFamily } from './providers/closing'
+import {
+  normalizeProviderToolOutput,
+  providerOwnsThinking,
+  providerThinkingBlockKey,
+  syncProviderActivities,
+  syncProviderThought
+} from './providers/events'
 import { collapseDuplicateTurnResponses, normalizedThreadText } from './thread-memory'
 
-const MAX_ACTIVITY_TEXT = 12_000
 const MAX_STATUS_TEXT = 160
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-export function piEventText(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value)) return value.map(piEventText).filter(Boolean).join('\n')
-  if (!isRecord(value)) return ''
-  if (typeof value.text === 'string') return value.text
-  if (Array.isArray(value.content)) return piEventText(value.content)
-  if (typeof value.summary === 'string') return value.summary
-  if (typeof value.message === 'string') return value.message
-  if (typeof value.errorMessage === 'string') return value.errorMessage
-  return ''
-}
-
-function serialized(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value === undefined || value === null) return ''
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
-}
-
-function safeActivityText(value: unknown): string {
-  return (piEventText(value).trim() || serialized(value))
-    .replace(/(bearer\s+)[^\s"']+/gi, '$1[redacted]')
-    .replace(
-      /("(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)"\s*:\s*)"[^"]*"/gi,
-      '$1"[redacted]"'
-    )
-    .replace(
-      /((?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)\s*[=:]\s*)[^\s,"']+/gi,
-      '$1[redacted]'
-    )
-    .slice(0, MAX_ACTIVITY_TEXT)
-}
+export { piEventText } from './event-core'
 
 type PiImage = { data: string; mimeType: string }
 
@@ -78,49 +46,6 @@ function toolImages(value: unknown, name: string): Array<{ alt: string; url: str
     alt: name === 'openpencil_board_screenshot' ? 'Board screenshot' : `${name} image`,
     url: `data:${image.mimeType};base64,${image.data}`
   }))
-}
-
-function mergeAssistantParts(
-  previous: AgentConversationMessage['parts'],
-  next: AgentConversationMessage['parts']
-): AgentConversationMessage['parts'] {
-  if (!next?.length) return previous
-  if (!previous?.length) return next
-  const previousPart = previous.length === 1 ? previous[0] : undefined
-  const nextPart = next.length === 1 ? next[0] : undefined
-  if (previousPart?.type === 'tool' && nextPart?.type === 'tool') {
-    return [{ ...previousPart, ...nextPart }]
-  }
-  const nextTypes = new Set(next.map((part) => part.type))
-  return [...previous.filter((part) => !nextTypes.has(part.type)), ...next]
-}
-
-function upsertMessage(thread: AgentConversationThread, message: AgentConversationMessage): void {
-  const index = thread.messages.findIndex((candidate) => candidate.id === message.id)
-  if (index !== -1) {
-    const previous = thread.messages[index]
-    const incomingCommentaryOnly =
-      !message.text.trim() && Boolean(message.parts?.some((part) => part.type === 'commentary'))
-    const leftover = previous.text.trim()
-    let parts = mergeAssistantParts(previous.parts, message.parts)
-    if (incomingCommentaryOnly && leftover) {
-      const already = parts?.some(
-        (part) => part.type === 'commentary' && part.text.trim() === leftover
-      )
-      if (!already) {
-        parts = [{ state: 'complete', text: leftover, type: 'commentary' }, ...(parts ?? [])]
-      }
-    }
-    thread.messages[index] = {
-      ...previous,
-      ...message,
-      createdAt: previous.createdAt,
-      text: message.text.trim() ? message.text : incomingCommentaryOnly ? '' : previous.text,
-      ...(parts?.length ? { parts } : {})
-    }
-    return
-  }
-  thread.messages.push(message)
 }
 
 function toolName(event: Record<string, unknown>, previousName?: string): string {
@@ -167,6 +92,40 @@ function assistantId(event: Record<string, unknown>, turnKey: string): string {
 
 function streamingAssistantId(turnKey: string): string {
   return `pi-agent:${turnKey}:assistant`
+}
+
+function streamingCommentaryMessageId(
+  thread: AgentConversationThread,
+  turnKey: string,
+  text = ''
+): string {
+  const base = streamingAssistantId(turnKey)
+  const candidates = thread.messages
+    .slice(latestUserTurnStart(thread))
+    .filter((message) => message.id === base || message.id.startsWith(`${base}:commentary:`))
+  const needle = normalizedThreadText(text)
+  const exact = needle
+    ? candidates.findLast((message) =>
+        message.parts?.some(
+          (part) => part.type === 'commentary' && normalizedThreadText(part.text) === needle
+        )
+      )
+    : undefined
+  if (exact) return exact.id
+  const latest = candidates.at(-1)
+  if (!latest) return base
+  const latestIndex = thread.messages.indexOf(latest)
+  const followedByTool = thread.messages
+    .slice(latestIndex + 1)
+    .some((message) => message.parts?.some((part) => part.type === 'tool'))
+  if (!followedByTool) return latest.id
+  let ordinal = candidates.length
+  while (
+    thread.messages.some((message) => message.id === `${base}:commentary:${String(ordinal)}`)
+  ) {
+    ordinal += 1
+  }
+  return `${base}:commentary:${String(ordinal)}`
 }
 
 function preSteerAssistantId(turnKey: string, steeringMessageId: string): string {
@@ -222,24 +181,59 @@ export function restorePiStreamingAssistant(
   Reflect.deleteProperty(current, 'completedAt')
 }
 
-function antigravityToolPrefix(turnKey: string, contentIndex: number): string {
-  return `pi-agy-tool:${turnKey}:${String(contentIndex)}:`
-}
-
-function antigravityThoughtId(turnKey: string, contentIndex: number): string {
-  return `pi-agy-thought:${turnKey}:${String(contentIndex)}`
-}
-
 function providerReasoningId(turnKey: string, contentIndex: number): string {
   return `pi-thinking:${turnKey}:${String(contentIndex)}`
 }
 
-function isPlaceholderReasoning(text: string): boolean {
-  return ['thinking', 'thought'].includes(text.trim().toLowerCase())
+function providerReasoningMessageId(
+  thread: AgentConversationThread,
+  turnKey: string,
+  contentIndex: number,
+  text: string
+): string {
+  const base = providerReasoningId(turnKey, contentIndex)
+  const turnStart = latestUserTurnStart(thread)
+  const candidates = thread.messages
+    .slice(turnStart)
+    .filter((message) => message.id === base || message.id.startsWith(`${base}:`))
+  const needle = normalizedThreadText(text)
+  const exact = needle
+    ? candidates.findLast((message) =>
+        message.parts?.some(
+          (part) => part.type === 'reasoning' && normalizedThreadText(part.text) === needle
+        )
+      )
+    : undefined
+  if (exact) return exact.id
+  const latest = candidates.at(-1)
+  if (!latest) return base
+  const latestIndex = thread.messages.indexOf(latest)
+  const followedByTool = thread.messages
+    .slice(latestIndex + 1)
+    .some((message) => message.parts?.some((part) => part.type === 'tool'))
+  if (!followedByTool) return latest.id
+  let ordinal = candidates.length
+  while (thread.messages.some((message) => message.id === `${base}:${String(ordinal)}`)) {
+    ordinal += 1
+  }
+  return `${base}:${String(ordinal)}`
 }
 
-function isAntigravityThread(thread: AgentConversationThread): boolean {
-  return piClosingFamily(undefined, thread.model) === 'antigravity'
+function latestProviderReasoningId(
+  thread: AgentConversationThread,
+  turnKey: string,
+  contentIndex: number
+): string {
+  const base = providerReasoningId(turnKey, contentIndex)
+  return (
+    thread.messages
+      .slice(latestUserTurnStart(thread))
+      .findLast((message) => message.id === base || message.id.startsWith(`${base}:`))?.id ?? base
+  )
+}
+
+function isPlaceholderReasoning(text: string): boolean {
+  return ['thinking', 'thought'].includes(text.trim().toLowerCase())
 }
 
 function syncProviderReasoning(
@@ -250,9 +244,9 @@ function syncProviderReasoning(
   complete: boolean,
   now: string
 ): void {
-  if (isAntigravityThread(thread)) return
+  if (providerOwnsThinking(thread)) return
   const text = (typeof value === 'string' ? value : piEventText(value)).trim()
-  const id = providerReasoningId(turnKey, contentIndex)
+  const id = providerReasoningMessageId(thread, turnKey, contentIndex, text)
   if (!text || isPlaceholderReasoning(text)) {
     if (!complete) return
     const index = thread.messages.findIndex((message) => message.id === id)
@@ -315,186 +309,6 @@ function accumulateThinking(
   return buffers.get(key) ?? ''
 }
 
-function antigravityActivityIdentity(activity: AntigravityActivity): {
-  input?: string
-  name: string
-} {
-  const input = activity.input ?? (activity.type === 'edit' ? activity.description : undefined)
-  return {
-    ...(input ? { input } : {}),
-    name: activity.type === 'edit' ? 'edit' : activity.name
-  }
-}
-
-function antigravityActivityStatus(activity: AntigravityActivity): string {
-  return activity.type === 'edit'
-    ? `Editing ${activity.description}…`
-    : `${activity.name.replaceAll('_', ' ')}…`
-}
-
-function antigravityActivityPart(activity: AntigravityActivity, running: boolean) {
-  const { input, name } = antigravityActivityIdentity(activity)
-  const images =
-    activity.type === 'tool' ? antigravityToolImages(activity.name, activity.output ?? '') : []
-  return {
-    ...(input ? { input } : {}),
-    ...(images.length ? { images } : {}),
-    name,
-    ...(activity.output ? { output: activity.output } : {}),
-    state: running ? ('running' as const) : ('success' as const),
-    type: 'tool' as const
-  }
-}
-
-function latestUserTurnStart(thread: AgentConversationThread): number {
-  return thread.messages.findLastIndex((message) => message.role === 'user') + 1
-}
-
-function antigravityToolGroupPrefix(id: string): string | null {
-  if (!id.startsWith('pi-agy-tool:')) return null
-  const separator = id.lastIndexOf(':')
-  if (separator === -1 || !/^\d+$/.test(id.slice(separator + 1))) return null
-  return id.slice(0, separator + 1)
-}
-
-function reconcileCompletedAntigravityActivities(
-  thread: AgentConversationThread,
-  activities: AntigravityActivity[],
-  now: string
-): boolean {
-  const groups = new Map<string, AgentConversationMessage[]>()
-  for (const message of thread.messages.slice(latestUserTurnStart(thread))) {
-    const prefix = antigravityToolGroupPrefix(message.id)
-    if (!prefix) continue
-    const group = groups.get(prefix) ?? []
-    group.push(message)
-    groups.set(prefix, group)
-  }
-  const match = [...groups.values()].reverse().find(
-    (messages) =>
-      messages.length === activities.length &&
-      messages.every((message, index) => {
-        const part = message.parts?.find((candidate) => candidate.type === 'tool')
-        const activity = activities[index]
-        if (part?.type !== 'tool' || !activity) return false
-        const identity = antigravityActivityIdentity(activity)
-        return part.name === identity.name && (part.input ?? '') === (identity.input ?? '')
-      })
-  )
-  if (!match) return false
-  for (const [index, message] of match.entries()) {
-    const messageIndex = thread.messages.indexOf(message)
-    const activity = activities[index]
-    if (messageIndex === -1 || !activity) continue
-    thread.messages[messageIndex] = {
-      ...message,
-      completedAt: now,
-      parts: [antigravityActivityPart(activity, false)],
-      text: ''
-    }
-  }
-  return true
-}
-
-function appendAntigravityActivities(
-  thread: AgentConversationThread,
-  activities: AntigravityActivity[],
-  prefix: string,
-  offset: number,
-  now: string,
-  streaming: boolean
-): void {
-  for (const [index, activity] of activities.entries()) {
-    const running = streaming && index === activities.length - 1
-    upsertMessage(thread, {
-      ...(running ? {} : { completedAt: now }),
-      createdAt: now,
-      id: `${prefix}${String(offset + index)}`,
-      parts: [antigravityActivityPart(activity, running)],
-      role: 'assistant',
-      text: ''
-    })
-  }
-}
-
-function syncAntigravityActivities(
-  thread: AgentConversationThread,
-  value: unknown,
-  turnKey: string,
-  contentIndex: number,
-  now: string,
-  streaming: boolean
-): string | null {
-  const activities = antigravityActivities(value, safeActivityText)
-  const prefix = antigravityToolPrefix(turnKey, contentIndex)
-  if (
-    activities.length &&
-    !streaming &&
-    !thread.messages.some((message) => message.id.startsWith(prefix)) &&
-    reconcileCompletedAntigravityActivities(thread, activities, now)
-  ) {
-    const latest = activities.at(-1)
-    return latest ? antigravityActivityStatus(latest) : null
-  }
-  const keep = new Set(activities.map((_, index) => `${prefix}${String(index)}`))
-  thread.messages = thread.messages.filter(
-    (message) => !message.id.startsWith(prefix) || keep.has(message.id)
-  )
-  if (!activities.length) return null
-  appendAntigravityActivities(thread, activities, prefix, 0, now, streaming)
-  const latest = activities.at(-1)
-  return latest ? antigravityActivityStatus(latest) : null
-}
-
-function syncAntigravityThought(
-  thread: AgentConversationThread,
-  value: unknown,
-  turnKey: string,
-  contentIndex: number,
-  now: string,
-  complete: boolean
-): string | null {
-  const id = antigravityThoughtId(turnKey, contentIndex)
-  if (!isAntigravityThread(thread)) return null
-  const text = antigravityThoughtText(value)
-  if (!text) {
-    const index = thread.messages.findIndex((message) => message.id === id)
-    if (index !== -1) thread.messages.splice(index, 1)
-    return null
-  }
-  if (complete && !thread.messages.some((message) => message.id === id)) {
-    const existing = thread.messages
-      .slice(latestUserTurnStart(thread))
-      .findLast(
-        (message) =>
-          message.id.startsWith('pi-agy-thought:') &&
-          message.parts?.some(
-            (part) => part.type === 'commentary' && part.text.trim() === text.trim()
-          )
-      )
-    if (existing) {
-      existing.completedAt = now
-      existing.parts = [{ state: 'complete', text, type: 'commentary' }]
-      return text
-    }
-  }
-  upsertMessage(thread, {
-    ...(complete ? { completedAt: now } : {}),
-    createdAt: now,
-    id,
-    parts: [
-      {
-        state: complete ? 'complete' : 'streaming',
-        text,
-        type: 'commentary'
-      }
-    ],
-    role: 'assistant',
-    text: ''
-  })
-  return text
-}
-
 function markRunning(thread: AgentConversationThread, detail = 'Pi is running.'): boolean {
   const current = thread.recentUpdate.trim()
   if (
@@ -535,7 +349,7 @@ function applyTool(
   if (name === 'memory_search' || name === 'memory_read') return false
   const ended = event.type === 'tool_execution_end'
   const input = safeActivityText(event.args)
-  const output = antigravityResolvedOutput(
+  const output = normalizeProviderToolOutput(
     name,
     safeActivityText(event.result ?? event.partialResult)
   )
@@ -613,7 +427,7 @@ function updateTextPhase(
 
 function syncStreamingCommentary(
   thread: AgentConversationThread,
-  turnKey: string,
+  id: string,
   text: string,
   complete: boolean,
   now: string
@@ -622,7 +436,7 @@ function syncStreamingCommentary(
   upsertMessage(thread, {
     ...(complete ? { completedAt: now } : {}),
     createdAt: now,
-    id: streamingAssistantId(turnKey),
+    id,
     parts: [
       {
         state: complete ? 'complete' : 'streaming',
@@ -647,7 +461,27 @@ function applyMessageUpdate(
   if (update.type.startsWith('thinking_')) {
     const complete = update.type === 'thinking_end'
     const thinking = accumulateThinking(thread, turnKey, contentIndex, update)
-    const activityStatus = syncAntigravityActivities(
+    if (providerOwnsThinking(thread)) {
+      const blockKey = providerThinkingBlockKey(
+        thread,
+        turnKey,
+        contentIndex,
+        update.type === 'thinking_start'
+      )
+      const thought = syncProviderThought(thread, thinking, blockKey, contentIndex, now, complete)
+      const activityStatus = syncProviderActivities(
+        thread,
+        thinking,
+        blockKey,
+        contentIndex,
+        now,
+        !complete
+      )
+      thread.recentUpdate =
+        activityStatus ?? (thought ? thought.slice(0, MAX_STATUS_TEXT) : 'Working…')
+      return true
+    }
+    const activityStatus = syncProviderActivities(
       thread,
       thinking,
       turnKey,
@@ -655,15 +489,9 @@ function applyMessageUpdate(
       now,
       !complete
     )
-    if (isAntigravityThread(thread)) {
-      const thought = syncAntigravityThought(thread, thinking, turnKey, contentIndex, now, complete)
-      thread.recentUpdate =
-        activityStatus ?? (thought ? thought.slice(0, MAX_STATUS_TEXT) : 'Working…')
-      return true
-    }
     if (activityStatus) {
       const index = thread.messages.findIndex(
-        (message) => message.id === providerReasoningId(turnKey, contentIndex)
+        (message) => message.id === latestProviderReasoningId(thread, turnKey, contentIndex)
       )
       if (index !== -1) thread.messages.splice(index, 1)
       thread.recentUpdate = activityStatus.slice(0, MAX_STATUS_TEXT)
@@ -677,15 +505,16 @@ function applyMessageUpdate(
   }
   if (update.type === 'text_delta' && typeof update.delta === 'string') {
     const id = streamingAssistantId(turnKey)
-    const existing = thread.messages.find((message) => message.id === id)
     const phase = updateTextPhase(update, contentIndex)
+    const commentaryId = phase === 'commentary' ? streamingCommentaryMessageId(thread, turnKey) : id
+    const existing = thread.messages.find((message) => message.id === commentaryId)
     const previous =
       phase === 'commentary'
         ? (existing?.parts?.find((part) => part.type === 'commentary')?.text ?? '')
         : (existing?.text ?? '')
     const text = `${previous}${update.delta}`
     if (phase === 'commentary') {
-      syncStreamingCommentary(thread, turnKey, text, false, now)
+      syncStreamingCommentary(thread, commentaryId, text, false, now)
       if (!/ · \d+s$/.test(thread.recentUpdate) && !thread.recentUpdate.endsWith('…')) {
         thread.recentUpdate = 'Working…'
       }
@@ -702,7 +531,13 @@ function applyMessageUpdate(
   }
   if (update.type === 'text_end' && typeof update.content === 'string') {
     if (updateTextPhase(update, contentIndex) === 'commentary') {
-      syncStreamingCommentary(thread, turnKey, update.content, true, now)
+      syncStreamingCommentary(
+        thread,
+        streamingCommentaryMessageId(thread, turnKey, update.content),
+        update.content,
+        true,
+        now
+      )
       thread.recentUpdate = update.content.trim().slice(0, 500)
       return true
     }
@@ -726,7 +561,13 @@ function syncCompletedThinking(
   for (let index = 0; index < event.message.content.length; index += 1) {
     const content = event.message.content[index]
     if (!isRecord(content) || content.type !== 'thinking') continue
-    const activityStatus = syncAntigravityActivities(
+    if (providerOwnsThinking(thread)) {
+      const blockKey = providerThinkingBlockKey(thread, turnKey, index, false)
+      syncProviderThought(thread, content.thinking, blockKey, index, now, true)
+      syncProviderActivities(thread, content.thinking, blockKey, index, now, false)
+      continue
+    }
+    const activityStatus = syncProviderActivities(
       thread,
       content.thinking,
       turnKey,
@@ -734,10 +575,6 @@ function syncCompletedThinking(
       now,
       false
     )
-    if (isAntigravityThread(thread)) {
-      syncAntigravityThought(thread, content.thinking, turnKey, index, now, true)
-      continue
-    }
     if (!activityStatus) {
       syncProviderReasoning(thread, turnKey, index, content.thinking, true, now)
     }
@@ -820,7 +657,7 @@ function findTurnCommentary(
 ): AgentConversationMessage | undefined {
   const needle = normalizedThreadText(text)
   if (!needle) return undefined
-  return messagesAfterLastUser(thread).find((candidate) =>
+  return messagesAfterLastUser(thread).findLast((candidate) =>
     candidate.parts?.some(
       (part) => part.type === 'commentary' && normalizedThreadText(part.text) === needle
     )
@@ -936,8 +773,14 @@ function applyAssistantText(
   const answer = finalText || (!toolTurn ? fallbackText || streamedText : '')
   if (!commentary.length && !answer) return markRunning(thread)
   const reuseStreamingAnswer = Boolean(answer) && Boolean(streamedText)
-  const reuseStreamingCommentary =
-    commentary.length === 1 && streamingIndex !== -1 && Boolean(commentary[0]?.text.trim())
+  const completedCommentaryText = commentary.length === 1 ? commentary[0]?.text.trim() : ''
+  const streamedCommentary = completedCommentaryText
+    ? (findTurnCommentary(thread, completedCommentaryText) ??
+      messagesAfterLastUser(thread).findLast((candidate) =>
+        candidate.parts?.some((part) => part.type === 'commentary' && part.state === 'streaming')
+      ))
+    : undefined
+  const reuseStreamingCommentary = Boolean(streamedCommentary)
   if (
     streamingIndex !== -1 &&
     streamingId !== id &&
@@ -946,13 +789,7 @@ function applyAssistantText(
   ) {
     thread.messages.splice(streamingIndex, 1)
   }
-  syncCompletedCommentary(
-    thread,
-    id,
-    commentary,
-    now,
-    reuseStreamingCommentary ? streamingId : undefined
-  )
+  syncCompletedCommentary(thread, id, commentary, now, streamedCommentary?.id)
   if (answer) {
     const existing = findTurnAnswer(thread, answer)
     if (existing) {

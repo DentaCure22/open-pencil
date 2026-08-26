@@ -198,6 +198,8 @@ describe('MCP stdio transport', () => {
     expect(names).toContain('list_agent_chats')
     expect(names).toContain('get_agent_chat_context')
     expect(names).toContain('dispatch_work')
+    expect(names).toContain('workmap_query')
+    expect(names).toContain('workmap_apply')
     expect(names).toContain('set_theme')
     expect(names).not.toContain('save_file')
     expect(names).not.toContain('get_codegen_prompt')

@@ -1,0 +1,66 @@
+{
+  "source": "artifacts/product-design/work-map-project-icons/expanding-viewport/open-cell.png",
+  "source_pixels": [
+    768,
+    1024
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    254
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    19,
+    177,
+    594,
+    737
+  ],
+  "trimmed_pixels": [
+    575,
+    560
+  ],
+  "prepared_pixels": [
+    667,
+    667
+  ],
+  "padding_fraction": 0.08,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-project/expanding-viewport-open-master.png",
+      "pixels": [
+        667,
+        667
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-project/expanding-viewport-open.png",
+      "pixels": [
+        20,
+        20
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-project/expanding-viewport-open@2x.png",
+      "pixels": [
+        40,
+        40
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-project/expanding-viewport-open@3x.png",
+      "pixels": [
+        60,
+        60
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -3,10 +3,16 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { CodexConversationThread } from '#mcp/codex/router'
+import type { AgentConversationThread } from '#mcp/agent-router/contracts'
 import { PiAgentRouter } from '#mcp/pi/router'
 
-function legacyDispatcherThread(): CodexConversationThread {
+type LegacyDispatcherThread = AgentConversationThread & {
+  nativeConversationId: string
+  originThreadId: null
+  routingKey: string
+}
+
+function legacyDispatcherThread(): LegacyDispatcherThread {
   return {
     canFollowUp: true,
     createdAt: '2026-08-21T12:00:00.000Z',

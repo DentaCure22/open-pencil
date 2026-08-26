@@ -3,12 +3,12 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { resolveAgentSelection } from '#mcp/agent-models/catalog'
 import {
   FALLBACK_PI_MODELS,
   loadPiAgentModels,
-  parsePiListModels,
-  validatePiSelection
-} from '#mcp/pi/catalog'
+  parsePiListModels
+} from '#mcp/pi/board-model-catalog'
 
 const LISTED = `
 provider      model                          context  max-out  thinking  images
@@ -148,7 +148,7 @@ describe('Pi model catalog', () => {
     expect(models[0]?.id).toBe('xai-auth/grok-4.6')
     expect(models.map((model) => model.id)).not.toContain('xai/grok-4.6')
     expect(models.map((model) => model.id)).toContain('cursor/composer-2.5-fast')
-    expect(validatePiSelection(models, 'cursor/composer-2.5-fast')).toEqual({
+    expect(resolveAgentSelection(models, 'cursor/composer-2.5-fast')).toEqual({
       effort: 'medium',
       model: 'cursor/composer-2.5-fast'
     })

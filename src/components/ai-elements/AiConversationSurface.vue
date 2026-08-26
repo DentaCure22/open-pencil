@@ -2,8 +2,12 @@
 import { refAutoReset, useClipboard, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
-import type { AgentConversationContextUsage, AgentConversationTurn } from '@/app/agent-chat/client'
+import type {
+  AgentConversationContextUsage,
+  AgentConversationTurn
+} from '@/app/agent-chat/conversations'
 import type { AgentPromptAnnotation, AgentPromptSubmission } from '@/app/agent-chat/models'
+import { carriesAttachmentDrag, readAttachmentDrag } from '@/app/agent-chat/attachments'
 import {
   speechDictationActiveOwner,
   speechDictationAvailable,
@@ -11,6 +15,7 @@ import {
   stopSpeechDictation
 } from '@/app/speech-dictation'
 import AiActivityDisclosure from './AiActivityDisclosure.vue'
+import AiComposerBannerStack from './AiComposerBannerStack.vue'
 import AiConversation from './AiConversation.vue'
 import AiConversationEmpty from './AiConversationEmpty.vue'
 import AiConversationNavigationRail from './AiConversationNavigationRail.vue'
@@ -18,11 +23,14 @@ import AiImageGeneration from './AiImageGeneration.vue'
 import AiMessageItem from './AiMessage.vue'
 import AiPromptInput from './AiPromptInput.vue'
 import AiStatusIndicator from './AiStatusIndicator.vue'
+import AiTurnChanges from './AiTurnChanges.vue'
 import AiVideoGeneration from './AiVideoGeneration.vue'
+import type { T3ComposerBannerItem } from './T3ComposerBannerStack'
 import {
   conversationNavigationItems,
   type ConversationNavigationItem
 } from './conversation-navigation'
+import { parseT3DiffAnnotationSourceId } from './t3-right-panel.logic'
 import { conversationRuns, type ConversationRun } from './conversation-runs'
 import {
   conversationPaintedRuns,
@@ -32,7 +40,11 @@ import {
   conversationWindowFollowsLatest,
   nextConversationRunHeight
 } from './conversation-window'
-import type { AiConversationStatus, AiMessage } from './types'
+import type {
+  AiConversationStatus,
+  AiMessage,
+  AiTurnChanges as AiTurnChangesPayload
+} from './types'
 
 const {
   annotations,
@@ -40,6 +52,7 @@ const {
   canRetry = false,
   canStop = false,
   chapterRailReady = true,
+  composerBanners,
   contextUsage,
   disabled = false,
   emptyDescription,
@@ -62,6 +75,7 @@ const {
   canRetry?: boolean
   canStop?: boolean
   chapterRailReady?: boolean
+  composerBanners?: T3ComposerBannerItem[]
   contextUsage?: AgentConversationContextUsage
   disabled?: boolean
   emptyDescription?: string
@@ -100,8 +114,50 @@ type AnnotationMarker = {
   top: number
 }
 
-const runs = computed<ConversationRun[]>(() => conversationRuns(messages))
 const busy = computed(() => ['streaming', 'submitted'].includes(status))
+const dismissedComposerBanners = ref(new Set<string>())
+const fallbackComposerBanners = computed<T3ComposerBannerItem[]>(() => {
+  if (composerBanners !== undefined) return composerBanners
+  if (status === 'submitted') {
+    return [
+      {
+        description: 'Starting the agent and opening the live stream.',
+        id: 'status:connecting',
+        title: 'Connecting',
+        variant: 'info'
+      }
+    ]
+  }
+  if ((status === 'error' || status === 'stopped') && statusMessage) {
+    return [
+      {
+        ...(canRetry ? { action: 'retry' as const, actionLabel: 'Retry' } : {}),
+        description: statusMessage,
+        dismissible: true,
+        id: `status:${status}`,
+        title: status === 'stopped' ? 'Response stopped' : 'Message not sent',
+        variant: 'error'
+      }
+    ]
+  }
+  if (status === 'needs_attention' && statusMessage) {
+    return [
+      {
+        description: statusMessage,
+        id: 'status:failed',
+        title: 'Task failed',
+        variant: 'error'
+      }
+    ]
+  }
+  return []
+})
+const visibleComposerBanners = computed(() =>
+  fallbackComposerBanners.value.filter((item) => !dismissedComposerBanners.value.has(item.id))
+)
+const hasComposerBanner = computed(() => visibleComposerBanners.value.length > 0)
+const runs = computed<ConversationRun[]>(() => conversationRuns(messages, { active: busy.value }))
+const latestTurnChanges = computed(() => (busy.value ? null : (runs.value.at(-1)?.changes ?? null)))
 const navigationItems = computed(() => {
   if (!chapterRailReady) return []
   return turns?.length ? turns : conversationNavigationItems(messages)
@@ -112,13 +168,17 @@ const transcriptScrollTop = ref(0)
 const transcriptViewportHeight = ref(0)
 const runObservers = new Map<string, ResizeObserver>()
 let prependHeight: number | null = null
+const conversation = ref<{
+  scrollToLatest: (animation?: 'instant' | 'smooth') => Promise<boolean>
+} | null>(null)
+const promptInput = ref<{ addFiles: (files: File[]) => void } | null>(null)
 const conversationThreadId = computed(() =>
   scope?.startsWith('task:') ? scope.slice('task:'.length) : undefined
 )
 const lastRunHasActivity = computed(() => Boolean(runs.value.at(-1)?.activity.length))
 const runWindow = computed(() => {
   const list = runs.value
-  const alwaysIds = [pendingRevealId.value]
+  const alwaysIds: Array<string | null | undefined> = [pendingRevealId.value]
   if (busy.value) {
     const latest = list.at(-1)
     if (latest) alwaysIds.push(latest.id, latest.prompt?.id)
@@ -215,6 +275,8 @@ const annotationMarkers = computed<AnnotationMarker[]>(() =>
 
 const emit = defineEmits<{
   'load-older': []
+  'open-diff': [changes: AiTurnChangesPayload]
+  'open-diff-annotation': [annotation: AgentPromptAnnotation]
   'reveal-chapter': [chapterId: string]
   retry: []
   send: [submission: AgentPromptSubmission]
@@ -299,24 +361,20 @@ watch(
   { immediate: true }
 )
 
-async function scrollTranscriptToLatest() {
+async function scrollTranscriptToLatest(animation: 'instant' | 'smooth' = 'instant') {
   await nextTick()
-  requestAnimationFrame(() => {
-    const viewport = surface.value?.querySelector<HTMLElement>(
-      '[data-test-id="ai-conversation-viewport"]'
-    )
-    if (viewport) viewport.scrollTop = viewport.scrollHeight
-  })
+  await conversation.value?.scrollToLatest(animation)
+  syncTranscriptWindow()
 }
 
 function submitPrompt(submission: AgentPromptSubmission) {
   emit('send', submission)
-  void scrollTranscriptToLatest()
+  void scrollTranscriptToLatest('smooth')
 }
 
 function retryPrompt() {
   emit('retry')
-  void scrollTranscriptToLatest()
+  void scrollTranscriptToLatest('smooth')
 }
 
 function selectionNodeInsideTranscript(node: Node | null): boolean {
@@ -605,6 +663,10 @@ function annotationCommentInput(event: Event) {
 async function openAnnotation(annotationId: string) {
   const annotation = annotations.find((candidate) => candidate.id === annotationId)
   if (!annotation) return
+  if (parseT3DiffAnnotationSourceId(annotation.sourceMessageId)) {
+    emit('open-diff-annotation', annotation)
+    return
+  }
   const root = messageElement(annotation.sourceMessageId)
   if (!root) return
   root.scrollIntoView({ block: 'nearest' })
@@ -716,6 +778,77 @@ watch(
   { immediate: true }
 )
 
+const surfaceDragActive = ref(false)
+
+function resetSurfaceDrag() {
+  surfaceDragActive.value = false
+}
+
+function dragRemainsInsideSurface(event: DragEvent): boolean {
+  const current = event.currentTarget
+  if (!(current instanceof HTMLElement)) return false
+  const related = event.relatedTarget
+  if (related instanceof Node) return current.contains(related)
+  const bounds = current.getBoundingClientRect()
+  return (
+    event.clientX > bounds.left &&
+    event.clientX < bounds.right &&
+    event.clientY > bounds.top &&
+    event.clientY < bounds.bottom
+  )
+}
+
+function onSurfaceDragEnter(event: DragEvent) {
+  if (!carriesAttachmentDrag(event.dataTransfer) || disabled) return
+  event.preventDefault()
+  event.stopPropagation()
+  surfaceDragActive.value = true
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function onSurfaceDragOver(event: DragEvent) {
+  if (!carriesAttachmentDrag(event.dataTransfer) || disabled) return
+  event.preventDefault()
+  event.stopPropagation()
+  surfaceDragActive.value = true
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function onSurfaceDragLeave(event: DragEvent) {
+  if (disabled || !surfaceDragActive.value || dragRemainsInsideSurface(event)) return
+  event.preventDefault()
+  event.stopPropagation()
+  resetSurfaceDrag()
+}
+
+function onSurfaceDrop(event: DragEvent) {
+  if (disabled || !carriesAttachmentDrag(event.dataTransfer)) return
+  event.preventDefault()
+  event.stopPropagation()
+  resetSurfaceDrag()
+  const files = readAttachmentDrag(event.dataTransfer)
+  if (files.length) promptInput.value?.addFiles(files)
+}
+
+function composerBannerAction(id: string) {
+  const item = visibleComposerBanners.value.find((candidate) => candidate.id === id)
+  if (item?.action === 'retry') emit('retry')
+}
+
+function dismissComposerBanner(id: string) {
+  dismissedComposerBanners.value = new Set([...dismissedComposerBanners.value, id])
+}
+
+useEventListener(document, 'drop', resetSurfaceDrag, { capture: true })
+useEventListener(window, 'dragend', resetSurfaceDrag)
+useEventListener(window, 'blur', resetSurfaceDrag)
+watch(
+  () => disabled,
+  (value) => {
+    if (value) resetSurfaceDrag()
+  }
+)
+
 onBeforeUnmount(() => {
   stopSpeechDictation(annotationDictationOwner)
   for (const observer of runObservers.values()) observer.disconnect()
@@ -727,7 +860,13 @@ onBeforeUnmount(() => {
   <section
     ref="surface"
     data-test-id="ai-conversation-surface"
-    class="flex min-h-0 flex-1 flex-col overflow-clip overscroll-contain select-text [container-type:inline-size]"
+    :data-drag-active="surfaceDragActive ? 'true' : 'false'"
+    class="relative flex min-h-0 flex-1 flex-col overflow-clip overscroll-contain select-text [container-type:inline-size]"
+    :class="surfaceDragActive ? 'ring-2 ring-inset ring-accent/60' : ''"
+    @dragenter="onSurfaceDragEnter"
+    @dragover="onSurfaceDragOver"
+    @dragleave="onSurfaceDragLeave"
+    @drop="onSurfaceDrop"
     @keydown.stop
     @keyup="syncSelectionActions"
     @scroll.capture="handleSurfaceScroll"
@@ -735,6 +874,15 @@ onBeforeUnmount(() => {
     @touchmove.stop
     @wheel="containWheel"
   >
+    <div
+      v-if="surfaceDragActive"
+      aria-hidden="true"
+      data-test-id="ai-conversation-drop-overlay"
+      class="bg-agent-surface/90 absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 rounded-[inherit] border-2 border-dashed border-accent/60 backdrop-blur-sm pointer-events-none"
+    >
+      <icon-lucide-paperclip class="t3-drop-overlay-icon size-6 text-accent" />
+      <span class="text-[12px] font-medium text-surface">Drop to attach files</span>
+    </div>
     <div v-if="$slots.header" class="relative z-20 shrink-0 bg-agent-surface">
       <slot name="header" />
       <div
@@ -744,6 +892,7 @@ onBeforeUnmount(() => {
       />
     </div>
     <AiConversation
+      ref="conversation"
       :can-load-older="hasOlder"
       :loading-older="loadingOlder"
       @load-older="emit('load-older')"
@@ -760,16 +909,6 @@ onBeforeUnmount(() => {
         v-if="messages.length"
         class="agent-conversation-column mt-auto flex flex-col gap-5 pt-10 pb-4"
       >
-        <button
-          v-if="hasOlder || loadingOlder"
-          type="button"
-          class="self-center rounded-full border border-border bg-panel px-3 py-1 text-[12px] text-muted hover:bg-hover hover:text-surface"
-          data-test-id="ai-conversation-load-older"
-          :disabled="loadingOlder"
-          @click="emit('load-older')"
-        >
-          {{ loadingOlder ? 'Loading earlier messages…' : 'Earlier messages' }}
-        </button>
         <div
           v-if="runWindow.leading"
           aria-hidden="true"
@@ -792,6 +931,7 @@ onBeforeUnmount(() => {
           />
           <AiActivityDisclosure
             :ended-at="run.endedAt"
+            :has-visible-content="run.visible.length > 0"
             :messages="run.activity"
             :started-at="run.startedAt"
             :status="runIndex === runs.length - 1 && !approvalVisible ? status : 'ready'"
@@ -842,6 +982,7 @@ onBeforeUnmount(() => {
           v-if="
             !approvalVisible &&
             !busy &&
+            !hasComposerBanner &&
             status !== 'ready' &&
             (statusMessage || !lastRunHasActivity)
           "
@@ -855,17 +996,37 @@ onBeforeUnmount(() => {
       >
         <AiActivityDisclosure :messages="[]" :status="status" :working-label="workingLabel" />
       </div>
-      <AiConversationEmpty
-        v-else-if="status === 'ready' && !approvalVisible"
-        :description="emptyDescription"
-        :heading="emptyTitle"
-      />
-      <div v-else-if="!approvalVisible" class="agent-conversation-column mt-auto pt-10 pb-4">
+      <template v-else-if="status === 'ready' && !approvalVisible">
+        <slot name="empty">
+          <AiConversationEmpty :description="emptyDescription" :heading="emptyTitle" />
+        </slot>
+      </template>
+      <div
+        v-else-if="!approvalVisible && !hasComposerBanner"
+        class="agent-conversation-column mt-auto pt-10 pb-4"
+      >
         <AiStatusIndicator :message="statusMessage" :status="status" />
       </div>
       <slot v-if="!messages.length" name="approval" run-id="unattached" />
     </AiConversation>
+    <AiComposerBannerStack
+      v-if="visibleComposerBanners.length"
+      :items="visibleComposerBanners"
+      @action="composerBannerAction"
+      @dismiss="dismissComposerBanner"
+    />
+    <div
+      v-if="latestTurnChanges"
+      class="agent-conversation-column relative z-20 flex shrink-0 justify-center pb-2"
+      data-test-id="ai-turn-changes-dock"
+    >
+      <AiTurnChanges
+        :changes="latestTurnChanges"
+        @open-diff="emit('open-diff', latestTurnChanges)"
+      />
+    </div>
     <AiPromptInput
+      ref="promptInput"
       v-model:attachments="attachments"
       :annotations="annotations"
       :can-retry="canRetry"
@@ -940,7 +1101,7 @@ onBeforeUnmount(() => {
           class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-400/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/35"
           @click="removeEditingAnnotation"
         >
-          <icon-lucide-trash-2 class="size-4" />
+          <IconlyIcon name="delete" class="size-4" />
         </button>
         <button
           v-if="speechDictationAvailable"
@@ -954,7 +1115,7 @@ onBeforeUnmount(() => {
           @click="toggleAnnotationDictation"
         >
           <icon-lucide-mic-off v-if="dictatingAnnotation" class="size-4" />
-          <icon-lucide-mic v-else class="size-4" />
+          <IconlyIcon name="voice" v-else class="size-4" />
         </button>
       </form>
       <div

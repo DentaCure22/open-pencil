@@ -28,7 +28,7 @@ const { panels } = useI18n()
           data-test-id="effects-section-add"
           @click="actions.add(effectsCtx.createDefaultEffect())"
         >
-          <icon-lucide-plus class="size-3.5" />
+          <IconlyIcon name="plus" class="size-3.5" />
         </IconButton>
       </template>
 

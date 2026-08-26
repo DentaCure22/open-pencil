@@ -8,21 +8,23 @@ import { drawSelection } from '#core/canvas/overlays/selection'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 
 function selectionRenderer() {
-  return {
+  return Object.assign(Object.create(null) as SkiaRenderer, {
     drawParentFrameOutlines: mock()
-  } as unknown as SkiaRenderer
+  })
+}
+
+function emptySelectionGraph() {
+  return Object.assign(Object.create(null) as SceneGraph, {
+    getNode: mock(() => undefined)
+  })
 }
 
 test('lets one product-owned overlay replace native selection chrome', () => {
   const renderer = selectionRenderer()
 
-  drawSelection(
-    renderer,
-    {} as Canvas,
-    { getNode: mock(() => undefined) } as unknown as SceneGraph,
-    new Set(['code-object']),
-    { selectionChromeOwnerIds: new Set(['code-object']) }
-  )
+  drawSelection(renderer, {} as Canvas, emptySelectionGraph(), new Set(['code-object']), {
+    selectionChromeOwnerIds: new Set(['code-object'])
+  })
 
   expect(renderer.drawParentFrameOutlines).not.toHaveBeenCalled()
 })
@@ -36,7 +38,7 @@ test('lets one product-owned overlay replace native hover chrome', async () => {
 test('keeps native selection chrome for ordinary selected nodes', () => {
   const renderer = selectionRenderer()
   const canvas = {} as Canvas
-  const graph = { getNode: mock(() => undefined) } as unknown as SceneGraph
+  const graph = emptySelectionGraph()
   const selectedIds = new Set(['rectangle'])
 
   drawSelection(renderer, canvas, graph, selectedIds, {})

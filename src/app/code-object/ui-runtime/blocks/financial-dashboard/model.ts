@@ -8,17 +8,7 @@ import type {
   FinancialDashboardTableColumn
 } from '@/app/code-object/ui-runtime/types'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function optionalString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function stringValue(value: unknown, fallback: string) {
-  return optionalString(value) ?? fallback
-}
+import { isRecord, optionalString, stringValue } from '../model'
 
 function stringUnion<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback

@@ -119,7 +119,7 @@ function isAlignmentActive(primary: LayoutAlign, counter: string) {
             class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-[11px] text-muted outline-none"
             @pointerdown.stop
           >
-            <icon-lucide-chevron-down class="size-3" />
+            <IconlyIcon name="arrow-down" class="size-3" />
           </SelectTrigger>
           <SelectPortal>
             <SelectContent
@@ -171,7 +171,7 @@ function isAlignmentActive(primary: LayoutAlign, counter: string) {
                 class="flex shrink-0 cursor-pointer items-center self-stretch border-none bg-transparent px-1 text-[11px] text-muted outline-none"
                 @pointerdown.stop
               >
-                <icon-lucide-chevron-down class="size-3" />
+                <IconlyIcon name="arrow-down" class="size-3" />
               </SelectTrigger>
               <SelectPortal>
                 <SelectContent
@@ -208,7 +208,7 @@ function isAlignmentActive(primary: LayoutAlign, counter: string) {
         v-if="ctx.showIndividualPadding || !ctx.hasUniformPadding"
         class="size-3"
       />
-      <icon-lucide-plus v-else class="size-3" />
+      <IconlyIcon name="plus" v-else class="size-3" />
     </button>
   </div>
 

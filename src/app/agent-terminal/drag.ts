@@ -1,6 +1,7 @@
 import { useEventListener } from '@vueuse/core'
 import { onScopeDispose, type Ref } from 'vue'
 
+import { IS_BROWSER } from '@open-pencil/core/constants'
 import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 
 import { codeObjectDocument, codeObjectPluginData } from '@/app/code-object/model'
@@ -137,11 +138,11 @@ export function armAgentConversationPointerDrag(
   }
   const target = event.currentTarget
   if (target instanceof HTMLElement) {
+    // oxlint-disable open-pencil/no-silent-catch -- Pointer capture is optional; window listeners still track the drag.
     try {
       target.setPointerCapture(event.pointerId)
-    } catch {
-      // Capture is optional; window pointer listeners still track the drag.
-    }
+    } catch {}
+    // oxlint-enable open-pencil/no-silent-catch
   }
 }
 
@@ -305,7 +306,7 @@ function clearAgentConversationDragState() {
   pointerIntent = null
   html5DragActive = false
   boardDragActivity?.(false)
-  if (typeof window === 'undefined') {
+  if (!IS_BROWSER) {
     suppressAgentConversationClick = false
     return
   }
@@ -338,12 +339,23 @@ export function useAgentConversationDrop(
 
   function isOverBoard(clientX: number, clientY: number) {
     const bounds = boardBounds
+    const panelBounds = document
+      .querySelector<HTMLElement>('[data-test-id="agent-chats-panel"]')
+      ?.getBoundingClientRect()
+    const overChatsPanel = Boolean(
+      panelBounds &&
+      clientX >= panelBounds.left &&
+      clientX <= panelBounds.right &&
+      clientY >= panelBounds.top &&
+      clientY <= panelBounds.bottom
+    )
     return Boolean(
       bounds &&
-        clientX >= bounds.left &&
-        clientX <= bounds.right &&
-        clientY >= bounds.top &&
-        clientY <= bounds.bottom
+      !overChatsPanel &&
+      clientX >= bounds.left &&
+      clientX <= bounds.right &&
+      clientY >= bounds.top &&
+      clientY <= bounds.bottom
     )
   }
 
@@ -396,8 +408,6 @@ export function useAgentConversationDrop(
     placeFromPending(pending.lastPoint)
   }
 
-  function onDragEnter(_event: DragEvent) {}
-
   function onDragOver(event: DragEvent) {
     if (!pendingAgentConversationDrag && !pointerIntent) return
     trackPointer(event.clientX, event.clientY)
@@ -405,8 +415,6 @@ export function useAgentConversationDrop(
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   }
-
-  function onDragLeave(_event: DragEvent) {}
 
   function onDrop(event: DragEvent) {
     const pending = pendingAgentConversationDrag
@@ -453,5 +461,5 @@ export function useAgentConversationDrop(
   useEventListener(window, 'pointermove', onPointerMove, { passive: true })
   useEventListener(window, 'pointerup', onPointerUp)
 
-  return { onDragEnter, onDragLeave, onDragOver, onDrop }
+  return { onDragOver, onDrop }
 }

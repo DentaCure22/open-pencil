@@ -142,7 +142,7 @@ function byteSize(source: SourceObjectSource): string {
             :href="assetUrl(item.source)"
             class="flex items-center gap-1.5 rounded-md bg-[#7662b9] px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-[#856fd0]"
           >
-            <icon-lucide-download class="size-3" />
+            <IconlyIcon name="download" class="size-3" />
             Download
           </a>
         </div>

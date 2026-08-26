@@ -1,5 +1,7 @@
 import type { AgentConversationMessage, AgentConversationThread } from '#mcp/agent-router/contracts'
 
+import { isPendingProviderHeartbeat, isPendingProviderOutput } from './providers'
+
 function singleReasoningPart(message: AgentConversationMessage) {
   if (message.parts?.length !== 1) return null
   const part = message.parts[0]
@@ -35,6 +37,22 @@ export function migrateProviderActivityHistory(thread: AgentConversationThread):
         ...message,
         parts: [{ ...part, type: 'commentary' }]
       })
+      changed = true
+      continue
+    }
+    if (isPendingProviderHeartbeat(message)) {
+      const migrated: AgentConversationMessage = {
+        ...message,
+        parts: message.parts?.map((part) =>
+          part.type === 'tool' &&
+          typeof part.output === 'string' &&
+          isPendingProviderOutput(part.output)
+            ? { ...part, state: 'running' }
+            : part
+        )
+      }
+      delete migrated.completedAt
+      messages.push(migrated)
       changed = true
       continue
     }

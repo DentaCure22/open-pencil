@@ -179,6 +179,7 @@ test('keeps one normal mounted chat through design and interaction modes', async
   await expect(surface.getByTestId('ai-message')).toHaveCount(29)
   const activity = surface.getByTestId('ai-activity-disclosure').last()
   await expect(activity).toBeVisible()
+  await activity.getByTestId('ai-turn-duration').click()
   await expect(activity.getByTestId('ai-activity-timeline')).toBeVisible()
   await expect(activity.getByTestId('ai-tool-call')).toHaveCount(0)
   await surface.evaluate((element) => element.setAttribute('data-residency-probe', 'surface'))

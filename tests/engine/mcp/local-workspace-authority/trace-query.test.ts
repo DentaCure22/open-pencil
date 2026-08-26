@@ -104,10 +104,14 @@ async function fixture() {
 async function persistSession(
   f: Fixture,
   input: {
+    aliases?: string[]
+    episodes?: unknown[]
     id: string
+    origin?: unknown
     pageId: string
     spokenTurns?: unknown[]
     startedAt: string
+    tag?: string
     text: string
   }
 ) {
@@ -121,17 +125,21 @@ async function persistSession(
     id: `${input.id}:event:${String(index)}`,
     kind: 'transcript',
     label: input.text,
+    ...(input.origin ? { origin: input.origin } : {}),
     text: `${input.text} ${String(index)}`
   }))
   await f.store.recordTraceSession({
     gestures: [],
     session: {
+      ...(input.aliases ? { aliases: input.aliases } : {}),
       contextDraft: [],
       durationMs: 1_000,
+      ...(input.episodes ? { episodes: input.episodes } : {}),
       events,
       id: input.id,
       scope,
-      startedAt: input.startedAt
+      startedAt: input.startedAt,
+      ...(input.tag ? { tag: input.tag } : {})
     },
     spokenTurns: input.spokenTurns,
     summary: {
@@ -142,26 +150,34 @@ async function persistSession(
       scope,
       searchTerms: input.text.toLowerCase().split(/\s+/u),
       startedAt: input.startedAt,
+      ...(input.aliases ? { aliases: input.aliases } : {}),
+      ...(input.tag ? { tag: input.tag } : {}),
       title: input.text,
       updatedAt: input.startedAt
     }
   })
 }
 
-function result(value: unknown) {
+type TraceQueryResult = {
+  matches: Array<{
+    episodes?: unknown[]
+    events: unknown[]
+    scope: { pageId: string }
+    sessionId: string
+    tag?: string
+  }>
+  reason?: string
+  status: string
+  taskCursor?: string
+}
+
+type TraceQueryResponse = { result?: TraceQueryResult }
+
+function result(value: unknown): TraceQueryResult {
   if (!value || typeof value !== 'object') throw new Error('Expected RPC response')
-  const payload = (value as { result?: unknown }).result
+  const payload = (value as TraceQueryResponse).result
   if (!payload || typeof payload !== 'object') throw new Error('Expected RPC result')
-  return payload as {
-    matches: Array<{
-      events: unknown[]
-      scope: { pageId: string }
-      sessionId: string
-    }>
-    reason?: string
-    status: string
-    taskCursor?: string
-  }
+  return payload
 }
 
 afterEach(async () => {
@@ -420,6 +436,84 @@ describe('persisted Trace history query', () => {
       matches: [{ sessionId: 'session:dental' }],
       status: 'matched'
     })
+  })
+
+  test('resolves one durable session globally by its exact voice-friendly tag', async () => {
+    const f = await fixture()
+    await persistSession(f, {
+      aliases: ['patient-check'],
+      episodes: [
+        {
+          endedAtMs: 900,
+          id: 'chrome:capture-1',
+          kind: 'chrome',
+          label: 'Patient chart',
+          sourceSessionId: 'capture-1',
+          startedAtMs: 0
+        }
+      ],
+      id: 'session:tagged',
+      origin: {
+        episodeId: 'chrome:capture-1',
+        kind: 'chrome',
+        reference: 'Annotation #1',
+        sequence: 1,
+        sourceSessionId: 'capture-1'
+      },
+      pageId: 'page:tagged',
+      startedAt: '2026-08-02T12:00:00.000Z',
+      tag: 'patient-flow',
+      text: 'Chrome annotations for the patient flow'
+    })
+    await persistSession(f, {
+      id: 'session:other-tag',
+      pageId: 'page:other',
+      startedAt: '2026-08-02T13:00:00.000Z',
+      tag: 'billing-flow',
+      text: 'Unrelated billing activity'
+    })
+
+    const queried = result(
+      await f.runtime.sendRpc({
+        args: { session_tag: '#PATIENT FLOW' },
+        command: 'trace_query'
+      })
+    )
+    expect(queried).toMatchObject({
+      matches: [
+        {
+          episodes: [{ id: 'chrome:capture-1', kind: 'chrome' }],
+          sessionId: 'session:tagged',
+          tag: 'patient-flow'
+        }
+      ],
+      status: 'matched'
+    })
+    expect(queried.matches).toHaveLength(1)
+    expect(queried.matches[0]?.events[0]).toMatchObject({
+      origin: { kind: 'chrome', reference: 'Annotation #1' }
+    })
+
+    const legacyAlias = result(
+      await f.runtime.sendRpc({
+        args: { session_tag: 'patient-check' },
+        command: 'trace_query'
+      })
+    )
+    expect(legacyAlias).toMatchObject({
+      matches: [{ sessionId: 'session:tagged', tag: 'patient-flow' }],
+      status: 'matched'
+    })
+
+    await expect(
+      persistSession(f, {
+        id: 'session:duplicate-tag',
+        pageId: 'page:duplicate',
+        startedAt: '2026-08-02T14:00:00.000Z',
+        tag: 'patient-check',
+        text: 'Should not steal a saved alias'
+      })
+    ).rejects.toThrow('Trace session tag #patient-check is already in use.')
   })
 
   test('applies inclusive persisted time ranges without resolving a live Board', async () => {

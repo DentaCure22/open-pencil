@@ -22,6 +22,7 @@ import { narratedTraceTargetForLiveInspectorSelection } from './live-inspector-t
 import { narratedTraceScopeForStore } from './scope'
 import {
   appendNarratedTraceEvent,
+  beginNarratedTraceEpisode,
   beginNarratedTraceSession,
   finishNarratedTraceSession,
   narratedTraceSession,
@@ -174,7 +175,23 @@ function recordActivity(
   options: NarratedTraceAppendOptions = {}
 ) {
   if (!ensureActivitySession(scope)) return null
-  const eventId = appendNarratedTraceEvent(event, options)
+  const sessionId = narratedTraceSession.value?.id
+  const episodeId = event.origin?.episodeId ?? (sessionId ? `board:${sessionId}` : '')
+  if (episodeId) {
+    beginNarratedTraceEpisode(
+      event.origin
+        ? {
+            id: episodeId,
+            kind: event.origin.kind,
+            sourceSessionId: event.origin.sourceSessionId
+          }
+        : { id: episodeId, kind: 'board', label: 'Board activity' }
+    )
+  }
+  const eventId = appendNarratedTraceEvent(
+    episodeId && !event.origin ? { ...event, origin: { episodeId, kind: 'board' } } : event,
+    options
+  )
   scheduleActivitySessionFinish()
   return eventId
 }

@@ -121,7 +121,9 @@ describe('local workspace authority HTTP receipt contract', () => {
         `/local-workspace/v1/changes?after_revision=${String(initialized.appliedRevision)}&timeout_ms=2000`,
         { headers }
       )
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      await new Promise((resolve) => {
+        setTimeout(resolve, 150)
+      })
 
       const workspacePath = path.join(root, 'workspace.json')
       const document = JSON.parse(await readFile(workspacePath, 'utf8')) as { nodes: string[] }

@@ -6,14 +6,13 @@ import IconClipboard from '~icons/lucide/clipboard'
 import IconCopy from '~icons/lucide/copy'
 import IconCopyPlus from '~icons/lucide/copy-plus'
 import IconGroup from '~icons/lucide/group'
-import IconLock from '~icons/lucide/lock'
 import IconScissors from '~icons/lucide/scissors'
-import IconTrash2 from '~icons/lucide/trash-2'
 import IconUngroup from '~icons/lucide/ungroup'
 
 import type { useEditorCommands } from '@open-pencil/vue'
 
 import type { EditorStore } from '@/app/editor/active-store'
+import { IconlyDelete as IconTrash2, IconlyLock as IconLock } from '@/components/icons/iconly'
 import type { ToolbarActionItem } from '@/components/Toolbar/types'
 
 type ToolbarActionOptions = {

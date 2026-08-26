@@ -1,7 +1,3 @@
-import { guidToString } from '@open-pencil/kiwi/fig/guid'
-import { parseVariantName } from '@open-pencil/scene-graph/variant-name'
-
-/* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 import { DEFAULT_FONT_FAMILY, DEFAULT_STROKE_MITER_LIMIT } from '#core/constants'
 import { styleToWeight } from '#core/text/fonts'
 
@@ -26,6 +22,10 @@ import {
 } from './plugin-data'
 import { resolveGeometryPaths, resolveVectorNetwork } from './vector-geometry'
 export { resolveGeometryPaths } from './vector-geometry'
+import { extractComponentProps, isComponentSet } from './component-metadata'
+import { extractFigmaSourceMetadata } from './source-metadata'
+export { FIGMA_RAW_NODE_FIELD_KEYS } from './source-metadata'
+export { VARIABLE_BINDING_FIELDS, VARIABLE_BINDING_FIELDS_INVERSE } from './variable-bindings'
 
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import type {
@@ -44,63 +44,10 @@ import type {
   TextAlignVertical,
   TextCase,
   ArcData,
-  VectorNetwork,
-  ComponentPropertyDefinition,
-  ComponentPropertyType,
-  SymbolLink,
-  VariantPropSpec
+  VectorNetwork
 } from '@open-pencil/scene-graph'
-import type { GUID } from '@open-pencil/scene-graph/primitives'
 
 export { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
-
-export const VARIABLE_BINDING_FIELDS: Record<string, string> = {
-  // Corner radius
-  cornerRadius: 'CORNER_RADIUS',
-  topLeftRadius: 'RECTANGLE_TOP_LEFT_CORNER_RADIUS',
-  topRightRadius: 'RECTANGLE_TOP_RIGHT_CORNER_RADIUS',
-  bottomLeftRadius: 'RECTANGLE_BOTTOM_LEFT_CORNER_RADIUS',
-  bottomRightRadius: 'RECTANGLE_BOTTOM_RIGHT_CORNER_RADIUS',
-  // Stroke
-  strokeWeight: 'STROKE_WEIGHT',
-  borderTopWeight: 'BORDER_TOP_WEIGHT',
-  borderBottomWeight: 'BORDER_BOTTOM_WEIGHT',
-  borderLeftWeight: 'BORDER_LEFT_WEIGHT',
-  borderRightWeight: 'BORDER_RIGHT_WEIGHT',
-  // Auto-layout spacing & padding
-  itemSpacing: 'STACK_SPACING',
-  paddingLeft: 'STACK_PADDING_LEFT',
-  paddingTop: 'STACK_PADDING_TOP',
-  paddingRight: 'STACK_PADDING_RIGHT',
-  paddingBottom: 'STACK_PADDING_BOTTOM',
-  counterAxisSpacing: 'STACK_COUNTER_SPACING',
-  // Grid gaps
-  gridRowGap: 'GRID_ROW_GAP',
-  gridColumnGap: 'GRID_COLUMN_GAP',
-  // Visibility & opacity
-  visible: 'VISIBLE',
-  opacity: 'OPACITY',
-  // Dimensions
-  width: 'WIDTH',
-  height: 'HEIGHT',
-  minWidth: 'MIN_WIDTH',
-  maxWidth: 'MAX_WIDTH',
-  minHeight: 'MIN_HEIGHT',
-  maxHeight: 'MAX_HEIGHT',
-  // Position & rotation
-  x: 'X_POSITION',
-  y: 'Y_POSITION',
-  rotation: 'ROTATION',
-  // Text
-  fontSize: 'FONT_SIZE',
-  letterSpacing: 'LETTER_SPACING',
-  lineHeight: 'LINE_HEIGHT',
-  fontFamily: 'FONT_FAMILY'
-}
-
-export const VARIABLE_BINDING_FIELDS_INVERSE: Record<string, string> = Object.fromEntries(
-  Object.entries(VARIABLE_BINDING_FIELDS).map(([k, v]) => [v, k])
-)
 
 const NODE_TYPE_MAP: Record<string, NodeType | 'DOCUMENT' | 'VARIABLE'> = {
   DOCUMENT: 'DOCUMENT',
@@ -571,7 +518,7 @@ export function nodeChangeToProps(
   return {
     nodeType,
     name: nc.name ?? nodeType,
-    source: extractSourceMetadata(nc, blobs),
+    source: extractFigmaSourceMetadata(nc, blobs),
     ...convertTransformProps(nc),
     opacity: nc.opacity ?? 1,
     visible: nc.visible ?? true,
@@ -608,186 +555,7 @@ export function nodeChangeToProps(
     pluginData: extractPluginData(nc),
     pluginRelaunchData: extractPluginRelaunchData(nc),
     clipsContent: nc.frameMaskDisabled === false && nc.resizeToFit !== true,
-    componentId: extractSymbolId(nc),
-    componentPropertyDefinitions: extractComponentPropertyDefs(nc),
-    componentPropertyValues: extractComponentPropertyValues(nc),
-    ...extractComponentMetadata(nc)
-  }
-}
-
-const COMPONENT_PROP_TYPE_MAP: Record<string, ComponentPropertyType> = {
-  VARIANT: 'VARIANT',
-  TEXT: 'TEXT',
-  BOOL: 'BOOLEAN',
-  BOOLEAN: 'BOOLEAN',
-  INSTANCE_SWAP: 'INSTANCE_SWAP'
-}
-
-function componentPropValueToString(value: unknown): string {
-  if (!value || typeof value !== 'object') return ''
-  const propValue = value as {
-    boolValue?: boolean
-    textValue?: string | { characters?: string }
-    guidValue?: GUID
-  }
-  if (typeof propValue.boolValue === 'boolean') return String(propValue.boolValue)
-  if (typeof propValue.textValue === 'string') return propValue.textValue
-  if (propValue.textValue && typeof propValue.textValue === 'object') {
-    return propValue.textValue.characters ?? ''
-  }
-  return propValue.guidValue ? guidToString(propValue.guidValue) : ''
-}
-
-interface RawComponentPropDef {
-  id?: GUID
-  name?: string
-  type?: string
-  initialValue?: unknown
-}
-
-interface RawSymbolData {
-  symbolOverrides?: unknown[]
-  uniformScaleFactor?: number
-}
-
-function extractComponentPropertyDefs(nc: NodeChange): ComponentPropertyDefinition[] {
-  const defs = nc.componentPropDefs as RawComponentPropDef[] | undefined
-  if (!defs?.length) return []
-  const result: ComponentPropertyDefinition[] = []
-  for (const def of defs) {
-    if (!def.id || !def.name) continue
-    const propType = COMPONENT_PROP_TYPE_MAP[def.type ?? ''] ?? 'VARIANT'
-    result.push({
-      id: guidToString(def.id),
-      name: def.name,
-      type: propType,
-      defaultValue: componentPropValueToString(def.initialValue),
-      variantOptions: propType === 'VARIANT' ? undefined : undefined
-    })
-  }
-  return result
-}
-
-function extractVariantPropSpecs(nc: NodeChange): VariantPropSpec[] {
-  const specs = nc.variantPropSpecs as Array<{ propDefId?: GUID; value?: string }> | undefined
-  if (!specs?.length) return []
-  return specs
-    .filter((spec): spec is { propDefId: GUID; value?: string } => !!spec.propDefId)
-    .map((spec) => ({ propDefId: guidToString(spec.propDefId), value: spec.value ?? '' }))
-}
-
-function extractComponentPropertyValues(nc: NodeChange): Record<string, string> {
-  const specs = extractVariantPropSpecs(nc)
-  const defs = new Map(extractComponentPropertyDefs(nc).map((def) => [def.id, def.name]))
-  if (specs.length > 0 && defs.size > 0) {
-    const values: Record<string, string> = {}
-    for (const spec of specs) values[defs.get(spec.propDefId) ?? spec.propDefId] = spec.value
-    return values
-  }
-
-  const name = nc.name
-  if (!name?.includes('=')) return {}
-  return parseVariantName(name)
-}
-
-type ComponentMetadataProps = Pick<
-  SceneNode,
-  | 'componentKey'
-  | 'sourceLibraryKey'
-  | 'publishId'
-  | 'overrideKey'
-  | 'sharedSymbolVersion'
-  | 'publishedVersion'
-  | 'isPublishable'
-  | 'isSymbolPublishable'
-  | 'symbolDescription'
-  | 'symbolLinks'
-  | 'variantPropSpecs'
->
-
-function guidToStringOrNull(value: unknown): string | null {
-  if (!value || typeof value !== 'object') return null
-  const guid = value as Partial<GUID>
-  if (typeof guid.sessionID !== 'number' || typeof guid.localID !== 'number') return null
-  return guidToString({ sessionID: guid.sessionID, localID: guid.localID })
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-function stringOrEmpty(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function booleanOrFalse(value: unknown): boolean {
-  return typeof value === 'boolean' ? value : false
-}
-
-function extractComponentMetadata(nc: NodeChange): ComponentMetadataProps {
-  const symbolLinks = (nc.symbolLinks as Array<Partial<SymbolLink>> | undefined) ?? []
-  return {
-    componentKey: stringOrNull(nc.componentKey),
-    sourceLibraryKey: stringOrNull(nc.sourceLibraryKey),
-    publishId: guidToStringOrNull(nc.publishID),
-    overrideKey: guidToStringOrNull(nc.overrideKey),
-    sharedSymbolVersion: stringOrNull(nc.sharedSymbolVersion),
-    publishedVersion: stringOrNull(nc.publishedVersion),
-    isPublishable: booleanOrFalse(nc.isPublishable),
-    isSymbolPublishable: booleanOrFalse(nc.isSymbolPublishable),
-    symbolDescription: stringOrEmpty(nc.symbolDescription),
-    symbolLinks: symbolLinks
-      .filter((link): link is SymbolLink => typeof link.uri === 'string')
-      .map((link) => ({
-        uri: link.uri,
-        displayName: link.displayName,
-        displayText: link.displayText
-      })),
-    variantPropSpecs: extractVariantPropSpecs(nc)
-  }
-}
-
-function isComponentSet(nc: NodeChange): boolean {
-  const defs = nc.componentPropDefs as Array<{ type?: string }> | undefined
-  if (!defs?.length) return false
-  return defs.some((d) => d.type === 'VARIANT')
-}
-
-function extractFigmaLayoutMetadata(nc: NodeChange): SceneNode['source']['fig']['layout'] {
-  return {
-    stackMode: nc.stackMode,
-    stackSpacing: nc.stackSpacing,
-    stackPadding: nc.stackPadding,
-    stackPaddingRight: nc.stackPaddingRight,
-    stackPaddingBottom: nc.stackPaddingBottom,
-    stackCounterAlign: nc.stackCounterAlign,
-    stackJustify: nc.stackJustify,
-    stackCounterAlignItems: nc.stackCounterAlignItems,
-    stackPrimaryAlignItems: nc.stackPrimaryAlignItems,
-    stackPrimarySizing: nc.stackPrimarySizing,
-    stackCounterSizing: nc.stackCounterSizing,
-    stackVerticalPadding: nc.stackVerticalPadding,
-    stackHorizontalPadding: nc.stackHorizontalPadding,
-    stackWrap: nc.stackWrap,
-    stackPositioning: nc.stackPositioning,
-    stackChildPrimaryGrow: nc.stackChildPrimaryGrow,
-    stackChildAlignSelf: nc.stackChildAlignSelf,
-    stackCounterSpacing: nc.stackCounterSpacing,
-    bordersTakeSpace: nc.bordersTakeSpace as boolean | undefined,
-    stackReverseZIndex: nc.stackReverseZIndex as boolean | undefined
-  }
-}
-
-function extractSourceMetadata(nc: NodeChange, blobs: Uint8Array[]): SceneNode['source'] {
-  return {
-    format: 'fig',
-    id: nc.guid ? guidToString(nc.guid) : null,
-    orderKey: nc.parentIndex?.position ?? null,
-    fig: {
-      ...extractFigmaRawGeometry(nc, blobs),
-      ...extractFigmaSymbolMetadata(nc, blobs),
-      layout: extractFigmaLayoutMetadata(nc)
-    }
+    ...extractComponentProps(nc)
   }
 }
 
@@ -818,180 +586,4 @@ export function sortChildren(
 
     return 0
   })
-}
-
-interface PreservedFigmaBlob {
-  __openPencilFigmaBlob: Uint8Array
-}
-
-function preserveFigmaPayloadBlobs(value: unknown, blobs: Uint8Array[]): unknown {
-  if (value instanceof Uint8Array) return value
-  if (Array.isArray(value)) return value.map((item) => preserveFigmaPayloadBlobs(item, blobs))
-  if (!value || typeof value !== 'object') return value
-  const result: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if ((key === 'commandsBlob' || key === 'vectorNetworkBlob') && typeof child === 'number') {
-      const blob: unknown = blobs[child]
-      if (blob == null) {
-        result[key] = child
-      } else {
-        result[key] = {
-          __openPencilFigmaBlob:
-            blob instanceof Uint8Array
-              ? blob
-              : new Uint8Array(Object.values(blob as Record<string, number>))
-        } satisfies PreservedFigmaBlob
-      }
-    } else {
-      result[key] = preserveFigmaPayloadBlobs(child, blobs)
-    }
-  }
-  return result
-}
-
-export const FIGMA_RAW_NODE_FIELD_KEYS = [
-  'styleIdForFill',
-  'styleIdForStrokeFill',
-  'styleIdForText',
-  'styleIdForEffect',
-  'styleIdForGrid',
-  'backgroundPaints',
-  'layoutGrids',
-  'exportSettings',
-  'componentPropDefs',
-  'componentPropRefs',
-  'variantPropSpecs',
-  'stateGroupPropertyValueOrders',
-  'isStateGroup',
-  'version',
-  'sourceLibraryKey',
-  'userFacingVersion',
-  'description',
-  'key',
-  'sortPosition',
-  'detachedSymbolId',
-  'documentColorProfile',
-  'variableConsumptionMap',
-  'variableModeBySetMap',
-  'parameterConsumptionMap',
-  'editInfo',
-  'backgroundColor',
-  'pageType',
-  'isPageDivider',
-  'guides',
-  'handoffStatusMap',
-  'annotationCategories',
-  'miterLimit',
-  'mask',
-  'maskType',
-  'maskIsOutline',
-  'strokeWeight',
-  'strokeJoin',
-  'borderStrokeWeightsIndependent',
-  'borderTopWeight',
-  'borderRightWeight',
-  'borderBottomWeight',
-  'borderLeftWeight',
-  'minSize',
-  'maxSize',
-  'targetAspectRatio',
-  'gridRows',
-  'gridColumns',
-  'gridRowAnchor',
-  'gridColumnAnchor',
-  'gridColumnsSizing',
-  'gridRowsSizing',
-  'gridChildVerticalAlign',
-  'gridChildHorizontalAlign',
-  'textAutoResize',
-  'textData',
-  'lineHeight',
-  'fontName',
-  'fontSize',
-  'letterSpacing',
-  'textTracking',
-  'fontVersion',
-  'textUserLayoutVersion',
-  'textExplicitLayoutVersion',
-  'fontVariations',
-  'fontVariantCommonLigatures',
-  'fontVariantContextualLigatures',
-  'toggledOnOTFeatures',
-  'toggledOffOTFeatures',
-  'leadingTrim',
-  'textDecorationFillPaints',
-  'textUnderlineOffset',
-  'textDecorationThickness',
-  'textDecorationStyle',
-  'semanticWeight',
-  'semanticItalic',
-  'maxLines',
-  'textPathStart',
-  'derivedTextData',
-  'fillPaints',
-  'strokePaints',
-  'effects',
-  'sectionStatusInfo',
-  'prototypeStartNodeID',
-  'prototypeInteractions',
-  'transitionInfo',
-  'codeSyntax',
-  'lockMode',
-  'slideThemeMap',
-  'isSoftDeleted',
-  'brushType',
-  'scatterStrokeSettings',
-  'vectorOperationVersion',
-  'vectorData',
-  'fillGeometry',
-  'strokeGeometry'
-] as const satisfies readonly (keyof NodeChange)[]
-
-function extractFigmaRawGeometry(
-  nc: NodeChange,
-  blobs: Uint8Array[]
-): Pick<SceneNode['source']['fig'], 'rawSize' | 'rawTransform' | 'rawNodeFields'> {
-  const rawNodeFields: Record<string, unknown> = {}
-  for (const key of FIGMA_RAW_NODE_FIELD_KEYS) {
-    const value = nc[key]
-    if (value !== undefined) rawNodeFields[key] = preserveFigmaPayloadBlobs(value, blobs)
-  }
-  return {
-    rawSize: nc.size ? { ...nc.size } : null,
-    rawTransform: nc.transform ? { ...nc.transform } : null,
-    rawNodeFields
-  }
-}
-
-function extractFigmaSymbolMetadata(
-  nc: NodeChange,
-  blobs: Uint8Array[]
-): Pick<
-  SceneNode['source']['fig'],
-  | 'symbolOverrides'
-  | 'componentPropAssignments'
-  | 'derivedSymbolData'
-  | 'derivedSymbolDataLayoutVersion'
-  | 'uniformScaleFactor'
-> {
-  const sd = nc.symbolData as RawSymbolData | undefined
-  return {
-    symbolOverrides: preserveFigmaPayloadBlobs(sd?.symbolOverrides ?? [], blobs) as unknown[],
-    componentPropAssignments: preserveFigmaPayloadBlobs(
-      nc.componentPropAssignments ?? [],
-      blobs
-    ) as unknown[],
-    derivedSymbolData: preserveFigmaPayloadBlobs(nc.derivedSymbolData ?? [], blobs) as unknown[],
-    derivedSymbolDataLayoutVersion:
-      typeof nc.derivedSymbolDataLayoutVersion === 'number'
-        ? nc.derivedSymbolDataLayoutVersion
-        : null,
-    uniformScaleFactor: typeof sd?.uniformScaleFactor === 'number' ? sd.uniformScaleFactor : null
-  }
-}
-
-function extractSymbolId(nc: NodeChange): string {
-  const sd = nc.symbolData as { symbolID?: GUID } | undefined
-  if (!sd?.symbolID) return ''
-  return guidToString(sd.symbolID)
 }

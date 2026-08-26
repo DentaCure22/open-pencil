@@ -276,6 +276,50 @@ function validateRunPolicy(
   return warmSessionId
 }
 
+function recoverySourceForRun(
+  runId: string,
+  recoveryOfRunId: string | null,
+  exactTarget: EvalTarget | null,
+  scenario: PromptToBoardScenario,
+  preparedByRunId: Map<string, PreparedRun>
+): PreparedRun | undefined {
+  if (!recoveryOfRunId) return undefined
+  const recoverySource = preparedByRunId.get(recoveryOfRunId)
+  if (!recoverySource) {
+    throw new Error(
+      `Campaign recovery run ${runId} must reference an earlier run_id: ${recoveryOfRunId}.`
+    )
+  }
+  if (
+    !exactTarget ||
+    !recoverySource.exactTarget ||
+    !sameEvalTarget(exactTarget, recoverySource.exactTarget)
+  ) {
+    throw new Error(`Campaign recovery run ${runId} must keep the original exact target.`)
+  }
+  if (recoverySource.scenarioFingerprint !== scenarioFingerprint(scenario)) {
+    throw new Error(`Campaign recovery run ${runId} must keep the original scenario.`)
+  }
+  return recoverySource
+}
+
+function boardRequestIdentityForRun(
+  runId: string,
+  exactTarget: EvalTarget | null,
+  recoveryOfRunId: string | null,
+  recoverySource?: PreparedRun
+): CampaignBoardRequestIdentity | null {
+  if (!exactTarget) return null
+  const requestScopeRunId = recoverySource?.boardRequestIdentity?.request_scope_run_id ?? runId
+  return {
+    board_request_id:
+      recoverySource?.boardRequestIdentity?.board_request_id ??
+      campaignBoardRequestId(requestScopeRunId, exactTarget),
+    recovery_of_run_id: recoveryOfRunId,
+    request_scope_run_id: requestScopeRunId
+  }
+}
+
 function prepareRuns(options: ExecuteCampaignOptions): PreparedRun[] {
   if (!Number.isInteger(options.maxConcurrency) || options.maxConcurrency < 1) {
     throw new Error('Campaign maxConcurrency must be a positive integer.')
@@ -300,34 +344,19 @@ function prepareRuns(options: ExecuteCampaignOptions): PreparedRun[] {
     assertTargetMatchesConfiguration(run.run_id, exactTarget, configuration)
     const warmSessionId = validateRunPolicy(options, run, scenario, exactTarget, configuration)
     const recoveryOfRunId = run.recovery_of_run_id?.trim() || null
-    const recoverySource = recoveryOfRunId ? preparedByRunId.get(recoveryOfRunId) : undefined
-    if (recoveryOfRunId && !recoverySource) {
-      throw new Error(
-        `Campaign recovery run ${run.run_id} must reference an earlier run_id: ${recoveryOfRunId}.`
-      )
-    }
-    if (
-      recoverySource &&
-      (!exactTarget ||
-        !recoverySource.exactTarget ||
-        !sameEvalTarget(exactTarget, recoverySource.exactTarget))
-    ) {
-      throw new Error(`Campaign recovery run ${run.run_id} must keep the original exact target.`)
-    }
-    if (recoverySource && recoverySource.scenarioFingerprint !== scenarioFingerprint(scenario)) {
-      throw new Error(`Campaign recovery run ${run.run_id} must keep the original scenario.`)
-    }
-    const requestScopeRunId =
-      recoverySource?.boardRequestIdentity?.request_scope_run_id ?? run.run_id
-    const boardRequestIdentity = exactTarget
-      ? {
-          board_request_id:
-            recoverySource?.boardRequestIdentity?.board_request_id ??
-            campaignBoardRequestId(requestScopeRunId, exactTarget),
-          recovery_of_run_id: recoveryOfRunId,
-          request_scope_run_id: requestScopeRunId
-        }
-      : null
+    const recoverySource = recoverySourceForRun(
+      run.run_id,
+      recoveryOfRunId,
+      exactTarget,
+      scenario,
+      preparedByRunId
+    )
+    const boardRequestIdentity = boardRequestIdentityForRun(
+      run.run_id,
+      exactTarget,
+      recoveryOfRunId,
+      recoverySource
+    )
 
     const promptParts = campaignPromptParts(scenario, exactTarget, boardRequestIdentity)
     const contextComponents = contextComponentInventory({

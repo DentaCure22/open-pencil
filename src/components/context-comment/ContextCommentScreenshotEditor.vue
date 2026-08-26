@@ -320,9 +320,7 @@ useEventListener(window, 'resize', syncViewportInsets)
           :style="annotationStyle(annotation.x, annotation.y)"
           @click.stop="openAnnotation(annotation.id)"
         >
-          <icon-lucide-message-circle
-            class="size-9 fill-current stroke-[1.5] [&>path]:fill-current"
-          />
+          <IconlyIcon name="chat" class="size-9 fill-current stroke-[1.5] [&>path]:fill-current" />
           <span
             class="absolute inset-x-0 top-[7px] text-center text-[12px] leading-none font-semibold text-white"
           >
@@ -360,7 +358,7 @@ useEventListener(window, 'resize', syncViewportInsets)
             class="flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-red-400/10 hover:text-red-400"
             @click="removeEditingAnnotation"
           >
-            <icon-lucide-trash-2 class="size-4" />
+            <IconlyIcon name="delete" class="size-4" />
           </button>
         </form>
       </div>
@@ -375,7 +373,7 @@ useEventListener(window, 'resize', syncViewportInsets)
       <div
         class="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-400"
       >
-        <icon-lucide-image class="size-[20px]" />
+        <IconlyIcon name="image" class="size-[20px]" />
       </div>
       <textarea
         :value="draft.text"
@@ -402,7 +400,7 @@ useEventListener(window, 'resize', syncViewportInsets)
         @click="toggleDictation"
       >
         <icon-lucide-square v-if="contextCommentDictationActive" class="size-3.5" />
-        <icon-lucide-mic v-else class="size-[22px]" />
+        <IconlyIcon name="voice" v-else class="size-[22px]" />
       </button>
       <button
         v-else

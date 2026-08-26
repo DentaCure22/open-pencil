@@ -1,8 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+import { isLocalAgentChatContinuation } from '#mcp/pi/local-continuation'
 import { fail, ok } from '#mcp/result'
 import { agentAuth, authorityJson } from '#mcp/tool/authority-client'
+import { workMapSnapshotFromPayload } from '#mcp/tool/work-map-registration'
 
 const DISPATCH_TIMEOUT_MS = 15_000
 const DEFAULT_CHAT_LIMIT = 6
@@ -19,57 +21,88 @@ const CHAT_QUERY_NOISE = new Set([
   'agent',
   'agents',
   'all',
+  'and',
   'available',
   'board',
   'boards',
+  'carry',
   'chat',
   'chats',
   'completed',
+  'continue',
   'conversation',
   'conversations',
   'current',
   'currently',
   'do',
+  'doing',
   'existing',
+  'figure',
+  'figured',
+  'figuring',
+  'for',
+  'go',
+  'going',
   'have',
+  'it',
+  'keep',
   'list',
   'me',
   'my',
   'on',
   'open',
   'opened',
+  'out',
   'please',
+  'proceed',
   'recent',
   'resident',
+  'resume',
   'running',
   'show',
+  'still',
+  'that',
   'the',
+  'they',
+  'this',
   'up',
+  'we',
   'what',
-  'which'
+  'which',
+  'work',
+  'working'
 ])
 
 type DispatchWorkAction = 'continue' | 'fork' | 'new'
 
 type AgentChatCandidate = {
   currentTask: string
-  latestResult: string
-  references: string[]
+  isCurrent: boolean
   resumable: boolean
   state: 'completed' | 'needs_attention' | 'running' | 'stopped'
   status: string
   threadId: string
   updatedAt: string
+  workMap?: {
+    projectId: string | null
+    projectPath: string[]
+    todos: Array<{ id: string; status: string; title: string }>
+  }
 }
 
-type AgentChatContext = AgentChatCandidate & {
+type AgentChatContext = Omit<AgentChatCandidate, 'isCurrent'> & {
+  latestResult: string
   originTask: string
+  references: string[]
   recentMessages: Array<{ role: 'assistant' | 'user'; text: string }>
 }
 
 type AgentChatSearchRecord = {
   candidate: AgentChatCandidate
+  latestResult: string
+  latestUser: string
   originTask: string
+  references: string[]
   recentMessages: AgentChatContext['recentMessages']
 }
 
@@ -78,13 +111,50 @@ type AgentChatPayload = {
 }
 
 type AgentChatList = {
-  boardPlacement: 'not_reported'
+  activeThreadId?: string
+  boardPlacement: 'not_reported' | 'work_map_reported'
   candidates: AgentChatCandidate[]
+  continuationPolicy?: 'cross_chat_available' | 'current_chat_only'
   hasMore: boolean
   matched: number
   resumableCount: number
   runningCount: number
   scope: 'resident_pi_chats'
+}
+
+function withWorkMapPlacement(
+  list: AgentChatList,
+  payload: Record<string, unknown> | null
+): AgentChatList {
+  const workMap = workMapSnapshotFromPayload(payload)
+  if (!workMap) return list
+  const projects = new Map(workMap.projects.map((project) => [project.id, project]))
+  const projectPath = (projectId: string | null): string[] => {
+    if (!projectId) return ['Misc']
+    const project = projects.get(projectId)
+    if (!project) return ['Misc']
+    const parent = project.parentId ? projects.get(project.parentId) : null
+    return parent ? [parent.name, project.name] : [project.name]
+  }
+  return {
+    ...list,
+    boardPlacement: 'work_map_reported',
+    candidates: list.candidates.map((candidate) => {
+      const placement = workMap.placements.find((value) => value.threadId === candidate.threadId)
+      const projectId = placement?.projectId ?? null
+      return {
+        ...candidate,
+        workMap: {
+          projectId,
+          projectPath: projectPath(projectId),
+          todos: workMap.todos
+            .filter((todo) => todo.threadId === candidate.threadId && todo.status !== 'finished')
+            .map((todo) => ({ id: todo.id, status: todo.status, title: todo.title }))
+            .slice(0, 6)
+        }
+      }
+    })
+  }
 }
 
 type AgentChatThread = {
@@ -96,6 +166,13 @@ type AgentChatThread = {
   state?: unknown
   task?: unknown
   updatedAt?: unknown
+}
+
+type AuthorityRequest = typeof authorityJson
+
+export type DispatchWorkToolOptions = {
+  authorityRequest?: AuthorityRequest
+  currentThreadId?: string
 }
 
 function connectionFailure(error: unknown, port: number): Error {
@@ -177,7 +254,19 @@ function lastMessageText(
   return ''
 }
 
-function chatSearchRecord(value: unknown): AgentChatSearchRecord | null {
+function lastSubstantiveUserTask(
+  messages: AgentChatContext['recentMessages'],
+  originTask: string
+): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'user' || isLocalAgentChatContinuation(message.text)) continue
+    return message.text
+  }
+  return originTask || lastMessageText(messages, 'user')
+}
+
+function chatSearchRecord(value: unknown, currentThreadId = ''): AgentChatSearchRecord | null {
   if (!isRecord(value)) return null
   const thread = value as AgentChatThread
   const state = conversationState(thread.state)
@@ -188,18 +277,21 @@ function chatSearchRecord(value: unknown): AgentChatSearchRecord | null {
   const latestUser = lastMessageText(recentMessages, 'user')
   const latestAssistant = lastMessageText(recentMessages, 'assistant')
   const originTask = boundedText(thread.task, MAX_CHAT_INTENT)
-  const currentTask = boundedText(latestUser || originTask, MAX_CHAT_INTENT)
+  const currentTask = boundedText(
+    lastSubstantiveUserTask(recentMessages, originTask),
+    MAX_CHAT_INTENT
+  )
   const recentUpdate = boundedText(thread.recentUpdate, MAX_CHAT_STATUS)
   const latestResult = boundedText(
     latestAssistant || (state === 'completed' ? recentUpdate : ''),
     MAX_CHAT_RESULT
   )
   const status = state === 'completed' && latestResult ? '' : recentUpdate
+  const references = contextReferences(currentTask, latestResult, status, originTask)
   return {
     candidate: {
       currentTask,
-      latestResult,
-      references: contextReferences(currentTask, latestResult, status, originTask),
+      isCurrent: Boolean(currentThreadId && threadId === currentThreadId),
       resumable:
         thread.canFollowUp === true &&
         typeof thread.sessionId === 'string' &&
@@ -209,7 +301,10 @@ function chatSearchRecord(value: unknown): AgentChatSearchRecord | null {
       threadId,
       updatedAt
     },
+    latestResult,
+    latestUser,
     originTask,
+    references,
     recentMessages
   }
 }
@@ -225,13 +320,18 @@ function searchTerms(value: string): string[] {
   ]
 }
 
+function concreteSearchTerms(value: string): string[] {
+  return searchTerms(value).filter((term) => !CHAT_QUERY_NOISE.has(term))
+}
+
 function queryScore(record: AgentChatSearchRecord, query: string): number {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return 1
   const fields = [
-    { text: record.candidate.references.join(' '), weight: 10 },
+    { text: record.candidate.threadId, weight: 12 },
+    { text: record.references.join(' '), weight: 10 },
     { text: record.candidate.currentTask, weight: 8 },
-    { text: record.candidate.latestResult, weight: 5 },
+    { text: record.latestResult, weight: 5 },
     { text: record.candidate.status, weight: 3 },
     { text: record.originTask, weight: 2 }
   ].map((field) => ({
@@ -239,9 +339,12 @@ function queryScore(record: AgentChatSearchRecord, query: string): number {
     tokens: new Set(searchTerms(field.text)),
     weight: field.weight
   }))
-  const terms = searchTerms(normalized).filter((term) => !CHAT_QUERY_NOISE.has(term))
-  if (!terms.length) return 1
-  const exactPhrase = fields.some((field) => field.normalized.includes(normalized))
+  const terms = concreteSearchTerms(normalized)
+  if (!terms.length) return 0
+  const concretePhrase = terms.join(' ')
+  const exactPhrase = fields.some(
+    (field) => field.normalized.includes(normalized) || field.normalized.includes(concretePhrase)
+  )
   const matchedTerms = terms.filter((term) => fields.some((field) => field.tokens.has(term)))
   const requiredTerms = terms.length <= 1 ? terms.length : 2
   if (!exactPhrase && matchedTerms.length < requiredTerms) return 0
@@ -266,28 +369,52 @@ function activityRank(state: AgentChatCandidate['state']): number {
 export function compactAgentChatCandidates(
   payload: AgentChatPayload,
   query = '',
-  limit = DEFAULT_CHAT_LIMIT
+  limit = DEFAULT_CHAT_LIMIT,
+  currentThreadId = ''
 ): AgentChatList {
   const boundedLimit = Math.min(MAX_CHAT_LIMIT, Math.max(1, Math.trunc(limit)))
-  const scored = (Array.isArray(payload.threads) ? payload.threads : [])
+  const records = (Array.isArray(payload.threads) ? payload.threads : []).flatMap((thread) => {
+    const record = chatSearchRecord(thread, currentThreadId)
+    return record ? [record] : []
+  })
+  const scored = records
     .flatMap((thread) => {
-      const record = chatSearchRecord(thread)
-      if (!record) return []
-      const score = queryScore(record, query)
-      return score > 0 ? [{ candidate: record.candidate, score }] : []
+      const score = queryScore(thread, query)
+      return score > 0 ? [{ candidate: thread.candidate, score }] : []
     })
     .sort((left, right) => {
       if (left.score !== right.score) return right.score - left.score
+      if (left.candidate.isCurrent !== right.candidate.isCurrent) {
+        return left.candidate.isCurrent ? -1 : 1
+      }
       const activity = activityRank(left.candidate.state) - activityRank(right.candidate.state)
       return activity || right.candidate.updatedAt.localeCompare(left.candidate.updatedAt)
     })
+  const activeRecord = currentThreadId
+    ? records.find((record) => record.candidate.threadId === currentThreadId)
+    : undefined
+  const currentChatOnly = Boolean(
+    activeRecord && isLocalAgentChatContinuation(activeRecord.latestUser)
+  )
+  const visible =
+    currentChatOnly && activeRecord
+      ? [{ candidate: activeRecord.candidate, score: Number.POSITIVE_INFINITY }]
+      : scored
   return {
+    ...(currentThreadId ? { activeThreadId: currentThreadId } : {}),
     boardPlacement: 'not_reported',
-    candidates: scored.slice(0, boundedLimit).map(({ candidate }) => candidate),
-    hasMore: scored.length > boundedLimit,
-    matched: scored.length,
-    resumableCount: scored.filter(({ candidate }) => candidate.resumable).length,
-    runningCount: scored.filter(({ candidate }) => candidate.state === 'running').length,
+    candidates: visible.slice(0, boundedLimit).map(({ candidate }) => candidate),
+    ...(activeRecord
+      ? {
+          continuationPolicy: currentChatOnly
+            ? ('current_chat_only' as const)
+            : ('cross_chat_available' as const)
+        }
+      : {}),
+    hasMore: visible.length > boundedLimit,
+    matched: visible.length,
+    resumableCount: visible.filter(({ candidate }) => candidate.resumable).length,
+    runningCount: visible.filter(({ candidate }) => candidate.state === 'running').length,
     scope: 'resident_pi_chats'
   }
 }
@@ -295,12 +422,15 @@ export function compactAgentChatCandidates(
 export function compactAgentChatContext(payload: Record<string, unknown>): AgentChatContext {
   const record = chatSearchRecord(payload)
   if (!record) throw new TypeError('Agent chat preview is invalid.')
+  const { isCurrent: _isCurrent, ...candidate } = record.candidate
   return {
-    ...record.candidate,
+    ...candidate,
+    latestResult: record.latestResult,
     originTask:
       record.originTask && record.originTask !== record.candidate.currentTask
         ? record.originTask
         : '',
+    references: record.references,
     recentMessages: record.recentMessages.slice(-MAX_FOCUSED_MESSAGES)
   }
 }
@@ -371,8 +501,21 @@ function dispatchReason(action: DispatchWorkAction): string {
   return 'Started a new Board worker chat.'
 }
 
-async function listAgentChats(args: { limit?: number; query?: string }) {
-  const response = await authorityJson('/agent-router/v1/pi/conversations?preview=1')
+async function listAgentChats(
+  args: { limit?: number; query?: string },
+  options: DispatchWorkToolOptions
+) {
+  const query = args.query?.trim() ?? ''
+  if (query && concreteSearchTerms(query).length === 0) {
+    throw new TypeError(
+      'Chat search needs concrete subject terms or an exact thread ID. Omit query only when the user explicitly asks for a chat inventory.'
+    )
+  }
+  const authorityRequest = options.authorityRequest ?? authorityJson
+  const [response, workMapResponse] = await Promise.all([
+    authorityRequest('/agent-router/v1/pi/conversations?preview=1'),
+    authorityRequest('/agent-router/v1/pi/work-map').catch(() => null)
+  ])
   if (!response.ok) {
     throw new Error(
       typeof response.payload?.error === 'string'
@@ -380,19 +523,55 @@ async function listAgentChats(args: { limit?: number; query?: string }) {
         : `Agent chats unavailable (${String(response.status)}).`
     )
   }
+  const list = compactAgentChatCandidates(
+    response.payload ?? {},
+    query,
+    args.limit ?? DEFAULT_CHAT_LIMIT,
+    options.currentThreadId?.trim() ?? ''
+  )
   return ok(
-    compactAgentChatCandidates(
-      response.payload ?? {},
-      args.query?.trim() ?? '',
-      args.limit ?? DEFAULT_CHAT_LIMIT
+    withWorkMapPlacement(
+      list,
+      workMapResponse?.ok && workMapResponse.payload ? workMapResponse.payload : null
     ),
     'list_agent_chats'
   )
 }
 
-async function getAgentChatContext(args: { thread_id: string }) {
+async function getAgentChatContext(
+  args: { query?: string; thread_id: string },
+  options: DispatchWorkToolOptions
+) {
   const threadId = args.thread_id.trim()
-  const response = await authorityJson(
+  const currentThreadId = options.currentThreadId?.trim() ?? ''
+  const authorityRequest = options.authorityRequest ?? authorityJson
+  let activeRecord: AgentChatSearchRecord | null = null
+  if (currentThreadId && currentThreadId !== threadId) {
+    const activeResponse = await authorityRequest(
+      `/agent-router/v1/pi/conversations/${encodeURIComponent(currentThreadId)}/preview`
+    )
+    if (!activeResponse.ok || !activeResponse.payload) {
+      throw new Error(
+        'The active worker chat could not be verified, so external context is blocked.'
+      )
+    }
+    activeRecord = chatSearchRecord(activeResponse.payload, currentThreadId)
+    if (!activeRecord) {
+      throw new Error('The active worker chat preview is invalid, so external context is blocked.')
+    }
+    if (isLocalAgentChatContinuation(activeRecord.latestUser)) {
+      throw new TypeError(
+        `“${activeRecord.latestUser}” continues the active chat. Use its existing history; do not open another chat.`
+      )
+    }
+    const query = args.query?.trim() ?? ''
+    if (!query || concreteSearchTerms(query).length === 0) {
+      throw new TypeError(
+        'Reading another chat requires concrete subject terms or its exact thread ID in query.'
+      )
+    }
+  }
+  const response = await authorityRequest(
     `/agent-router/v1/pi/conversations/${encodeURIComponent(threadId)}/preview`
   )
   if (!response.ok) {
@@ -403,7 +582,28 @@ async function getAgentChatContext(args: { thread_id: string }) {
     )
   }
   if (!response.payload) throw new Error('Agent chat preview was empty.')
-  return ok(compactAgentChatContext(response.payload), 'get_agent_chat_context')
+  const targetRecord = chatSearchRecord(response.payload)
+  if (!targetRecord) throw new TypeError('Agent chat preview is invalid.')
+  const query = args.query?.trim() ?? ''
+  if (activeRecord && queryScore(targetRecord, query) === 0) {
+    throw new TypeError('The selected chat does not match the concrete subject in query.')
+  }
+  const context = compactAgentChatContext(response.payload)
+  return ok(
+    {
+      ...(activeRecord
+        ? {
+            activeThread: {
+              currentTask: activeRecord.candidate.currentTask,
+              threadId: currentThreadId
+            }
+          }
+        : {}),
+      contextRole: activeRecord ? 'external_reference' : 'chat_preview',
+      ...context
+    },
+    'get_agent_chat_context'
+  )
 }
 
 async function sendDispatch(args: DispatchWorkArgs) {
@@ -440,18 +640,22 @@ async function sendDispatch(args: DispatchWorkArgs) {
   )
 }
 
-export function registerDispatchWorkTool(mcpServer: McpServer): void {
+export function registerDispatchWorkTool(
+  mcpServer: McpServer,
+  options: DispatchWorkToolOptions = {}
+): void {
   const register = mcpServer.registerTool.bind(mcpServer) as (...a: unknown[]) => void
   register(
     'list_agent_chats',
     {
       description:
-        'List compact resident Pi chats when the user asks about them, routing prior work, or the current task genuinely depends on another chat. Omit query for inventory or status; otherwise use concrete subject terms. It does not report Board placement, transcripts, or tool output. Read-only.',
+        'List the resident Pi chat directory when the user asks about other chats or the active task genuinely needs one. Bare continuations such as “continue” or “figure it out” always refer to the active chat and must not trigger chat lookup. Omit query only for an explicit inventory request; otherwise use concrete subject terms or an exact thread ID. It does not report chat results, transcripts, or tool output—only task labels and status. Read-only.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(MAX_CHAT_LIMIT).optional(),
         query: z
           .string()
           .trim()
+          .min(1)
           .max(240)
           .describe('Omit for inventory/status; otherwise use concrete task or object terms')
           .optional()
@@ -459,7 +663,7 @@ export function registerDispatchWorkTool(mcpServer: McpServer): void {
     },
     async (args: { limit?: number; query?: string }) => {
       try {
-        return await listAgentChats(args)
+        return await listAgentChats(args, options)
       } catch (error) {
         return fail(error)
       }
@@ -469,14 +673,21 @@ export function registerDispatchWorkTool(mcpServer: McpServer): void {
     'get_agent_chat_context',
     {
       description:
-        'Read one bounded resident Pi chat preview after list_agent_chats identifies a genuinely relevant candidate. Returns at most six human-facing messages and no tool calls, tool output, reasoning, attachments, or session data. Read-only.',
+        'Read one bounded resident Pi chat as external reference after list_agent_chats identifies a concrete match. In a worker, never use this for “continue”, “go on”, “figure it out”, or another local follow-up; those use the active chat history. A worker must provide the same concrete subject or exact thread ID in query. External context never replaces the active task. Returns at most six human-facing messages and no tool calls, tool output, reasoning, attachments, or session data. Read-only.',
       inputSchema: z.object({
+        query: z
+          .string()
+          .trim()
+          .min(1)
+          .max(240)
+          .describe('Concrete subject terms or exact thread ID used to select this chat')
+          .optional(),
         thread_id: z.string().trim().min(1).describe('Exact thread ID from list_agent_chats')
       })
     },
-    async (args: { thread_id: string }) => {
+    async (args: { query?: string; thread_id: string }) => {
       try {
-        return await getAgentChatContext(args)
+        return await getAgentChatContext(args, options)
       } catch (error) {
         return fail(error)
       }

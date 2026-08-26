@@ -23,9 +23,11 @@ export type AgentProviderUsage = {
 }
 
 export type AgentModelSelection = {
-  effort: AgentReasoningEffort
-  model: string
+  effort?: AgentReasoningEffort
+  model?: string
 }
+
+type StoredAgentModelSelection = Required<AgentModelSelection>
 
 export type AgentPromptAnnotation = {
   comment: string
@@ -45,15 +47,15 @@ const REASONING_EFFORTS = new Set<AgentReasoningEffort>([
   'ultra'
 ])
 
-const DEFAULT_AGENT_MODEL: AgentModelDefinition = {
-  defaultEffort: 'high',
-  efforts: ['low', 'medium', 'high', 'xhigh'],
-  group: 'xAI',
-  id: 'xai-auth/grok-4.6',
-  label: 'Grok 4.6'
+const EMPTY_AGENT_MODEL: AgentModelDefinition = {
+  defaultEffort: 'medium',
+  efforts: ['medium'],
+  group: '',
+  id: '',
+  label: 'Model'
 }
 
-export const AGENT_MODELS = reactive<AgentModelDefinition[]>([{ ...DEFAULT_AGENT_MODEL }])
+export const AGENT_MODELS = reactive<AgentModelDefinition[]>([])
 export const AGENT_PROVIDER_USAGE = reactive<Record<string, AgentProviderUsage | null | undefined>>(
   {}
 )
@@ -61,7 +63,7 @@ export const AGENT_PROVIDER_USAGE = reactive<Record<string, AgentProviderUsage |
 export const GLOBAL_MODEL_SCOPE = 'global'
 export const CONTEXT_COMMENT_MODEL_SCOPE = 'context-comment'
 
-const conversationModels = useLocalStorage<Record<string, AgentModelSelection>>(
+const conversationModels = useLocalStorage<Record<string, StoredAgentModelSelection>>(
   'open-pencil:conversation-models-v1',
   {}
 )
@@ -182,11 +184,7 @@ export function refreshAgentProviderUsage(group: string): Promise<void> {
 function healthyDefault(
   models: readonly AgentModelDefinition[] = AGENT_MODELS
 ): AgentModelDefinition {
-  return (
-    models.find((model) => model.id === DEFAULT_AGENT_MODEL.id) ??
-    models.at(0) ??
-    DEFAULT_AGENT_MODEL
-  )
+  return models.at(0) ?? EMPTY_AGENT_MODEL
 }
 
 function resolveModel(
@@ -198,12 +196,12 @@ function resolveModel(
   return healthyDefault(models)
 }
 
-function storedState(scope: string): AgentModelSelection | undefined {
+function storedState(scope: string): StoredAgentModelSelection | undefined {
   return conversationModels.value[scope]
 }
 
 export function conversationModel(scope: string): AgentModelDefinition {
-  return resolveModel(storedState(scope)?.model ?? DEFAULT_AGENT_MODEL.id)
+  return resolveModel(storedState(scope)?.model)
 }
 
 export function conversationEffort(scope: string): AgentReasoningEffort {
@@ -213,7 +211,10 @@ export function conversationEffort(scope: string): AgentReasoningEffort {
 }
 
 export function conversationSelection(scope: string): AgentModelSelection {
+  const stored = storedState(scope)
+  if (!AGENT_MODELS.length) return stored ?? {}
   const model = conversationModel(scope)
+  if (!model.id) return {}
   return {
     effort: conversationEffort(scope),
     model: model.id
@@ -221,7 +222,8 @@ export function conversationSelection(scope: string): AgentModelSelection {
 }
 
 export function selectConversationModel(scope: string, modelId: string) {
-  const model = resolveModel(modelId)
+  const model = AGENT_MODELS.find((candidate) => candidate.id === modelId)
+  if (!model) return
   const current = storedState(scope)
   const effort =
     current && model.efforts.includes(current.effort) ? current.effort : model.defaultEffort
@@ -233,7 +235,7 @@ export function selectConversationModel(scope: string, modelId: string) {
 
 export function selectConversationEffort(scope: string, effort: AgentReasoningEffort) {
   const model = conversationModel(scope)
-  if (!model.efforts.includes(effort)) return
+  if (!model.id || !model.efforts.includes(effort)) return
   conversationModels.value = {
     ...conversationModels.value,
     [scope]: { effort, model: model.id }
@@ -242,6 +244,16 @@ export function selectConversationEffort(scope: string, effort: AgentReasoningEf
 
 export function seedConversationModel(scope: string, modelId?: string, effort?: string) {
   if (storedState(scope) || !modelId) return
+  if (!AGENT_MODELS.length) {
+    conversationModels.value = {
+      ...conversationModels.value,
+      [scope]: {
+        effort: isEffort(effort) ? effort : EMPTY_AGENT_MODEL.defaultEffort,
+        model: modelId
+      }
+    }
+    return
+  }
   selectConversationModel(scope, modelId)
   if (isEffort(effort)) selectConversationEffort(scope, effort)
 }

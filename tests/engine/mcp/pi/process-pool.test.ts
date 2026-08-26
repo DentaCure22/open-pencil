@@ -60,6 +60,7 @@ describe('PiProcessPool', () => {
         effort: 'high',
         model: 'xai-auth/grok-4.6'
       })
+      expect(first?.poolSessionId).toBeTruthy()
       expect(first?.sessionId).toMatch(/^warm-\d+$/)
       expect(first?.process.isAlive).toBe(true)
       expect(await pool.waitUntilReady(1)).toBe(true)

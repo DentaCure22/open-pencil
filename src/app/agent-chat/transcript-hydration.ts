@@ -2,6 +2,14 @@ export const TRANSCRIPT_HYDRATION_BATCH = 2
 export const TRANSCRIPT_HYDRATION_IDLE_TIMEOUT_MS = 200
 export const LIVE_TRANSCRIPT_INTERVAL_MS = 80
 
+type LiveTranscriptMessage = {
+  completedAt?: string
+  id: string
+  role: string
+}
+
+export type TranscriptHydrationHandle = () => void
+
 export function liveStreamingThreadIds(
   threads: readonly { id: string; state?: string }[],
   retainedIds: Iterable<string>
@@ -10,6 +18,23 @@ export function liveStreamingThreadIds(
   return threads.flatMap((thread) =>
     retained.has(thread.id) && thread.state === 'running' ? [thread.id] : []
   )
+}
+
+/**
+ * Return the last stable message before the changing tail. Live polling can
+ * then request only messages after this cursor instead of downloading the
+ * whole transcript on every tick.
+ */
+export function liveTranscriptAfterCursor(
+  messages: readonly LiveTranscriptMessage[]
+): string | undefined {
+  if (!messages.length) return undefined
+  const latestUserIndex = messages.findLastIndex((message) => message.role === 'user')
+  const firstMutableIndex = messages.findIndex(
+    (message, index) => index > latestUserIndex && !message.completedAt
+  )
+  if (firstMutableIndex === -1) return messages.at(-1)?.id
+  return messages[firstMutableIndex - 1]?.id
 }
 
 export function resolvePreviewTranscriptSource<T>(input: {
@@ -42,17 +67,15 @@ export function nextTranscriptHydrationBatch(
   return pending
 }
 
-export function scheduleTranscriptHydration(work: () => void): number {
+export function scheduleTranscriptHydration(work: () => void): TranscriptHydrationHandle {
   if (typeof requestIdleCallback === 'function') {
-    return requestIdleCallback(() => work(), { timeout: TRANSCRIPT_HYDRATION_IDLE_TIMEOUT_MS })
+    const id = requestIdleCallback(() => work(), { timeout: TRANSCRIPT_HYDRATION_IDLE_TIMEOUT_MS })
+    return () => {
+      if (typeof cancelIdleCallback === 'function') cancelIdleCallback(id)
+    }
   }
-  return setTimeout(work, 16) as unknown as number
-}
-
-export function cancelScheduledTranscriptHydration(handle: number | null): void {
-  if (handle === null) return
-  if (typeof cancelIdleCallback === 'function') cancelIdleCallback(handle)
-  else clearTimeout(handle)
+  const id = setTimeout(work, 16)
+  return () => clearTimeout(id)
 }
 
 export type BoardTranscriptRetainPlan =

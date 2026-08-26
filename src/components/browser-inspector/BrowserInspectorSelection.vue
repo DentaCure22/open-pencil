@@ -397,7 +397,8 @@ watch(
         "
         @click="toggleSessionRow"
       >
-        <icon-lucide-chevron-down
+        <IconlyIcon
+          name="arrow-down"
           class="size-3 transition-transform"
           :class="sessionRowExpanded ? 'rotate-180' : ''"
         />
@@ -470,7 +471,8 @@ watch(
               :style="annotationStyle(annotation)"
               @click.stop="openAnnotation(annotation.id)"
             >
-              <icon-lucide-message-circle
+              <IconlyIcon
+                name="chat"
                 class="size-9 fill-current stroke-[1.5] [&>path]:fill-current"
               />
               <span
@@ -503,7 +505,7 @@ watch(
                 class="flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-red-400/10 hover:text-red-400"
                 @click="removeEditingAnnotation"
               >
-                <icon-lucide-trash-2 class="size-4" />
+                <IconlyIcon name="delete" class="size-4" />
               </button>
             </form>
           </div>

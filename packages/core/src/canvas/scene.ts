@@ -4,6 +4,8 @@ import type { Canvas, Path } from 'canvaskit-wasm'
 import type { SceneNode, SceneGraph, Fill } from '@open-pencil/scene-graph'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
+import { drawFigmaDerivedText } from '#core/canvas/text/derived'
+import { textNodeToOutlinePath } from '#core/canvas/text/outlines'
 import { DROP_HIGHLIGHT_ALPHA, DROP_HIGHLIGHT_STROKE, SECTION_CORNER_RADIUS } from '#core/constants'
 import { vectorNetworkToCenterlinePath } from '#core/vector'
 
@@ -20,8 +22,6 @@ import {
   getStrokeCapEntity,
   getStrokeJoinEntity
 } from './strokes'
-import { drawFigmaDerivedText } from './text-derived'
-import { textNodeToOutlinePath } from './text-outlines'
 
 function drawVisibleFills(
   r: SkiaRenderer,
@@ -217,6 +217,20 @@ function renderChildren(
     renderChildIds(r, canvas, graph, node.childIds, overlays, absX, absY)
   }
 }
+function skipsNodeRender(
+  r: SkiaRenderer,
+  node: SceneNode,
+  nodeId: string,
+  overlays: RenderOverlays
+): boolean {
+  return (
+    !node.visible ||
+    node.isMask ||
+    Boolean(r.skipSceneNodeIds?.has(nodeId)) ||
+    overlays.nodeEditState?.nodeId === nodeId
+  )
+}
+
 export function renderNode(
   r: SkiaRenderer,
   canvas: Canvas,
@@ -227,10 +241,7 @@ export function renderNode(
   parentAbsY = 0
 ): void {
   const node = graph.getNode(nodeId)
-  if (!node || !node.visible || node.isMask || r.skipSceneNodeIds?.has(nodeId)) return
-
-  // Hide the node being edited in node-edit mode (overlay draws it live)
-  if (overlays.nodeEditState?.nodeId === nodeId) return
+  if (!node || skipsNodeRender(r, node, nodeId, overlays)) return
 
   r._nodeCount++
 

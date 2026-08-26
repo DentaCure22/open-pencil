@@ -1,8 +1,13 @@
 # OpenPencil Project Instructions
 
-OpenPencil is a Vue 3 design editor built on CanvasKit and Yoga. Read the live
-source and package manifests for exact versions, scripts, exports, and enabled
-libraries. Product direction lives in `packages/docs/development/roadmap.md`.
+These instructions govern OpenPencil product and repository work. Live persisted
+Board-instance work follows the OpenPencil worker skill and does not require
+repository-source inspection unless the task changes or diagnoses the product.
+
+OpenPencil is a Vue 3 design editor built on CanvasKit and Yoga. For repository
+work, use the live source and package manifests for exact versions, scripts,
+exports, and enabled libraries. Product direction lives in
+`packages/docs/development/roadmap.md`.
 
 ## Package boundaries
 

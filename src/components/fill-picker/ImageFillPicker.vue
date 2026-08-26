@@ -73,7 +73,7 @@ const scaleMode = computed({
       data-test-id="fill-picker-choose-image"
       @click="pickImage()"
     >
-      <icon-lucide-image class="size-3" />
+      <IconlyIcon name="image" class="size-3" />
       {{ fill.imageHash ? 'Replace' : 'Choose image' }}
     </button>
     <AppSelect

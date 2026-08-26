@@ -59,7 +59,7 @@ const { panels } = useI18n()
               data-test-id="fill-picker-add-stop"
               @click="root.actions.addStop"
             >
-              <icon-lucide-plus class="size-3" />
+              <IconlyIcon name="plus" class="size-3" />
             </button>
           </Tip>
         </div>

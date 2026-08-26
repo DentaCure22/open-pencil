@@ -6,7 +6,7 @@ import IconChart from '~icons/lucide/chart-no-axes-column-increasing'
 import IconCode from '~icons/lucide/code-2'
 import IconDocument from '~icons/lucide/file-text'
 import IconFlow from '~icons/lucide/git-branch'
-import IconImage from '~icons/lucide/image'
+import { IconlyImage as IconImage } from '@/components/icons/iconly'
 import IconReview from '~icons/lucide/message-square-check'
 
 import type { BoardIconKey } from '@/app/sidebar-workspace/icons'

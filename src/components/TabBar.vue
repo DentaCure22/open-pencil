@@ -45,7 +45,7 @@ function onClose(e: MouseEvent, tabId: string) {
         @mousedown="onMiddleClick($event, tab.id)"
       >
         <icon-lucide-panels-top-left v-if="tab.isWorkspace" class="text-accent size-3 shrink-0" />
-        <icon-lucide-file v-else class="size-3 shrink-0 opacity-50" />
+        <IconlyIcon name="document" v-else class="size-3 shrink-0 opacity-50" />
         <span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
         <Tip v-if="!tab.isWorkspace" :label="dialogs.closeTab({ name: tab.name })">
           <button
@@ -68,7 +68,7 @@ function onClose(e: MouseEvent, tabId: string) {
         :aria-label="dialogs.newTab"
         @click="createTab()"
       >
-        <icon-lucide-plus class="size-3.5" />
+        <IconlyIcon name="plus" class="size-3.5" />
       </button>
     </Tip>
   </TabsRoot>

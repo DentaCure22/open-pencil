@@ -180,7 +180,7 @@ function submitCreate() {
               class="flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-2 py-1.5 text-left text-[11px] text-muted hover:bg-hover hover:text-surface"
               @click="startCreate"
             >
-              <icon-lucide-plus class="size-3" />
+              <IconlyIcon name="plus" class="size-3" />
               <span class="min-w-0 flex-1 truncate">{{ createLabel }}</span>
             </button>
           </div>

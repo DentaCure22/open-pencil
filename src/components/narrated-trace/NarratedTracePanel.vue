@@ -117,6 +117,11 @@ const micItems = computed<NarratedTraceActivityItem[]>(() =>
 )
 const micTurnIds = computed(() => new Set(narratedTraceMicTurns.value.map((turn) => turn.id)))
 
+function micSourceTurnId(item: NarratedTraceActivityItem) {
+  if (item.event.origin?.kind === 'voice') return item.event.origin.sourceSessionId ?? null
+  return micTurnIds.value.has(item.event.id) ? item.event.id : null
+}
+
 watch(micTurnIds, (current, previous) => {
   if (!previous) return
   const removed = new Set([...previous].filter((turnId) => !current.has(turnId)))
@@ -156,7 +161,8 @@ const activityItems = computed(() => {
     ...micItems.value,
     ...historicalPage.value.items
   ]) {
-    const key = `${item.sessionId}:${item.event.id}`
+    const sourceTurnId = micSourceTurnId(item)
+    const key = sourceTurnId ? `voice:${sourceTurnId}` : `${item.sessionId}:${item.event.id}`
     if (!byId.has(key)) byId.set(key, item)
   }
   const ordered = [...byId.values()].sort(
@@ -271,12 +277,6 @@ async function showLatestActivity() {
     newerActivityCursors.value = previousNewerCursors
   }
 }
-
-const activityPageLabel = computed(() =>
-  activityCursor.value === null
-    ? 'Latest'
-    : `Earlier · page ${String(newerActivityCursors.value.length + 1)}`
-)
 
 function activityEvidence(items = activityItems.value) {
   const byId = new Map<string, NonNullable<NarratedTraceActivityItem['event']['evidence']>>()
@@ -422,12 +422,14 @@ function evidenceMenuOpenChanged(open: boolean) {
 }
 
 function isMicTranscript(item: NarratedTraceActivityItem) {
-  return item.event.kind === 'transcript' && micTurnIds.value.has(item.event.id)
+  const turnId = micSourceTurnId(item)
+  return item.event.kind === 'transcript' && Boolean(turnId && micTurnIds.value.has(turnId))
 }
 
 function deleteMicTranscript(item: NarratedTraceActivityItem) {
-  if (!isMicTranscript(item)) return
-  removeNarratedTraceMicTurn(item.event.id)
+  const turnId = micSourceTurnId(item)
+  if (!turnId || !isMicTranscript(item)) return
+  removeNarratedTraceMicTurn(turnId)
 }
 
 function rowTime(item: NarratedTraceActivityItem) {
@@ -508,22 +510,17 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
 
 <template>
   <div data-test-id="narrated-trace-panel" class="flex min-h-0 flex-1 flex-col">
-    <header class="flex min-h-14 shrink-0 items-center border-b border-white/[0.055] px-3 py-2.5">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <h2 class="text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface">
-            Board activity
-          </h2>
-          <span
-            v-if="isCapturing"
-            data-test-id="narrated-trace-capture-status"
-            class="size-1.5 rounded-full bg-violet-300"
-            aria-label="Capturing activity"
-          />
-        </div>
-        <p class="truncate text-[9.5px] leading-3.5 text-muted/70">
-          Human and agent changes, anchored to this Board
-        </p>
+    <header class="flex min-h-10 shrink-0 items-center border-b border-white/[0.055] px-3 py-1.5">
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <h2 class="text-[12px] leading-5 font-semibold tracking-[-0.01em] text-surface">
+          Board activity
+        </h2>
+        <span
+          v-if="isCapturing"
+          data-test-id="narrated-trace-capture-status"
+          class="size-1.5 rounded-full bg-violet-300"
+          aria-label="Capturing activity"
+        />
       </div>
       <div class="ml-2 flex shrink-0 items-center gap-1">
         <DropdownMenuRoot :modal="false" @update:open="evidenceMenuOpenChanged">
@@ -538,7 +535,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
               <span v-if="evidenceOverview" class="tabular-nums">
                 {{ evidenceOverview.usage.count }}
               </span>
-              <icon-lucide-chevron-down class="size-2.5 text-muted/60" />
+              <IconlyIcon name="arrow-down" class="size-2.5 text-muted/60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuPortal>
@@ -635,7 +632,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
           label="Clear spoken Trace turns"
           @click="clearNarratedTraceMicTurns"
         >
-          <icon-lucide-trash-2 class="size-3.5" />
+          <IconlyIcon name="delete" class="size-3.5" />
         </IconButton>
       </div>
     </header>
@@ -805,7 +802,8 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
               "
               @click="toggleExpanded(agentReceiptKey(receipt))"
             >
-              <icon-lucide-chevron-right
+              <IconlyIcon
+                name="arrow-right"
                 class="size-3 transition-transform"
                 :class="isExpanded(agentReceiptKey(receipt)) ? 'rotate-90' : ''"
               />
@@ -863,35 +861,21 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
       <section
         v-if="activityItems.length > 0"
         data-test-id="narrated-trace-activity-feed"
-        class="relative mt-2 pl-3 before:absolute before:top-10 before:bottom-4 before:left-[17px] before:w-px before:bg-violet-400/50"
+        class="mt-1 px-2.5"
       >
-        <div
-          class="flex h-8 items-center gap-2 px-2.5 text-[8.5px] font-semibold tracking-[0.045em] text-muted/65 uppercase"
-        >
-          <icon-lucide-activity class="size-3.5 text-violet-200/75" />
-          <span>Trace activity</span>
-          <span class="ml-auto text-[8px] font-medium tracking-normal text-muted/45 normal-case">
-            {{ activityPageLabel }}
-          </span>
-          <span class="tabular-nums text-muted/45">{{ activityItems.length }}</span>
-        </div>
-
         <article
           v-for="item in activityItems"
           :key="`${item.sessionId}:${item.event.id}`"
           :data-test-id="'narrated-trace-row-' + item.event.kind"
           :aria-label="rowMetadata(item) || undefined"
-          class="group relative mb-2 ml-3 flex min-w-0 gap-2 rounded-[7px] border border-white/[0.055] bg-white/[0.015] px-2 py-2 hover:bg-white/[0.035]"
+          class="group flex min-w-0 gap-2.5 border-b border-white/[0.05] px-1 py-2.5 transition-colors last:border-b-0 hover:bg-white/[0.025]"
         >
-          <span
-            aria-hidden="true"
-            class="border-chrome-detail absolute top-4 -left-[19px] size-3 rounded-full border-2 bg-violet-400 shadow-[0_0_0_1px_rgb(167_139_250_/_0.7)]"
-          />
           <div
-            class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-white/[0.035] text-muted/80"
+            class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-white/[0.035] text-muted/75 ring-1 ring-inset ring-white/[0.045]"
             :aria-label="item.event.kind"
           >
-            <icon-lucide-mic
+            <IconlyIcon
+              name="voice"
               v-if="item.event.kind === 'transcript'"
               class="size-3.5 text-violet-200"
             />
@@ -899,7 +883,8 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
               v-else-if="item.event.kind === 'selection' || item.event.kind === 'tool'"
               class="size-3"
             />
-            <icon-lucide-pencil
+            <IconlyIcon
+              name="edit"
               v-else-if="item.event.kind === 'shape' || item.event.kind === 'ink'"
               class="size-3.5"
             />
@@ -908,7 +893,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
               class="size-3.5 text-violet-200"
             />
             <icon-lucide-braces v-else-if="item.event.kind === 'edit'" class="size-3.5" />
-            <icon-lucide-message-square v-else class="size-3.5" />
+            <IconlyIcon name="chat" v-else class="size-3.5" />
           </div>
 
           <div class="min-w-0 flex-1">
@@ -930,7 +915,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                   class="flex size-5 shrink-0 items-center justify-center rounded text-muted/45 transition-colors hover:bg-white/[0.055] hover:text-surface focus-visible:text-surface"
                   @click.stop="deleteMicTranscript(item)"
                 >
-                  <icon-lucide-trash-2 class="size-3" />
+                  <IconlyIcon name="delete" class="size-3" />
                 </button>
               </Tip>
             </div>
@@ -972,7 +957,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                   v-else-if="rowEvidenceStatus(item) === 'pending'"
                   class="size-2.5 animate-spin"
                 />
-                <icon-lucide-triangle-alert v-else class="size-2.5" />
+                <IconlyIcon name="danger" v-else class="size-2.5" />
                 {{ rowEvidenceLabel(item) }}
               </span>
               <button
@@ -987,7 +972,8 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
                 :data-expanded="isExpanded(item.event.id)"
                 @click.stop="toggleExpanded(item.event.id)"
               >
-                <icon-lucide-chevron-right
+                <IconlyIcon
+                  name="arrow-right"
                   class="size-3 transition-transform duration-150"
                   :class="isExpanded(item.event.id) ? 'rotate-90' : ''"
                 />
@@ -1077,7 +1063,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
             :aria-label="`Load context snapshot for ${rowTitle(item)}`"
             @click="toggleExpanded(item.event.id)"
           >
-            <icon-lucide-image class="size-3.5" />
+            <IconlyIcon name="image" class="size-3.5" />
           </button>
           <div
             v-else-if="item.event.evidence && rowEvidenceStatus(item) !== 'pending'"
@@ -1106,7 +1092,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
             class="flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[8.5px] font-medium text-muted/70 hover:bg-white/[0.055] hover:text-surface disabled:opacity-40"
             @click="showNewerActivity"
           >
-            <icon-lucide-chevron-up class="size-3" /> Newer
+            <IconlyIcon name="arrow-up" class="size-3" /> Newer
           </button>
           <button
             v-if="activityCursor !== null"
@@ -1138,7 +1124,7 @@ function retrievalEventCoordinates(event: NarratedTraceRetrievalEventSummary) {
             class="flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[8.5px] font-medium text-violet-200/75 hover:bg-violet-300/10 hover:text-violet-100 disabled:opacity-40"
             @click="showOlderActivity"
           >
-            Earlier <icon-lucide-chevron-down class="size-3" />
+            Earlier <IconlyIcon name="arrow-down" class="size-3" />
           </button>
         </div>
       </section>

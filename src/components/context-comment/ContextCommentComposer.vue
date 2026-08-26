@@ -194,7 +194,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
       class="flex size-11 shrink-0 items-center justify-center rounded-full bg-chrome-control text-surface ring-1 ring-inset ring-chrome-control-border transition-colors hover:bg-hover disabled:opacity-40"
       @click="beginCapture"
     >
-      <icon-lucide-plus class="size-[22px]" />
+      <IconlyIcon name="plus" class="size-[22px]" />
     </button>
 
     <textarea
@@ -224,7 +224,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
       @click="toggleDictation"
     >
       <icon-lucide-square v-if="contextCommentDictationActive" class="size-3.5" />
-      <icon-lucide-mic v-else class="size-[22px]" />
+      <IconlyIcon name="voice" v-else class="size-[22px]" />
     </button>
 
     <button

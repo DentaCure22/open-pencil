@@ -56,7 +56,8 @@ function activate(id: BoardExperienceId) {
       class="text-muted hover:text-surface flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[9.5px] font-semibold tracking-wide uppercase"
       @click="toggleFolder"
     >
-      <icon-lucide-chevron-right
+      <IconlyIcon
+        name="arrow-right"
         class="size-3 transition-transform"
         :class="folderIsOpen ? 'rotate-90' : ''"
       />

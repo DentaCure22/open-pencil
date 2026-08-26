@@ -19,12 +19,12 @@ import {
 } from 'reka-ui'
 import { computed, nextTick, ref, watch } from 'vue'
 
-import type { AgentConversationThread } from '@/app/agent-chat/client'
 import {
   agentConversationMessages,
   forkAgentConversation,
-  getAgentConversation
-} from '@/app/agent-chat/client'
+  getAgentConversation,
+  type AgentConversationThread
+} from '@/app/agent-chat/conversations'
 import { refreshAgentConversationHistory } from '@/app/agent-chat/history-store'
 import type { AgentReasoningEffort } from '@/app/agent-chat/models'
 import { agentChatsPanelSelectedId, agentChatsPanelView } from '@/app/agent-chat/panel'
@@ -148,6 +148,7 @@ async function fullThread(): Promise<AgentConversationThread> {
     recentUpdate: remote.recentUpdate,
     state: remote.state,
     task: remote.task,
+    ...(remote.title ? { title: remote.title } : {}),
     updatedAt: remote.updatedAt
   }
 }
@@ -229,7 +230,7 @@ async function shareConversation() {
             :class="menu.item"
             @select="beginRename"
           >
-            <icon-lucide-pencil :class="menu.icon" />
+            <IconlyIcon name="edit" :class="menu.icon" />
             <span>Rename</span>
           </ContextMenuItem>
           <ContextMenuItem
@@ -282,7 +283,7 @@ async function shareConversation() {
             <ContextMenuSubTrigger data-test-id="agent-conversation-copy" :class="menu.subTrigger">
               <icon-lucide-copy :class="menu.icon" />
               <span class="min-w-0 flex-1">Copy</span>
-              <icon-lucide-chevron-right class="size-3.5 shrink-0 stroke-[1.8] text-muted" />
+              <IconlyIcon name="arrow-right" class="size-3.5 shrink-0 stroke-[1.8] text-muted" />
             </ContextMenuSubTrigger>
             <ContextMenuPortal>
               <ContextMenuSubContent :class="menu.content" :side-offset="4">
@@ -291,7 +292,7 @@ async function shareConversation() {
                   :class="menu.item"
                   @select="copyConversation('conversation')"
                 >
-                  <icon-lucide-messages-square :class="menu.icon" />
+                  <IconlyIcon name="chat" :class="menu.icon" />
                   <span>Copy conversation</span>
                 </ContextMenuItem>
                 <ContextMenuItem

@@ -1,5 +1,0 @@
-{
-  "finalText": "Captured as an editable native decision card on the exact target:\n\n- Page: `0:430` — “PTB Dev Sparse v1”\n- Card owner: `0:369`\n- Decision, blocker, and all three next actions verified by readback\n- Presentation acknowledged; card is selected and visible\n- Persistence reported durable\n\nLimitation: no separate screenshot, Undo/Redo, or reload test was performed.\n\n### Recap\n\n- Added the desktop-beta decision card to the specified Board.\n- Verified exact target, content, visibility, and durable receipt.\n\n",
-  "generatedAtMs": 1785357419512,
-  "releasedAtMs": 1785357461914
-}

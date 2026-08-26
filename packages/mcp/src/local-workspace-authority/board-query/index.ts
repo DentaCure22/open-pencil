@@ -1,6 +1,9 @@
 import type { Rect, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { authorityNodeSummary } from '#mcp/local-workspace-authority/node-summary'
+import {
+  authorityNodeClassification,
+  authorityNodeSummary
+} from '#mcp/local-workspace-authority/node-summary'
 
 import {
   authorityBoardQueryCandidates,
@@ -220,12 +223,18 @@ export function projectAuthorityBoardNode(
 ): JsonRecord {
   if (projection === 'detail') return authorityNodeSummary(graph, node)
   if (projection === 'id_only') {
-    return { id: node.id, parent_id: node.parentId, type: node.type }
+    return {
+      id: node.id,
+      parent_id: node.parentId,
+      ...authorityNodeClassification(node),
+      type: node.type
+    }
   }
   const geometry = {
     bounds: graph.getAbsoluteBounds(node.id),
     id: node.id,
     parent_id: node.parentId,
+    ...authorityNodeClassification(node),
     type: node.type,
     visible: node.visible
   }

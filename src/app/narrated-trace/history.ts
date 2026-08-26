@@ -1,6 +1,6 @@
 import { shallowRef } from 'vue'
 
-import { traceEventSearchValues } from '@open-pencil/core/rpc'
+import { normalizeTraceSessionTag, traceEventSearchValues } from '@open-pencil/core/rpc'
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -24,6 +24,7 @@ const DEFAULT_ACTIVITY_ITEM_LIMIT = 80
 const DEFAULT_ACTIVITY_SESSION_LIMIT = 24
 
 export type NarratedTraceRecordSummary = {
+  aliases?: string[]
   bounds?: Rect
   durationMs: number
   eventCount: number
@@ -35,6 +36,7 @@ export type NarratedTraceRecordSummary = {
   scope?: NarratedTraceScope
   searchTerms?: string[]
   startedAt: string
+  tag?: string
   targetIds?: string[]
   title: string
   updatedAt: string
@@ -95,6 +97,7 @@ function isRecordSummary(value: unknown): value is NarratedTraceRecordSummary {
     typeof record.eventCount === 'number' &&
     typeof record.evidenceCount === 'number' &&
     typeof record.id === 'string' &&
+    (record.tag === undefined || typeof record.tag === 'string') &&
     typeof record.startedAt === 'string' &&
     typeof record.title === 'string' &&
     typeof record.updatedAt === 'string'
@@ -102,7 +105,12 @@ function isRecordSummary(value: unknown): value is NarratedTraceRecordSummary {
 }
 
 function summarySearchTerms(session: NarratedTraceSession, title: string): string[] {
-  const values = [title, ...traceEventSearchValues(session.events)]
+  const values = [
+    title,
+    session.tag ?? '',
+    ...(session.aliases ?? []),
+    ...traceEventSearchValues(session.events)
+  ]
   return [
     ...new Set(
       values
@@ -202,6 +210,7 @@ export function summarizeNarratedTraceSession(
   const startedAtMs = Date.parse(session.startedAt)
   const latestGesture = gestureEvents.at(-1)
   return {
+    ...(session.aliases?.length ? { aliases: [...session.aliases] } : {}),
     ...(bounds ? { bounds } : {}),
     durationMs: session.durationMs,
     eventCount: session.events.length,
@@ -217,10 +226,30 @@ export function summarizeNarratedTraceSession(
     ...(session.scope ? { scope: structuredClone(session.scope) } : {}),
     searchTerms: summarySearchTerms(session, title),
     startedAt: session.startedAt,
+    ...(session.tag ? { tag: session.tag } : {}),
     ...(targetIds.length > 0 ? { targetIds } : {}),
     title,
     updatedAt
   }
+}
+
+export function uniqueNarratedTraceTag(seed: string, sessionId?: string) {
+  const base = normalizeTraceSessionTag(seed) || 'session'
+  const used = new Set(
+    narratedTraceHistory.value.flatMap((record) =>
+      record.id === sessionId
+        ? []
+        : [record.tag, ...(record.aliases ?? [])].flatMap((tag) =>
+            tag ? [normalizeTraceSessionTag(tag)] : []
+          )
+    )
+  )
+  if (!used.has(base)) return base
+  for (let suffix = 2; suffix < 10_000; suffix += 1) {
+    const candidate = `${base.slice(0, Math.max(1, 39 - String(suffix).length))}-${String(suffix)}`
+    if (!used.has(candidate)) return candidate
+  }
+  return `${base.slice(0, 31)}-${globalThis.crypto.randomUUID().slice(0, 8)}`
 }
 
 export function upsertNarratedTraceRecordSummary(

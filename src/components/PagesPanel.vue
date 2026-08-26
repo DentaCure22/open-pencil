@@ -550,7 +550,7 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
       <label
         class="group/search flex h-7 items-center gap-2 rounded-[5px] px-2 text-muted transition-colors focus-within:bg-white/[0.055] focus-within:text-surface hover:bg-white/[0.035]"
       >
-        <icon-lucide-search class="size-[17px] shrink-0 stroke-[1.6]" />
+        <IconlyIcon name="search" class="size-[17px] shrink-0 stroke-[1.6]" />
         <input
           v-model="pageQuery"
           data-test-id="pages-search"
@@ -610,7 +610,8 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
               class="absolute inset-0 flex items-center justify-center rounded-[4px] transition-opacity group-hover/page:opacity-0"
               @click="togglePage(row.page.id)"
             >
-              <icon-lucide-chevron-right
+              <IconlyIcon
+                name="arrow-right"
                 class="size-3 stroke-[1.6] text-muted/65 transition-transform"
                 :class="expandedPages.has(row.page.id) ? 'rotate-90' : ''"
               />
@@ -626,7 +627,10 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
               <icon-lucide-grip-vertical class="size-3.5 stroke-[1.5]" />
             </button>
           </span>
-          <icon-lucide-folder class="mr-1.5 size-[15px] shrink-0 stroke-[1.45] text-muted/75" />
+          <IconlyIcon
+            name="folder"
+            class="mr-1.5 size-[15px] shrink-0 stroke-[1.45] text-muted/75"
+          />
           <div v-if="pageRename.editingId.value === row.page.id" class="min-w-0 flex-1 pr-1">
             <input
               ref="pageRenameInput"
@@ -656,7 +660,7 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
                 class="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-muted opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-surface group-hover/page:opacity-100 data-[state=open]:opacity-100"
                 @click.stop
               >
-                <icon-lucide-plus class="size-[15px] stroke-[1.6]" />
+                <IconlyIcon name="plus" class="size-[15px] stroke-[1.6]" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
@@ -689,13 +693,13 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
                 class="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-muted opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-surface group-hover/page:opacity-100 data-[state=open]:opacity-100"
                 @click.stop
               >
-                <icon-lucide-more-horizontal class="size-3.5" />
+                <IconlyIcon name="more" class="size-3.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
               <DropdownMenuContent :class="menuContentClass" :side-offset="4" align="end">
                 <DropdownMenuItem :class="menuItemClass" @select="beginPageRename(row.page)">
-                  <icon-lucide-pencil class="size-3.5 text-[#999ca6]" />
+                  <IconlyIcon name="edit" class="size-3.5 text-[#999ca6]" />
                   <span>Rename</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator class="my-1 h-px bg-white/[0.07]" />
@@ -705,7 +709,7 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
                   :disabled="!pageIsEmpty(row.page.id)"
                   @select="deletePage(row.page)"
                 >
-                  <icon-lucide-trash-2 class="size-3.5" />
+                  <IconlyIcon name="delete" class="size-3.5" />
                   <span>Delete project</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -784,13 +788,13 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
                 class="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-muted opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-surface group-hover/board:opacity-100 data-[state=open]:opacity-100"
                 @click.stop
               >
-                <icon-lucide-more-horizontal class="size-3.5" />
+                <IconlyIcon name="more" class="size-3.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuPortal>
               <DropdownMenuContent :class="menuContentClass" :side-offset="4" align="end">
                 <DropdownMenuItem :class="menuItemClass" @select="beginBoardRename(row.board)">
-                  <icon-lucide-pencil class="size-3.5 text-[#999ca6]" />
+                  <IconlyIcon name="edit" class="size-3.5 text-[#999ca6]" />
                   <span>Rename</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator class="my-1 h-px bg-white/[0.07]" />
@@ -799,7 +803,7 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
                   :disabled="store.graph.getPages().length <= 1"
                   @select="requestBoardDeletion(row.board)"
                 >
-                  <icon-lucide-trash-2 class="size-3.5" />
+                  <IconlyIcon name="delete" class="size-3.5" />
                   <span>Delete board</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -818,7 +822,7 @@ defineExpose({ createBoard: requestBoardCreation, createPage })
         class="mt-1 flex h-7 w-full items-center gap-1.5 rounded-[5px] px-2 text-left text-[12px] text-muted/80 transition-colors hover:bg-white/[0.045] hover:text-surface"
         @click="createPage()"
       >
-        <icon-lucide-plus class="size-[14px] stroke-[1.6]" />
+        <IconlyIcon name="plus" class="size-[14px] stroke-[1.6]" />
         <span>New project</span>
       </button>
     </div>

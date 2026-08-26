@@ -54,6 +54,9 @@ const hasMessageBody = computed(
     })
 )
 const hasContent = computed(() => attachments.value.length > 0 || hasMessageBody.value)
+const enteringPrompt = computed(
+  () => message.role === 'user' && message.id.startsWith('optimistic:')
+)
 const copied = refAutoReset(false, 1_500)
 const copyText = computed(() =>
   contentParts.value
@@ -83,10 +86,14 @@ async function copyMessage() {
   <article
     v-if="hasContent"
     data-test-id="ai-message"
+    :data-entering="enteringPrompt ? 'true' : undefined"
     :data-message-id="message.id"
     :data-role="message.role"
     class="group/message flex w-full gap-2 font-sans text-[14px] font-normal leading-[1.58] tracking-normal select-text"
-    :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+    :class="[
+      message.role === 'user' ? 'justify-end' : 'justify-start',
+      enteringPrompt ? 'agent-prompt-enter' : ''
+    ]"
   >
     <div
       class="flex min-w-0 flex-col"
@@ -160,6 +167,28 @@ async function copyMessage() {
 </template>
 
 <style scoped>
+@keyframes agent-prompt-enter {
+  from {
+    opacity: 0.35;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.agent-prompt-enter {
+  transform-origin: bottom right;
+  animation: agent-prompt-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-prompt-enter {
+    animation: none;
+  }
+}
+
 :deep(.assistant-markdown) {
   font: inherit;
   color: var(--color-agent-ink);

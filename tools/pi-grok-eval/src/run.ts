@@ -370,6 +370,34 @@ async function runGrok(prompt: string): Promise<{
   return { ...result, lastText: '' }
 }
 
+type HarnessResult = Awaited<ReturnType<typeof runPi>>
+
+async function runHarness(harness: Harness, prompt: string, lastPath: string) {
+  if (harness === 'pi') return runPi(prompt, 'xai-auth', 'grok-4.6')
+  if (harness === 'pi-sol') return runPi(prompt, 'openai-codex', 'gpt-5.6-sol')
+  if (harness === 'codex-sol') return runCodexSol(prompt, lastPath)
+  return runGrok(prompt)
+}
+
+function harnessText(harness: Harness, result: HarnessResult): string {
+  if (harness === 'pi' || harness === 'pi-sol') return parsePiFinalText(result.stdout)
+  if (harness === 'codex-sol') return result.lastText || result.stdout
+  return parseGrokText(result.stdout)
+}
+
+function harnessUsage(harness: Harness, result: HarnessResult): TokenUsage {
+  if (harness === 'pi' || harness === 'pi-sol') return parsePiUsage(result.stdout)
+  if (harness === 'codex-sol') return parseCodexUsage(result.stdout)
+  return parseGrokUsage(result.stdout)
+}
+
+function harnessModel(harness: Harness): string {
+  if (harness === 'pi') return 'xai-auth/grok-4.6'
+  if (harness === 'pi-sol') return 'openai-codex/gpt-5.6-sol'
+  if (harness === 'codex-sol') return 'codex-cli/gpt-5.6-sol'
+  return 'grok-4.6-build'
+}
+
 function evalPaths(harness: Harness): EvalPaths {
   return {
     copyPath: path.join(RUN_DIR, `station-${harness}.txt`),
@@ -390,6 +418,10 @@ async function readText(filePath: string): Promise<string | null> {
   }
 }
 
+function errorUnless(condition: boolean, message: string): string | null {
+  return condition ? null : message
+}
+
 async function verifyTask(
   task: TaskId,
   harness: Harness,
@@ -400,27 +432,25 @@ async function verifyTask(
   if (!fixture?.includes('CODE=lumen-47')) return 'fixture changed'
   switch (task) {
     case 'read':
-      return footer.code === 'lumen-47' ? null : 'wrong code'
+      return errorUnless(footer.code === 'lumen-47', 'wrong code')
     case 'bash':
-      return footer.lines === '4' ? null : 'wrong line count'
+      return errorUnless(footer.lines === '4', 'wrong line count')
     case 'search':
-      return footer.file?.includes('notes-hit.md') ? null : 'wrong search file'
+      return errorUnless(Boolean(footer.file?.includes('notes-hit.md')), 'wrong search file')
     case 'json':
-      return footer.name === 'mira' ? null : 'wrong lead name'
+      return errorUnless(footer.name === 'mira', 'wrong lead name')
     case 'edit': {
       const scratch = await readText(paths.scratchPath)
-      if (!scratch?.includes('probed-by-eval')) return 'scratch missing line'
-      return null
+      return errorUnless(Boolean(scratch?.includes('probed-by-eval')), 'scratch missing line')
     }
     case 'write': {
       const written = await readText(paths.writePath)
-      if (!written?.includes('HELLO=eval')) return 'write file missing'
-      return null
+      return errorUnless(Boolean(written?.includes('HELLO=eval')), 'write file missing')
     }
     case 'copy': {
       const copied = (await readText(paths.copyPath))?.trim()
       if (copied !== 'lumen-47') return 'copy file wrong'
-      return footer.code === 'lumen-47' ? null : 'wrong copied code'
+      return errorUnless(footer.code === 'lumen-47', 'wrong copied code')
     }
   }
 }
@@ -436,14 +466,7 @@ async function runOne(harness: Harness, task: TaskSpec): Promise<TaskResult> {
   try {
     const lastPath = path.join(RUN_DIR, 'logs', `${harness}-${task.id}.last.txt`)
     await mkdir(path.join(RUN_DIR, 'logs'), { recursive: true })
-    const result =
-      harness === 'pi'
-        ? await runPi(prompt, 'xai-auth', 'grok-4.6')
-        : harness === 'pi-sol'
-          ? await runPi(prompt, 'openai-codex', 'gpt-5.6-sol')
-          : harness === 'codex-sol'
-            ? await runCodexSol(prompt, lastPath)
-            : await runGrok(prompt)
+    const result = await runHarness(harness, prompt, lastPath)
     stdout = result.stdout
     stderr = result.stderr
     lastText = result.lastText
@@ -456,34 +479,17 @@ async function runOne(harness: Harness, task: TaskSpec): Promise<TaskResult> {
   await writeFile(path.join(RUN_DIR, 'logs', `${harness}-${task.id}.stdout.txt`), stdout)
   await writeFile(path.join(RUN_DIR, 'logs', `${harness}-${task.id}.stderr.txt`), stderr)
   const wallMs = Date.now() - started
-  const text =
-    harness === 'pi' || harness === 'pi-sol'
-      ? parsePiFinalText(stdout)
-      : harness === 'codex-sol'
-        ? lastText || stdout
-        : parseGrokText(stdout)
+  const result = { lastText, settled: false, stderr, stdout, timedOut: false }
+  const text = harnessText(harness, result)
   const footer = parseFooter(text)
-  const usage =
-    harness === 'pi' || harness === 'pi-sol'
-      ? parsePiUsage(stdout)
-      : harness === 'codex-sol'
-        ? parseCodexUsage(stdout)
-        : parseGrokUsage(stdout)
+  const usage = harnessUsage(harness, result)
   const verifyError = error ? null : await verifyTask(task.id, harness, footer)
   if (verifyError) error = verifyError
-  const model =
-    harness === 'pi'
-      ? 'xai-auth/grok-4.6'
-      : harness === 'pi-sol'
-        ? 'openai-codex/gpt-5.6-sol'
-        : harness === 'codex-sol'
-          ? 'codex-cli/gpt-5.6-sol'
-          : 'grok-4.6-build'
   return {
     error,
     footer,
     harness,
-    model,
+    model: harnessModel(harness),
     ok: footer.ok === true && error === null,
     task: task.id,
     text: text.slice(0, 2000),

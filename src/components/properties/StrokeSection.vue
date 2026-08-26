@@ -72,7 +72,7 @@ function onToggleSides(activeNode: SceneNode | null) {
           data-test-id="stroke-section-add"
           @click="actions.add(strokeCtx.defaultStroke)"
         >
-          <icon-lucide-plus class="size-3.5" />
+          <IconlyIcon name="plus" class="size-3.5" />
         </IconButton>
       </template>
 

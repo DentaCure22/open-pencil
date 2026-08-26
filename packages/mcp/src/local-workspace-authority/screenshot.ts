@@ -13,10 +13,14 @@ export type AuthorityBoardScreenshot = {
   base64: string
   bounds: Rect
   byteLength: number
+  capture_scope: 'live_board' | 'persisted_board'
+  live_capture_error?: string
+  live_runtime_captured: boolean
   mimeType: 'image/png'
   objectIds: string[]
   pixelHeight: number
   pixelWidth: number
+  retry_will_not_capture_runtime?: true
   scale: number
 }
 
@@ -66,10 +70,13 @@ export async function renderAuthorityBoardScreenshot(
     base64: Buffer.from(bytes).toString('base64'),
     bounds: { height, width, x: bounds.minX, y: bounds.minY },
     byteLength: bytes.byteLength,
+    capture_scope: 'persisted_board',
+    live_runtime_captured: false,
     mimeType: 'image/png',
     objectIds,
     pixelHeight: Math.ceil(height * scale),
     pixelWidth: Math.ceil(width * scale),
+    retry_will_not_capture_runtime: true,
     scale
   }
 }

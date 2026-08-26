@@ -27,7 +27,7 @@ function defaultTrackValue(sizing: GridTrackSizing): number {
           {{ trackProp === 'gridTemplateColumns' ? panels.columns : panels.rows }}
         </label>
         <IconButton @click="ctx.addTrack(trackProp)">
-          <icon-lucide-plus class="size-3.5" />
+          <IconlyIcon name="plus" class="size-3.5" />
         </IconButton>
       </div>
       <div class="flex flex-col gap-1">

@@ -1,4 +1,4 @@
-import type { AgentConversationHistory, AgentConversationThread } from './client'
+import type { AgentConversationHistory, AgentConversationThread } from './conversations'
 import { boundLoadedTranscript } from './replay-buffer'
 import type { AiMessage, AiMessagePart } from './types'
 
@@ -133,10 +133,12 @@ function sameMessage(previous: AiMessage, next: AiMessage): boolean {
 function sameThread(previous: AgentConversationThread, next: AgentConversationThread): boolean {
   const sameMetadata = [
     previous.id === next.id,
+    previous.activeTurnStartedAt === next.activeTurnStartedAt,
     previous.updatedAt === next.updatedAt,
     previous.state === next.state,
     previous.recentUpdate === next.recentUpdate,
     previous.task === next.task,
+    previous.title === next.title,
     previous.canFollowUp === next.canFollowUp,
     previous.nativeThreadId === next.nativeThreadId,
     previous.model === next.model,
@@ -256,6 +258,7 @@ export function applyConversationPage(
   const messages = boundLoadedTranscript(
     mergeConversationPageMessages(current.messages, page.messages)
   )
+  const turns = page.turns?.length ? page.turns : current.turns
   return {
     ...page,
     hasNewer: page.hasNewer === true,
@@ -263,7 +266,7 @@ export function applyConversationPage(
     messages,
     newerAfter: page.newerAfter ?? current.newerAfter,
     olderBefore: mode === 'delta' ? current.olderBefore : page.olderBefore,
-    ...(page.turns?.length ? { turns: page.turns } : current.turns ? { turns: current.turns } : {})
+    ...(turns ? { turns } : {})
   }
 }
 

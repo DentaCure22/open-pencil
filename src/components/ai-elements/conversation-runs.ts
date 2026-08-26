@@ -1,8 +1,9 @@
 import { isRetiredMemoryTool, latestMessageCreatedAt } from './model'
-import type { AiMessage } from './types'
+import type { AiMessage, AiTurnChanges } from './types'
 
 export type ConversationRun = {
   activity: AiMessage[]
+  changes?: AiTurnChanges
   endedAt?: string
   id: string
   missingResponse: boolean
@@ -48,7 +49,10 @@ function commentaryFromText(message: AiMessage): AiMessage {
   }
 }
 
-export function conversationRuns(messages: readonly AiMessage[]): ConversationRun[] {
+export function conversationRuns(
+  messages: readonly AiMessage[],
+  options: { active?: boolean } = {}
+): ConversationRun[] {
   const grouped: Array<{
     id: string
     messages: AiMessage[]
@@ -67,12 +71,37 @@ export function conversationRuns(messages: readonly AiMessage[]): ConversationRu
     const answers = run.messages.filter((message) => message.text.trim())
     const lastAnswer = answers.at(-1)
     const earlierAnswers = new Set(answers.slice(0, -1).map((message) => message.id))
+    const lastAnswerIndex = lastAnswer ? run.messages.indexOf(lastAnswer) : -1
+    const compactUnfinishedText = Boolean(
+      lastAnswer &&
+      !lastAnswer.completedAt &&
+      lastAnswer.text.length <= 240 &&
+      !lastAnswer.text.includes('\n')
+    )
+    const followedByRunningTool = Boolean(
+      lastAnswer &&
+      run.messages
+        .slice(lastAnswerIndex + 1)
+        .some((message) =>
+          message.parts?.some(
+            (part) => part.type === 'tool' && (part.state === 'pending' || part.state === 'running')
+          )
+        )
+    )
+    const activePreamble = Boolean(
+      options.active &&
+      lastAnswer &&
+      !lastAnswer.completedAt &&
+      (compactUnfinishedText || followedByRunningTool)
+    )
+    if (activePreamble && lastAnswer) earlierAnswers.add(lastAnswer.id)
     const media = run.messages.filter(
       (message) => !message.text.trim() && hasVisibleMessageContent(message)
     )
-    const visible = lastAnswer
-      ? [...media.filter((message) => message.id !== lastAnswer.id), lastAnswer]
-      : media
+    const visible =
+      lastAnswer && !activePreamble
+        ? [...media.filter((message) => message.id !== lastAnswer.id), lastAnswer]
+        : media
 
     const activity = run.messages.flatMap((message) => {
       const parked = earlierAnswers.has(message.id) ? commentaryFromText(message) : message
@@ -88,6 +117,7 @@ export function conversationRuns(messages: readonly AiMessage[]): ConversationRu
 
     return {
       activity,
+      ...(run.prompt?.changes ? { changes: run.prompt.changes } : {}),
       endedAt: run.prompt?.completedAt ?? latestMessageCreatedAt(run.messages),
       id: run.id,
       missingResponse: Boolean(run.prompt && !visible.length),

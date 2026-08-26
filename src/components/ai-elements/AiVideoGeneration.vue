@@ -162,7 +162,7 @@ function openViewer(video: VideoSource): void {
           class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-hover"
           :class="generation.state === 'error' ? 'text-red-400' : 'text-muted'"
         >
-          <icon-lucide-triangle-alert v-if="generation.state === 'error'" class="size-4" />
+          <IconlyIcon name="danger" v-if="generation.state === 'error'" class="size-4" />
           <icon-lucide-video v-else class="size-4" />
         </span>
         <div class="min-w-0">

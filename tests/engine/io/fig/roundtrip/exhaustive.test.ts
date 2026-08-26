@@ -40,6 +40,7 @@ function num3(n: number): string {
 
 const EPSILON = 0.01
 const MAX_ERRORS = 2000
+type CompareStyle = 'raw' | 'scene'
 
 const SPECS: FixtureSpec[] = [
   {
@@ -90,7 +91,90 @@ function buildPathMap(graph: SceneGraph): Map<string, SceneNode> {
   return map
 }
 
-// oxlint-disable-next-line eslint(complexity)
+function compareByteArrays(
+  a: Uint8Array,
+  b: Uint8Array,
+  key: string,
+  path: string,
+  opts: CompareOptions,
+  style: CompareStyle
+): void {
+  if (a.length !== b.length) {
+    opts.errors.push({ path, key, message: `bytes ${a.length} -> ${b.length}` })
+    return
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] === b[index]) continue
+    const message = style === 'scene' ? `byte[${index}] differs (${a.length}B)` : `byte[${index}]`
+    opts.errors.push({ path, key, message })
+    return
+  }
+}
+
+function compareNumbers(
+  a: number,
+  b: number,
+  key: string,
+  path: string,
+  opts: CompareOptions,
+  style: CompareStyle
+): void {
+  if (Number.isNaN(a) && Number.isNaN(b)) return
+  if (Math.abs(a - b) <= EPSILON) return
+  const message = style === 'scene' ? `${a} -> ${b} (D${+(b - a).toPrecision(4)})` : `${a} -> ${b}`
+  opts.errors.push({ path, key, message })
+}
+
+function compareLeafValues(
+  a: unknown,
+  b: unknown,
+  key: string,
+  path: string,
+  opts: CompareOptions,
+  style: CompareStyle
+): boolean {
+  if (a == null || b == null) {
+    opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
+    return true
+  }
+  if (a instanceof Uint8Array && b instanceof Uint8Array) {
+    compareByteArrays(a, b, key, path, opts, style)
+    return true
+  }
+  if (typeof a === 'number' && typeof b === 'number') {
+    compareNumbers(a, b, key, path, opts, style)
+    return true
+  }
+  if (typeof a !== 'object' || typeof b !== 'object') {
+    if (a !== b) opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
+    return true
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    opts.errors.push({ path, key, message: style === 'scene' ? 'kind mismatch' : 'kind' })
+    return true
+  }
+  return false
+}
+
+function sceneVerifierHandled(
+  a: unknown,
+  b: unknown,
+  key: string,
+  path: string,
+  opts: CompareOptions
+): boolean {
+  const leafKey = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key
+  const verifier = opts.verifiers.get(key) ?? opts.verifiers.get(leafKey)
+  if (!verifier) return false
+  if (verifier({ a, b, key, path, ...opts })) return true
+  const message =
+    isColorObj(a) && isColorObj(b)
+      ? `color(${num3(a.r)},${num3(a.g)},${num3(a.b)},${num3(a.a)}) -> color(${num3(b.r)},${num3(b.g)},${num3(b.b)},${num3(b.a)})`
+      : `${fmt(a)} -> ${fmt(b)}`
+  opts.errors.push({ path, key, message })
+  return true
+}
+
 function deepCompare(
   a: unknown,
   b: unknown,
@@ -102,59 +186,8 @@ function deepCompare(
   if (opts.errors.length >= MAX_ERRORS || depth > 20) return
   if (a === b) return
   if (a == null && b == null) return
-
-  const leafKey = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key
-  const vfn = opts.verifiers.get(key) ?? opts.verifiers.get(leafKey)
-  if (vfn) {
-    if (vfn({ a, b, key, path, ...opts })) return
-    if (isColorObj(a) && isColorObj(b)) {
-      opts.errors.push({
-        path,
-        key,
-        message: `color(${num3(a.r)},${num3(a.g)},${num3(a.b)},${num3(a.a)}) -> color(${num3(b.r)},${num3(b.g)},${num3(b.b)},${num3(b.a)})`
-      })
-    } else {
-      opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
-    }
-    return
-  }
-
-  if (a == null || b == null) {
-    opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
-    return
-  }
-
-  if (a instanceof Uint8Array && b instanceof Uint8Array) {
-    if (a.length !== b.length) {
-      opts.errors.push({ path, key, message: `bytes ${a.length} -> ${b.length}` })
-      return
-    }
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) {
-        opts.errors.push({ path, key, message: `byte[${i}] differs (${a.length}B)` })
-        return
-      }
-    }
-    return
-  }
-
-  if (typeof a === 'number' && typeof b === 'number') {
-    if (Number.isNaN(a) && Number.isNaN(b)) return
-    if (Math.abs(a - b) > EPSILON) {
-      opts.errors.push({ path, key, message: `${a} -> ${b} (D${+(b - a).toPrecision(4)})` })
-    }
-    return
-  }
-
-  if (typeof a !== 'object' || typeof b !== 'object') {
-    if (a !== b) opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
-    return
-  }
-
-  if (Array.isArray(a) !== Array.isArray(b)) {
-    opts.errors.push({ path, key, message: `kind mismatch` })
-    return
-  }
+  if (sceneVerifierHandled(a, b, key, path, opts)) return
+  if (compareLeafValues(a, b, key, path, opts, 'scene')) return
 
   if (Array.isArray(a)) {
     const ba = b as unknown[]
@@ -287,7 +320,66 @@ function compareRawNodeFields(
   if (errors.length > 0) throw new Error(`${label} rawNodeFields:\n${summarize(errors)}`)
 }
 
-// oxlint-disable-next-line eslint(complexity)
+function rawVerifierAccepts(
+  a: unknown,
+  b: unknown,
+  key: string,
+  path: string,
+  opts: CompareOptions
+): boolean {
+  if (!key) return false
+  const leafKey = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key
+  const verifier = opts.verifiers.get(key) ?? opts.verifiers.get(leafKey)
+  return verifier?.({ a, b, key, path, ...opts }) === true
+}
+
+function compareRawRootFields(
+  a: unknown,
+  b: unknown,
+  key: string,
+  path: string,
+  opts: CompareOptions,
+  depth: number
+): boolean {
+  if (
+    key !== '' ||
+    typeof a !== 'object' ||
+    a === null ||
+    typeof b !== 'object' ||
+    b === null ||
+    Array.isArray(a)
+  ) {
+    return false
+  }
+  compareRawObjectFields(a as JsonObject, b as JsonObject, '', path, opts, depth)
+  return true
+}
+
+function compareRawObjectFields(
+  a: JsonObject,
+  b: JsonObject,
+  key: string,
+  path: string,
+  opts: CompareOptions,
+  depth: number
+): void {
+  const allKeys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const field of allKeys) {
+    const fullKey = key ? `${key}.${field}` : field
+    const verifier = opts.verifiers.get(fullKey) ?? opts.verifiers.get(field)
+    if (!verifier) {
+      deepCompareRaw(a[field], b[field], fullKey, path, opts, depth + 1)
+      continue
+    }
+    if (verifier({ a: a[field], b: b[field], key: fullKey, path, ...opts })) continue
+    opts.errors.push({
+      path,
+      key: fullKey,
+      message: `verifier rejected (${fmt(a[field])} -> ${fmt(b[field])})`
+    })
+  }
+}
+
 function deepCompareRaw(
   a: unknown,
   b: unknown,
@@ -299,77 +391,9 @@ function deepCompareRaw(
   if (opts.errors.length >= MAX_ERRORS || depth > 20) return
   if (a === b) return
   if (a == null && b == null) return
-
-  if (typeof key === 'string' && key !== '') {
-    const leafKey = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key
-    const vfn = opts.verifiers.get(key) ?? opts.verifiers.get(leafKey)
-    if (vfn) {
-      if (vfn({ a, b, key, path, ...opts })) return
-    }
-  }
-
-  if (
-    key === '' &&
-    typeof a === 'object' &&
-    a !== null &&
-    typeof b === 'object' &&
-    b !== null &&
-    !Array.isArray(a)
-  ) {
-    const aObj = a as JsonObject
-    const bObj = b as JsonObject
-    const allKeys = new Set([...Object.keys(aObj), ...Object.keys(bObj)])
-    for (const k of allKeys) {
-      const vfn2 = opts.verifiers.get(k)
-      if (vfn2) {
-        if (!vfn2({ a: aObj[k], b: bObj[k], key: k, path, ...opts })) {
-          opts.errors.push({
-            path,
-            key: k,
-            message: `verifier rejected (${fmt(aObj[k])} -> ${fmt(bObj[k])})`
-          })
-        }
-      } else {
-        deepCompareRaw(aObj[k], bObj[k], k, path, opts, depth + 1)
-      }
-    }
-    return
-  }
-
-  if (a == null || b == null) {
-    opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
-    return
-  }
-
-  if (a instanceof Uint8Array && b instanceof Uint8Array) {
-    if (a.length !== b.length) {
-      opts.errors.push({ path, key, message: `bytes ${a.length} -> ${b.length}` })
-      return
-    }
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) {
-        opts.errors.push({ path, key, message: `byte[${i}]` })
-        return
-      }
-    }
-    return
-  }
-
-  if (typeof a === 'number' && typeof b === 'number') {
-    if (Number.isNaN(a) && Number.isNaN(b)) return
-    if (Math.abs(a - b) > EPSILON) opts.errors.push({ path, key, message: `${a} -> ${b}` })
-    return
-  }
-
-  if (typeof a !== 'object' || typeof b !== 'object') {
-    if (a !== b) opts.errors.push({ path, key, message: `${fmt(a)} -> ${fmt(b)}` })
-    return
-  }
-
-  if (Array.isArray(a) !== Array.isArray(b)) {
-    opts.errors.push({ path, key, message: `kind` })
-    return
-  }
+  if (rawVerifierAccepts(a, b, key, path, opts)) return
+  if (compareRawRootFields(a, b, key, path, opts, depth)) return
+  if (compareLeafValues(a, b, key, path, opts, 'raw')) return
 
   if (Array.isArray(a)) {
     const ba = b as unknown[]
@@ -383,24 +407,7 @@ function deepCompareRaw(
     return
   }
 
-  const aObj = a as JsonObject
-  const bObj = b as JsonObject
-  const allKeys = new Set([...Object.keys(aObj), ...Object.keys(bObj)])
-  for (const k of allKeys) {
-    const fullKey = key ? `${key}.${k}` : k
-    const vfn2 = opts.verifiers.get(fullKey) ?? opts.verifiers.get(k)
-    if (vfn2) {
-      if (!vfn2({ a: aObj[k], b: bObj[k], key: fullKey, path, ...opts })) {
-        opts.errors.push({
-          path,
-          key: fullKey,
-          message: `verifier rejected (${fmt(aObj[k])} -> ${fmt(bObj[k])})`
-        })
-      }
-    } else {
-      deepCompareRaw(aObj[k], bObj[k], fullKey, path, opts, depth + 1)
-    }
-  }
+  compareRawObjectFields(a as JsonObject, b as JsonObject, key, path, opts, depth)
 }
 
 function verifyFixture(spec: FixtureSpec): void {

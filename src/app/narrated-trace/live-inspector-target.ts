@@ -1,5 +1,6 @@
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
+import { liveContainerOwnerReference } from '@/app/smylr-live-container/owner-reference'
 import type {
   SmylrLiveContainerDocument,
   SmylrLiveContainerNode,
@@ -54,11 +55,7 @@ function editableSourceForNode(node: SmylrLiveContainerNode) {
     owners.find((candidate) => candidate.filePath) ??
     owners.find(isMeaningfulOwner) ??
     source
-  return {
-    ...(owner.componentName ? { componentName: owner.componentName } : {}),
-    ...(owner.filePath ? { filePath: owner.filePath } : {}),
-    ...(owner.lineNumber ? { lineNumber: owner.lineNumber } : {})
-  }
+  return liveContainerOwnerReference(owner)
 }
 
 function elementKindForNode(node: SmylrLiveContainerNode) {

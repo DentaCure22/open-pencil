@@ -246,7 +246,7 @@ function applyTokenImport() {
                     class="flex size-6 cursor-pointer items-center justify-center rounded border-none bg-transparent text-muted hover:bg-hover hover:text-surface"
                     @click="importTokens"
                   >
-                    <icon-lucide-upload class="size-3.5" />
+                    <IconlyIcon name="upload" class="size-3.5" />
                   </button>
                 </Tip>
                 <Tip label="Export DTCG tokens">
@@ -256,7 +256,7 @@ function applyTokenImport() {
                     class="flex size-6 cursor-pointer items-center justify-center rounded border-none bg-transparent text-muted hover:bg-hover hover:text-surface"
                     @click="exportTokens"
                   >
-                    <icon-lucide-download class="size-3.5" />
+                    <IconlyIcon name="download" class="size-3.5" />
                   </button>
                 </Tip>
                 <DropdownMenuRoot>
@@ -265,7 +265,7 @@ function applyTokenImport() {
                       data-test-id="variables-collection-menu"
                       class="flex size-6 cursor-pointer items-center justify-center rounded border-none bg-transparent text-muted hover:bg-hover hover:text-surface"
                     >
-                      <icon-lucide-ellipsis class="size-3.5" />
+                      <IconlyIcon name="more" class="size-3.5" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuPortal>
@@ -279,7 +279,7 @@ function applyTokenImport() {
                         :class="menuCls.item"
                         @select="ctx.startRenameCollection(ctx.activeCollectionId.value)"
                       >
-                        <icon-lucide-pencil :class="menuCls.icon" />
+                        <IconlyIcon name="edit" :class="menuCls.icon" />
                         {{ dialogs.renameCollection }}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator class="mx-1.5 my-1 h-px bg-border" />
@@ -289,14 +289,14 @@ function applyTokenImport() {
                         data-test-id="variables-delete-collection"
                         @select="ctx.removeCollection(ctx.activeCollectionId.value)"
                       >
-                        <icon-lucide-trash-2 :class="menuCls.icon" />
+                        <IconlyIcon name="delete" :class="menuCls.icon" />
                         {{ dialogs.deleteCollection }}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenuPortal>
                 </DropdownMenuRoot>
                 <div class="flex items-center gap-1 rounded border border-border px-2 py-0.5">
-                  <icon-lucide-search class="size-3 text-muted" />
+                  <IconlyIcon name="search" class="size-3 text-muted" />
                   <input
                     v-model="ctx.searchTerm.value"
                     data-test-id="variables-search-input"
@@ -375,7 +375,7 @@ function applyTokenImport() {
                                   :class="menuCls.item"
                                   @select="ctx.startRenameMode(modeId(header.column.id))"
                                 >
-                                  <icon-lucide-pencil :class="menuCls.icon" />
+                                  <IconlyIcon name="edit" :class="menuCls.icon" />
                                   {{ dialogs.renameMode }}
                                 </ContextMenuItem>
                                 <ContextMenuItem
@@ -399,7 +399,7 @@ function applyTokenImport() {
                                   :disabled="col.modes.length <= 1"
                                   @select="ctx.removeMode(modeId(header.column.id))"
                                 >
-                                  <icon-lucide-trash-2 :class="menuCls.icon" />
+                                  <IconlyIcon name="delete" :class="menuCls.icon" />
                                   {{ dialogs.deleteMode }}
                                 </ContextMenuItem>
                               </ContextMenuContent>
@@ -431,7 +431,7 @@ function applyTokenImport() {
                             class="flex size-5 cursor-pointer items-center justify-center rounded border-none bg-transparent text-muted hover:bg-hover hover:text-surface"
                             @click="ctx.addMode"
                           >
-                            <icon-lucide-plus class="size-3" />
+                            <IconlyIcon name="plus" class="size-3" />
                           </button>
                         </Tip>
                       </th>
@@ -470,9 +470,9 @@ function applyTokenImport() {
                       data-test-id="variables-add-variable"
                       class="flex cursor-pointer items-center gap-1.5 rounded bg-hover px-2.5 py-1.5 text-xs text-surface hover:bg-border"
                     >
-                      <icon-lucide-plus class="size-3.5" />
+                      <IconlyIcon name="plus" class="size-3.5" />
                       {{ panels.add }}
-                      <icon-lucide-chevron-down class="size-3" />
+                      <IconlyIcon name="arrow-down" class="size-3" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuPortal>

@@ -43,7 +43,7 @@ const emit = defineEmits<{
             ? 'bg-accent text-white'
             : variant === 'utility'
               ? 'bg-chrome-control-active text-surface shadow-sm ring-1 ring-inset ring-chrome-control-border'
-              : 'bg-transparent text-panel'
+              : 'bg-transparent text-white'
           : mobile
             ? 'bg-transparent text-muted active:bg-hover'
             : 'bg-transparent text-muted hover:bg-hover hover:text-surface'

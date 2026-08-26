@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ScrollAreaRoot, ScrollAreaScrollbar, ScrollAreaThumb, ScrollAreaViewport } from 'reka-ui'
+import { ScrollAreaRoot, ScrollAreaViewport } from 'reka-ui'
 import { refAutoReset } from '@vueuse/core'
 import { computed, markRaw, nextTick, ref, watch } from 'vue'
 
@@ -11,6 +11,7 @@ import AcpPermissionDialog from '@/components/chat/AcpPermissionDialog.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import ChatMessage from '@/components/chat/ChatMessage.vue'
 import ProviderSetup from '@/components/chat/ProviderSetup.vue'
+import AppScrollAreaScrollbar from '@/components/ui/AppScrollAreaScrollbar.vue'
 import AppTextButton from '@/components/ui/AppTextButton.vue'
 import { useAIChat } from '@/app/ai/chat/use'
 import { toast } from '@/app/shell/ui'
@@ -138,7 +139,7 @@ function handleClearChat() {
             data-test-id="chat-empty-state"
             class="flex h-full flex-col items-center justify-center gap-3 text-muted"
           >
-            <icon-lucide-message-circle class="size-8 opacity-50" />
+            <IconlyIcon name="chat" class="size-8 opacity-50" />
             <p class="text-center text-xs">{{ dialogs.describeCreateOrChange }}</p>
           </div>
 
@@ -175,7 +176,7 @@ function handleClearChat() {
                 class="flex items-center gap-1.5 rounded-full bg-accent/10 px-4 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
                 @click="handleSubmit('Continue where you left off')"
               >
-                <icon-lucide-play class="size-3" />
+                <IconlyIcon name="play" class="size-3" />
                 Continue
               </button>
             </div>
@@ -183,9 +184,7 @@ function handleClearChat() {
             <div ref="messagesEnd" />
           </div>
         </ScrollAreaViewport>
-        <ScrollAreaScrollbar orientation="vertical" class="flex w-1.5 touch-none p-px select-none">
-          <ScrollAreaThumb class="relative flex-1 rounded-full bg-muted/30" />
-        </ScrollAreaScrollbar>
+        <AppScrollAreaScrollbar />
       </ScrollAreaRoot>
 
       <!-- Chat toolbar -->
@@ -215,7 +214,7 @@ function handleClearChat() {
           :ui="{ base: 'flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-hover' }"
           @click="handleClearChat"
         >
-          <icon-lucide-trash-2 class="size-3" />
+          <IconlyIcon name="delete" class="size-3" />
           Clear
         </AppTextButton>
       </div>

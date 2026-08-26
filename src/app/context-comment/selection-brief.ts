@@ -1,5 +1,6 @@
 import type { Rect } from '@open-pencil/scene-graph/primitives'
 
+import { liveContainerOwnerReference } from '@/app/smylr-live-container/owner-reference'
 import type {
   SmylrLiveContainerNode,
   SmylrLiveContainerOwner
@@ -78,13 +79,7 @@ function compactOwners(source: SmylrLiveContainerNode['source']): ContextComment
   return uniqueOwners(
     owners.flatMap((owner) => {
       if (!owner.componentName && !owner.filePath) return []
-      return [
-        {
-          ...(owner.componentName ? { componentName: owner.componentName } : {}),
-          ...(owner.filePath ? { filePath: owner.filePath } : {}),
-          ...(owner.lineNumber ? { lineNumber: owner.lineNumber } : {})
-        }
-      ]
+      return [liveContainerOwnerReference(owner)]
     })
   ).slice(0, 8)
 }
@@ -150,22 +145,11 @@ export function liveSelectionFromNode(
   }
 }
 
-export function contextCommentTargetLines(target: ContextCommentTarget): string[] {
-  const live = target.live
-  const id = target.stableIds[0]
-  if (!live) {
-    const where = target.route || id || target.scope.pageId
-    const source = target.source?.filePath
-      ? `${target.source.filePath}${target.source.lineNumber ? `:${String(target.source.lineNumber)}` : ''}`
-      : ''
-    const path = target.path.length > 1 ? target.path.join(' / ') : ''
-    return [
-      `Target: ${target.label}${where ? ` (${where})` : ''}${source ? ` ${source}` : ''}`,
-      ...(id && target.kind === 'selection' ? [`Id: ${id}`] : []),
-      ...(path && target.kind === 'selection' ? [`Path: ${path}`] : [])
-    ]
-  }
-
+function liveTargetLines(
+  target: ContextCommentTarget,
+  live: ContextCommentLiveSelection,
+  id: string | undefined
+): string[] {
   const bounds = live.parentRect
     ? `${formatRect(live.localRect)} in ${live.parentLabel ?? 'parent'} ${formatRect(live.parentRect)}`
     : formatRect(live.localRect)
@@ -174,6 +158,12 @@ export function contextCommentTargetLines(target: ContextCommentTarget): string[
         .map(([key, value]) => `${key}:${value}`)
         .join('; ')
     : ''
+  const ownerLines = live.ownerPath?.length
+    ? ['Owner:', ...live.ownerPath.map((owner) => `- ${ownerLine(owner)}`)]
+    : []
+  if (ownerLines.length === 0 && target.source) {
+    ownerLines.push(`Source: ${ownerLine(target.source)}`)
+  }
 
   return [
     `Target: ${target.label}`,
@@ -184,16 +174,27 @@ export function contextCommentTargetLines(target: ContextCommentTarget): string[
     ...(live.text ? [`Text: ${live.text}`] : []),
     `Bounds: ${bounds}`,
     ...(layout ? [`Layout: ${layout}`] : []),
-    ...(live.ownerPath?.length
-      ? ['Owner:', ...live.ownerPath.map((owner) => `- ${ownerLine(owner)}`)]
-      : target.source
-        ? [`Source: ${ownerLine(target.source)}`]
-        : []),
+    ...ownerLines,
     ...(target.hierarchy?.parent ? [`Parent: ${target.hierarchy.parent.label}`] : []),
     ...(target.hierarchy?.children.length
       ? [`Children: ${target.hierarchy.children.map((child) => child.label).join(', ')}`]
       : []),
     ...(live.className ? [`Classes: ${live.className}`] : []),
     ...(live.tokenHints?.length ? [`Tokens: ${live.tokenHints.join(', ')}`] : [])
+  ]
+}
+
+export function contextCommentTargetLines(target: ContextCommentTarget): string[] {
+  const id = target.stableIds[0]
+  if (target.live) return liveTargetLines(target, target.live, id)
+  const where = target.route || id || target.scope.pageId
+  const source = target.source?.filePath
+    ? `${target.source.filePath}${target.source.lineNumber ? `:${String(target.source.lineNumber)}` : ''}`
+    : ''
+  const path = target.path.length > 1 ? target.path.join(' / ') : ''
+  return [
+    `Target: ${target.label}${where ? ` (${where})` : ''}${source ? ` ${source}` : ''}`,
+    ...(id && target.kind === 'selection' ? [`Id: ${id}`] : []),
+    ...(path && target.kind === 'selection' ? [`Path: ${path}`] : [])
   ]
 }

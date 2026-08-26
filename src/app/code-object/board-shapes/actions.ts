@@ -13,7 +13,7 @@ import {
   type CodeObjectUpdateBoardShapeAction,
   type DispatchCodeObjectBoardAction
 } from '../contracts'
-import { reactShapeDocument as codeObjectDocument } from '../implementation'
+import { codeObjectDocument } from '../implementation'
 import {
   dispatchOwnedBoardShapeAction,
   ownedBoardShapeSnapshots,

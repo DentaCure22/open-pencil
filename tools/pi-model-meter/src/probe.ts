@@ -53,10 +53,7 @@ async function writeEmptyMcpConfig(cwd: string): Promise<void> {
   )
 }
 
-async function spawnPi(
-  args: string[],
-  cwd: string
-): Promise<{ stderr: string; stdout: string }> {
+async function spawnPi(args: string[], cwd: string): Promise<{ stderr: string; stdout: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(piBinary(), args, { cwd })
     let stdout = ''

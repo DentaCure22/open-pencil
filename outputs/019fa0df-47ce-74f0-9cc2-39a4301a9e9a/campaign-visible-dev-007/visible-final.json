@@ -1,5 +1,0 @@
-{
-  "finalText": "Built the editable native workflow diagram on the exact requested target.\n\n- Flow: Reported → Triaged → Product bug / How-to question → Resolved\n- Unresolved Product bug loops back to Triaged\n- Owner: `0:394`\n- Revision: `5425`\n- Verified: source reconciliation current, presentation acknowledged, persistence durable\n- Limitation: no separate screenshot/pixel review\n\n### Recap\n\n- Added one native Mermaid diagram to page `0:430`; no target substitution or extra objects.\n\n",
-  "generatedAtMs": 1785358602511,
-  "releasedAtMs": 1785358674924
-}

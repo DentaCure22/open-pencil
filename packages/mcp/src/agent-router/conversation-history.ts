@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -21,27 +22,7 @@ export function conversationThreadBodyPath(historyPath: string, threadId: string
 }
 
 export function conversationPersistSignature(thread: AgentConversationThread): string {
-  return [
-    thread.updatedAt,
-    thread.state,
-    thread.recentUpdate,
-    thread.lastPiEntryId ?? '',
-    String(thread.messages.length),
-    thread.messages
-      .map((message) => {
-        const partMarks = (message.parts ?? [])
-          .map((part) => {
-            if (!part || typeof part !== 'object') return '0'
-            const record = part as Record<string, unknown>
-            const output = typeof record.output === 'string' ? record.output.length : 0
-            const input = typeof record.input === 'string' ? record.input.length : 0
-            return `${record.type ?? ''}:${output}:${input}`
-          })
-          .join('.')
-        return `${message.id}:${message.completedAt ?? ''}:${String(message.text.length)}:${partMarks}`
-      })
-      .join(',')
-  ].join('|')
+  return createHash('sha256').update(JSON.stringify(thread)).digest('hex')
 }
 
 function readThreadBody(historyPath: string, threadId: string): AgentConversationThread | null {
@@ -60,6 +41,10 @@ function writeJsonFile(filePath: string, value: unknown): void {
   const temporary = `${filePath}.tmp`
   writeFileSync(temporary, JSON.stringify(value))
   renameSync(temporary, filePath)
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
 }
 
 export function readAgentConversationHistory(historyPath?: string): AgentConversationThread[] {
@@ -82,12 +67,12 @@ export function writeAgentConversationHistory(
   written: Map<string, string>
 ): void {
   const live = new Set(threads.map((thread) => thread.id))
-  for (const [threadId, signature] of written) {
+  for (const threadId of written.keys()) {
     if (live.has(threadId)) continue
     try {
       unlinkSync(conversationThreadBodyPath(historyPath, threadId))
-    } catch {
-      // The body may already be gone.
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error
     }
     written.delete(threadId)
   }

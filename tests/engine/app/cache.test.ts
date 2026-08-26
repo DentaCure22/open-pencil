@@ -21,12 +21,12 @@ function installIndexedDb() {
   const data = new Map<IDBValidKey, unknown>()
 
   function requestFor<T>(operation: () => T) {
-    const request = {
+    const request = Object.assign(Object.create(null) as IDBRequest<T>, {
       error: null as DOMException | null,
       onerror: null as ((event: Event) => void) | null,
       onsuccess: null as ((event: Event) => void) | null,
       result: undefined as T
-    }
+    })
     queueMicrotask(() => {
       try {
         request.result = operation()
@@ -36,7 +36,7 @@ function installIndexedDb() {
         request.onerror?.(new Event('error'))
       }
     })
-    return request as unknown as IDBRequest<T>
+    return request
   }
 
   const store = {
@@ -48,23 +48,23 @@ function installIndexedDb() {
         return key
       })
   }
-  const database = {
+  const database = Object.assign(Object.create(null) as IDBDatabase, {
     close: () => undefined,
     createObjectStore: () => store,
     objectStoreNames: { contains: () => true },
     transaction: () => ({ objectStore: () => store })
-  } as unknown as IDBDatabase
+  })
   const indexedDB = {
     open: () => {
-      const request = {
+      const request = Object.assign(Object.create(null) as IDBOpenDBRequest, {
         error: null as DOMException | null,
         onerror: null as ((event: Event) => void) | null,
         onsuccess: null as ((event: Event) => void) | null,
         onupgradeneeded: null as ((event: Event) => void) | null,
         result: database
-      }
+      })
       queueMicrotask(() => request.onsuccess?.(new Event('success')))
-      return request as unknown as IDBOpenDBRequest
+      return request
     }
   } as Pick<IDBFactory, 'open'>
 

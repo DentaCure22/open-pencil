@@ -26,26 +26,30 @@ function asNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
+function parseJson<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
+}
+
 export function parsePiUsage(stdout: string): TokenUsage {
   const usage = emptyUsage()
   for (const line of stdout.split('\n')) {
     if (!line.includes('"usage"') || !line.includes('totalTokens')) continue
-    try {
-      const event = JSON.parse(line) as {
-        message?: { usage?: Record<string, number> }
-        usage?: Record<string, number>
-      }
-      const raw = event.message?.usage ?? event.usage
-      if (!raw) continue
-      usage.input = Math.max(usage.input, asNumber(raw.input))
-      usage.output = Math.max(usage.output, asNumber(raw.output))
-      usage.cacheRead = Math.max(usage.cacheRead, asNumber(raw.cacheRead))
-      usage.cacheWrite = Math.max(usage.cacheWrite, asNumber(raw.cacheWrite))
-      usage.reasoning = Math.max(usage.reasoning, asNumber(raw.reasoning))
-      usage.total = Math.max(usage.total, asNumber(raw.totalTokens))
-    } catch {
-      // Skip non-JSON chatter mixed into the stream.
-    }
+    const event = parseJson<{
+      message?: { usage?: Record<string, number> }
+      usage?: Record<string, number>
+    }>(line)
+    const raw = event?.message?.usage ?? event?.usage
+    if (!raw) continue
+    usage.input = Math.max(usage.input, asNumber(raw.input))
+    usage.output = Math.max(usage.output, asNumber(raw.output))
+    usage.cacheRead = Math.max(usage.cacheRead, asNumber(raw.cacheRead))
+    usage.cacheWrite = Math.max(usage.cacheWrite, asNumber(raw.cacheWrite))
+    usage.reasoning = Math.max(usage.reasoning, asNumber(raw.reasoning))
+    usage.total = Math.max(usage.total, asNumber(raw.totalTokens))
   }
   if (usage.total === 0) usage.total = usage.input + usage.output
   return usage
@@ -54,23 +58,18 @@ export function parsePiUsage(stdout: string): TokenUsage {
 export function parseGrokUsage(stdout: string): TokenUsage {
   const trimmed = stdout.trim()
   if (!trimmed) return emptyUsage()
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      usage?: Record<string, number>
-    }
-    const raw = parsed.usage ?? {}
-    const input = asNumber(raw.input_tokens)
-    const output = asNumber(raw.output_tokens)
-    return {
-      cacheRead: asNumber(raw.cache_read_input_tokens),
-      cacheWrite: asNumber(raw.cache_write_input_tokens),
-      input,
-      output,
-      reasoning: asNumber(raw.reasoning_tokens),
-      total: asNumber(raw.total_tokens) || input + output
-    }
-  } catch {
-    return emptyUsage()
+  const parsed = parseJson<{ usage?: Record<string, number> }>(trimmed)
+  if (!parsed) return emptyUsage()
+  const raw = parsed.usage ?? {}
+  const input = asNumber(raw.input_tokens)
+  const output = asNumber(raw.output_tokens)
+  return {
+    cacheRead: asNumber(raw.cache_read_input_tokens),
+    cacheWrite: asNumber(raw.cache_write_input_tokens),
+    input,
+    output,
+    reasoning: asNumber(raw.reasoning_tokens),
+    total: asNumber(raw.total_tokens) || input + output
   }
 }
 
@@ -78,31 +77,20 @@ export function parseCodexUsage(stdout: string): TokenUsage {
   const usage = emptyUsage()
   for (const line of stdout.split('\n')) {
     if (!line.includes('turn.completed') || !line.includes('input_tokens')) continue
-    try {
-      const event = JSON.parse(line) as {
-        type?: string
-        usage?: Record<string, number>
-      }
-      if (event.type !== 'turn.completed' || !event.usage) continue
-      usage.input = asNumber(event.usage.input_tokens)
-      usage.cacheRead = asNumber(event.usage.cached_input_tokens)
-      usage.output = asNumber(event.usage.output_tokens)
-      usage.reasoning = asNumber(event.usage.reasoning_output_tokens)
-      usage.total = usage.input + usage.output
-    } catch {
-      // Skip non-JSON chatter mixed into the stream.
-    }
+    const event = parseJson<{ type?: string; usage?: Record<string, number> }>(line)
+    if (event?.type !== 'turn.completed' || !event.usage) continue
+    usage.input = asNumber(event.usage.input_tokens)
+    usage.cacheRead = asNumber(event.usage.cached_input_tokens)
+    usage.output = asNumber(event.usage.output_tokens)
+    usage.reasoning = asNumber(event.usage.reasoning_output_tokens)
+    usage.total = usage.input + usage.output
   }
   return usage
 }
 
 export function parseGrokText(stdout: string): string {
-  try {
-    const parsed = JSON.parse(stdout.trim()) as { text?: string }
-    return typeof parsed.text === 'string' ? parsed.text : stdout
-  } catch {
-    return stdout
-  }
+  const parsed = parseJson<{ text?: string }>(stdout.trim())
+  return typeof parsed?.text === 'string' ? parsed.text : stdout
 }
 
 function textFromContent(content: unknown): string {
@@ -120,39 +108,38 @@ function textFromContent(content: unknown): string {
     .join('\n')
 }
 
+type PiTextEvent = {
+  assistantMessageEvent?: { content?: string; delta?: string; type?: string }
+  message?: { content?: unknown; role?: string }
+  messages?: Array<{ content?: unknown; role?: string }>
+  type?: string
+}
+
+const PI_TEXT_MARKERS = ['"text":', '"text_delta"', '"text_end"', '"agent_end"']
+
+function lastAssistantText(messages: PiTextEvent['messages']): string {
+  let last = ''
+  for (const message of messages ?? []) {
+    const text = textFromContent(message.content)
+    if (message.role === 'assistant' && text) last = text
+  }
+  return last
+}
+
 export function parsePiFinalText(stdout: string): string {
   let last = ''
   let streamed = ''
   for (const line of stdout.split('\n')) {
-    if (
-      !line.includes('"text":') &&
-      !line.includes('"text_delta"') &&
-      !line.includes('"text_end"') &&
-      !line.includes('"agent_end"')
-    ) {
-      continue
-    }
-    try {
-      const event = JSON.parse(line) as {
-        assistantMessageEvent?: { content?: string; delta?: string; type?: string }
-        message?: { content?: unknown; role?: string }
-        messages?: Array<{ content?: unknown; role?: string }>
-        type?: string
-      }
-      const messageText = textFromContent(event.message?.content)
-      if (event.message?.role === 'assistant' && messageText) last = messageText
-      if (event.type === 'agent_end' && Array.isArray(event.messages)) {
-        for (const message of event.messages) {
-          const text = textFromContent(message.content)
-          if (message.role === 'assistant' && text) last = text
-        }
-      }
-      const streamEvent = event.assistantMessageEvent
-      if (streamEvent?.type === 'text_delta' && streamEvent.delta) streamed += streamEvent.delta
-      if (streamEvent?.type === 'text_end' && streamEvent.content) last = streamEvent.content
-    } catch {
-      // Ignore partial stream lines.
-    }
+    if (!PI_TEXT_MARKERS.some((marker) => line.includes(marker))) continue
+    const event = parseJson<PiTextEvent>(line)
+    if (!event) continue
+    const messageText = textFromContent(event.message?.content)
+    if (event.message?.role === 'assistant' && messageText) last = messageText
+    const endedText = event.type === 'agent_end' ? lastAssistantText(event.messages) : ''
+    if (endedText) last = endedText
+    const streamEvent = event.assistantMessageEvent
+    if (streamEvent?.type === 'text_delta' && streamEvent.delta) streamed += streamEvent.delta
+    if (streamEvent?.type === 'text_end' && streamEvent.content) last = streamEvent.content
   }
   return last || streamed
 }

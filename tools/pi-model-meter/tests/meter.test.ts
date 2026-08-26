@@ -6,12 +6,7 @@ import { readUsageTurns } from '../src/ledger'
 import { parsePiUsage } from '../src/parse'
 import { paddedPrompt } from '../src/probe'
 import { formatUsageRollup, rollupUsageTurns } from '../src/rollup'
-import {
-  buildUsageTurnRecord,
-  cacheHitPercent,
-  promptTokens,
-  usageFromParsed
-} from '../src/schema'
+import { buildUsageTurnRecord, cacheHitPercent, promptTokens, usageFromParsed } from '../src/schema'
 
 const fixtures = path.join(import.meta.dir, 'fixtures')
 
@@ -66,7 +61,11 @@ describe('pi-model-meter fixtures', () => {
 
   test('fails miss, drop, plateau, and estimated-when-measured fixtures', async () => {
     const turns = await readUsageTurns(path.join(fixtures, 'failures.jsonl'))
-    expect(checkUsageTurns(turns).map((failure) => failure.code).sort()).toEqual([
+    expect(
+      checkUsageTurns(turns)
+        .map((failure) => failure.code)
+        .sort()
+    ).toEqual([
       'drop-after-hit',
       'estimated-when-measured',
       'flat-while-growing',

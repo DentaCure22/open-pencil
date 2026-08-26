@@ -7,10 +7,13 @@ import ToolButton from '@/components/Toolbar/ToolButton.vue'
 import Tip from '@/components/ui/Tip.vue'
 
 const store = useEditorStore()
+const { side = 'right' } = defineProps<{
+  side?: 'right' | 'top'
+}>()
 </script>
 
 <template>
-  <Tip label="Screenshot and comment" side="right">
+  <Tip label="Screenshot and comment" :side="side">
     <span @pointerdown.stop>
       <ToolButton
         :icon="IconScan"

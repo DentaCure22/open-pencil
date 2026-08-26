@@ -29,19 +29,19 @@ const frameTransform = createCodeObjectTransformController(store, () => {
 const overlayStyle = computed(() => {
   void controlRevision.value
   void revision
-  void overlayGeometry.revision
+  void overlayGeometry.value.revision
   return codeObjectScreenOverlayStyle(store, frame, presentationViewport.value)
 })
 const resizeHandles = computed(() => {
   void controlRevision.value
   void revision
-  void overlayGeometry.revision
+  void overlayGeometry.value.revision
   return codeObjectResizeHandles(frame, presentationViewport.value.zoom)
 })
 const rotationHandles = computed(() => {
   void controlRevision.value
   void revision
-  void overlayGeometry.revision
+  void overlayGeometry.value.revision
   return codeObjectRotationHandles(frame, presentationViewport.value.zoom)
 })
 </script>

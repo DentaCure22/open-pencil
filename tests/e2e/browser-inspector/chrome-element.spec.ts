@@ -352,3 +352,113 @@ test('adds Chrome DOM elements to a capture session for agent and Trace context'
   )
   editor.canvas.assertNoErrors()
 })
+
+test('expands a capture session to the chat budget and bakes screenshot notes', async () => {
+  await enterBoard()
+  const result: {
+    contextPrompt?: string
+    evidence: Array<{ height: number; name: string }>
+    summary: { annotationCount: number } | null
+  } = await editor.page.evaluate(async () => {
+    const attachmentPath = '/src/app/browser-inspector/attachment.ts'
+    const attachmentModule = await import(attachmentPath)
+    const preview = document.createElement('canvas')
+    preview.width = 640
+    preview.height = 360
+    const context = preview.getContext('2d')
+    if (!context) throw new Error('Preview canvas unavailable')
+    context.fillStyle = '#f5f6f8'
+    context.fillRect(0, 0, 640, 360)
+    context.fillStyle = '#20242c'
+    context.fillRect(0, 0, 640, 46)
+    const dataUrl = preview.toDataURL('image/png')
+    const page = {
+      origin: 'https://example.com',
+      title: 'Patients',
+      url: 'https://example.com/patients'
+    }
+    const selections = Array.from({ length: 4 }, (_, index) => ({
+      ...(index === 3
+        ? {
+            annotations: [
+              {
+                comment: 'Keep this later capture visible',
+                id: 'attachment-note',
+                x: 0.72,
+                y: 0.28
+              }
+            ]
+          }
+        : {}),
+      capturedAt: `2026-08-22T12:00:0${String(index + 1)}.000Z`,
+      element: {
+        accessibleName: `Patient control ${String(index + 1)}`,
+        attributes: {},
+        bounds: { height: 40, width: 120, x: 500, y: 80 },
+        classes: ['patient-control'],
+        role: 'button',
+        selector: `[data-patient-control="${String(index + 1)}"]`,
+        tag: 'button',
+        text: `Control ${String(index + 1)}`
+      },
+      id: `attachment-selection-${String(index + 1)}`,
+      page,
+      session: {
+        captureSessionId: 'attachment-session',
+        captureStartedAt: '2026-08-22T12:00:00.000Z',
+        frameId: 0,
+        sequence: index + 1,
+        tabId: 12
+      },
+      snapshot: { dataUrl, height: 360, width: 640 }
+    }))
+    const attachment = attachmentModule.createBrowserCaptureAttachment({
+      id: 'attachment-session',
+      page,
+      recordings: [],
+      selections,
+      startedAt: '2026-08-22T12:00:00.000Z',
+      title: 'Patients · 12:00 PM'
+    })
+    if (!attachment) throw new Error('Expected a session attachment')
+    const summary = attachmentModule.browserCaptureAttachmentSummary(attachment)
+    const resolved = await attachmentModule.resolveBrowserCaptureAttachments([attachment])
+    const evidence = await Promise.all(
+      resolved.attachments.map(
+        (file: File) =>
+          new Promise<{ height: number; name: string }>((resolve, reject) => {
+            const url = URL.createObjectURL(file)
+            const image = new Image()
+            image.addEventListener(
+              'load',
+              () => {
+                resolve({ height: image.naturalHeight, name: file.name })
+                URL.revokeObjectURL(url)
+              },
+              { once: true }
+            )
+            image.addEventListener(
+              'error',
+              () => {
+                URL.revokeObjectURL(url)
+                reject(new Error(`Evidence image ${file.name} failed to load`))
+              },
+              { once: true }
+            )
+            image.src = url
+          })
+      )
+    )
+    return { contextPrompt: resolved.contextPrompt, evidence, summary }
+  })
+
+  expect(result.summary?.annotationCount).toBe(1)
+  expect(result.evidence).toHaveLength(4)
+  expect(result.evidence.map((item) => item.name)).toContain(
+    'chrome-selection-attachment-selection-4-annotated.png'
+  )
+  expect(result.evidence.find((item) => item.name.includes('-annotated.'))?.height).toBeGreaterThan(
+    360
+  )
+  expect(result.contextPrompt).toContain('Keep this later capture visible')
+})

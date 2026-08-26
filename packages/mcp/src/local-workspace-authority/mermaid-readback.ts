@@ -1,7 +1,4 @@
-import {
-  mermaidDiagramOwner,
-  reconcileMermaidDiagramSource
-} from '@open-pencil/core/editor'
+import { mermaidDiagramOwner, reconcileMermaidDiagramSource } from '@open-pencil/core/editor'
 import type { Rect, SceneNode } from '@open-pencil/scene-graph'
 
 import type { AuthorityBoardDocument } from './document'

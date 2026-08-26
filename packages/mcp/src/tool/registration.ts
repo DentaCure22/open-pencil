@@ -19,6 +19,7 @@ import {
   findOpenPencilTool,
   searchOpenPencilTools
 } from './search'
+import { registerWorkMapTools } from './work-map-registration'
 
 export function mcpToolSearchEnabled(
   env: NodeJS.ProcessEnv = process.env,
@@ -294,6 +295,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
   }
 
   registerDispatchWorkTool(mcpServer)
+  registerWorkMapTools(mcpServer)
 
   register(
     'set_theme',

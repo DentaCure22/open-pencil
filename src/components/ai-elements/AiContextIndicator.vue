@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import Tip from '@/components/ui/Tip.vue'
 
-import type { AgentConversationContextUsage } from '@/app/agent-chat/client'
+import type { AgentConversationContextUsage } from '@/app/agent-chat/conversations'
 
 const { contextUsage } = defineProps<{
   contextUsage: AgentConversationContextUsage

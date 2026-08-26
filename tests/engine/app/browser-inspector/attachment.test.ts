@@ -50,11 +50,23 @@ const session: BrowserCaptureSession = {
 
 describe('browser capture chat attachment', () => {
   test('stays one compact composer chip backed by Trace context and bounded evidence', async () => {
-    const attachment = createBrowserCaptureAttachment(session)
+    const annotatedSession = {
+      ...session,
+      selections: [
+        {
+          ...selection,
+          annotations: [
+            { comment: 'Keep this action visible', id: 'annotation-1', x: 0.75, y: 0.25 }
+          ]
+        }
+      ]
+    }
+    const attachment = createBrowserCaptureAttachment(annotatedSession)
     expect(attachment).not.toBeNull()
     if (!attachment) return
 
     expect(browserCaptureAttachmentSummary(attachment)).toEqual({
+      annotationCount: 1,
       captureCount: 1,
       recordingCount: 0,
       title: session.title,
@@ -69,17 +81,67 @@ describe('browser capture chat attachment', () => {
     expect(browserCaptureAttachmentAgentContext(attachment)).toContain('Trace session: trace-1')
 
     const resolved = await resolveBrowserCaptureAttachments([attachment])
+    expect(resolved.contextPrompt).toContain('Stable references: Annotation #1')
+    expect(resolved.contextPrompt).toContain('Reference: Annotation #1')
     expect(resolved.contextPrompt).toContain('[aria-label="Save patient"]')
+    expect(resolved.contextPrompt).toContain('Comment 1 at 75%,25%: Keep this action visible')
     expect(resolved.attachments).toHaveLength(1)
     expect(resolved.attachments[0]?.type).toBe('image/png')
   })
 
+  test('uses the available file budget and keeps annotated captures in evidence', async () => {
+    const selections = Array.from({ length: 4 }, (_, index) => ({
+      ...selection,
+      ...(index === 3
+        ? {
+            annotations: [
+              {
+                comment: 'This later capture must stay visible',
+                id: 'annotation-later',
+                x: 0.4,
+                y: 0.6
+              }
+            ]
+          }
+        : {}),
+      id: `selection-${String(index + 1)}`,
+      session: { ...selection.session, sequence: index + 1 }
+    }))
+    const attachment = createBrowserCaptureAttachment({ ...session, selections })
+    expect(attachment).not.toBeNull()
+    if (!attachment) return
+
+    const resolved = await resolveBrowserCaptureAttachments([attachment])
+    expect(resolved.attachments).toHaveLength(4)
+    expect(resolved.attachments.map((file) => file.name)).toContain(
+      'chrome-selection-selection-4.png'
+    )
+    expect(resolved.contextPrompt).toContain('This later capture must stay visible')
+
+    const limited = await resolveBrowserCaptureAttachments([attachment], 3)
+    expect(limited.attachments).toHaveLength(3)
+    expect(limited.attachments.map((file) => file.name)).toContain(
+      'chrome-selection-selection-4.png'
+    )
+  })
+
   test('a child drag limits context to that capture', () => {
-    const attachment = createBrowserCaptureAttachment(session, selection.id)
+    const seventhSelection = {
+      ...selection,
+      session: { ...selection.session, sequence: 7 }
+    }
+    const attachment = createBrowserCaptureAttachment(
+      { ...session, selections: [seventhSelection] },
+      selection.id
+    )
     expect(attachment).not.toBeNull()
     if (!attachment) return
     expect(browserCaptureAttachmentSummary(attachment)?.captureCount).toBe(1)
-    expect(browserCaptureAttachmentAgentContext(attachment)).toContain('Captured selections: 1')
+    const context = browserCaptureAttachmentAgentContext(attachment)
+    expect(context).toContain('Captured selections: 1')
+    expect(context).toContain('Stable references: Annotation #7')
+    expect(context).toContain('Reference: Annotation #7')
+    expect(context).not.toContain('Selection 1 of 1')
   })
 
   test('a recording child resolves to its bounded video evidence', async () => {

@@ -62,15 +62,13 @@ describe('lightning-fast improvement rounds', () => {
     expect(editor).toContain('maxWait: 2500')
   })
 
-  test('restores the startup JavaScript budget and compact page index', async () => {
-    const [config, pageIndex, subtree, scene] = await Promise.all([
+  test('restores the startup JavaScript budget and lean hot paths', async () => {
+    const [config, subtree, scene] = await Promise.all([
       Bun.file('vite.config.ts').text(),
-      Bun.file('packages/mcp/src/local-workspace-authority/page-index.ts').text(),
       Bun.file('packages/core/src/editor/clipboard/subtree-history.ts').text(),
       Bun.file('packages/core/src/canvas/scene.ts').text()
     ])
     expect(config).toContain('initialJavaScriptBudgetPlugin()')
-    expect(pageIndex).toContain('{ space: 0 }')
     expect(subtree).toContain('cloneSceneNode(node)')
     expect(subtree).not.toContain('structuredClone(node)')
     expect(scene).toContain('node.clipsContent || node.childIds.length === 0')

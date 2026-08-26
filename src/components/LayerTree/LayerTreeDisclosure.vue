@@ -18,7 +18,7 @@ const emit = defineEmits<{
     :class="expanded ? 'rotate-90' : 'rotate-0'"
     @click.stop="emit('toggle')"
   >
-    <icon-lucide-chevron-right class="size-3" />
+    <IconlyIcon name="arrow-right" class="size-3" />
   </button>
   <span v-else class="w-4 shrink-0" />
 </template>
