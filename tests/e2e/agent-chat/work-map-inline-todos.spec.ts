@@ -1388,6 +1388,27 @@ test('drops new chat and Bot templates into sidebar and Board destinations', asy
   await expect(page.getByTestId('work-map-create-dialog')).toContainText(
     'Name the Bot directory being placed on the Board.'
   )
+  await page.getByTestId('work-map-create-title').fill('Board Bot proof')
+  const applyRequest = page.waitForRequest(/\/agent-router\/v1\/pi\/work-map\/apply$/)
+  await page
+    .getByTestId('work-map-create-dialog')
+    .getByRole('button', { exact: true, name: 'Add' })
+    .click()
+  const operations = (await applyRequest).postDataJSON() as WorkMapApplyRequest
+  expect(operations.operations).toEqual([
+    expect.objectContaining({ name: 'Board Bot proof', op: 'create_project' }),
+    expect.objectContaining({ op: 'set_project_space' })
+  ])
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const store = window.openPencil?.getStore?.()
+        const id = [...(store?.state.selectedIds ?? [])][0]
+        const node = id ? store?.graph.getNode(id) : null
+        return node ? { name: node.name, type: node.type } : null
+      })
+    )
+    .toEqual({ name: 'Board Bot proof', type: 'FRAME' })
 })
 
 test('creates a dormant Todo from an inline attachment-ready composer', async ({ page }) => {

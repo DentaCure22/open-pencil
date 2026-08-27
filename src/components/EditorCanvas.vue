@@ -191,9 +191,7 @@ const {
 } = useAssetVariantDrop(canvasAreaRef, store)
 const { onDragOver: onAgentConversationDragOver, onDrop: onAgentConversationDrop } =
   useAgentConversationDrop(canvasAreaRef, store)
-const {
-  isDraggingWorkMapCreation
-} = useWorkMapCreationBoardDrop(canvasAreaRef, store, workMap)
+const { isDraggingWorkMapCreation } = useWorkMapCreationBoardDrop(canvasAreaRef, store, workMap)
 const {
   isDraggingExternalLiveSurface,
   onDragEnter: onExternalLiveSurfaceDragEnter,

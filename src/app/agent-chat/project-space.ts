@@ -3,10 +3,10 @@ import type { Rect, Vector } from '@open-pencil/scene-graph'
 import type { AgentWorkMap, AgentWorkMapProject } from './work-map'
 
 export const FLUID_PROJECT_DETACH_OVERLAP_RATIO = 0.58
-export const COLLAPSED_PROJECT_DIRECTORY_HEIGHT = 48
-export const COLLAPSED_PROJECT_DIRECTORY_MAX_WIDTH = 228
-export const COLLAPSED_PROJECT_DIRECTORY_GAP = 8
-export const COLLAPSED_PROJECT_DIRECTORY_INSET = 16
+export const COLLAPSED_PROJECT_TAB_HEIGHT = 32
+export const COLLAPSED_PROJECT_TAB_MAX_WIDTH = 212
+export const COLLAPSED_PROJECT_TAB_GAP = 6
+export const COLLAPSED_PROJECT_TAB_INSET = 16
 
 type Size = Pick<Rect, 'height' | 'width'>
 
@@ -25,7 +25,7 @@ export type ProjectSpaceBinding = {
   project: AgentWorkMapProject
 }
 
-export type CollapsedProjectDirectoryLayout = Rect
+export type CollapsedProjectTabLayout = Rect
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -36,15 +36,16 @@ function round(value: number): number {
 }
 
 /**
- * Packs closed sub-bot directories into a quiet shelf along the bottom of the
- * parent Bot space. The shelf is presentation-only: reopening restores the
- * sub-bot's exact Board geometry and contents.
+ * Packs closed sub-bots into a quiet tab rail along the top line shared by
+ * sibling sub-bot spaces. The rail is presentation-only: reopening restores
+ * the sub-bot's exact Board geometry and contents.
  */
-export function collapsedProjectDirectoryLayout(
+export function collapsedProjectTabLayout(
   parent: Rect,
   slotIndex: number,
-  readableViewport?: Rect
-): CollapsedProjectDirectoryLayout {
+  readableViewport?: Rect,
+  railY?: number
+): CollapsedProjectTabLayout {
   const intersection = readableViewport
     ? {
         height:
@@ -59,35 +60,40 @@ export function collapsedProjectDirectoryLayout(
     : null
   const shelf =
     intersection &&
-    intersection.width > COLLAPSED_PROJECT_DIRECTORY_INSET * 2 &&
-    intersection.height > COLLAPSED_PROJECT_DIRECTORY_HEIGHT + COLLAPSED_PROJECT_DIRECTORY_INSET * 2
+    intersection.width > COLLAPSED_PROJECT_TAB_INSET * 2 &&
+    intersection.height > COLLAPSED_PROJECT_TAB_HEIGHT + COLLAPSED_PROJECT_TAB_INSET * 2
       ? intersection
       : parent
-  const availableWidth = Math.max(1, shelf.width - COLLAPSED_PROJECT_DIRECTORY_INSET * 2)
-  const width = Math.min(COLLAPSED_PROJECT_DIRECTORY_MAX_WIDTH, availableWidth)
+  const availableWidth = Math.max(1, shelf.width - COLLAPSED_PROJECT_TAB_INSET * 2)
+  const width = Math.min(COLLAPSED_PROJECT_TAB_MAX_WIDTH, availableWidth)
   const columnCount = Math.max(
     1,
     Math.floor(
-      (availableWidth + COLLAPSED_PROJECT_DIRECTORY_GAP) / (width + COLLAPSED_PROJECT_DIRECTORY_GAP)
+      (availableWidth + COLLAPSED_PROJECT_TAB_GAP) / (width + COLLAPSED_PROJECT_TAB_GAP)
     )
   )
   const normalizedIndex = Math.max(0, Math.floor(slotIndex))
   const column = normalizedIndex % columnCount
   const row = Math.floor(normalizedIndex / columnCount)
+  const visibleRailY = clamp(
+    railY ?? shelf.y + COLLAPSED_PROJECT_TAB_INSET + COLLAPSED_PROJECT_TAB_HEIGHT,
+    shelf.y + COLLAPSED_PROJECT_TAB_INSET + COLLAPSED_PROJECT_TAB_HEIGHT,
+    shelf.y + shelf.height - COLLAPSED_PROJECT_TAB_INSET
+  )
 
   return {
-    height: COLLAPSED_PROJECT_DIRECTORY_HEIGHT,
+    height: COLLAPSED_PROJECT_TAB_HEIGHT,
     width,
     x:
       shelf.x +
-      COLLAPSED_PROJECT_DIRECTORY_INSET +
-      column * (width + COLLAPSED_PROJECT_DIRECTORY_GAP),
+      shelf.width -
+      COLLAPSED_PROJECT_TAB_INSET -
+      width -
+      column * (width + COLLAPSED_PROJECT_TAB_GAP),
     y:
-      shelf.y +
-      shelf.height -
-      COLLAPSED_PROJECT_DIRECTORY_INSET -
-      COLLAPSED_PROJECT_DIRECTORY_HEIGHT -
-      row * (COLLAPSED_PROJECT_DIRECTORY_HEIGHT + COLLAPSED_PROJECT_DIRECTORY_GAP)
+      visibleRailY -
+      COLLAPSED_PROJECT_TAB_HEIGHT -
+      row * (COLLAPSED_PROJECT_TAB_HEIGHT + COLLAPSED_PROJECT_TAB_GAP)
   }
 }
 

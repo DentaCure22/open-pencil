@@ -1,5 +1,5 @@
-import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { ref, type Ref } from 'vue'
 
 import type { SceneNode, Vector } from '@open-pencil/scene-graph'
 
@@ -145,11 +145,5 @@ export function useWorkMapCreationBoardDrop(
   useEventListener(canvasArea, 'dragover', onDragOver)
   useEventListener(canvasArea, 'drop', onDrop)
 
-  return {
-    isDraggingWorkMapCreation,
-    onDragEnter,
-    onDragLeave,
-    onDragOver,
-    onDrop
-  }
+  return { isDraggingWorkMapCreation }
 }

@@ -15,14 +15,76 @@ No actionable P0, P1, or P2 issue remains.
 - Icons and copy: the existing Lucide message-plus and Bot icons provide distinct targets with explicit `Add chat` and `Add Bot` accessible names.
 - Bot-row restraint: the former per-row Add sub-bot and New chat controls are absent at rest and on hover.
 - Interaction: clicking Add chat opens a New chat draft; clicking Add Bot opens the top-level Bot naming dialog. Both controls are native draggable buttons.
-- Drag destinations: focused browser coverage passed for chat-to-Bot, Bot-to-Bot, and Bot-to-Board drops. The Board drop opens the naming dialog with the exact Board placement attached to the draft.
+- Drag destinations: focused browser coverage passed for chat-to-Bot, Bot-to-Bot, and Bot-to-Board drops. The Board drop was named and submitted, emitted the atomic project/space operations, and left the new 720 × 480 Bot Frame selected on the Board.
 - Console: after a clean reload, the live browser produced no new errors.
 
 ## Validation
 
 - Focused Work Map drag tests: 3 passed, 0 failed.
 - Focused browser interaction tests: 3 passed, 0 failed.
+- Targeted lint: passed.
 - The broader Work Map contract had 8 relevant passes and one unrelated existing expectation failure in Bot idle-motion scheduling.
+
+final result: passed
+
+# Grok-style Bot direct messages and active presence — design QA
+
+## Evidence
+
+- Primary Grok conversation reference: `/var/folders/3p/1nb1q9rs4876lqrmh50kh6700000gn/T/TemporaryItems/NSIRD_screencaptureui_yj6RQo/Screenshot 2026-08-27 at 12.14.01 AM.png`.
+- Grok compact bubble/avatar reference: `/var/folders/3p/1nb1q9rs4876lqrmh50kh6700000gn/T/TemporaryItems/NSIRD_screencaptureui_J8vo1P/Screenshot 2026-08-27 at 12.13.51 AM.png`.
+- Grok hover actions reference: `/var/folders/3p/1nb1q9rs4876lqrmh50kh6700000gn/T/TemporaryItems/NSIRD_screencaptureui_dBCCsL/Screenshot 2026-08-27 at 12.20.12 AM.png`.
+- Grok approval choices reference: `/var/folders/3p/1nb1q9rs4876lqrmh50kh6700000gn/T/TemporaryItems/NSIRD_screencaptureui_wVmPw5/Screenshot 2026-08-27 at 12.20.30 AM.png`.
+- Fresh live implementation after editor/authority restart: `/Users/omar/Developer/Open Pencil Local 2026-08-26/.artifacts/bot-dm-grok-final/live-bot-dm-post-restart.png`.
+- One-input source/implementation comparison: `/Users/omar/Developer/Open Pencil Local 2026-08-26/.artifacts/bot-dm-grok-final/grok-vs-openpencil-post-restart.png`.
+- Live viewport: 1280 × 720 px at device pixel ratio 1. Comparison board: 880 × 760 px.
+- State: dark Dental Chart Bot DM with a completed user request, assistant reply, Board change link, image result, and idle composer.
+
+## Combined visual comparison
+
+The four supplied Grok references and the fresh OpenPencil Bot DM were reviewed in one image. The implementation preserves the reference's direct-message grammar: restrained left assistant bubbles, a clearly visible right user bubble, rounded full-width composer, concise message density, result media in the conversation flow, and no permanent assistant avatar beside completed content. OpenPencil keeps its current dark theme and project chrome instead of copying Grok's white application shell.
+
+The finished tooth image now stands on its own. There is no loose Bot avatar between the completed reply and the image, below the image, or elsewhere in the idle transcript. The image retains its own rounded result surface and is not displaced by a status element.
+
+## Active-state comparison
+
+The Bot character is mounted only inside the live presence row while the final run is busy. That row is a plain transparent status line with no bubble, border, ring, or circular ellipsis container. Its phase is derived from live activity: `thinking`, `working`, or `typing`. Image generation remains `working` until the result completes; the presence row then unmounts and only the result remains.
+
+## Findings
+
+No actionable P0, P1, or P2 visual issue remains for the requested Bot presence and message ownership behavior.
+
+- Message ownership: user messages remain right-aligned and use a dedicated high-contrast bubble token in both light and dark themes.
+- Completed Bot content: replies and images render without an avatar or persistent status row.
+- Live Bot presence: the animated approved Bot asset appears only during thinking, working, typing, or generation.
+- Status treatment: the Bot name and pulsing ellipsis sit directly on the transcript with no surrounding circle or border.
+- Conversation controls: React, Reply, overflow actions, compact choice approvals, plus, microphone, and send states remain in the Bot DM contract.
+- Future channel boundary: replies, reactions, approvals, files, Board objects, and Bot identity remain transport-neutral so a later Messages/iMessage adapter can project the same conversation model.
+
+## Browser and validation record
+
+- Fresh browser capture after restarting `com.openpencil.dev`: editor returned HTTP 200 at port 1420.
+- The real Work Map authority route responded at port 7602 after restart; its unauthenticated probe correctly returned 401 instead of a dead connection.
+- Focused Bot UI/unit suite: 29 passed, 0 failed, 344 assertions.
+- Focused Bot charter/router suite: 61 passed, 0 failed, 269 assertions.
+- Focused browser coverage: 2 passed, 0 failed. It covers persistent Bot DM rendering and scheduled Bot routing.
+- Browser coverage additionally asserts zero completed-state Bot presence/avatar, a transparent zero-border active row, Reply/cancel, reactions, overflow actions, composer controls, and compact approvals.
+- Diff whitespace validation passed.
+
+## Implementation checklist
+
+- [x] Remove the Bot avatar from completed replies and generated images.
+- [x] Show the Bot character only while the Bot is actively working.
+- [x] Distinguish thinking, working, and typing without technical activity chrome.
+- [x] Keep the live status line borderless and bubble-free.
+- [x] Preserve a visible user bubble in light and dark themes.
+- [x] Retain Grok-like message actions and conversational approval choices.
+- [x] Preserve a channel-neutral model for a later Messages/iMessage connection.
+- [x] Compare the supplied references and fresh live implementation in one visual input.
+
+## Follow-up polish
+
+- None required for this correction.
 
 final result: passed
 
@@ -699,5 +761,11 @@ final result: passed
 ## Fidelity result
 
 No P0, P1, or P2 issue remains in the normalized assets or sizing contract. A fresh live localhost capture could not be attached in this run because the browser-control URL policy rejected the local page; the current user-visible app remains the final pixel-feedback surface.
+
+final result: passed
+
+## Latest report
+
+The **Grok-style Bot direct messages and active presence** report above is the current authority. It covers completed-image avatar removal, active-only Bot presence, the borderless ellipsis line, visible user bubbles, transport-neutral messaging controls, and the fresh post-restart source comparison.
 
 final result: passed

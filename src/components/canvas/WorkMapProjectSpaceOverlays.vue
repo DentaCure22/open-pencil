@@ -5,7 +5,7 @@ import type { Rect, SceneNode } from '@open-pencil/scene-graph'
 import { applyMoveReparent, applyMoveSnap } from '@open-pencil/vue'
 
 import {
-  collapsedProjectDirectoryLayout,
+  collapsedProjectTabLayout,
   fluidProjectTerritoryAppearance,
   shouldDetachFromFluidProjectSpace,
   workMapProjectSpaceBindings
@@ -130,6 +130,21 @@ function collapsedSiblingSlotIndex(
   )
 }
 
+function collapsedSiblingRailY(
+  bindings: ReturnType<typeof workMapProjectSpaceBindings>,
+  project: AgentWorkMapProject,
+  zoom: number
+): number | undefined {
+  const siblingTops = bindings.flatMap((binding) => {
+    if (binding.project.parentId !== project.parentId) return []
+    const siblingFrame = store.graph.getNode(binding.frameId)
+    if (!siblingFrame || siblingFrame.type !== 'FRAME') return []
+    const absolute = store.graph.getAuthoritativeAbsolutePosition(siblingFrame.id)
+    return [absolute.y * zoom + presentationViewport.value.panY]
+  })
+  return siblingTops.length > 0 ? Math.min(...siblingTops) : undefined
+}
+
 const territories = computed(() => {
   void graphVersion.value
   void geometryVersion.value.revision
@@ -160,10 +175,10 @@ const territories = computed(() => {
       ? collapsedSiblingSlotIndex(bindings, project, collapsedDirectories)
       : 0
     const parentAbsolute = parentFrame
-      ? store.graph.getAbsolutePosition(parentFrame.id)
-      : store.graph.getAbsolutePosition(frame.id)
+      ? store.graph.getAuthoritativeAbsolutePosition(parentFrame.id)
+      : store.graph.getAuthoritativeAbsolutePosition(frame.id)
     const readableViewport = readableCanvasViewport()
-    const collapsedLayout = collapsedProjectDirectoryLayout(
+    const collapsedLayout = collapsedProjectTabLayout(
       {
         height: (parentFrame?.height ?? frame.height) * zoom,
         width: (parentFrame?.width ?? frame.width) * zoom,
@@ -171,7 +186,8 @@ const territories = computed(() => {
         y: parentAbsolute.y * zoom + presentationViewport.value.panY
       },
       collapsedSlotIndex,
-      readableViewport
+      readableViewport,
+      collapsedSiblingRailY(bindings, project, zoom)
     )
     const collapsedCardStyle = {
       height: `${collapsedLayout.height}px`,
