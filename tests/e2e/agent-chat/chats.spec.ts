@@ -173,7 +173,7 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   })
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
-  await page.getByRole('button', { name: 'Chats', exact: true }).click()
+  await page.getByTestId('left-panel-chats-tab').click()
 
   const panel = page.getByTestId('agent-chats-panel')
   const conversation = page.getByTestId('agent-selected-conversation')
