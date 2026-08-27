@@ -102,7 +102,7 @@ function directionalContainer(
       first.name.localeCompare(second.name) ||
       first.id.localeCompare(second.id)
   )
-  const target = candidates[0]
+  const target = candidates.at(0)
   return target ? (editor.graph.getNode(target.id) ?? null) : null
 }
 

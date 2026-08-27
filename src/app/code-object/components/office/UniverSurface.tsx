@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
+import type { CodeObjectTheme } from '@open-pencil/core/code-object'
+
 import type {
   OfficeDocumentState,
   OfficeSpreadsheetState,
@@ -15,6 +17,7 @@ type UniverSurfaceProps = {
   onStateChange: (state: CodeObjectState) => void
   preview: ReactNode
   state: OfficeDocumentState | OfficeSpreadsheetState
+  theme: CodeObjectTheme
 }
 
 type RuntimeStatus = 'error' | 'loading' | 'ready'
@@ -42,7 +45,8 @@ export function UniverSurface({
   kind,
   onStateChange,
   preview,
-  state
+  state,
+  theme
 }: UniverSurfaceProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const runtimeRef = useRef<OfficeRuntime | null>(null)
@@ -89,7 +93,8 @@ export function UniverSurface({
       container: host,
       fileName,
       kind,
-      state: stateRef.current
+      state: stateRef.current,
+      theme
     }).then(
       (runtime) => {
         if (disposed) {
@@ -116,11 +121,11 @@ export function UniverSurface({
         host.remove()
       }
     }
-  }, [fileName, kind, runtimeActive, state.revision])
+  }, [fileName, kind, runtimeActive, state.revision, theme])
 
   return (
     <main
-      className="relative size-full overflow-hidden bg-[#f3f4f6] font-sans"
+      className="relative size-full overflow-hidden bg-[var(--code-background)] font-sans"
       data-office-kind={kind}
       data-office-mode={interactionEnabled ? 'interact' : 'design'}
       data-test-id={`office-${kind}`}
@@ -141,7 +146,7 @@ export function UniverSurface({
 
       {interactionEnabled && status === 'loading' ? (
         <div
-          className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f3f4f6] text-[12px] font-medium text-[#6b7280]"
+          className="pointer-events-none absolute inset-0 grid place-items-center bg-[var(--code-background)] text-[12px] font-medium text-[var(--code-text-muted)]"
           data-test-id={`office-${kind}-loading`}
         >
           Opening {kind === 'document' ? 'document' : 'spreadsheet'}…
@@ -150,7 +155,7 @@ export function UniverSurface({
 
       {interactionEnabled && status === 'error' ? (
         <div
-          className="absolute inset-0 grid place-items-center bg-[#f8fafc] p-10 text-center text-[12px] leading-5 text-[#64748b]"
+          className="absolute inset-0 grid place-items-center bg-[var(--code-background)] p-10 text-center text-[12px] leading-5 text-[var(--code-text-muted)]"
           data-test-id={`office-${kind}-error`}
         >
           The Office surface could not start. The board object and its source remain preserved.

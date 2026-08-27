@@ -10,24 +10,37 @@ import {
 import { BROWSER_CAPTURE_DRAG_TYPE } from '@/app/browser-inspector/drag'
 
 function fakeDataTransfer(options: { files?: File[]; types?: string[] }): DataTransfer {
+  const files = options.files ?? []
+  const fileList: FileList = Object.assign(files.slice(), {
+    item: (index: number) => files[index] ?? null
+  })
+  const items: DataTransferItemList = {
+    add: () => null,
+    clear: () => undefined,
+    length: 0,
+    remove: () => undefined
+  }
   return {
-    clearData: () => {},
+    clearData: () => undefined,
     dropEffect: 'none',
     effectAllowed: 'all',
-    files: options.files ?? ([] as unknown as FileList),
+    files: fileList,
     getData: () => '',
-    items: [] as unknown as DataTransferItemList,
-    setData: () => {},
-    setDragImage: () => {},
+    items,
+    setData: () => undefined,
+    setDragImage: () => undefined,
     types: options.types ?? []
-  } as DataTransfer
+  }
 }
 
 describe('agent-chat attachments', () => {
   test('deduplicates identical files and respects count limit', () => {
     const file1 = new File(['hello'], 'test1.png', { type: 'image/png', lastModified: 1000 })
     const file2 = new File(['world'], 'test2.png', { type: 'image/png', lastModified: 2000 })
-    const file1Duplicate = new File(['hello'], 'test1.png', { type: 'image/png', lastModified: 1000 })
+    const file1Duplicate = new File(['hello'], 'test1.png', {
+      type: 'image/png',
+      lastModified: 1000
+    })
 
     const result1 = appendDraftAttachments([], [file1, file2, file1Duplicate])
     expect(result1.attachments.length).toBe(2)

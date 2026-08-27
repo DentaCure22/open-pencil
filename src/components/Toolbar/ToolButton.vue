@@ -37,13 +37,13 @@ const emit = defineEmits<{
       type="button"
       class="relative z-10 flex size-8 shrink-0 cursor-pointer items-center justify-center overflow-hidden border-none outline-none transition-[color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-chrome"
       :class="[
-        mobile ? 'rounded-[6px] select-none' : 'rounded-full',
+        mobile ? 'rounded-[6px] select-none' : 'rounded-[10px]',
         active
           ? mobile
             ? 'bg-accent text-white'
             : variant === 'utility'
               ? 'bg-chrome-control-active text-surface shadow-sm ring-1 ring-inset ring-chrome-control-border'
-              : 'bg-transparent text-white'
+              : 'bg-transparent text-surface'
           : mobile
             ? 'bg-transparent text-muted active:bg-hover'
             : 'bg-transparent text-muted hover:bg-hover hover:text-surface'

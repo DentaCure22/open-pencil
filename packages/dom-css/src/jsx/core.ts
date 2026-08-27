@@ -102,7 +102,7 @@ export function stateBindingsFromProps(props: JSXElementProps): DesignStateBindi
   if (typeof value !== 'string') return undefined
   const bindings = value.split(',').flatMap((entry): DesignStateBinding[] => {
     const [indexValue, ...fieldParts] = entry.trim().split(':')
-    const stateIndex = Number.parseInt(indexValue ?? '', 10)
+    const stateIndex = Number.parseInt(indexValue, 10)
     const field = fieldParts.join(':').trim()
     if (!Number.isSafeInteger(stateIndex) || stateIndex < 0 || !field) return []
     return [{ field, stateIndex }]

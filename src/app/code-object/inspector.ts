@@ -85,7 +85,8 @@ function elementAtPath(frameId: string, path: number[]): HTMLElement | null {
 
 function meaningfulText(element: HTMLElement) {
   if (element.children.length > 0) return ''
-  return element.textContent?.replace(/\s+/g, ' ').trim().slice(0, 48) ?? ''
+  const textContent = element.textContent as string | null
+  return (textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 48)
 }
 
 function elementName(element: HTMLElement) {
@@ -181,7 +182,8 @@ function normalizedBounds(rect: DOMRect, surfaceRect: DOMRect): Rect {
 }
 
 function compactElementText(element: HTMLElement) {
-  const text = element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+  const textContent = element.textContent as string | null
+  const text = (textContent ?? '').replace(/\s+/g, ' ').trim()
   return text ? text.slice(0, 120) : undefined
 }
 

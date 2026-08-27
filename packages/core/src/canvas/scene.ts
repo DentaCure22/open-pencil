@@ -301,8 +301,10 @@ export function renderNode(
   }
 
   applyNodeTransforms(r, canvas, node, nodeId, overlays)
-  renderNodeContent(r, canvas, graph, node, nodeId, overlays)
-  drawLayoutGrids(r, canvas, node)
+  if (!overlays.sceneContentOwnerIds?.has(nodeId)) {
+    renderNodeContent(r, canvas, graph, node, nodeId, overlays)
+    drawLayoutGrids(r, canvas, node)
+  }
   renderChildren(r, canvas, graph, node, overlays, absX, absY)
 
   if (layerBlur) {

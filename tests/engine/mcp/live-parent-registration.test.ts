@@ -269,8 +269,50 @@ describe('live-parent MCP registration', () => {
     })
   })
 
-  test('offers typed Code Object actions without exposing pluginData serialization', () => {
+  test('offers typed source-backed actions without exposing pluginData serialization', () => {
     const schema = toolsSchema(setup(), 'board_apply')
+    const exactSource = 'flowchart TD\n  Assess --> Diagnose --> Treat\n'
+    const parsedCreate = schema.safeParse({
+      operations: [
+        {
+          appearance: 'auto',
+          bounds: { height: 480, width: 720, x: 100, y: 120 },
+          object_id: 'diagram:patient-flow',
+          op: 'create_mermaid',
+          parent_id: '0:2',
+          source: exactSource
+        }
+      ],
+      page_id: '0:2'
+    })
+    expect(parsedCreate.success).toBe(true)
+    if (parsedCreate.success) expect(parsedCreate.data.operations[0]?.source).toBe(exactSource)
+    expect(
+      schema.safeParse({
+        operations: [
+          {
+            object_id: 'diagram:patient-flow',
+            op: 'update_mermaid',
+            source: 'flowchart TD\n  Assess --> Plan --> Treat'
+          }
+        ],
+        page_id: '0:2'
+      }).success
+    ).toBe(true)
+    expect(
+      schema.safeParse({
+        operations: [
+          {
+            bounds: { height: 480, width: 720, x: 100, y: 120 },
+            object_id: 'diagram:bad',
+            op: 'create_mermaid',
+            parent_id: '0:2',
+            source: ''
+          }
+        ],
+        page_id: '0:2'
+      }).success
+    ).toBe(false)
     expect(
       schema.safeParse({
         operations: [
@@ -288,6 +330,36 @@ describe('live-parent MCP registration', () => {
         page_id: '0:2'
       }).success
     ).toBe(true)
+    expect(
+      schema.safeParse({
+        operations: [
+          {
+            bounds: { height: 520, width: 720, x: 100, y: 120 },
+            object_id: 'code:work-plan',
+            op: 'create_code_object',
+            parent_id: '0:2',
+            preset_id: 'work-plan',
+            props: { plan: { blocks: [], shape: 'mixed', status: 'draft', title: 'Plan' } }
+          }
+        ],
+        page_id: '0:2'
+      }).success
+    ).toBe(true)
+    expect(
+      schema.safeParse({
+        operations: [
+          {
+            board_permissions: ['invented.permission'],
+            bounds: { height: 240, width: 360, x: 100, y: 120 },
+            object_id: 'code:bad-permission',
+            op: 'create_code_object',
+            parent_id: '0:2',
+            preset_id: 'board-tool-starter'
+          }
+        ],
+        page_id: '0:2'
+      }).success
+    ).toBe(false)
     expect(
       schema.safeParse({
         operations: [
@@ -629,6 +701,16 @@ describe('live-parent MCP registration', () => {
                   threadId: 'thread-editor',
                   title: 'Review plan interactions',
                   updatedAt: '2026-08-25T12:00:00.000Z'
+                },
+                {
+                  archivedAt: '2026-08-25T13:00:00.000Z',
+                  createdAt: '2026-08-25T12:00:00.000Z',
+                  id: 'todo:archived',
+                  projectId: 'project:editor',
+                  status: 'in_motion',
+                  threadId: 'thread-archived',
+                  title: 'Archived plan work',
+                  updatedAt: '2026-08-25T13:00:00.000Z'
                 }
               ],
               version: 1
@@ -647,6 +729,15 @@ describe('live-parent MCP registration', () => {
                   state: 'running',
                   task: 'Refine the plan editor',
                   updatedAt: '2026-08-25T12:00:00.000Z'
+                },
+                {
+                  canFollowUp: true,
+                  id: 'thread-archived',
+                  messages: [{ role: 'user', text: 'Old archived work.' }],
+                  sessionId: 'session-archived',
+                  state: 'completed',
+                  task: 'Archived plan work',
+                  updatedAt: '2026-08-25T13:00:00.000Z'
                 }
               ]
             },
@@ -661,6 +752,7 @@ describe('live-parent MCP registration', () => {
     }
 
     expect(output.boardPlacement).toBe('work_map_reported')
+    expect(output.candidates).toHaveLength(1)
     expect(output.candidates?.[0]?.workMap).toEqual({
       projectId: 'project:editor',
       projectPath: ['Treatment plan', 'Plan editor'],

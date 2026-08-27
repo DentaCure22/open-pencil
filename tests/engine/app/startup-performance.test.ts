@@ -31,18 +31,27 @@ describe('startup and lightweight runtime contracts', () => {
     expect(canvas).toContain('data-test-id="canvas-error-retry"')
   })
 
-  test('loads automation and React Code Object runtimes only on demand', async () => {
-    const [server, runtime, overlays] = await Promise.all([
+  test('loads automation and optional React editor surfaces only on demand', async () => {
+    const [server, runtime, overlays, editorView] = await Promise.all([
       Bun.file('src/app/automation/bridge/server.ts').text(),
       Bun.file('src/app/code-object/runtime.ts').text(),
-      Bun.file('src/components/canvas/CodeObjectOverlays.vue').text()
+      Bun.file('src/components/canvas/CodeObjectOverlays.vue').text(),
+      Bun.file('src/views/EditorView.vue').text()
     ])
 
     expect(server).not.toContain("from '@/app/automation/bridge/handlers'")
     expect(server).toContain("import('@/app/automation/bridge/handlers')")
     expect(runtime).toContain("import('@/app/code-object/runtime-implementation')")
+    expect(overlays).toContain(
+      "import('@/components/agent-terminal/AgentConversationBoardSurface.vue')"
+    )
+    expect(overlays).not.toContain(
+      "import AgentConversationBoardSurface from '@/components/agent-terminal/AgentConversationBoardSurface.vue'"
+    )
     expect(overlays).toContain("if ('pluginData' in changes) scheduleRuntimeRender(id)")
     expect(overlays).not.toContain("store.onEditorEvent('node:updated', () =>")
+    expect(editorView).toContain("import('@/components/diagram/MermaidImportDialog.vue')")
+    expect(editorView).toContain('<MermaidImportDialog v-if="mermaidDialogOpen" />')
   })
 
   test('keeps document viewers out of the initial editor bundle', async () => {

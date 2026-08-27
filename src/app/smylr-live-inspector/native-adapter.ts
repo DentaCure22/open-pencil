@@ -115,26 +115,7 @@ function parseCSSLengthToPixels(raw: string | undefined): number | null {
 
 function parseColorLoose(raw: string | undefined): VariableValue | null {
   if (!raw) return null
-  const value = raw.trim()
-  const direct = parseColor(value)
-  if (direct) return direct
-
-  const modern = value.match(
-    /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i
-  )
-  if (!modern) return null
-
-  const alphaRaw = modern[4]
-  let alpha = 1
-  if (alphaRaw) {
-    alpha = alphaRaw.endsWith('%') ? Number.parseFloat(alphaRaw) / 100 : Number.parseFloat(alphaRaw)
-  }
-  return {
-    a: Number.isFinite(alpha) ? alpha : 1,
-    b: Number.parseFloat(modern[3]) / 255,
-    g: Number.parseFloat(modern[2]) / 255,
-    r: Number.parseFloat(modern[1]) / 255
-  }
+  return parseColor(raw.trim())
 }
 
 function semanticVariableValue(token: SmylrLiveSemanticToken): {
@@ -146,24 +127,15 @@ function semanticVariableValue(token: SmylrLiveSemanticToken): {
     return value !== null ? { type: 'FLOAT', value } : null
   }
   if (token.category === 'shadow') {
-    const raw = token.resolvedValue?.trim()
+    const raw = token.resolvedValue.trim()
     if (!raw || raw === 'none') return null
     return { type: 'FLOAT', value: 1 }
   }
-  if (
-    token.category === 'surface' ||
-    token.category === 'border' ||
-    token.category === 'chart' ||
-    token.category === 'status' ||
-    token.category === 'text'
-  ) {
-    const color = parseColorLoose(token.resolvedValue)
-    if (color) return { type: 'COLOR', value: color }
-    const opacity = parseCSSLengthToPixels(token.resolvedValue)
-    if (opacity !== null && opacity <= 1) return { type: 'FLOAT', value: opacity }
-    return { type: 'COLOR', value: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }
-  }
-  return null
+  const color = parseColorLoose(token.resolvedValue)
+  if (color) return { type: 'COLOR', value: color }
+  const opacity = parseCSSLengthToPixels(token.resolvedValue)
+  if (opacity !== null && opacity <= 1) return { type: 'FLOAT', value: opacity }
+  return { type: 'COLOR', value: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }
 }
 
 function matchesProvenance(token: SmylrLiveSemanticToken, provenance: SmylrLiveTokenProvenance) {
@@ -193,7 +165,7 @@ function bindingPathsForProperty(property: string): string[] {
   }
   if (property.startsWith('padding-')) {
     const suffix = property.slice('padding-'.length)
-    const key = `${suffix[0]?.toUpperCase() ?? ''}${suffix.slice(1)}`
+    const key = `${suffix.at(0)?.toUpperCase() ?? ''}${suffix.slice(1)}`
     return [`padding${key}`]
   }
   if (property === 'width' || property === 'height') return [property]
@@ -341,15 +313,16 @@ function flippedScaleComponent(value: string, flipped: boolean) {
 }
 
 function flippedCSSScale(value: string | undefined, flipX: boolean, flipY: boolean) {
-  const [first = '1', second, sourceZ] = cssComponents(value)
-  const sourceX = first
-  const sourceY = second ?? first
+  const components = cssComponents(value)
+  const sourceX = components.at(0) ?? '1'
+  const sourceY = components.at(1) ?? sourceX
+  const sourceZ = components.at(2)
   const scaled = [flippedScaleComponent(sourceX, flipX), flippedScaleComponent(sourceY, flipY)]
   if (sourceZ) scaled.push(sourceZ)
   return scaled.join(' ')
 }
 
-function contentBoxAdjustment(styles: SmylrLiveContainerNode['computedStyle'], axis: 'x' | 'y') {
+function contentBoxAdjustment(styles: DesignStyleDeclaration | undefined, axis: 'x' | 'y') {
   if (styles?.['box-sizing'] === 'border-box') return 0
   if (axis === 'x') {
     return (
@@ -408,7 +381,7 @@ function applySemanticBindings(
   styles: Record<string, string>,
   current: SceneNode,
   baseline: SceneNode,
-  currentStyle: DesignStyleDeclaration,
+  currentStyle: Partial<DesignStyleDeclaration>,
   tokenByVariableId: Map<string, SmylrLiveSemanticToken>
 ) {
   const paths = new Set([
@@ -441,8 +414,8 @@ export function createLiveInspectorStylePatch({
   sourceStyles: SmylrLiveContainerNode['computedStyle']
   tokenByVariableId: Map<string, SmylrLiveSemanticToken>
 }) {
-  const currentStyle = sceneNodeToStyle(current)
-  const baselineStyle = sceneNodeToStyle(baseline)
+  const currentStyle: Partial<DesignStyleDeclaration> = sceneNodeToStyle(current)
+  const baselineStyle: Partial<DesignStyleDeclaration> = sceneNodeToStyle(baseline)
   const styles: Record<string, string> = {}
   const properties = new Set([...Object.keys(baselineStyle), ...Object.keys(currentStyle)])
 

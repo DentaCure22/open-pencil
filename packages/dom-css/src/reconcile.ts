@@ -99,7 +99,7 @@ function mergeDesiredNode(
     conflicts > 0 ? 'conflict' : 'current'
   )
   targetGraph.preserveSourceMetadataDuring(() => {
-    targetGraph.updateNode(current.id, changes as Partial<SceneNode>)
+    targetGraph.updateNode(current.id, changes)
   })
   result.updated += 1
   result.preservedOverrides += conflicts

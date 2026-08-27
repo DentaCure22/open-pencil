@@ -110,4 +110,4 @@ Grid layouts export to JSX with Tailwind classes: `grid grid-cols-3`, `gap-x-4 g
 - Use "Fill" sizing to make a child take up remaining space, like a flex-grow: 1 in CSS.
 - Use grid for dashboard layouts, galleries, and forms — anything with a two-dimensional structure.
 - See [Drawing Shapes](./drawing-shapes) for creating the frames that auto layout applies to.
-- See [Components](./components) for using auto layout within reusable components.
+- Imported Figma components retain their auto-layout data for compatibility.

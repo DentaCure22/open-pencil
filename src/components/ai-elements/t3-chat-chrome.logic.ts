@@ -29,15 +29,22 @@ export function resolveT3ThreadStatus(
   if (thread.state === 'needs_attention') {
     return { label: 'Failed', pulse: false, tone: 'red' }
   }
-  if (thread.state === 'stopped') {
-    return /\b(error|fail(?:ed|ure)?)\b/i.test(thread.recentUpdate)
-      ? { label: 'Failed', pulse: false, tone: 'red' }
-      : { label: 'Stopped', pulse: false, tone: 'zinc' }
-  }
+  if (thread.state === 'stopped') return null
   if (options.unread) {
     return { label: 'Completed', pulse: false, tone: 'emerald' }
   }
   return null
+}
+
+export function summarizeT3ThreadStatuses(
+  statuses: readonly (T3ThreadStatus | null | undefined)[]
+): T3ThreadStatus | undefined {
+  const visible = statuses.filter((status): status is T3ThreadStatus => Boolean(status))
+  return (
+    visible.find((status) => status.pulse) ??
+    visible.find((status) => status.tone === 'red') ??
+    visible.find((status) => status.tone === 'emerald')
+  )
 }
 
 export type T3ComposerTriggerKind = 'path' | 'slash-command' | 'skill'

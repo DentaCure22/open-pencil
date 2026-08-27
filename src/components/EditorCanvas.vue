@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, type Component } from 'vue'
+import { computed, onMounted, ref, watch, type Component } from 'vue'
 import {
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_X,
   AUTO_LAYOUT_PADDING_EDITOR_OFFSET_Y
 } from '@open-pencil/core/constants'
+import type { SceneNode } from '@open-pencil/scene-graph'
 import {
   ContextMenuPortal,
   ContextMenuRoot,
@@ -22,6 +23,12 @@ import {
 } from '@open-pencil/vue'
 import { useCollabInjected } from '@/app/collab/use'
 import { isCodeObjectFrame } from '@/app/code-object/model'
+import {
+  shouldDetachFromFluidProjectSpace,
+  workMapProjectSpaceBindings
+} from '@/app/agent-chat/project-space'
+import { useWorkMapCreationBoardDrop } from '@/app/agent-chat/work-map-create-drag'
+import { useAgentWorkMapPersistence } from '@/app/agent-chat/work-map-persistence'
 import { isAgentConversationDragActive, useAgentConversationDrop } from '@/app/agent-terminal/drag'
 import { useEditorStore } from '@/app/editor/active-store'
 import { useAssetVariantDrop } from '@/app/editor/assets/drag'
@@ -53,6 +60,8 @@ import ContextCommentScreenshotEditor from './context-comment/ContextCommentScre
 import MediaEvidenceOverlays from './canvas/MediaEvidenceOverlays.vue'
 import MarkdownDocumentOverlays from './canvas/MarkdownDocumentOverlays.vue'
 import MermaidSvgOverlays from './canvas/MermaidSvgOverlays.vue'
+import NativeObjectActionOverlay from './canvas/NativeObjectActionOverlay.vue'
+import WorkMapProjectSpaceOverlays from './canvas/WorkMapProjectSpaceOverlays.vue'
 import NarratedTraceAnnotationOverlay from './narrated-trace/NarratedTraceAnnotationOverlay.vue'
 import SpatialMediaOverlays from './spatial-media/SpatialMediaOverlays.vue'
 import SourceObjectOverlays from './canvas/SourceObjectOverlays.vue'
@@ -67,7 +76,29 @@ type CanvasLayer = 'overlays' | 'scene'
 const canvasLoadErrors = ref<Partial<Record<CanvasLayer, string>>>({})
 const canvasRetrying = ref(false)
 const presentationViewport = useEditorPresentationViewport(store)
+const { load: loadCanvasWorkMap, workMap } = useAgentWorkMapPersistence()
+const projectSpaceFrameIds = computed(
+  () =>
+    new Set(
+      workMapProjectSpaceBindings(workMap.value, store.state.currentPageId).map(
+        ({ frameId }) => frameId
+      )
+    )
+)
+const projectMoveMembershipPolicy = {
+  shouldDetach: (child: SceneNode, parent: SceneNode) =>
+    projectSpaceFrameIds.value.has(parent.id) && shouldDetachFromFluidProjectSpace(child, parent)
+}
 useCanvasViewportCssVariables(store, canvasAreaRef)
+
+onMounted(() => {
+  if (!workMap.value) void loadCanvasWorkMap()
+})
+watch(
+  () => [...projectSpaceFrameIds.value].sort().join('\u0000'),
+  () => store.requestRender(),
+  { immediate: true }
+)
 
 const canvasGridStyle = {
   backgroundColor: 'var(--color-canvas)',
@@ -105,6 +136,7 @@ const { retryCanvasKit: retrySceneCanvasKit } = useCanvas(sceneCanvasRef, store,
   layer: 'scene',
   maxDevicePixelRatio: 1.5,
   preserveDrawingBuffer: true,
+  sceneContentOwnerIds: () => projectSpaceFrameIds.value,
   showRulers: false,
   onError: (error) => markCanvasError('scene', error),
   onReady: () => markCanvasReady('scene')
@@ -118,6 +150,7 @@ const {
   layer: 'overlays',
   maxDevicePixelRatio: 1.25,
   ownsSelectionChrome: (nodeId) => isCodeObjectFrame(store.graph.getNode(nodeId)),
+  ownsSelectionLabel: (nodeId) => projectSpaceFrameIds.value.has(nodeId),
   onError: (error) => markCanvasError('overlays', error),
   onReady: () => markCanvasReady('overlays')
 })
@@ -143,7 +176,8 @@ const {
   hitTestFrameTitle,
   updateCursor,
   editorViewportInsets,
-  isAgentConversationDragActive
+  isAgentConversationDragActive,
+  projectMoveMembershipPolicy
 )
 
 useTextEdit(canvasRef, store)
@@ -157,6 +191,9 @@ const {
 } = useAssetVariantDrop(canvasAreaRef, store)
 const { onDragOver: onAgentConversationDragOver, onDrop: onAgentConversationDrop } =
   useAgentConversationDrop(canvasAreaRef, store)
+const {
+  isDraggingWorkMapCreation
+} = useWorkMapCreationBoardDrop(canvasAreaRef, store, workMap)
 const {
   isDraggingExternalLiveSurface,
   onDragEnter: onExternalLiveSurfaceDragEnter,
@@ -245,6 +282,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         @drop="onCanvasDrop"
         @scroll.passive="keepCanvasAreaPinned"
       >
+        <WorkMapProjectSpaceOverlays />
         <canvas
           ref="sceneCanvasRef"
           data-test-id="scene-canvas-element"
@@ -263,6 +301,7 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
         <MarkdownDocumentOverlays />
         <MermaidSvgOverlays />
         <CodeObjectOverlays />
+        <NativeObjectActionOverlay />
         <BoardExperienceRuntimeHost />
         <AgentTerminalOverlays />
         <ContainerNavigationStatus />
@@ -278,7 +317,12 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           leave-to-class="opacity-0"
         >
           <div
-            v-if="isDraggingOver || isDraggingAssetVariant || isDraggingExternalLiveSurface"
+            v-if="
+              isDraggingOver ||
+              isDraggingAssetVariant ||
+              isDraggingExternalLiveSurface ||
+              isDraggingWorkMapCreation
+            "
             data-test-id="canvas-drop-overlay"
             class="absolute inset-0 z-40 border-2 border-dashed border-accent/60 bg-accent/5"
             :class="

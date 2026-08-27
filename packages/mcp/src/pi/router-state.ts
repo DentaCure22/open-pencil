@@ -15,27 +15,21 @@ import {
 import { AgentJobTracker, type AgentJobRecord } from '#mcp/agent-router/jobs'
 
 import { ConversationMediaStore } from './conversation-media'
-import { piEventText, piToolOutputFailed } from './events'
 import { recoverDurableMediaResults } from './media-recovery'
 import {
   DefaultPiProviderRuntime,
   type PiProviderRuntime,
   type PiProviderTurnCursor
 } from './providers'
-import { closingTextFromAssistantMessage } from './providers/closing'
 import { migrateProviderActivityHistory } from './reasoning-history'
-import type { PiRpcProcess, PiRpcRecord } from './rpc-process'
+import type { PiRpcProcess } from './rpc-process'
 import { compactAgentThreadMemory } from './thread-memory'
 import type { TurnWorkspaceSnapshot } from './turn-changes'
-import {
-  parseUsageTokens,
-  usageTokensAreZero,
-  type UsageSource,
-  type UsageTokens
-} from './usage-ledger'
+import type { UsageSource, UsageTokens } from './usage-ledger'
 
 const RUNNING_HEARTBEAT_MS = 8_000
-const MAX_STATUS_TEXT = 160
+
+export { capturePiOutcome, processExitDetail, safeStatusText } from './router-outcome'
 
 export type ValidatedPiRequest = AgentDispatchRequest & {
   effort: string
@@ -51,6 +45,8 @@ export type PiLaunch =
 export type PiSession = {
   aborting: 'stop' | null
   activeJobId: string | null
+  agentContextPath: string | null
+  agentContextRevision: string | null
   configuredEffort: string
   configuredModel: string
   eventTurnKey: string | null
@@ -76,17 +72,6 @@ export type PiSession = {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-export function safeStatusText(value: unknown): string {
-  return piEventText(value)
-    .replace(/(bearer\s+)[^\s"']+/gi, '$1[redacted]')
-    .replace(
-      /((?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)\s*[=:]\s*)[^\s,"']+/gi,
-      '$1[redacted]'
-    )
-    .trim()
-    .slice(0, MAX_STATUS_TEXT)
 }
 
 function latestUserMessage(thread: AgentConversationThread) {
@@ -122,85 +107,6 @@ function refreshPiHeartbeat(thread: AgentConversationThread, now = Date.now()): 
   thread.recentUpdate = next
   thread.updatedAt = new Date(now).toISOString()
   return true
-}
-
-function assistantMessage(event: PiRpcRecord): Record<string, unknown> | null {
-  return isRecord(event.message) && event.message.role === 'assistant' ? event.message : null
-}
-
-function hasToolCall(message: Record<string, unknown>): boolean {
-  return Boolean(
-    Array.isArray(message.content) &&
-    message.content.some((part) => isRecord(part) && part.type === 'toolCall')
-  )
-}
-
-function captureToolOutcome(session: PiSession, event: PiRpcRecord): void {
-  if (event.type !== 'tool_execution_end') return
-  const output = piEventText(event.result)
-  if (event.isError !== true && !piToolOutputFailed(output)) return
-  const toolName = typeof event.toolName === 'string' ? event.toolName : 'Tool'
-  session.lastToolError = safeStatusText(output) || `${toolName} failed.`
-}
-
-function captureSessionError(session: PiSession, event: PiRpcRecord): void {
-  if (event.type === 'extension_error') {
-    session.lastError = safeStatusText(event.error) || 'A Pi extension failed.'
-    return
-  }
-  if (event.type === 'auto_retry_end' && event.success === false) {
-    session.lastError = safeStatusText(event.finalError) || 'Pi exhausted its retries.'
-  }
-}
-
-function captureTurnUsage(session: PiSession, event: PiRpcRecord): void {
-  if (event.type !== 'message_end') return
-  const message = assistantMessage(event)
-  if (!message || !isRecord(message.usage)) return
-  const tokens = parseUsageTokens(message.usage)
-  const previous = session.lastTurnUsage
-  session.lastTurnUsage = {
-    source:
-      previous?.source === 'pi-event' || !usageTokensAreZero(tokens) ? 'pi-event' : 'estimated',
-    tokens: previous
-      ? {
-          cacheRead: previous.tokens.cacheRead + tokens.cacheRead,
-          cacheWrite: previous.tokens.cacheWrite + tokens.cacheWrite,
-          input: previous.tokens.input + tokens.input,
-          output: previous.tokens.output + tokens.output,
-          reasoning: previous.tokens.reasoning + tokens.reasoning
-        }
-      : tokens
-  }
-}
-
-function captureAssistantOutcome(session: PiSession, event: PiRpcRecord): void {
-  const message = assistantMessage(event)
-  if (!message) return
-  const stopReason = typeof message.stopReason === 'string' ? message.stopReason : ''
-  const text = piEventText(message).trim()
-  if (stopReason === 'error' || stopReason === 'aborted') {
-    const label = stopReason === 'aborted' ? 'stopped' : 'failed'
-    session.lastError = safeStatusText(message.errorMessage ?? text) || `Pi ${label}.`
-    return
-  }
-  if (stopReason === 'toolUse' || hasToolCall(message)) return
-  const closing = closingTextFromAssistantMessage(message)
-  if (closing) session.finalResponse = closing
-  else if (text) session.finalResponse = text
-}
-
-export function capturePiOutcome(session: PiSession, event: PiRpcRecord): void {
-  captureToolOutcome(session, event)
-  captureSessionError(session, event)
-  captureTurnUsage(session, event)
-  captureAssistantOutcome(session, event)
-}
-
-export function processExitDetail(code: number | null, signal: NodeJS.Signals | null): string {
-  if (signal) return `Pi session exited before completion (${signal}).`
-  if (code !== null) return `Pi session exited before completion (code ${String(code)}).`
-  return 'Pi session exited before completion.'
 }
 
 const IMAGE_EXTENSION = '(?:png|jpe?g|webp|gif)'
@@ -260,11 +166,18 @@ export function createPiUserMessage(
 
 export function createPiSession(
   process: PiRpcProcess,
-  selection: { effort: string; model: string }
+  selection: {
+    agentContextPath?: string
+    agentContextRevision?: string
+    effort: string
+    model: string
+  }
 ): PiSession {
   return {
     aborting: null,
     activeJobId: null,
+    agentContextPath: selection.agentContextPath ?? null,
+    agentContextRevision: selection.agentContextRevision ?? null,
     configuredEffort: selection.effort,
     configuredModel: selection.model,
     eventTurnKey: null,
@@ -296,11 +209,13 @@ export function createIdleForkThread(input: {
   messages: AgentConversationThread['messages']
   model: string
   now: string
+  projectId?: string | null
   recentUpdate: string
   sessionId: string | null
   task: string
   title?: string
   toolScope?: AgentConversationThread['toolScope']
+  workspaceRoot?: string
   workerId: string
 }): AgentConversationThread {
   const id = randomUUID()
@@ -313,6 +228,7 @@ export function createIdleForkThread(input: {
     id,
     messages: input.messages,
     model: input.model,
+    ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
     recentUpdate: input.recentUpdate,
     sessionId: input.sessionId,
     state: 'completed',
@@ -320,6 +236,7 @@ export function createIdleForkThread(input: {
     ...(input.title ? { title: input.title } : {}),
     toolScope: input.toolScope ?? 'general',
     updatedAt: input.now,
+    ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     workerId: input.workerId
   }
 }
@@ -336,6 +253,7 @@ export function createPiTodoDraftThread(
     id: request.threadId?.trim() || randomUUID(),
     messages: [],
     model: request.model,
+    projectId: request.projectId,
     recentUpdate: 'Ready to plan.',
     sessionId: null,
     state: 'completed',
@@ -347,11 +265,13 @@ export function createPiTodoDraftThread(
         ? { createdByThreadId: request.createdByThreadId.trim() }
         : {}),
       kind: 'todo',
+      presetId: 'todo-document',
       projectId: request.projectId.trim(),
       todoId: request.todoId.trim()
     },
     toolScope: 'board-worker',
     updatedAt: now,
+    ...(request.workspaceRoot ? { workspaceRoot: request.workspaceRoot } : {}),
     workerId
   }
 }
@@ -365,18 +285,21 @@ export function createPiThread(
   const id = randomUUID()
   return {
     activeTurnStartedAt: now,
+    ...(request.botId ? { botId: request.botId } : {}),
     canFollowUp: true,
     createdAt: now,
     effort: request.effort,
     id,
     messages: [createPiUserMessage(request, now)],
     model: request.model,
+    ...(request.projectId !== undefined ? { projectId: request.projectId } : {}),
     recentUpdate,
     sessionId: id,
     state: 'running',
     task: currentTask(request),
     toolScope: request.toolScope ?? 'general',
     updatedAt: now,
+    ...(request.workspaceRoot ? { workspaceRoot: request.workspaceRoot } : {}),
     workerId
   }
 }
@@ -522,7 +445,7 @@ export class PiRouterState {
       this.idleUnloads.delete(threadId)
       onIdle()
     }, delayMs)
-    timer.unref?.()
+    timer.unref()
     this.idleUnloads.set(threadId, timer)
   }
 

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
+import type { ResolvedCodeObjectAppearance } from '@open-pencil/core/code-object'
+
 import type { SignalBloomState } from '../model'
 
 type SignalBloomProps = {
+  appearance: ResolvedCodeObjectAppearance
   onStateChange: (state: SignalBloomState) => void
   state: SignalBloomState
 }
@@ -29,12 +32,13 @@ function normalizedHue(value: number) {
   return ((Math.round(value) % 360) + 360) % 360
 }
 
-export function SignalBloom({ onStateChange, state }: SignalBloomProps) {
+export function SignalBloom({ appearance, onStateChange, state }: SignalBloomProps) {
   const bloomRef = useRef<SVGGElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const currentRef = useRef(state)
   const onStateChangeRef = useRef(onStateChange)
   const [viewState, setViewState] = useState(state)
+  const { theme, tokens } = appearance
 
   useEffect(() => {
     onStateChangeRef.current = onStateChange
@@ -106,8 +110,9 @@ export function SignalBloom({ onStateChange, state }: SignalBloomProps) {
 
   return (
     <main
-      className="relative size-full select-none overflow-hidden font-sans text-[#fff9f1]"
+      className="relative size-full select-none overflow-hidden font-sans"
       data-test-id="code-object-signal-bloom"
+      style={{ color: tokens.text }}
     >
       <div
         className="pointer-events-none absolute inset-[10%] rounded-full blur-3xl"
@@ -187,7 +192,10 @@ export function SignalBloom({ onStateChange, state }: SignalBloomProps) {
       </svg>
 
       <header className="pointer-events-none absolute top-8 left-9">
-        <div className="flex items-center gap-2 text-[9px] font-semibold tracking-[0.22em] text-white/48 uppercase">
+        <div
+          className="flex items-center gap-2 text-[9px] font-semibold tracking-[0.22em] uppercase"
+          style={{ color: tokens.textMuted }}
+        >
           <span
             className="size-1.5 rounded-full"
             style={{
@@ -204,19 +212,25 @@ export function SignalBloom({ onStateChange, state }: SignalBloomProps) {
 
       <div className="pointer-events-none absolute bottom-8 left-9 flex items-end gap-5">
         <div>
-          <div className="text-[8px] font-semibold tracking-[0.2em] text-white/32 uppercase">
+          <div
+            className="text-[8px] font-semibold tracking-[0.2em] uppercase"
+            style={{ color: tokens.textMuted }}
+          >
             Spectrum
           </div>
           <div
             className="mt-1 font-mono text-[22px] tracking-[-0.04em]"
             data-test-id="code-object-bloom-hue"
-            style={{ color: `hsl(${viewState.hue} 90% 72%)` }}
+            style={{ color: `hsl(${viewState.hue} 82% ${theme === 'dark' ? 72 : 38}%)` }}
           >
             {String(viewState.hue).padStart(3, '0')}°
           </div>
         </div>
-        <span className="mb-1 h-7 w-px bg-white/12" />
-        <div className="mb-1 text-[8px] font-semibold leading-4 tracking-[0.15em] text-white/26 uppercase">
+        <span className="mb-1 h-7 w-px" style={{ background: tokens.border }} />
+        <div
+          className="mb-1 text-[8px] font-semibold leading-4 tracking-[0.15em] uppercase"
+          style={{ color: tokens.textMuted }}
+        >
           Drag to tune
           <br />
           Lift to commit
@@ -226,16 +240,20 @@ export function SignalBloom({ onStateChange, state }: SignalBloomProps) {
       <button
         type="button"
         aria-pressed={viewState.frozen}
-        className="absolute top-8 right-9 z-10 flex h-8 items-center gap-2 rounded-full border border-white/10 bg-[#160d20]/65 px-3 text-[9px] font-medium text-white/58 shadow-[0_8px_26px_rgba(0,0,0,0.22)] backdrop-blur-md transition hover:bg-[#24132e]/85 hover:text-white"
+        className="absolute top-8 right-9 z-10 flex h-8 items-center gap-2 rounded-full border px-3 text-[9px] font-medium backdrop-blur-md transition"
         data-test-id="code-object-bloom-toggle"
         onClick={toggleFrozen}
+        style={{
+          background: tokens.surface,
+          borderColor: tokens.border,
+          boxShadow: tokens.shadow,
+          color: tokens.textMuted
+        }}
       >
         <span
           className="size-1.5 rounded-full"
           style={{
-            backgroundColor: viewState.frozen
-              ? 'rgba(255,255,255,0.28)'
-              : `hsl(${viewState.hue} 92% 70%)`
+            backgroundColor: viewState.frozen ? tokens.textMuted : `hsl(${viewState.hue} 92% 70%)`
           }}
         />
         {viewState.frozen ? 'Release bloom' : 'Hold bloom'}

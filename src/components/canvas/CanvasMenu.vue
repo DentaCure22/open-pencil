@@ -24,10 +24,11 @@ import {
   editorCommandMetadata,
   formatShortcut
 } from '@open-pencil/vue'
-import type { Component } from 'vue'
+import { computed, type Component } from 'vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { openAgentRightPanel } from '@/app/agent-chat/right-panel'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import { createCanvasMenuActions } from '@/app/editor/canvas/menu/actions'
 import { useCanvasContextMenu } from '@/app/editor/canvas/menu/context'
@@ -45,6 +46,15 @@ const { menu: t } = useI18n()
 const canvasMenuActions = createCanvasMenuActions(store, selectedIds)
 const { execCommand } = canvasMenuActions
 const contextMenu = useCanvasContextMenu(canvasMenu, hasSelection, editor, canvasMenuActions, t)
+const selectedObjectId = computed(() =>
+  selectedIds.value.size === 1 ? ([...selectedIds.value][0] ?? null) : null
+)
+
+function openSelectedObject() {
+  if (selectedObjectId.value) {
+    openAgentRightPanel('object', { objectId: selectedObjectId.value })
+  }
+}
 
 const menuCls = useMenuUI({
   content: 'min-w-56 shadow-[0_8px_30px_rgb(0_0_0/0.4)] animate-in fade-in zoom-in-95',
@@ -82,6 +92,15 @@ function contextCommandIcon(id: EditorCommandId | undefined): Component | undefi
 
 <template>
   <ContextMenuContent :class="cls.menu" :side-offset="2" align="start">
+    <ContextMenuItem
+      v-if="selectedObjectId"
+      data-test-id="context-open-object"
+      :class="cls.item"
+      @select="openSelectedObject"
+    >
+      <span>Open in Object panel</span>
+    </ContextMenuItem>
+    <ContextMenuSeparator v-if="selectedObjectId" :class="cls.sep" />
     <ContextMenuItem
       data-test-id="context-copy"
       :class="cls.item"

@@ -6,7 +6,6 @@ import type { VariableType, VariableValue } from '@open-pencil/scene-graph'
 
 import { BLACK } from '#core/constants'
 import { populateAndApplyOverrides } from '#core/kiwi/fig/instance-overrides'
-import type { InstanceNodeChange } from '#core/kiwi/fig/instance-overrides'
 import { setLazyFigImportContext } from '#core/kiwi/fig/lazy-import'
 import {
   guidToString,
@@ -401,7 +400,7 @@ function rememberLazyFigImportContext(
   populatedRootIds: string[]
 ): void {
   setLazyFigImportContext(graph, {
-    changeMap: changeMap as Map<string, InstanceNodeChange>,
+    changeMap: changeMap,
     guidToNodeId,
     blobs,
     populatedRootIds: new Set(populatedRootIds)
@@ -483,7 +482,7 @@ export function importNodeChanges(
   graph.preserveSourceMetadataDuring(() => {
     populateAndApplyOverrides(
       graph,
-      changeMap as Map<string, InstanceNodeChange>,
+      changeMap,
       guidToNodeId,
       blobs,
       activeRootIds

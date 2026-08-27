@@ -100,9 +100,27 @@ describe('agent conversation preferences', () => {
     ).toBe(false)
   })
 
-  test('keeps tasks ordered by the last user message, not later agent turns', () => {
+  test('keeps chats ordered by their latest activity, including later agent turns', () => {
+    const laterAgentTurn = thread(
+      'later-agent-turn',
+      '2026-08-22T12:10:00.000Z',
+      '2026-08-22T12:00:00.000Z'
+    )
+    const laterUserTurn = thread(
+      'later-user-turn',
+      '2026-08-22T12:03:00.000Z',
+      '2026-08-22T12:05:00.000Z'
+    )
+
+    expect(
+      sortAgentConversationThreads([laterUserTurn, laterAgentTurn]).map(
+        (item) => item.nativeThreadId
+      )
+    ).toEqual(['later-agent-turn', 'later-user-turn'])
+  })
+
+  test('finds the latest user message when a preview omits it', () => {
     const olderUser = thread('older-user', '2026-08-22T12:10:00.000Z', '2026-08-22T12:00:00.000Z')
-    const newerUser = thread('newer-user', '2026-08-22T12:03:00.000Z', '2026-08-22T12:05:00.000Z')
     const previewWithoutUser = {
       ...olderUser,
       nativeThreadId: 'preview-without-user',
@@ -110,11 +128,6 @@ describe('agent conversation preferences', () => {
       messages: olderUser.messages.filter((message) => message.role === 'assistant')
     }
 
-    expect(
-      sortAgentConversationThreads([olderUser, newerUser, previewWithoutUser]).map(
-        (item) => item.nativeThreadId
-      )
-    ).toEqual(['newer-user', 'preview-without-user', 'older-user'])
     expect(agentConversationLastUserMessageAt(previewWithoutUser)).toBe('2026-08-22T12:04:00.000Z')
   })
 

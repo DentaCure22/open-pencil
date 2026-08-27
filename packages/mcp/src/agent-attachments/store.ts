@@ -135,7 +135,7 @@ export class AgentAttachmentStore {
     const directories = attachmentPaths(value).flatMap((candidate) => {
       const relative = path.relative(this.root, path.resolve(candidate))
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return []
-      const batchName = relative.split(path.sep)[0]
+      const batchName = relative.split(path.sep).at(0)
       if (!batchName?.startsWith(BATCH_PREFIX)) return []
       return [path.join(this.root, batchName)]
     })

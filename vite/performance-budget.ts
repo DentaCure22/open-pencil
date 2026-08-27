@@ -1,5 +1,7 @@
+import { relative } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
+import type { OutputChunk } from 'rollup'
 import type { Plugin } from 'vite'
 
 export const INITIAL_JAVASCRIPT_RAW_BUDGET_BYTES = 4_750_000
@@ -20,6 +22,17 @@ export function measureJavaScriptBundle(code: string): JavaScriptBundleSize {
 
 function megabytes(bytes: number) {
   return `${(bytes / 1_000_000).toFixed(2)} MB`
+}
+
+function largestRenderedModules(entry: OutputChunk, limit = 12): string[] {
+  return Object.entries(entry.modules)
+    .map(([id, module]) => ({
+      id: relative(process.cwd(), id),
+      renderedLength: module.renderedLength
+    }))
+    .sort((left, right) => right.renderedLength - left.renderedLength)
+    .slice(0, limit)
+    .map(({ id, renderedLength }) => `  ${megabytes(renderedLength)}  ${id}`)
 }
 
 export function initialJavaScriptBudgetError(size: JavaScriptBundleSize): string | null {
@@ -47,7 +60,10 @@ export function initialJavaScriptBudgetPlugin(): Plugin {
       )
       if (!entry || entry.type !== 'chunk') return
       const error = initialJavaScriptBudgetError(measureJavaScriptBundle(entry.code))
-      if (error) this.error(error)
+      if (error) {
+        const modules = largestRenderedModules(entry)
+        this.error(`${error}\nLargest initial modules:\n${modules.join('\n')}`)
+      }
     }
   }
 }

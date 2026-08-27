@@ -17,8 +17,10 @@ export default memo(function T3ThreadStatusIndicator({ status }: { status: T3Thr
       data-tone={status.tone}
       role="status"
     >
-      <span aria-hidden="true" className="t3-thread-status-dot" />
-      <span>{status.label}</span>
+      <span
+        aria-hidden="true"
+        className={status.pulse ? 't3-thread-status-spinner' : 't3-thread-status-dot'}
+      />
     </span>
   )
 })

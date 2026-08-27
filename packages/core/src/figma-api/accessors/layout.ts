@@ -113,7 +113,7 @@ function axisSizingModeAccessor(
     },
     set(this: ProxyThis, value: string) {
       const mapped = value === 'AUTO' ? 'HUG' : value
-      updateNode(this, internals, { [field]: mapped } as Partial<SceneNode>)
+      updateNode(this, internals, { [field]: mapped })
     }
   }
 }
@@ -141,7 +141,7 @@ function simpleAccessor(internals: NodeProxyInternals, field: keyof SceneNode): 
       return raw(this, internals)[field]
     },
     set(this: ProxyThis, value: unknown) {
-      updateNode(this, internals, { [field]: value } as Partial<SceneNode>)
+      updateNode(this, internals, { [field]: value })
     }
   }
 }
@@ -152,7 +152,7 @@ function mappedAccessor(internals: NodeProxyInternals, field: keyof SceneNode): 
       return raw(this, internals)[field]
     },
     set(this: ProxyThis, value: string) {
-      updateNode(this, internals, { [field]: value } as Partial<SceneNode>)
+      updateNode(this, internals, { [field]: value })
     }
   }
 }

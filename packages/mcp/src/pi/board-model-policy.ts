@@ -112,7 +112,7 @@ export const FALLBACK_PI_MODELS: AgentModelDefinition[] = PROVIDER_MODEL_POLICIE
 )
 
 function defaultPiModelId(models: readonly AgentModelDefinition[]): string {
-  const model = models[0]
+  const model = models.at(0)
   if (!model) throw new TypeError('Board model policy must define at least one fallback model.')
   return model.id
 }

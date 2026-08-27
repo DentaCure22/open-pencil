@@ -3,8 +3,8 @@ import type { EditorStore } from '@/app/editor/session'
 
 export function createAppPreviewSection(
   store: EditorStore,
-  btnCompId: string,
-  badgeCompId: string
+  buttonPatternId: string,
+  badgePatternId: string
 ) {
   const { graph } = store
 
@@ -58,10 +58,8 @@ export function createAppPreviewSection(
     fills: [solid(DEMO_COLORS.black)]
   })
 
-  const badgeInstance = graph.createInstance(badgeCompId, headerId)
-  if (badgeInstance) graph.updateNode(badgeInstance.id, { x: 264, y: 15 })
-  const buttonInstance = graph.createInstance(btnCompId, headerId)
-  if (buttonInstance) graph.updateNode(buttonInstance.id, { x: 324, y: 6 })
+  graph.cloneTree(badgePatternId, headerId, { name: 'Status', x: 264, y: 15 })
+  graph.cloneTree(buttonPatternId, headerId, { name: 'Get Started', x: 324, y: 6 })
 
   const stats = [
     { title: 'Revenue', value: '$12,480', badge: '+14%', color: DEMO_COLORS.green },

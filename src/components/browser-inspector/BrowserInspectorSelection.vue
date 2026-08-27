@@ -234,7 +234,7 @@ watch(
 
 <template>
   <section
-    v-if="sessions.length || browserInspectorState.error"
+    v-if="sessions.length"
     data-test-id="browser-inspector-selection-panel"
     data-openpencil-browser-inspector-ui
     class="group/session-row relative shrink-0 px-2.5 transition-[padding] duration-150"
@@ -404,15 +404,6 @@ watch(
         />
       </button>
     </div>
-
-    <p
-      v-if="browserInspectorState.error"
-      data-test-id="browser-inspector-error"
-      class="mt-1.5 text-[10px] leading-4 text-red-400"
-      role="status"
-    >
-      {{ browserInspectorState.error }}
-    </p>
   </section>
 
   <DialogRoot :open="Boolean(editing)" @update:open="!$event && closeAnnotationReview()">

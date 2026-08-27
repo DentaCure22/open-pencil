@@ -1,6 +1,8 @@
 export type {
+  AiBoardObjectChange,
   AiConversationStatus,
   AiFileChange,
+  AiLinkedObject,
   AiMessage,
   AiMessagePart,
   AiToolState,

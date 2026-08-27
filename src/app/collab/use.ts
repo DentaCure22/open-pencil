@@ -38,7 +38,7 @@ function createInitialCollabState(localName: string): CollabState {
 
 export function useCollab(storeOrGetter: EditorStore | (() => EditorStore)) {
   const getStore = () =>
-    typeof storeOrGetter === 'function' ? (storeOrGetter as () => EditorStore)() : storeOrGetter
+    typeof storeOrGetter === 'function' ? (storeOrGetter)() : storeOrGetter
   const storedName = useLocalStorage('op-collab-name', '')
   const state = ref<CollabState>(createInitialCollabState(storedName.value))
   let runtime: CollabRuntime | null = null

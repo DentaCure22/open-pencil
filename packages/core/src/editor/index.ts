@@ -11,6 +11,13 @@ export {
 export type { InsertMermaidDiagramPosition, MermaidDiagramIdentity } from './diagram'
 export { EDITOR_TOOLS, TOOL_SHORTCUTS } from './tool-registry'
 export type { EditorToolDef } from './tool-registry'
+export {
+  BOARD_NATIVE_CREATE_TYPES,
+  isBoardNativeCreateType,
+  isLegacyDesignNodeType,
+  LEGACY_DESIGN_NODE_TYPES
+} from './node-policy'
+export type { BoardNativeCreateType, LegacyDesignNodeType } from './node-policy'
 export { createResizeSnapshot, type ResizeSnapshot } from './resize-snapshot'
 export type { ViewportInsets } from './viewport'
 export type {

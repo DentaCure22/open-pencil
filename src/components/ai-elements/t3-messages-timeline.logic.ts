@@ -223,6 +223,7 @@ function toolSummaryLabel(kind: AiToolKind, count: number): string {
     case 'tool':
       return `Used ${String(count)} ${plural('tool')}`
   }
+  throw new Error(`Unsupported tool kind: ${String(kind)}`)
 }
 
 export function summarizeT3ToolGroup(entries: readonly T3TimelineWorkEntry[]): {
@@ -238,12 +239,11 @@ export function summarizeT3ToolGroup(entries: readonly T3TimelineWorkEntry[]): {
   const sentenceLabels = labels.map((label, index) =>
     index === 0 ? label : `${label.charAt(0).toLowerCase()}${label.slice(1)}`
   )
-  const text =
-    sentenceLabels.length < 2
-      ? (sentenceLabels[0] ?? 'Used tools')
-      : sentenceLabels.length === 2
-        ? sentenceLabels.join(' and ')
-        : `${sentenceLabels.slice(0, -1).join(', ')}, and ${sentenceLabels.at(-1)}`
+  let text = sentenceLabels[0] ?? 'Used tools'
+  if (sentenceLabels.length === 2) text = sentenceLabels.join(' and ')
+  else if (sentenceLabels.length > 2) {
+    text = `${sentenceLabels.slice(0, -1).join(', ')}, and ${sentenceLabels.at(-1)}`
+  }
   return {
     kind: counts.size === 1 ? (counts.keys().next().value ?? 'tool') : 'mixed',
     text
@@ -411,39 +411,54 @@ function workRowUnchanged(
   return a.groupedEntries.every((entry, index) => toolsEqual(entry, b.groupedEntries[index]))
 }
 
+function workLiveRowUnchanged(
+  a: Extract<T3MessagesTimelineRow, { kind: 'work-live' }>,
+  b: T3MessagesTimelineRow
+): boolean {
+  return (
+    b.kind === 'work-live' &&
+    a.groupId === b.groupId &&
+    a.expanded === b.expanded &&
+    toolsEqual(a.entry, b.entry) &&
+    a.groupedEntries.length === b.groupedEntries.length &&
+    a.groupedEntries.every((entry, index) => toolsEqual(entry, b.groupedEntries[index]))
+  )
+}
+
+function workToggleRowUnchanged(
+  a: Extract<T3MessagesTimelineRow, { kind: 'work-toggle' }>,
+  b: T3MessagesTimelineRow
+): boolean {
+  return (
+    b.kind === 'work-toggle' &&
+    a.groupId === b.groupId &&
+    a.hiddenCount === b.hiddenCount &&
+    a.expanded === b.expanded &&
+    a.summary === b.summary &&
+    a.summaryKind === b.summaryKind &&
+    a.hasFailure === b.hasFailure
+  )
+}
+
+function workingRowUnchanged(
+  a: Extract<T3MessagesTimelineRow, { kind: 'working' }>,
+  b: T3MessagesTimelineRow
+): boolean {
+  return (
+    b.kind === 'working' &&
+    a.prefix === b.prefix &&
+    a.stepLabel === b.stepLabel &&
+    a.live === b.live
+  )
+}
+
 function rowUnchanged(a: T3MessagesTimelineRow, b: T3MessagesTimelineRow): boolean {
   if (a.id !== b.id || a.kind !== b.kind || a.createdAt !== b.createdAt) return false
   if (a.kind === 'message') return messageRowUnchanged(a, b)
   if (a.kind === 'work') return workRowUnchanged(a, b)
-  if (a.kind === 'work-live') {
-    return (
-      b.kind === 'work-live' &&
-      a.groupId === b.groupId &&
-      a.expanded === b.expanded &&
-      toolsEqual(a.entry, b.entry) &&
-      a.groupedEntries.length === b.groupedEntries.length &&
-      a.groupedEntries.every((entry, index) => toolsEqual(entry, b.groupedEntries[index]))
-    )
-  }
-  if (a.kind === 'work-toggle') {
-    return (
-      b.kind === 'work-toggle' &&
-      a.groupId === b.groupId &&
-      a.hiddenCount === b.hiddenCount &&
-      a.expanded === b.expanded &&
-      a.summary === b.summary &&
-      a.summaryKind === b.summaryKind &&
-      a.hasFailure === b.hasFailure
-    )
-  }
-  if (a.kind === 'working') {
-    return (
-      b.kind === 'working' &&
-      a.prefix === b.prefix &&
-      a.stepLabel === b.stepLabel &&
-      a.live === b.live
-    )
-  }
+  if (a.kind === 'work-live') return workLiveRowUnchanged(a, b)
+  if (a.kind === 'work-toggle') return workToggleRowUnchanged(a, b)
+  if (a.kind === 'working') return workingRowUnchanged(a, b)
   return b.kind === 'turn-fold' && a.label === b.label && a.expanded === b.expanded
 }
 

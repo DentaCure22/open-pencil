@@ -3,21 +3,15 @@ import { ref, type Ref } from 'vue'
 
 import type { EditorStore } from '@/app/editor/session'
 
-export const ASSET_VARIANT_DRAG_TYPE = 'application/x-openpencil-component-variant'
+export const ASSET_VARIANT_DRAG_TYPE = 'application/x-openpencil-code-object-variant'
 const ASSET_VARIANT_DRAG_START_EVENT = 'openpencil:asset-variant-drag-start'
 
-export type AssetVariantDragPayload =
-  | {
-      componentId: string
-      kind: 'scene'
-      label: string
-    }
-  | {
-      fixtureId: string
-      kind: 'computed'
-      label: string
-      variantId: string | null
-    }
+export type AssetVariantDragPayload = {
+  fixtureId: string
+  kind: 'computed'
+  label: string
+  variantId: string | null
+}
 
 function hasAssetVariant(dataTransfer: DataTransfer | null) {
   return Boolean(dataTransfer && [...dataTransfer.types].includes(ASSET_VARIANT_DRAG_TYPE))
@@ -40,15 +34,6 @@ function readAssetVariantDrag(dataTransfer: DataTransfer | null): AssetVariantDr
     const value = JSON.parse(dataTransfer?.getData(ASSET_VARIANT_DRAG_TYPE) ?? '') as unknown
     if (!value || typeof value !== 'object' || !('kind' in value)) return null
     if (
-      value.kind === 'scene' &&
-      'componentId' in value &&
-      typeof value.componentId === 'string' &&
-      'label' in value &&
-      typeof value.label === 'string'
-    ) {
-      return { kind: 'scene', componentId: value.componentId, label: value.label }
-    }
-    if (
       value.kind === 'computed' &&
       'fixtureId' in value &&
       typeof value.fixtureId === 'string' &&
@@ -68,28 +53,6 @@ function readAssetVariantDrag(dataTransfer: DataTransfer | null): AssetVariantDr
   } catch {
     return null
   }
-}
-
-function placeSceneVariant(
-  editor: EditorStore,
-  payload: Extract<AssetVariantDragPayload, { kind: 'scene' }>,
-  centerX: number,
-  centerY: number
-) {
-  const component = editor.graph.getNode(payload.componentId)
-  if (component?.type !== 'COMPONENT') return
-  const parentId = editor.state.enteredContainerId ?? editor.state.currentPageId
-  const parentOffset =
-    parentId === editor.state.currentPageId
-      ? { x: 0, y: 0 }
-      : editor.graph.getAbsolutePosition(parentId)
-  editor.createInstanceFromComponent(
-    component.id,
-    centerX - parentOffset.x - component.width / 2,
-    centerY - parentOffset.y - component.height / 2,
-    parentId
-  )
-  editor.requestRender()
 }
 
 export function useAssetVariantDrop(canvasAreaRef: Ref<HTMLElement | null>, editor: EditorStore) {
@@ -123,10 +86,6 @@ export function useAssetVariantDrop(canvasAreaRef: Ref<HTMLElement | null>, edit
     event.preventDefault()
     const bounds = area.getBoundingClientRect()
     const point = editor.screenToCanvas(event.clientX - bounds.left, event.clientY - bounds.top)
-    if (payload.kind === 'scene') {
-      placeSceneVariant(editor, payload, point.x, point.y)
-      return
-    }
     const [{ placeSmylrComponentCodeObject }, { SMYLR_COMPUTED_ASSETS }] = await Promise.all([
       import('@/app/smylr-component-library/code-object-canvas'),
       import('@/app/smylr-component-library/computed-catalog')

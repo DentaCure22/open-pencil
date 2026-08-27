@@ -47,6 +47,18 @@ describe('assistant markdown', () => {
     expect(nodes.some((node) => node.type === 'list')).toBe(true)
   })
 
+  test('keeps mixed Bot prose and structured Markdown as separate top-level nodes', async () => {
+    const nodes = assistantMarkdownNodes('First thought.\n\n- One\n- Two\n\nLast thought.')
+    expect(nodes.map((node) => node.type)).toEqual(['paragraph', 'list', 'paragraph'])
+
+    const component = await Bun.file('src/components/ai-elements/AiMarkdown.vue').text()
+    expect(component).toContain('blocks.value.flatMap((block, blockIndex) =>')
+    expect(component).toContain('block.nodes.flatMap((node, nodeIndex) =>')
+    expect(component).toContain("node.type === 'thematicBreak'")
+    expect(component).toContain('nodes: [node]')
+    expect(component).toContain('v-for="(block, index) in botTextBlocks"')
+  })
+
   test('parses table node types', () => {
     const nodes = walkNodes(assistantMarkdownNodes('| A | B |\n| --- | --- |\n| 1 | 2 |'))
     const types = nodes.map((node) => node.type)
@@ -89,7 +101,11 @@ describe('assistant markdown', () => {
   test('memoizes completed Markdown blocks in the chat renderer', async () => {
     const component = await Bun.file('src/components/ai-elements/AiMarkdown.vue').text()
     expect(component).toContain('parser.value.blocks')
-    expect(component).toContain('v-memo="[block.root, streaming && index === blocks.length - 1]"')
+    expect(component).toContain('boardObjectsSignature')
+    expect(component).toContain('streaming && index === botTextBlocks.length - 1')
+    expect(component).toContain(
+      'v-memo="[block.root, boardObjectsSignature, streaming && index === blocks.length - 1]"'
+    )
     expect(component).toContain(':nodes="block.nodes"')
   })
 

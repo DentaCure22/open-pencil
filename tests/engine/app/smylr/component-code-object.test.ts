@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { codeObjectDocument, setCodeObjectDocument } from '@/app/code-object/model'
+import { codeObjectDocument } from '@/app/code-object/model'
 import { createEditorStore } from '@/app/editor/session'
 import {
   ensureSmylrComponentCodeObjectCanvas,
@@ -19,18 +19,21 @@ function pluginValue(
 }
 
 describe('Smylr component Code Objects', () => {
-  test('keeps one editable Code Object per component variant without resetting authored state', () => {
+  test('keeps one Code Object per component variant without resetting authored metadata', () => {
     const store = createEditorStore()
     const asset = SMYLR_COMPUTED_ASSETS.find((candidate) => candidate.fixtureId === 'button')
     if (!asset) throw new Error('Button asset missing')
 
     const first = ensureSmylrComponentCodeObjectCanvas(store, asset, 'destructive')
     const document = codeObjectDocument(first.frame)
-    if (document?.component !== 'user-code') throw new Error('Code Object document missing')
-    setCodeObjectDocument(store.graph, first.frame.id, {
-      ...document,
-      source: `${document.source}\n// Authored locally`,
-      state: { active: true }
+    if (document?.component !== 'smylr-production-app') {
+      throw new Error('Smylr production document missing')
+    }
+    store.graph.updateNode(first.frame.id, {
+      pluginData: [
+        ...first.frame.pluginData,
+        { key: 'note', pluginId: 'user', value: 'Authored locally' }
+      ]
     })
 
     const second = ensureSmylrComponentCodeObjectCanvas(store, asset, 'destructive')
@@ -40,8 +43,12 @@ describe('Smylr component Code Objects', () => {
     expect(second.frame.id).toBe(first.frame.id)
     expect(pluginValue(second.page, 'kind')).toBe(SMYLR_COMPONENT_CODE_OBJECT_PAGE_KIND)
     expect(isSmylrComponentCodeObject(second.frame)).toBe(true)
-    expect(restored?.source).toEndWith('// Authored locally')
-    expect(restored?.state).toEqual({ active: true })
+    expect(restored?.component).toBe('smylr-production-app')
+    expect(restored?.route).toContain('component=button')
+    expect(
+      second.frame.pluginData.find((entry) => entry.pluginId === 'user' && entry.key === 'note')
+        ?.value
+    ).toBe('Authored locally')
   })
 
   test('places one ordinary Code Object on the Board with Undo and Redo', () => {
@@ -55,7 +62,7 @@ describe('Smylr component Code Objects', () => {
     expect(frame.x + frame.width / 2).toBe(420)
     expect(frame.y + frame.height / 2).toBe(280)
     expect(isSmylrComponentCodeObject(frame)).toBe(true)
-    expect(codeObjectDocument(frame)?.component).toBe('user-code')
+    expect(codeObjectDocument(frame)?.component).toBe('smylr-production-app')
     expect(store.state.selectedIds).toEqual(new Set([frame.id]))
 
     store.undoAction()

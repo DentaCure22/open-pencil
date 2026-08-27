@@ -7,7 +7,7 @@ function errorCode(error: unknown): string | null {
   return typeof error.code === 'string' ? error.code : null
 }
 
-export async function readJsonFile(filePath: string): Promise<unknown | null> {
+export async function readJsonFile(filePath: string): Promise<unknown> {
   const saved = await readSerializedJsonFile(filePath)
   return saved?.value ?? null
 }
@@ -82,16 +82,13 @@ export async function writeJsonHistory(
   )
 }
 
-export async function readJsonHistory(
-  historyPath: string,
-  revision: number
-): Promise<unknown | null> {
+export async function readJsonHistory(historyPath: string, revision: number): Promise<unknown> {
   const prefix = `${String(revision).padStart(10, '0')}-`
   try {
     const fileName = (await readdir(historyPath)).find(
       (candidate) => candidate.startsWith(prefix) && candidate.endsWith('.json')
     )
-    return fileName ? readJsonFile(path.join(historyPath, fileName)) : null
+    return fileName ? await readJsonFile(path.join(historyPath, fileName)) : null
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return null
     throw error

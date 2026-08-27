@@ -101,6 +101,10 @@ export function createCanvasSurfaceManager({
       ownsOverlayChrome && hoveredNodeId && ownsOverlayChrome(hoveredNodeId)
         ? new Set([hoveredNodeId])
         : undefined
+    const ownsSelectionLabel = options?.ownsSelectionLabel
+    const selectionLabelOwnerIds = ownsSelectionLabel
+      ? new Set([...editor.state.selectedIds].filter(ownsSelectionLabel))
+      : undefined
     state.renderer.renderFromEditorState(
       editor.state,
       editor.graph,
@@ -111,7 +115,9 @@ export function createCanvasSurfaceManager({
       state.backing.dpr,
       options?.layer ?? 'full',
       selectionChromeOwnerIds,
-      hoverChromeOwnerIds
+      hoverChromeOwnerIds,
+      options?.sceneContentOwnerIds?.(),
+      selectionLabelOwnerIds
     )
     renderLoop.markRendered()
     clearSceneBackingRenderTimer()

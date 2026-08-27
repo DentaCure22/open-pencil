@@ -2,6 +2,222 @@
 
 ## Unreleased
 
+- Keep the frequently used isolated Board worker warm for fast Pi startup, stop
+  prewarming the unused general worker, and unload settled Pi sessions after
+  five minutes instead of twenty-one.
+- Reveal Work Map archive controls immediately on row hover or keyboard focus,
+  removing the opacity lag from active chats, Todos, and uncategorized chats.
+- Keep the Work Map search reveal smooth by holding its width steady and
+  animating only opacity and translate for 150 ms while focusing immediately.
+- Split each Bot directory row into two clear actions: the avatar or name opens
+  its persistent Bot chat, while a quiet hover/focus caret expands or collapses
+  Scheduled, Todo, and In motion. The existing plus still starts a new chat in
+  that Bot.
+- Give every Bot directory an explicit charter chat so a newer scheduled or
+  specialist Bot can never replace its identity. Bot chats now use compact
+  left/right message bubbles, paragraph-sized replies, reactions, and a quiet
+  texting composer while task chats retain their existing presentation.
+- Increase Work Map hierarchy typography and header icon sizing, keep Chats
+  icon- and indent-free, and connect Inbox entries to their parent with the same
+  tree branches used by Scheduled, Todo, and In motion.
+- Fix the inline Work Map Archive confirmation so it keeps the selected chat
+  long enough to archive it and remove it from the active list.
+- Let sub-bot Board directories close into compact workspace tiles packed along
+  the readable bottom edge of their parent Bot. Closing folds the saved frame and
+  its children out of presentation without changing their geometry; reopening
+  restores the exact prior layout.
+- Add message reactions to Bot chats, teach new Bots a short texting rhythm, and turn scheduled briefing results into one-click linked Object bars while reusing the existing chat activity, approval, file, and Board-change surfaces.
+- Show the strongest child-chat status on the collapsed Chats row: a spinner while any chat is working, then a red failure dot or green unread-completion dot.
+- Keep Bot directory Board spaces lazy: creating a root Bot or sub-bot does not add an empty Frame. Its first Board object creates and binds the directory's exact parent Frame; each sub-bot owns its space independently inside its parent Bot's bound Frame.
+- Rename the standalone-chat sidebar section from Misc chats to Chats.
+- Remove the colored status dot and purple press border from Inbox receipt rows, using a quiet background for keyboard focus instead. Scheduled rows now open their Bot chat, and Run swaps immediately to a persistent spinner while that routine is active.
+- Remove dropdown arrows from Inbox, Scheduled, Todo, In motion, and Misc chats while keeping each full row clickable to open or close it.
+- Use the six user-approved Bot characters—the original plus mint round, ivory twin-thruster, coral hover-puck, graphite utility, and orange glider—with transparent eight-frame animations. New Bots choose randomly among the least-used approved identities, and the rejected deep-blue variant is migrated out.
+- Render the Inbox unread count as plain theme-aware text without a colored badge.
+- Increase Bot directory avatars and names so Bot identity reads clearly above its Scheduled, Todo, and In motion sections, while keeping the avatar column aligned with Inbox and Misc chats and preserving breathing room before Bot names.
+- Open existing chats at their remembered position before the first visible frame, avoiding the delayed transcript jump after selection.
+- Made Bot directories the canonical Work Map container: legacy unassigned Bots are migrated into full root directories, Bot charter chats no longer appear as working chats, Bot directories render before the separate Inbox, and Scheduled work stays outside In Motion.
+- Aligned the Work Map tools and bundled OpenPencil skills with the same ownership rule: every persistent Bot charter must name a Bot directory, sub-bots use the directory hierarchy, and Inbox contains scheduled-run receipts rather than Bots.
+- Teach each Bot and chat inside a directory to treat it as the shared project boundary: Board artifacts stay in its bound frame, files stay under its workspace root, existing structure is reused, task-created temporary files are cleaned up, and other paths require explicit user direction.
+
+- Make each Work Map directory a Bot workspace and each nested directory a
+  sub-bot. Active conversations now live under In motion, dormant one-off work
+  stays under Todo, and recurring definitions remain under a separate Scheduled
+  section even while a run is active. Project sections stay ordered Scheduled,
+  Todo, then In motion; project and section headers open or close without
+  persistent disclosure arrows. Project-backed Bot chats join their own In
+  motion list, global Bots render as root directories, and the former directory
+  tray artwork now identifies Misc chats.
+- Keep Inbox directly below the Work map header as a collapsible scheduled-run receipt surface. It starts closed on every fresh panel load instead of restoring an old open state,
+  uses the same open/close motion as the rest of the Work Map, and keeps its
+  unopened scheduled-update count visible when closed. Running work stays in
+  its Bot's live status; completed, failed, and stopped receipts appear in
+  Inbox only after the run finishes. Each receipt uses the linked chat's same
+  generated or human-renamed title, while the formatted result stays in the
+  chat instead of leaking raw Markdown into the sidebar. Opening a receipt
+  jumps to its exact Bot message and also opens that run's briefing in the
+  right Object panel when one exists. A schedule can optionally create a read-only
+  structured briefing Code Object that appears with the run in chat and opens in
+  the right Object panel. Briefings persist a typed report, render through the
+  normal Code Object runtime instead of raw Markdown, and normalize legacy
+  receipts when opened. Scheduled workers receive the same concise title,
+  summary, section, and item contract while remaining general-purpose agents.
+  Existing schedules can turn that option on or off through a
+  hover-only row control without being recreated or losing their timing. The
+  briefing title follows the current renamed Bot chat instead of keeping the
+  stale title from the run. Archiving the receipt hides only that Inbox message
+  and leaves its Bot chat and briefing intact.
+- Reduce the Inbox briefing panel header to its linked title and Message action,
+  removing the redundant Briefing eyebrow, document icon, and divider.
+- Let the live voice parent archive or restore exact Work Map Todo chats after
+  an explicit user request. Archive first presents the exact chat list and waits
+  for confirmation in a later turn; restore remains immediate. Both preserve
+  the conversation and evidence, lifecycle changes stay separate from
+  organization changes, and neither the voice parent nor resident workers
+  receive a delete operation.
+- Render a Work Map project's exact Board Frame as a clean dashed boundary with
+  no background fill and its name embedded in the top border. The Frame stays
+  normally rounded at rest: children travel with it, the crossing edge can stretch
+  during movement, loose objects can join it, and a deliberate crossing
+  detaches on release without changing ordinary Frame behavior. Its title and a
+  narrow invisible edge corridor are reliable select-and-move targets even when
+  children cover the interior; double-click focuses the Frame, and the quiet
+  hover-only title action opens and expands that exact directory in the Work Map
+  sidebar.
+- Give Bot directories a stable seven-avatar identity with short idle motion at
+  spaced random intervals instead of hover-looping. Directory hover actions now
+  create a sub-bot or a chat, while Scheduled owns recurring run, delete, and add
+  controls without turning a schedule into an In motion item.
+- Create one verified JSON/JSONL backup of Bot schedules, Inbox receipts, chat
+  history, and resumable Pi sessions per day. Keep the newest 30 snapshots and
+  prune older copies so local backups remain bounded.
+- Let a dormant Todo-backed Bot start reliably without a prewarmed Pi worker.
+  Scheduled catch-up runs now use a Pi-safe native session ID even when the
+  visible chat ID contains Work Map punctuation.
+- Keep stalled and stopped chats quiet in the Work Map by removing their passive
+  status dots, and add a hover or keyboard-focus Archive action to active Todo
+  and Misc chat rows. Human-facing archive actions now require an explicit
+  confirmation while resident worker archive permissions remain unchanged.
+- Bind each Work Map project to one exact Board space frame. Board workers now
+  continue artifacts inside that frame, preserve its established layout, place
+  new work without sibling overlap, and grow the space deliberately instead of
+  scattering related objects across the page.
+- Rename the agent-facing dormant-Todo capture tool to
+  `workmap_capture_future_work`, making its intent distinct from general
+  `workmap_apply` mutations without changing Todo creation behavior.
+- Summarize Board objects created or edited by each agent turn in a quiet,
+  expandable list. Object names in the final response become inline Board
+  links; hovering highlights the live object and clicking selects and reveals
+  it without relying on the agent to format special markup.
+- Add typed `create_mermaid` and `update_mermaid` Board operations. Agents can
+  now place validated Mermaid source as one selectable SVG-rendered frame,
+  refine it without changing identity or geometry, and read the exact stored
+  source through `board_query` without rasterizing it or using a Code Object.
+- Keep provider failures resumable and visible as failures. A progress or
+  commentary line can no longer be promoted into a final answer after the model
+  connection ends in an error.
+- Let Work Map projects own regular chats directly inside In motion, without a
+  separate Chats category. Starting a chat from a project places it there before
+  dispatch returns; a project can also bind one local workspace so chats launched
+  from either the project or that directory inherit the same working context.
+  Regular chats and active Todo chats share one five-row progressive-disclosure
+  budget, so no rows leak below Show more. Manual moves stay authoritative, and
+  unmatched workspaces remain under Misc. Todo and In motion can be collapsed
+  independently, and a collapsed In motion header keeps a working spinner visible
+  whenever one of its chats is active.
+- Keep the right-workspace add-surface control pinned inside the panel header
+  while its tabs scroll independently, so narrow panel widths cannot push the
+  control past the rounded panel boundary.
+- Make the right Object panel universal for Board objects without replacing the
+  chat or Work Map on the left. Code Objects keep their literal interactive
+  preset; native groups and individual objects get a clean, unframed preview
+  plus a direct return to Layers. The contextual selection controls remain the
+  single open-object action for Code Objects, without a duplicate button floating
+  at the frame edge. Native objects keep their hover action. Plans still open
+  their linked Plan artifact.
+- Keep Todo-row object controls quiet until hover or keyboard focus, remove the
+  duplicate per-Todo Board reveal action, and move Board navigation to the
+  owning project's hover actions so it opens that project's linked workspace.
+- Replace Pinned with durable Bots at both Global and project scope. A Bot is a
+  persistent chat that can exist without a schedule; optional one-shot, hourly,
+  daily, or weekly routines continue that same chat through the local authority,
+  and every run leaves a readable completion or failure receipt in the Work Map
+  Inbox. Existing chats can become Bots or return to normal chats without losing
+  their conversation, and an OpenPencil agent can create or promote a Bot with
+  an optional schedule when the user explicitly asks. Opening a new Bot now
+  always starts with an empty transcript instead of retaining a stale selected
+  chat beneath the Bot composer. On its first turn, the Bot infers its charter
+  and asks at most three short, structured questions only when scope, reporting,
+  or an implied schedule would otherwise remain materially ambiguous.
+- Let Plan Code Objects carry typed Mermaid diagrams, exact-data line, bar, and
+  area charts, compact tables, and linked previews for sheets, documents,
+  slides, PDFs, datasets, media, spatial files, apps, and other Code Objects.
+  Rich blocks stay transparent and theme-aware, while their source artifacts
+  remain independent and editable on the Board.
+- Keep Todo navigation chat-first: selecting a Todo opens its existing dormant
+  chat, while a small row action opens the Todo object. The object is now a
+  sandboxed, directly editable HTML document instead of a fixed field form;
+  files and images enter through its Reference control, and drops append to the
+  document without dispatching an agent or changing Todo status.
+- Replace Todo creation's modal with an inline, attachment-ready composer under
+  the project Todo lane. Captures now keep the full prompt as the prepared brief,
+  generate a short chat title in the background, remain in Todo after the first
+  message, and move to In motion only through an explicit user or linked-agent
+  status change.
+- Reduce the active Work Map to Todo and In motion. A user archive now removes
+  the linked chat and Todo from the active directory while retaining its
+  conversation, Plan Code Object, evidence, and durable archive timestamp.
+  Legacy Finished todos migrate into that archive instead of returning as a
+  visible status lane, and agent tools can no longer create a Finished state.
+- Add a typed Code Object modality and preset contract for Board agents. Every
+  modality now has a safe built-in starter, preset-backed objects keep their
+  renderer platform-owned, and the Work Plan skill creates the canonical Plan
+  preset from JSON instead of generating TSX. Preset host surfaces are
+  transparent so the selected experience owns its visible background.
+- Give Code Objects one persisted appearance contract with System, Light, and
+  Dark preferences plus overridable semantic tokens. Authored runtimes receive
+  the resolved theme and tokens as props and CSS variables; Board workers can
+  set the same contract through typed Code Object mutations.
+- Remove native component, component-set, and instance authoring from Board
+  menus, shortcuts, Assets, agent tools, and Board mutations. Imported Figma
+  design nodes remain readable and round-trip for compatibility, while reusable
+  authored objects are now organized through explicit Code Object modalities.
+- Simplify the chat composer attachment control to a bare plus glyph, give the
+  selected-chat header a top inset matching its side spacing, and remove its
+  redundant Diff shortcut while keeping each turn's changes pill as the entry.
+  Dictation now uses a waveform glyph and a neutral active state instead of the
+  purple accent treatment. While dictation is active, five live waveform bars
+  follow the microphone's measured frequency energy instead of playing a canned
+  animation; reduced-motion mode keeps them still. Send appears beside the
+  waveform for the entire recording session, remains disabled until content
+  exists, and never replaces the Stop dictation control. While recording, Voice
+  is an outlined circular secondary action. Voice stays available beside a
+  drafted message so dictation can resume without clearing or sending the text
+  first, and its pair with the filled Send action keeps an 8-pixel gap in both
+  states.
+- Route chat and annotation dictation through the signed-in Antigravity CLI's
+  native `/voice` transcription stream. Browser microphone audio reaches the
+  local CLI directly through its `ANTIGRAVITY_MIC` bridge; the local authority
+  owns the private terminal session, streams the CLI's revisable live text into
+  the composer, and settles on the exact inserted transcript without exposing
+  OAuth credentials or spending a chat-model turn. A bounded local language
+  layer now preserves exact spellings from the active chat and Todo first, then
+  its project path, children, and Todo titles, with the wider Work Map project
+  tree available as a lower-priority name catalog. It does not send project
+  contents into the transcription model. Browser speech recognition remains the
+  fallback when the CLI path is unavailable.
+- Replace the bottom toolbar's blue active-tool highlight with a soft,
+  theme-aware grey state.
+- Give both dark-mode sidebars one crisp translucent-black surface. Selected
+  chats and the right workspace now inherit that same plane instead of painting
+  mismatched grey headers or stacking a second dark layer over the shell. The
+  selected-chat fade keeps its original overlay behavior and geometry, but now
+  uses a solid black matched to the composited sidebar instead of the unrelated
+  grey agent surface. Floating right-workspace menus keep their own opaque raised
+  surface so Diff content cannot show through them, render above the clipped
+  panel shell, and stay viewport-contained beside the add button at narrow widths.
+- Sort Work Map chats by their latest activity, including newer agent replies,
+  while keeping explicitly pinned chats ahead of the recency order.
 - Move project Layers and Assets out of the Work Map's left utility strip and
   into the existing T3 right workspace beside Diff. Clicking a project's
   workspace tray now opens its board layers directly; Assets can switch between
@@ -18,28 +234,51 @@
 - Replace the flat agent-chat history with a durable Work Map of projects,
   one-level subprojects, live chats, and linked todos. Board workers now place
   their own chats from current Board context, can capture and advance todos from
-  Todo through In motion to Finished, and respect manual placement. Legacy Needs
-  you and Review items return to In motion so blockers stay in the conversation
-  and verified workers can finish the work they complete.
+  Todo to In motion, and respect manual placement. Legacy Needs you and Review
+  items return to In motion so blockers stay in the conversation.
+- Treat new Todo chats as quick captures for distinct future work. Agents save a
+  short title and goal without interrupting the current task, enrich the brief
+  only with context already in hand, and leave planning, research, and the Plan
+  Code Object for the Todo chat when the user opens it. Plan components now read
+  their saved model through the authored runtime's `props` wrapper, and a
+  successful planning turn replies with a short receipt instead of repeating
+  the document in chat.
+- Replace the oversized prepared-Todo card in chat with a compact link to its
+  HTML-backed Object surface in the right workspace. The Todo document can be
+  tailored by the creating agent, edited directly like a document, and later
+  shaped into one stable Plan Code Object from the same chat.
 - Polish the Work Map sidebar with a borderless utility strip, a roomier top
   inset, a dedicated zero-width edge hinge for closing the panel, full-width
   spaced shadowless tabs with a soft grey fill and no border on the active
   utility, and an icon-first search control that expands left into the title
   space. Search, new chat, and new project stay ordered together at the right.
   Project highlighting remains hover-only, with a visible placeholder beneath
-  an empty active status. Finished and Misc chats rows no longer show trailing
-  counts. Task-status icons are smaller with breathing room around their guide
+  an empty active status. Misc chat rows no longer show trailing counts.
+  Task-status icons are smaller with breathing room around their guide
   line, use transparent icon wells, and pair with larger, higher-contrast labels.
   Task-row hover surfaces begin after the guide rail without moving their text,
   so the highlight no longer paints across the hierarchy line.
-  The former Global section is now Pinned, with top-level project rows aligned to
+  Todo, In motion, and project Bot lanes now keep that guide rail as a compact
+  tree: rounded elbow branches meet every task row and empty placeholder, the
+  row-owned rail segments meet edge to edge as one continuous trunk, and each
+  empty lane ends at its muted placeholder instead of leaving a dangling line.
+  The final row's trunk now stops where its rounded elbow begins, so no short
+  stem can paint through or below the last task branch.
+  A dedicated theme-aware tree color keeps the hierarchy legible on the black
+  sidebar without overpowering task labels.
+  The former Global section is now Bots, with top-level project rows aligned to
   the section instead of visually nested beneath it. Expanded project statuses
   and tasks now use one compact hierarchy step, while child-project icon spacing
   is tuned separately so both child types share the same label column. Opening
   and closing a project now slides its contents smoothly from the directory row,
-  with reduced-motion preferences respected.
-  Project rows now use a translucent raster workspace tray that changes with the
-  workspace's real expanded or collapsed state. Projects, subprojects, and their
+  with reduced-motion preferences respected. Parent and child tracks now share
+  one symmetric easing curve instead of front-loading the opening motion. The
+  content track now collapses its internal spacing to a true zero-height endpoint
+  instead of hopping the final six pixels. Child projects now remain mounted and
+  collapse through the same disclosure motion instead of appearing or
+  disappearing in one frame. Project rows now crossfade between translucent
+  raster workspace trays instead of replacing the expanded or collapsed art in
+  one frame. Projects, subprojects, and their
   contents now use compact stepped whitespace for hierarchy, with subproject
   icons centered on the same column as their parent's task-status icons. Child
   projects now hide with their collapsed parent and return when it reopens.
@@ -47,38 +286,62 @@
   same simple plus used by Todo hover keep child-project and new-chat creation
   easy to tell apart. Both actions use the same icon size and stroke weight, with
   the directory action kept rightmost.
-  The collapsed Finished disclosure stays quiet until its row is hovered or
-  keyboard-focused, while the expanded state remains visible.
-  Expanded projects begin directly with their task statuses instead of placed
-  chat rows or a redundant Tasks heading; unplaced conversations remain
-  recoverable under Misc chats. Each task status now reveals five rows at a
-  time, while Misc chats starts at fifteen and reveals ten more per step. These
-  quiet disclosure labels darken on hover without painting a background box.
+  Expanded projects begin directly with Bots and their task statuses instead of
+  placed chat rows or a redundant Tasks heading. Standalone conversations live
+  together under Misc chats instead of appearing between project rows. Each
+  task status now reveals five rows at a time. These quiet disclosure labels
+  darken on hover without painting a background box.
   The Work Map title's optical top inset now matches its side insets. Expanded
   search now dismisses when the user clicks elsewhere without stealing focus
   from the clicked control. Existing chat rows now advertise click first with a
-  pointer and switch to grabbing only while pressed.
+  pointer and switch to grabbing only while pressed, including chat-backed rows
+  inside project statuses. Both draggable New chat controls now follow the same
+  pointer-then-grabbing cursor contract. Actionable chat runtime states now stay compact as
+  colored dots, settled chats remain unmarked, and an animated spinner is
+  reserved for actively working or connecting chats.
 - Make both workspace edges easier to resize: stable, visually transparent 40px
   hit areas keep neighboring Board controls from flickering the resize cursor.
   The left edge now lives directly in the workspace interaction layer instead of
   re-enabling pointer input through disabled splitter ancestors. Each handle now
   owns one captured pointer stream, and a drag-scoped cursor lock prevents the
-  canvas or toolbar from replacing the resize cursor mid-drag. The sidebar close
-  hinge now stays visually hidden at rest and reveals only its flush chevron on
-  hover or keyboard focus, while preserving a generous invisible hit target.
+  canvas or toolbar from replacing the resize cursor mid-drag. Each open sidebar
+  now splits its edge corridor into two flush, invisible lanes: resize on the
+  panel side and close on the canvas side. Collapse is available anywhere along
+  that edge, while only a small chevron appears on hover or keyboard focus.
+  Hovering the chevron itself now keeps the full-height divider hidden; the
+  divider appears only when hovering elsewhere on the collapse rail.
   When collapsed, the old draggable mini-toolbar is replaced by a fixed 28 x 44
-  edge tab with a centered reopen icon and no duplicate grip or floating shell.
-  The tab now stays pinned to its final midpoint throughout the collapse instead
-  of riding the shrinking panel edge and settling into place afterward.
+  floating pill with a centered reopen icon, complete corner rounding, and no
+  duplicate grip. A matching pill now reopens the right workspace. Both controls
+  crossfade at their final midpoint while both full-size sidebar shells use the
+  same 300ms slide-and-fade motion, avoiding width or shape jumps during
+  disclosure. While open, the right workspace mirrors the left sidebar with the
+  same dedicated close rail instead of a permanent header button. Selecting Diff
+  from the Work Map now keeps the right workspace open, and an explicitly closed
+  workspace always returns its floating reopen control. Selected right-workspace
+  tabs now use a flat grey fill in both themes without border elevation or shadow.
 - Keep the bottom editor toolbar inside the free canvas between the Work Map,
-  right workspace, and zoom controls. Its chrome now contracts with the
-  available space while one continuous horizontal control track remains
-  scrollable, so tools and utilities stay reachable without covering either
-  side panel.
+  right workspace, and viewport edge. Its chrome now contracts with the
+  available space while the editor-tool section remains horizontally
+  scrollable. Workspace, Share, and Settings stay pinned in a fixed trailing
+  group, so essential utilities remain visible without covering either side
+  panel. Workspace and Share now sit together without an extra divider, and the
+  selected-tool highlight follows the toolbar's inset corner radius without an
+  extra ring or shadow. Desktop tool hover surfaces now use that same radius.
+  Chrome-inspection failures now fade into a quiet translucent notice
+  above the toolbar, linger briefly, and dissolve automatically instead of
+  appearing as persistent red text in the Work Map. The dissolve is now an
+  opacity-only compositor transition without live-canvas backdrop blur, keeping
+  the exit smooth even while the Board is rendering. The separate floating
+  plus, minus, and zoom-percent pill has been removed to keep the canvas quiet.
 - Keep historical task failures in the task row and selected header instead of
   repeating them as a large composer card. Composer banners remain reserved for
   actionable connection, retry, and in-progress states, and now sit in their own
   space above the prompt instead of overlapping its top edge.
+- Expand each turn's changes pill into an anchored list of edited files without
+  opening the right workspace. Selecting one file then opens Diff scoped to that
+  file alone. The trigger now uses the same compact corner radius as neighboring
+  chat controls instead of a fully rounded capsule.
 - Keep the composer command drawer in its own aligned space above the prompt,
   with a complete border and compact padding instead of a tucked-under stacked
   shell.
@@ -570,8 +833,8 @@
   3D point. The compact target chip shows what the agent will receive.
 - Show image generation as a first-class agent-chat card with a grainy live
   loading state, image-specific progress, an intrinsically sized completed MCP
-  preview, and a transparent checkerboard with enough inset to keep rounded cards
-  from clipping image pixels. Generated images open in the same numbered-comment
+  preview that sits flush inside its rounded frame without a transparency grid or
+  inset padding. Generated images open in the same numbered-comment
   editor as Board screenshots; image evidence keeps its alpha channel and is sent
   back to the exact task as a steer or follow-up for editing. Transparent sources
   add an explicit no-flattening constraint to the edit prompt. Durable results

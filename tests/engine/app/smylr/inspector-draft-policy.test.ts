@@ -58,7 +58,8 @@ describe('Smylr live-inspector draft policy', () => {
     const copy = copyLiveInspectorPatchDraft(original)
 
     original.add.push('shadow')
-    original.styles!.color = 'blue'
+    if (!original.styles) throw new Error('Expected draft styles.')
+    original.styles.color = 'blue'
 
     expect(copy.add).toEqual(['rounded'])
     expect(copy.styles).toEqual({ color: 'red' })

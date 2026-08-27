@@ -1,0 +1,441 @@
+{
+  "mcpServers": {
+    "messages__msg": {
+      "command": "/Users/omar/plugins/messages/bin/direct-messages-launcher",
+      "cwd": "/Users/omar/plugins/messages",
+      "lifecycle": "lazy",
+      "approveTools": false,
+      "searchKeywords": {
+        "find_chats": [
+          "messages",
+          "imessage",
+          "sms",
+          "recent conversations",
+          "contacts"
+        ],
+        "read_messages": [
+          "messages",
+          "imessage",
+          "sms",
+          "conversation",
+          "thread"
+        ],
+        "search_messages": [
+          "messages",
+          "imessage",
+          "sms",
+          "search text"
+        ],
+        "read_image": [
+          "messages",
+          "imessage",
+          "attachment",
+          "image"
+        ]
+      }
+    },
+    "messages__send": {
+      "command": "/Users/omar/plugins/messages/bin/official-messages-launcher",
+      "cwd": "/Users/omar/plugins/messages",
+      "env": {
+        "OPENPENCIL_MESSAGES_BRIDGE_SCHEMA_VERSION": "3"
+      },
+      "lifecycle": "lazy",
+      "requestTimeoutMs": 60000,
+      "includeTools": [
+        "send_message"
+      ],
+      "approveTools": [
+        "send_message"
+      ],
+      "searchKeywords": {
+        "send_message": [
+          "messages",
+          "imessage",
+          "sms",
+          "send",
+          "text"
+        ]
+      }
+    },
+    "node_repl": {
+      "disabled": true
+    },
+    "pi-chrome": {
+      "command": "/Users/omar/plugins/pi-chrome/bin/pi-chrome-mcp",
+      "cwd": "/Users/omar/plugins/pi-chrome",
+      "lifecycle": "lazy",
+      "searchKeywords": {
+        "chrome_launch": [
+          "chrome",
+          "browser",
+          "connect",
+          "onboard",
+          "extension"
+        ],
+        "chrome_tab": [
+          "chrome",
+          "browser",
+          "tab",
+          "tabs",
+          "open tab"
+        ],
+        "chrome_navigate": [
+          "chrome",
+          "browser",
+          "url",
+          "open page",
+          "go to"
+        ],
+        "chrome_snapshot": [
+          "chrome",
+          "browser",
+          "page",
+          "see page",
+          "screenshot page"
+        ],
+        "chrome_click": [
+          "chrome",
+          "browser",
+          "click"
+        ],
+        "chrome_type": [
+          "chrome",
+          "browser",
+          "type"
+        ],
+        "chrome_screenshot": [
+          "chrome",
+          "browser",
+          "screenshot"
+        ]
+      }
+    },
+    "x-search": {
+      "command": "/Users/omar/plugins/x-search/bin/x-search-mcp",
+      "cwd": "/Users/omar/plugins/x-search",
+      "lifecycle": "lazy",
+      "searchKeywords": {
+        "x_search": [
+          "x",
+          "twitter",
+          "tweet",
+          "grok",
+          "x search",
+          "posts"
+        ]
+      }
+    },
+    "handbook": {
+      "command": "/Users/omar/plugins/pi-codex-memory/bin/handbook-mcp",
+      "cwd": "/Users/omar/plugins/pi-codex-memory",
+      "lifecycle": "lazy",
+      "searchKeywords": {
+        "handbook_search": [
+          "project memory",
+          "handbook",
+          "memory",
+          "remember",
+          "notes"
+        ],
+        "handbook_read": [
+          "project memory",
+          "handbook",
+          "memory",
+          "read notes"
+        ],
+        "handbook_status": [
+          "project memory",
+          "handbook",
+          "memory",
+          "pending",
+          "status"
+        ]
+      }
+    },
+    "computer-history": {
+      "command": "/Users/omar/plugins/computer-history/bin/computer-history-mcp",
+      "cwd": "/Users/omar/plugins/computer-history",
+      "lifecycle": "lazy",
+      "searchKeywords": {
+        "computer_history_status": [
+          "computer history",
+          "what was I doing",
+          "recent activity",
+          "skysight"
+        ],
+        "computer_history_recent": [
+          "computer history",
+          "recent",
+          "last hour",
+          "today"
+        ],
+        "computer_history_search": [
+          "computer history",
+          "what was I doing",
+          "activity",
+          "app"
+        ],
+        "computer_history_read": [
+          "computer history",
+          "read note",
+          "skysight"
+        ]
+      }
+    },
+    "grok-video": {
+      "command": "node",
+      "args": [
+        "/Users/omar/plugins/grok-video/mcp/server.mjs"
+      ],
+      "cwd": "/Users/omar/plugins/grok-video",
+      "env": {
+        "GROK_VIDEO_BASE_URL": "http://127.0.0.1:18645/v1"
+      },
+      "lifecycle": "lazy",
+      "searchKeywords": {
+        "video_gen": [
+          "grok",
+          "video",
+          "generate",
+          "animate",
+          "text-to-video",
+          "image-to-video"
+        ],
+        "get_video_job": [
+          "grok",
+          "video",
+          "job",
+          "status",
+          "result"
+        ],
+        "video_service_status": [
+          "grok",
+          "video",
+          "service",
+          "ready",
+          "health"
+        ]
+      }
+    },
+    "ima2-media": {
+      "command": "node",
+      "args": [
+        "/Users/omar/plugins/ima2-media/mcp/server.mjs"
+      ],
+      "cwd": "/Users/omar/plugins/ima2-media",
+      "env": {
+        "IMA2_BIN": "/Users/omar/.local/share/pi-node/node-v22.23.1-darwin-arm64/bin/ima2"
+      },
+      "lifecycle": "lazy",
+      "requestTimeoutMs": 1200000,
+      "searchKeywords": {
+        "generate_image": [
+          "image",
+          "generate",
+          "create",
+          "codex",
+          "gpt",
+          "transparent",
+          "cutout"
+        ],
+        "edit_image": [
+          "image",
+          "edit",
+          "modify",
+          "codex",
+          "gpt",
+          "transparent",
+          "background",
+          "cutout"
+        ],
+        "generate_grok_image": [
+          "grok",
+          "xai",
+          "image",
+          "generate",
+          "create"
+        ],
+        "edit_grok_image": [
+          "grok",
+          "xai",
+          "image",
+          "edit",
+          "modify"
+        ],
+        "get_media_job": [
+          "image",
+          "video",
+          "job",
+          "status"
+        ],
+        "list_models": [
+          "image",
+          "video",
+          "model",
+          "provider"
+        ]
+      }
+    },
+    "codex_apps": {
+      "url": "https://chatgpt.com/backend-api/wham/apps",
+      "auth": false,
+      "requestHeadersCommand": {
+        "command": "/Users/omar/.pi/agent/bin/codex-apps-headers",
+        "timeoutMs": 15000
+      },
+      "lifecycle": "lazy",
+      "protocolVersion": "legacy"
+    },
+    "computer-use": {
+      "disabled": true
+    },
+    "open-computer-use": {
+      "command": "node",
+      "args": [
+        "/Users/omar/plugins/screen-guide-runtime/scripts/open-computer-use-background-guard.mjs"
+      ],
+      "cwd": "/Users/omar/plugins/screen-guide-runtime",
+      "lifecycle": "lazy-keep-alive",
+      "searchKeywords": {
+        "list_apps": [
+          "computer use",
+          "desktop",
+          "apps",
+          "open apps"
+        ],
+        "get_app_state": [
+          "computer use",
+          "screen",
+          "window",
+          "accessibility",
+          "desktop",
+          "screenshot"
+        ],
+        "click": [
+          "computer use",
+          "click",
+          "desktop",
+          "app"
+        ],
+        "perform_secondary_action": [
+          "computer use",
+          "menu",
+          "secondary action",
+          "desktop"
+        ],
+        "scroll": [
+          "computer use",
+          "scroll",
+          "desktop",
+          "app"
+        ],
+        "drag": [
+          "computer use",
+          "drag",
+          "desktop",
+          "app"
+        ],
+        "type_text": [
+          "computer use",
+          "type",
+          "desktop",
+          "app"
+        ],
+        "press_key": [
+          "computer use",
+          "keyboard",
+          "shortcut",
+          "desktop"
+        ],
+        "set_value": [
+          "computer use",
+          "set value",
+          "field",
+          "desktop"
+        ],
+        "run_actions": [
+          "computer use",
+          "batch",
+          "sequence",
+          "efficient",
+          "desktop"
+        ]
+      }
+    },
+    "screen-guide": {
+      "command": "/Users/omar/plugins/screen-guide-runtime/scripts/launch-screen-guide.sh",
+      "cwd": "/Users/omar/plugins/screen-guide-runtime",
+      "lifecycle": "lazy-keep-alive",
+      "searchKeywords": {
+        "guide_snapshot": [
+          "screen guide",
+          "where to click",
+          "visual guidance",
+          "capture"
+        ],
+        "guide_show": [
+          "screen guide",
+          "point",
+          "highlight",
+          "show where",
+          "visible cue"
+        ],
+        "guide_tour": [
+          "screen guide",
+          "walkthrough",
+          "tour",
+          "steps"
+        ],
+        "guide_clear": [
+          "screen guide",
+          "clear",
+          "remove cue",
+          "stop guidance"
+        ]
+      }
+    },
+    "openpencil": {
+      "command": "/Users/omar/plugins/openpencil/bin/dispatch",
+      "cwd": "/Users/omar/plugins/openpencil",
+      "lifecycle": "lazy",
+      "directTools": false,
+      "includeTools": [
+        "board_screenshot",
+        "board_where",
+        "get_agent_chat_context",
+        "list_agent_chats",
+        "set_theme"
+      ]
+    }
+  },
+  "settings": {
+    "agentPluginPaths": [
+      "/Users/omar/plugins/mermaid",
+      "/Users/omar/plugins/messages",
+      "/Users/omar/plugins/visualize",
+      "/Users/omar/plugins/sites",
+      "/Users/omar/plugins/record-and-replay",
+      "/Users/omar/plugins/computer-history",
+      "/Users/omar/plugins/documents",
+      "/Users/omar/plugins/pdf",
+      "/Users/omar/plugins/spreadsheets",
+      "/Users/omar/plugins/presentations",
+      "/Users/omar/plugins/template-creator",
+      "/Users/omar/plugins/quickbooks",
+      "/Users/omar/plugins/gmail",
+      "/Users/omar/plugins/google-calendar",
+      "/Users/omar/plugins/google-drive",
+      "/Users/omar/plugins/linear",
+      "/Users/omar/plugins/finances",
+      "/Users/omar/plugins/data-analytics",
+      "/Users/omar/plugins/product-design",
+      "/Users/omar/plugins/openai-templates",
+      "/Users/omar/plugins/pi-codex-memory",
+      "/Users/omar/plugins/x-search",
+      "/Users/omar/plugins/grok-video",
+      "/Users/omar/plugins/ima2-media",
+      "/Users/omar/plugins/pi-chrome"
+    ]
+  }
+}

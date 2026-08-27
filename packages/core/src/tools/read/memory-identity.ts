@@ -11,14 +11,24 @@ export type CanonicalMemoryObjectMetadata = {
   sourceNodeId?: string
 }
 
-export function canonicalMemoryObjectId(node: SceneNode): string {
+type CanonicalMemoryNode = Pick<SceneNode, 'id'> & {
+  pluginData?: SceneNode['pluginData']
+}
+
+type CanonicalMemoryPluginDataSource = {
+  pluginData?: SceneNode['pluginData']
+}
+
+export function canonicalMemoryObjectId(node: CanonicalMemoryNode): string {
   const assigned = node.pluginData?.find(
     (entry) => entry.pluginId === MEMORY_PLUGIN_ID && entry.key === CANONICAL_OBJECT_KEY
   )?.value
   return assigned?.trim() || node.id
 }
 
-export function canonicalMemorySourceNodeId(node: SceneNode): string | undefined {
+export function canonicalMemorySourceNodeId(
+  node: CanonicalMemoryPluginDataSource
+): string | undefined {
   return node.pluginData
     ?.find(
       (entry) => entry.pluginId === MEMORY_PLUGIN_ID && entry.key === CANONICAL_SOURCE_NODE_KEY
@@ -26,7 +36,9 @@ export function canonicalMemorySourceNodeId(node: SceneNode): string | undefined
     ?.value.trim()
 }
 
-export function canonicalMemoryDerivedFromId(node: SceneNode): string | undefined {
+export function canonicalMemoryDerivedFromId(
+  node: CanonicalMemoryPluginDataSource
+): string | undefined {
   return node.pluginData
     ?.find(
       (entry) =>

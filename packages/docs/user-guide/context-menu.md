@@ -55,20 +55,6 @@ Moves the selected node to the top or bottom of its parent's child list.
 - **Ungroup** appears when a group is selected — children are reparented to the group's parent
 - **Add auto layout** wraps the selection in a new [auto layout](./auto-layout) frame
 
-## Component Actions
-
-Component actions are displayed in purple to match the component color theme.
-
-| Action | Shortcut (Mac) | Shortcut (Win/Linux) | Available on |
-|--------|----------------|----------------------|--------------|
-| Create component | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>K</kbd> | Frames, groups, multi-selection |
-| Create component set | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>K</kbd> | 2+ selected components |
-| Create instance | — | — | Components (no shortcut) |
-| Go to main component | — | — | Instances |
-| Detach instance | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> | Instances |
-
-See [Components](./components) for details on the component workflow.
-
 ## Visibility & Lock
 
 | Action | Shortcut (Mac) | Shortcut (Win/Linux) |

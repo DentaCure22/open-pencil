@@ -65,11 +65,6 @@ export function useBottomToolbarBounds(embedded: MaybeRefOrGetter<boolean>) {
       }
     }
 
-    const zoomControls = visibleToolbarBoundary('[data-test-id="canvas-zoom-controls"]')
-    if (zoomControls) {
-      rightEdge = Math.min(rightEdge, zoomControls.getBoundingClientRect().left - EDGE_GAP)
-    }
-
     rightEdge = Math.max(left, rightEdge)
     horizontalInsets.value = {
       left: Math.round(left * 2) / 2,
@@ -95,7 +90,6 @@ export function useBottomToolbarBounds(embedded: MaybeRefOrGetter<boolean>) {
     observeBoundary(document.querySelector('[data-test-id="layers-shell-motion"]'))
     observeBoundary(document.querySelector('[data-test-id="t3-right-panel"]'))
     observeBoundary(document.querySelector('[data-test-id="properties-panel"]'))
-    observeBoundary(document.querySelector('[data-test-id="canvas-zoom-controls"]'))
     queueRefresh()
   }
 

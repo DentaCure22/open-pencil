@@ -181,8 +181,8 @@ describe('lightning-fast improvement rounds', () => {
       Bun.file('src/components/ai-elements/AiConversationSurface.vue').text()
     ])
     expect(board).toContain('planBoardTranscriptRetain')
-    expect(board).toContain(':chapter-rail-ready="interactionEnabled"')
-    expect(surface).toContain('chapterRailReady = true')
+    expect(board).toContain('chapterRailReady: interactionEnabled')
+    expect(surface).toContain('presentation?.chapterRailReady ?? true')
     expect(surface).toContain('v-if="chapterRailReady"')
   })
 

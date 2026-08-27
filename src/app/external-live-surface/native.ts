@@ -8,20 +8,20 @@ type CaptureEvent =
 
 type BrowserCaptureEvent =
   | {
-      contract: 'openpencil-browser-element/v1'
+      contract: string
       dataUrl: string
       kind: 'live-surface-frame'
       sequence: number
       sessionId: string
     }
   | {
-      contract: 'openpencil-browser-element/v1'
+      contract: string
       kind: 'live-surface-ended'
       sessionId: string
     }
 
 type BrowserCaptureResult = {
-  contract: 'openpencil-browser-element-command-result/v1'
+  contract: string
   ok: boolean
   reason?: string
   requestId: string

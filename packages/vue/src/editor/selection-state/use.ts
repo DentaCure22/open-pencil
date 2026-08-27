@@ -24,17 +24,7 @@ export function useSelectionState() {
 
   const selectedNodeType = computed(() => selectedNode.value?.type ?? null)
 
-  const isInstance = computed(() => selectedNodeType.value === 'INSTANCE')
-  const isComponent = computed(() => selectedNodeType.value === 'COMPONENT')
   const isGroup = computed(() => selectedNodeType.value === 'GROUP')
-
-  const canCreateComponentSet = useSceneComputed(() => {
-    if (selectedIds.value.size < 2) return false
-    for (const id of selectedIds.value) {
-      if (editor.graph.getNode(id)?.type !== 'COMPONENT') return false
-    }
-    return true
-  })
 
   return {
     editor,
@@ -43,9 +33,6 @@ export function useSelectionState() {
     selectedNode,
     selectedCount,
     selectedNodeType,
-    isInstance,
-    isComponent,
-    isGroup,
-    canCreateComponentSet
+    isGroup
   }
 }

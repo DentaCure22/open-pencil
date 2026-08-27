@@ -118,7 +118,7 @@ export async function materializeAuthorityMermaidDocument(
   const invalidOwnerIds: string[] = []
   for (const materialization of materializations) {
     try {
-      const [scene] = await compileHeadlessMermaidScenes([materialization.source])
+      const scene = (await compileHeadlessMermaidScenes([materialization.source])).at(0)
       if (scene) scenes.set(materialization.ownerId, scene)
     } catch (error) {
       if (!(error instanceof MermaidSourceValidationError)) throw error

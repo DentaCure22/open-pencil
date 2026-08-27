@@ -335,6 +335,41 @@ function applySession(thread: AgentConversationThread, event: Record<string, unk
   return markRunning(thread)
 }
 
+function toolExecutionState(ended: boolean, failed: boolean): 'error' | 'running' | 'success' {
+  if (failed) return 'error'
+  return ended ? 'success' : 'running'
+}
+
+function toolExecutionMessage(input: {
+  ended: boolean
+  failed: boolean
+  id: string
+  images: Array<{ alt: string; url: string }>
+  input: string
+  name: string
+  now: string
+  output: string
+}): AgentConversationMessage {
+  return {
+    ...(input.ended ? { completedAt: input.now } : {}),
+    createdAt: input.now,
+    id: input.id,
+    parts: [
+      {
+        ...(input.failed ? { error: input.output || `${input.name} failed.` } : {}),
+        ...(input.images.length ? { images: input.images } : {}),
+        ...(input.input ? { input: input.input } : {}),
+        name: input.name,
+        ...(!input.failed && input.output ? { output: input.output } : {}),
+        state: toolExecutionState(input.ended, input.failed),
+        type: 'tool'
+      }
+    ],
+    role: 'assistant',
+    text: ''
+  }
+}
+
 function applyTool(
   thread: AgentConversationThread,
   event: Record<string, unknown>,
@@ -359,27 +394,19 @@ function applyTool(
     0,
     MAX_STATUS_TEXT
   )
-  let state: 'error' | 'running' | 'success' = 'running'
-  if (failed) state = 'error'
-  else if (ended) state = 'success'
-  upsertMessage(thread, {
-    ...(ended ? { completedAt: now } : {}),
-    createdAt: now,
-    id,
-    parts: [
-      {
-        ...(failed ? { error: output || `${name} failed.` } : {}),
-        ...(images.length ? { images } : {}),
-        ...(input ? { input } : {}),
-        name,
-        ...(!failed && output ? { output } : {}),
-        state,
-        type: 'tool'
-      }
-    ],
-    role: 'assistant',
-    text: ''
-  })
+  upsertMessage(
+    thread,
+    toolExecutionMessage({
+      ended,
+      failed,
+      id,
+      images,
+      input,
+      name,
+      now,
+      output
+    })
+  )
   return true
 }
 
@@ -449,6 +476,116 @@ function syncStreamingCommentary(
   })
 }
 
+function applyThinkingUpdate(
+  thread: AgentConversationThread,
+  update: Record<string, unknown>,
+  turnKey: string,
+  contentIndex: number,
+  now: string
+): boolean {
+  const updateType = String(update.type)
+  const complete = updateType === 'thinking_end'
+  const thinking = accumulateThinking(thread, turnKey, contentIndex, update)
+  if (providerOwnsThinking(thread)) {
+    const blockKey = providerThinkingBlockKey(
+      thread,
+      turnKey,
+      contentIndex,
+      updateType === 'thinking_start'
+    )
+    const thought = syncProviderThought(thread, thinking, blockKey, contentIndex, now, complete)
+    const activityStatus = syncProviderActivities(
+      thread,
+      thinking,
+      blockKey,
+      contentIndex,
+      now,
+      !complete
+    )
+    thread.recentUpdate =
+      activityStatus ?? (thought ? thought.slice(0, MAX_STATUS_TEXT) : 'Working…')
+    return true
+  }
+  const activityStatus = syncProviderActivities(
+    thread,
+    thinking,
+    turnKey,
+    contentIndex,
+    now,
+    !complete
+  )
+  if (activityStatus) {
+    const index = thread.messages.findIndex(
+      (message) => message.id === latestProviderReasoningId(thread, turnKey, contentIndex)
+    )
+    if (index !== -1) thread.messages.splice(index, 1)
+    thread.recentUpdate = activityStatus.slice(0, MAX_STATUS_TEXT)
+  } else {
+    syncProviderReasoning(thread, turnKey, contentIndex, thinking, complete, now)
+    if (!/ · \d+s$/.test(thread.recentUpdate) && !thread.recentUpdate.endsWith('…')) {
+      thread.recentUpdate = 'Working…'
+    }
+  }
+  return true
+}
+
+function applyTextDeltaUpdate(
+  thread: AgentConversationThread,
+  update: Record<string, unknown>,
+  delta: string,
+  turnKey: string,
+  contentIndex: number,
+  now: string
+): boolean {
+  const id = streamingAssistantId(turnKey)
+  const phase = updateTextPhase(update, contentIndex)
+  const commentaryId = phase === 'commentary' ? streamingCommentaryMessageId(thread, turnKey) : id
+  const existing = thread.messages.find((message) => message.id === commentaryId)
+  const previous =
+    phase === 'commentary'
+      ? (existing?.parts?.find((part) => part.type === 'commentary')?.text ?? '')
+      : (existing?.text ?? '')
+  const text = `${previous}${delta}`
+  if (phase === 'commentary') {
+    syncStreamingCommentary(thread, commentaryId, text, false, now)
+    if (!/ · \d+s$/.test(thread.recentUpdate) && !thread.recentUpdate.endsWith('…')) {
+      thread.recentUpdate = 'Working…'
+    }
+    return true
+  }
+  upsertMessage(thread, {
+    createdAt: now,
+    id,
+    role: 'assistant',
+    text
+  })
+  thread.recentUpdate = 'Writing response…'
+  return true
+}
+
+function applyTextEndUpdate(
+  thread: AgentConversationThread,
+  update: Record<string, unknown>,
+  content: string,
+  turnKey: string,
+  contentIndex: number,
+  now: string
+): boolean {
+  if (updateTextPhase(update, contentIndex) === 'commentary') {
+    syncStreamingCommentary(
+      thread,
+      streamingCommentaryMessageId(thread, turnKey, content),
+      content,
+      true,
+      now
+    )
+    thread.recentUpdate = content.trim().slice(0, 500)
+    return true
+  }
+  thread.recentUpdate = 'Writing response…'
+  return true
+}
+
 function applyMessageUpdate(
   thread: AgentConversationThread,
   event: Record<string, unknown>,
@@ -459,90 +596,13 @@ function applyMessageUpdate(
   if (!update || typeof update.type !== 'string') return markRunning(thread)
   const contentIndex = typeof update.contentIndex === 'number' ? update.contentIndex : 0
   if (update.type.startsWith('thinking_')) {
-    const complete = update.type === 'thinking_end'
-    const thinking = accumulateThinking(thread, turnKey, contentIndex, update)
-    if (providerOwnsThinking(thread)) {
-      const blockKey = providerThinkingBlockKey(
-        thread,
-        turnKey,
-        contentIndex,
-        update.type === 'thinking_start'
-      )
-      const thought = syncProviderThought(thread, thinking, blockKey, contentIndex, now, complete)
-      const activityStatus = syncProviderActivities(
-        thread,
-        thinking,
-        blockKey,
-        contentIndex,
-        now,
-        !complete
-      )
-      thread.recentUpdate =
-        activityStatus ?? (thought ? thought.slice(0, MAX_STATUS_TEXT) : 'Working…')
-      return true
-    }
-    const activityStatus = syncProviderActivities(
-      thread,
-      thinking,
-      turnKey,
-      contentIndex,
-      now,
-      !complete
-    )
-    if (activityStatus) {
-      const index = thread.messages.findIndex(
-        (message) => message.id === latestProviderReasoningId(thread, turnKey, contentIndex)
-      )
-      if (index !== -1) thread.messages.splice(index, 1)
-      thread.recentUpdate = activityStatus.slice(0, MAX_STATUS_TEXT)
-    } else {
-      syncProviderReasoning(thread, turnKey, contentIndex, thinking, complete, now)
-      if (!/ · \d+s$/.test(thread.recentUpdate) && !thread.recentUpdate.endsWith('…')) {
-        thread.recentUpdate = 'Working…'
-      }
-    }
-    return true
+    return applyThinkingUpdate(thread, update, turnKey, contentIndex, now)
   }
   if (update.type === 'text_delta' && typeof update.delta === 'string') {
-    const id = streamingAssistantId(turnKey)
-    const phase = updateTextPhase(update, contentIndex)
-    const commentaryId = phase === 'commentary' ? streamingCommentaryMessageId(thread, turnKey) : id
-    const existing = thread.messages.find((message) => message.id === commentaryId)
-    const previous =
-      phase === 'commentary'
-        ? (existing?.parts?.find((part) => part.type === 'commentary')?.text ?? '')
-        : (existing?.text ?? '')
-    const text = `${previous}${update.delta}`
-    if (phase === 'commentary') {
-      syncStreamingCommentary(thread, commentaryId, text, false, now)
-      if (!/ · \d+s$/.test(thread.recentUpdate) && !thread.recentUpdate.endsWith('…')) {
-        thread.recentUpdate = 'Working…'
-      }
-      return true
-    }
-    upsertMessage(thread, {
-      createdAt: now,
-      id,
-      role: 'assistant',
-      text
-    })
-    thread.recentUpdate = 'Writing response…'
-    return true
+    return applyTextDeltaUpdate(thread, update, update.delta, turnKey, contentIndex, now)
   }
   if (update.type === 'text_end' && typeof update.content === 'string') {
-    if (updateTextPhase(update, contentIndex) === 'commentary') {
-      syncStreamingCommentary(
-        thread,
-        streamingCommentaryMessageId(thread, turnKey, update.content),
-        update.content,
-        true,
-        now
-      )
-      thread.recentUpdate = update.content.trim().slice(0, 500)
-      return true
-    }
-    thread.recentUpdate = 'Writing response…'
-    return true
+    return applyTextEndUpdate(thread, update, update.content, turnKey, contentIndex, now)
   }
   if (update.type.startsWith('text_')) {
     thread.recentUpdate = 'Writing response…'
@@ -613,12 +673,9 @@ function closingAssistantText(
 ): { commentary: AssistantTextBlock[]; finalText: string } {
   if (toolTurn) return visibleAssistantText(blocks, true)
   const provider = message && typeof message.provider === 'string' ? message.provider : undefined
-  const model =
-    message && typeof message.model === 'string'
-      ? message.model
-      : message && typeof message.responseModel === 'string'
-        ? message.responseModel
-        : fallbackModelId
+  let model = fallbackModelId
+  if (message && typeof message.responseModel === 'string') model = message.responseModel
+  if (message && typeof message.model === 'string') model = message.model
   return {
     commentary: [],
     finalText: closingTextForFamily(
@@ -742,17 +799,19 @@ function syncCompletedCommentary(
   }
 }
 
-function applyAssistantText(
+type CompletedAssistantContent = {
+  answer: string
+  commentary: AssistantTextBlock[]
+  fallbackText: string
+  id: string
+  streamingId: string
+}
+
+function completedAssistantContent(
   thread: AgentConversationThread,
   event: Record<string, unknown>,
-  turnKey: string,
-  now: string
-): boolean {
-  if (event.type === 'message_update') return applyMessageUpdate(thread, event, turnKey, now)
-  if (isRecord(event.message) && event.message.role && event.message.role !== 'assistant') {
-    return false
-  }
-  syncCompletedThinking(thread, event, turnKey, now)
+  turnKey: string
+): CompletedAssistantContent {
   const message = isRecord(event.message) ? event.message : null
   const toolTurn = assistantTurnUsesTools(message)
   const textBlocks = assistantTextBlocks(message)
@@ -765,47 +824,90 @@ function applyAssistantText(
   const fallbackText = textBlocks.length
     ? ''
     : piEventText(message ?? event.assistantMessageEvent).trim()
-  const id = assistantId(event, turnKey)
   const streamingId = streamingAssistantId(turnKey)
-  const streamingIndex = thread.messages.findIndex((candidate) => candidate.id === streamingId)
-  const streaming = streamingIndex === -1 ? undefined : thread.messages[streamingIndex]
-  const streamedText = streaming?.text.trim() ?? ''
-  const answer = finalText || (!toolTurn ? fallbackText || streamedText : '')
-  if (!commentary.length && !answer) return markRunning(thread)
-  const reuseStreamingAnswer = Boolean(answer) && Boolean(streamedText)
-  const completedCommentaryText = commentary.length === 1 ? commentary[0]?.text.trim() : ''
+  const streamedText = thread.messages
+    .find((candidate) => candidate.id === streamingId)
+    ?.text.trim()
+  return {
+    answer: finalText || (!toolTurn ? fallbackText || streamedText || '' : ''),
+    commentary,
+    fallbackText,
+    id: assistantId(event, turnKey),
+    streamingId
+  }
+}
+
+function reconcileCompletedStreaming(
+  thread: AgentConversationThread,
+  content: CompletedAssistantContent
+): {
+  reuseStreamingAnswer: boolean
+  streamedCommentary?: AgentConversationMessage
+} {
+  const streamingIndex = thread.messages.findIndex(
+    (candidate) => candidate.id === content.streamingId
+  )
+  const streamedText =
+    streamingIndex === -1 ? '' : (thread.messages[streamingIndex]?.text.trim() ?? '')
+  const reuseStreamingAnswer = Boolean(content.answer) && Boolean(streamedText)
+  const completedCommentaryText =
+    content.commentary.length === 1 ? content.commentary[0]?.text.trim() : ''
   const streamedCommentary = completedCommentaryText
     ? (findTurnCommentary(thread, completedCommentaryText) ??
       messagesAfterLastUser(thread).findLast((candidate) =>
         candidate.parts?.some((part) => part.type === 'commentary' && part.state === 'streaming')
       ))
     : undefined
-  const reuseStreamingCommentary = Boolean(streamedCommentary)
   if (
     streamingIndex !== -1 &&
-    streamingId !== id &&
-    !reuseStreamingCommentary &&
+    content.streamingId !== content.id &&
+    !streamedCommentary &&
     !reuseStreamingAnswer
   ) {
     thread.messages.splice(streamingIndex, 1)
   }
-  syncCompletedCommentary(thread, id, commentary, now, streamedCommentary?.id)
-  if (answer) {
-    const existing = findTurnAnswer(thread, answer)
-    if (existing) {
-      existing.completedAt = now
-    } else {
-      upsertMessage(thread, {
-        completedAt: now,
-        createdAt: now,
-        id: reuseStreamingAnswer ? streamingId : id,
-        role: 'assistant',
-        text: answer
-      })
-    }
+  return { reuseStreamingAnswer, ...(streamedCommentary ? { streamedCommentary } : {}) }
+}
+
+function syncCompletedAnswer(
+  thread: AgentConversationThread,
+  content: CompletedAssistantContent,
+  reuseStreamingAnswer: boolean,
+  now: string
+): void {
+  if (!content.answer) return
+  const existing = findTurnAnswer(thread, content.answer)
+  if (existing) {
+    existing.completedAt = now
+    return
   }
+  upsertMessage(thread, {
+    completedAt: now,
+    createdAt: now,
+    id: reuseStreamingAnswer ? content.streamingId : content.id,
+    role: 'assistant',
+    text: content.answer
+  })
+}
+
+function applyAssistantText(
+  thread: AgentConversationThread,
+  event: Record<string, unknown>,
+  turnKey: string,
+  now: string
+): boolean {
+  if (event.type === 'message_update') return applyMessageUpdate(thread, event, turnKey, now)
+  if (isRecord(event.message) && event.message.role && event.message.role !== 'assistant') {
+    return false
+  }
+  syncCompletedThinking(thread, event, turnKey, now)
+  const content = completedAssistantContent(thread, event, turnKey)
+  if (!content.commentary.length && !content.answer) return markRunning(thread)
+  const { reuseStreamingAnswer, streamedCommentary } = reconcileCompletedStreaming(thread, content)
+  syncCompletedCommentary(thread, content.id, content.commentary, now, streamedCommentary?.id)
+  syncCompletedAnswer(thread, content, reuseStreamingAnswer, now)
   collapseDuplicateTurnResponses(thread)
-  const latest = answer || commentary.at(-1)?.text.trim() || fallbackText
+  const latest = content.answer || content.commentary.at(-1)?.text.trim() || content.fallbackText
   thread.recentUpdate = latest.slice(0, 500)
   return true
 }

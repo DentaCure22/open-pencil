@@ -43,13 +43,12 @@ async function localAuthorityRequest(pathName: string, init: RequestInit = {}): 
     throw new Error('agent-auth.json has no token; restart the OpenPencil dev server.')
   }
   const port = typeof auth.port === 'number' ? auth.port : 7602
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${auth.token}`)
   try {
     return await fetch(`http://127.0.0.1:${String(port)}${pathName}`, {
       ...init,
-      headers: {
-        Authorization: `Bearer ${auth.token}`,
-        ...init.headers
-      },
+      headers,
       signal: init.signal ?? AbortSignal.timeout(5000)
     })
   } catch (error) {

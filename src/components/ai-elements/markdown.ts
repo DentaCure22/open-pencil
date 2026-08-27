@@ -3,6 +3,7 @@ import { MarkdownParser } from 'vue-stream-markdown'
 export type AssistantMarkdownNode = {
   align?: Array<'left' | 'right' | 'center' | null> | null
   alt?: string | null
+  boardObjectId?: string
   checked?: boolean | null
   children?: AssistantMarkdownNode[]
   depth?: number

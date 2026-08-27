@@ -35,12 +35,12 @@ export function usePropScrub(editor: Editor) {
     if (nodes.length > 1) {
       for (const n of nodes) {
         const prev = previousValues.get(n.id)?.[key] ?? previous
-        editor.commitNodeUpdate(n.id, { [key]: prev } as Partial<SceneNode>, `Change ${key}`)
+        editor.commitNodeUpdate(n.id, { [key]: prev }, `Change ${key}`)
       }
       previousValues.clear()
     } else {
       const n = nodes[0]
-      editor.commitNodeUpdate(n.id, { [key]: previous } as Partial<SceneNode>, `Change ${key}`)
+      editor.commitNodeUpdate(n.id, { [key]: previous }, `Change ${key}`)
     }
   }
 

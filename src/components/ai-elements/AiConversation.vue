@@ -4,8 +4,15 @@ import { watch } from 'vue'
 
 import { IS_BROWSER } from '@/constants'
 
-const { canLoadOlder = false, loadingOlder = false } = defineProps<{
+const {
+  canLoadOlder = false,
+  initialAtBottom = true,
+  initialScrollTop,
+  loadingOlder = false
+} = defineProps<{
   canLoadOlder?: boolean
+  initialAtBottom?: boolean
+  initialScrollTop?: number
   loadingOlder?: boolean
 }>()
 
@@ -18,7 +25,7 @@ const SEND_SCROLL_SPRING = { damping: 0.82, mass: 1, stiffness: 0.12 } as const
 
 const { contentRef, escapedFromLock, isAtBottom, scrollRef, scrollToBottom, setOptions } =
   useStickToBottom({
-    initial: 'instant',
+    initial: initialScrollTop === undefined && initialAtBottom ? 'instant' : false,
     // Match T3's live-follow model: keep the live edge fixed while content grows.
     // A spring makes the viewport chase every resize and turns steady streaming
     // into visible catch-up motion.
@@ -27,27 +34,54 @@ const { contentRef, escapedFromLock, isAtBottom, scrollRef, scrollToBottom, setO
 
 let smoothResizeActive = false
 
-// vue-stick-to-bottom applies its instant correction on the next animation
-// frame. A wrapped streaming line is therefore visible one frame before the
-// viewport catches up, which reads as a random one-line jump. Pin the live edge
-// inside ResizeObserver's pre-paint phase; the library still owns escape and
-// manual-navigation behavior.
+// Hide a populated transcript until its initial scroll position and virtualized
+// message heights have settled. After that, pin a locked live edge in
+// ResizeObserver's pre-paint phase so streaming growth cannot flash one frame
+// before the viewport catches up. The library still owns escape and manual
+// navigation behavior.
 watch(
   [scrollRef, contentRef],
   ([viewport, content], _previous, onCleanup) => {
     if (!viewport || !content) return
+    const pinInitialPosition = () => {
+      if (initialScrollTop !== undefined) {
+        viewport.scrollTop = Math.max(
+          0,
+          Math.min(initialScrollTop, viewport.scrollHeight - viewport.clientHeight)
+        )
+      } else if (initialAtBottom) {
+        viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+      }
+    }
+    const initializingPosition = initialScrollTop !== undefined || initialAtBottom
+    if (initializingPosition) content.style.visibility = 'hidden'
+    pinInitialPosition()
+    let revealFrame = 0
+    if (initializingPosition) {
+      revealFrame = requestAnimationFrame(() => {
+        pinInitialPosition()
+        revealFrame = requestAnimationFrame(() => {
+          pinInitialPosition()
+          content.style.visibility = ''
+        })
+      })
+    }
     let previousHeight = content.getBoundingClientRect().height
     const observer = new ResizeObserver((entries) => {
       const height = entries[0]?.contentRect.height ?? previousHeight
-      const grew = height > previousHeight
+      const resized = height !== previousHeight
       previousHeight = height
-      if (!grew || smoothResizeActive || escapedFromLock.value || !isAtBottom.value) {
+      if (!resized || smoothResizeActive || escapedFromLock.value || !isAtBottom.value) {
         return
       }
       viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
     })
     observer.observe(content)
-    onCleanup(() => observer.disconnect())
+    onCleanup(() => {
+      if (revealFrame) cancelAnimationFrame(revealFrame)
+      content.style.visibility = ''
+      observer.disconnect()
+    })
   },
   { flush: 'post', immediate: true }
 )

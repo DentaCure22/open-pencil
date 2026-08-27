@@ -59,7 +59,7 @@ function resolveFloatVariable(
   const value = entry.variableData.value
   if (!value) return undefined
   if (typeof value.floatValue === 'number') return value.floatValue
-  const alias = value.alias as AliasRef | undefined
+  const alias = value.alias
   const aliasId = alias ? resolveAliasId(alias, assetRefs) : undefined
   return aliasId ? resolveFloatVariable(ctx, aliasId, assetRefs, depth + 1) : undefined
 }

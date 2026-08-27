@@ -59,6 +59,26 @@ function visiblePatchContent(raw: string, kind: T3DiffLineKind): string {
   return kind === 'addition' || kind === 'deletion' || kind === 'context' ? raw.slice(1) : raw
 }
 
+function isPatchFileHeader(raw: string): boolean {
+  return ['diff --git ', 'index ', '--- ', '+++ '].some((prefix) => raw.startsWith(prefix))
+}
+
+function patchLineNumber(
+  kind: T3DiffLineKind,
+  side: 'new' | 'old',
+  currentLine: number
+): number | null {
+  if (kind === 'meta') return null
+  if (side === 'old' && kind === 'addition') return null
+  if (side === 'new' && kind === 'deletion') return null
+  return currentLine
+}
+
+function advancesPatchLine(kind: T3DiffLineKind, side: 'new' | 'old'): boolean {
+  if (kind === 'context') return true
+  return side === 'old' ? kind === 'deletion' : kind === 'addition'
+}
+
 export function parseT3UnifiedPatch(file: AiFileChange): T3ParsedDiffFile {
   const lines: T3DiffLine[] = []
   let oldLine = 0
@@ -66,21 +86,14 @@ export function parseT3UnifiedPatch(file: AiFileChange): T3ParsedDiffFile {
   let hunkReady = false
 
   for (const [index, raw] of (file.patch ?? '').replace(/\r\n?/g, '\n').split('\n').entries()) {
-    if (
-      raw.startsWith('diff --git ') ||
-      raw.startsWith('index ') ||
-      raw.startsWith('--- ') ||
-      raw.startsWith('+++ ')
-    ) {
-      continue
-    }
+    if (isPatchFileHeader(raw)) continue
 
     const kind = patchLineKind(raw)
     if (kind === 'hunk') {
       const match = HUNK_HEADER.exec(raw)
       if (match) {
-        oldLine = Number.parseInt(match[1] ?? '0', 10)
-        newLine = Number.parseInt(match[3] ?? '0', 10)
+        oldLine = Number.parseInt(match[1], 10)
+        newLine = Number.parseInt(match[3], 10)
         hunkReady = true
       }
       lines.push({
@@ -96,8 +109,8 @@ export function parseT3UnifiedPatch(file: AiFileChange): T3ParsedDiffFile {
 
     if (!hunkReady && kind !== 'meta') continue
 
-    const currentOldLine = kind === 'addition' || kind === 'meta' ? null : oldLine
-    const currentNewLine = kind === 'deletion' || kind === 'meta' ? null : newLine
+    const currentOldLine = patchLineNumber(kind, 'old', oldLine)
+    const currentNewLine = patchLineNumber(kind, 'new', newLine)
     lines.push({
       content: visiblePatchContent(raw, kind),
       id: `${file.path}:${String(index)}`,
@@ -106,8 +119,8 @@ export function parseT3UnifiedPatch(file: AiFileChange): T3ParsedDiffFile {
       oldLine: currentOldLine,
       raw
     })
-    if (kind === 'context' || kind === 'deletion') oldLine += 1
-    if (kind === 'context' || kind === 'addition') newLine += 1
+    if (advancesPatchLine(kind, 'old')) oldLine += 1
+    if (advancesPatchLine(kind, 'new')) newLine += 1
   }
 
   return {
@@ -132,7 +145,7 @@ export function t3DiffRangeLabel(file: T3ParsedDiffFile, selection: T3DiffLineSe
     .slice(normalized.startIndex, normalized.endIndex + 1)
     .map((line) => line.newLine ?? line.oldLine)
     .filter((line): line is number => line !== null)
-  const start = lineNumbers[0]
+  const start = lineNumbers.at(0)
   const end = lineNumbers.at(-1)
   if (start === undefined || end === undefined) return 'selected lines'
   return start === end ? `line ${String(start)}` : `lines ${String(start)}–${String(end)}`
@@ -168,7 +181,13 @@ export function t3DiffAnnotationSourceId(input: {
 export function parseT3DiffAnnotationSourceId(
   sourceMessageId: string
 ): Omit<T3DiffReviewComment, 'id' | 'quote' | 'rangeLabel' | 'text'> | null {
-  const [prefix, capturedAt, path, rawStart, rawEnd, ...extra] = sourceMessageId.split(':')
+  const segments = sourceMessageId.split(':')
+  const prefix = segments.at(0)
+  const capturedAt = segments.at(1)
+  const path = segments.at(2)
+  const rawStart = segments.at(3)
+  const rawEnd = segments.at(4)
+  const extra = segments.slice(5)
   if (
     prefix !== DIFF_ANNOTATION_PREFIX ||
     !capturedAt ||

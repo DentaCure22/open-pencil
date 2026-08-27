@@ -16,6 +16,7 @@ import {
 } from '@open-pencil/vue'
 import type { LayerDragInstruction, LayerNode } from '@open-pencil/vue'
 import { useEditorStore } from '@/app/editor/active-store'
+import { openAgentRightPanel } from '@/app/agent-chat/right-panel'
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { createCodeObjectLayerTreeBridge, isCodeObjectLayerId } from '@/app/code-object/inspector'
 import {
@@ -194,6 +195,10 @@ function closeTreeTools() {
 function revealNode(nodeId: string) {
   layerFilter.value = ''
   store.select([nodeId])
+}
+
+function openLayerObject(nodeId: string) {
+  openAgentRightPanel('object', { objectId: nodeId })
 }
 
 defineExpose({ closeTreeTools, revealNode })
@@ -375,6 +380,7 @@ onUnmounted(() => {
                     :chrome="chrome(scope)"
                     @hover-end="unhoverLayer"
                     @hover-start="hoverLayer"
+                    @open-object="openLayerObject"
                     @rename-start="rename.start"
                   />
                 </LayerTreeItem>

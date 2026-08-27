@@ -39,7 +39,9 @@ export function renderFromEditorState(
   dpr = 1,
   layer: RenderLayer = 'full',
   selectionChromeOwnerIds?: ReadonlySet<string>,
-  hoverChromeOwnerIds?: ReadonlySet<string>
+  hoverChromeOwnerIds?: ReadonlySet<string>,
+  sceneContentOwnerIds?: ReadonlySet<string>,
+  selectionLabelOwnerIds?: ReadonlySet<string>
 ): void {
   r.dpr = dpr
   r.panX = state.panX
@@ -56,7 +58,9 @@ export function renderFromEditorState(
     graph,
     state.selectedIds,
     {
+      sceneContentOwnerIds,
       selectionChromeOwnerIds,
+      selectionLabelOwnerIds,
       hoverChromeOwnerIds,
       hoveredNodeId: state.hoveredNodeId,
       enteredContainerId: state.enteredContainerId,
@@ -92,12 +96,19 @@ function hasVolatileOverlay(overlays: RenderOverlays): boolean {
   )
 }
 
+function sceneContentOwnerKey(overlays: RenderOverlays): string {
+  return overlays.sceneContentOwnerIds?.size
+    ? [...overlays.sceneContentOwnerIds].sort().join('\u0000')
+    : ''
+}
+
 function scenePictureMissReason(
   r: SkiaRenderer,
   graph: SceneGraph,
   overlays: RenderOverlays,
   sceneVersion: number,
-  hasPositionPreview: boolean
+  hasPositionPreview: boolean,
+  contentOwnerKey: string
 ): string {
   if (hasPositionPreview) return 'position-preview'
   if (hasVolatileOverlay(overlays)) return 'volatile-overlay'
@@ -106,6 +117,7 @@ function scenePictureMissReason(
     return 'position-preview-version'
   if (sceneVersion !== r.scenePictureVersion) return 'scene-version'
   if (r.pageId !== r.scenePicturePageId) return 'page'
+  if (contentOwnerKey !== r.scenePictureContentOwnerKey) return 'scene-content-owners'
   return 'unknown'
 }
 
@@ -113,14 +125,16 @@ function canUseScenePicture(
   r: SkiaRenderer,
   graph: SceneGraph,
   sceneVersion: number,
-  hasVolatileOverlays: boolean
+  hasVolatileOverlays: boolean,
+  contentOwnerKey: string
 ): boolean {
   return (
     !hasVolatileOverlays &&
     !graph.hasNodePositionPresentations() &&
     !!r.scenePicture &&
     sceneVersion === r.scenePictureVersion &&
-    r.pageId === r.scenePicturePageId
+    r.pageId === r.scenePicturePageId &&
+    contentOwnerKey === r.scenePictureContentOwnerKey
   )
 }
 
@@ -193,7 +207,9 @@ export function render(
     w: r.viewportWidth / r.zoom,
     h: r.viewportHeight / r.zoom
   }
-  updateSceneBackingPreviewState(r, layer)
+  const contentOwnerKey = sceneContentOwnerKey(overlays)
+  if (contentOwnerKey) r.sceneBackingNeedsCrispRender = false
+  else updateSceneBackingPreviewState(r, layer)
 
   const positionPreview = previewPresentedNodeIds(graph, r.pageId)
   const hasPositionPreview = graph.hasNodePositionPresentations()
@@ -201,13 +217,20 @@ export function render(
   const canCompositePositionPreview =
     hasPositionPreview && !hasVolatileOverlays && positionPreview !== null
 
-  const canUsePicture = canUseScenePicture(r, graph, sceneVersion, hasVolatileOverlays)
+  const canUsePicture = canUseScenePicture(
+    r,
+    graph,
+    sceneVersion,
+    hasVolatileOverlays,
+    contentOwnerKey
+  )
   const cacheMissReason = scenePictureMissReason(
     r,
     graph,
     overlays,
     sceneVersion,
-    hasPositionPreview
+    hasPositionPreview,
+    contentOwnerKey
   )
 
   if (layer !== 'overlays') {
@@ -218,6 +241,7 @@ export function render(
     if (
       layer === 'scene' &&
       !hasVolatileOverlays &&
+      contentOwnerKey === '' &&
       renderSceneBacking(r, canvas, graph, sceneVersion)
     ) {
       if (hasPositionPreview && positionPreview) {
@@ -243,7 +267,8 @@ export function render(
         canUsePicture,
         cacheMissReason,
         hasVolatileOverlays || (hasPositionPreview && !canCompositePositionPreview),
-        canCompositePositionPreview ? positionPreview : null
+        canCompositePositionPreview ? positionPreview : null,
+        contentOwnerKey
       )
     }
     p.endPhase('render:scene')
@@ -327,7 +352,8 @@ function renderSceneContent(
   canUsePicture: boolean,
   cacheMissReason: string,
   hasVolatileOverlays: boolean,
-  positionPreview: { liveIds: string[]; skipIds: string[] } | null
+  positionPreview: { liveIds: string[]; skipIds: string[] } | null,
+  contentOwnerKey: string
 ): void {
   const p = r.profiler
   if (canUsePicture) {
@@ -366,7 +392,9 @@ function renderSceneContent(
   r._nodeCount = 0
   r._culledCount = 0
   p.beginPhase('render:recordPicture')
-  const { duration } = measure(() => recordScenePicture(r, canvas, graph, sceneVersion))
+  const { duration } = measure(() =>
+    recordScenePicture(r, canvas, graph, overlays, sceneVersion, contentOwnerKey)
+  )
   p.setScenePictureRecordTime(duration)
   p.endPhase('render:recordPicture')
 }
@@ -416,7 +444,8 @@ function renderPositionPreview(
   if (
     r.scenePicture &&
     r.scenePictureVersion === sceneVersion &&
-    r.scenePicturePageId === r.pageId
+    r.scenePicturePageId === r.pageId &&
+    r.scenePictureContentOwnerKey === sceneContentOwnerKey(overlays)
   ) {
     canvas.drawPicture(r.scenePicture)
     punchPresentedRestBounds(r, canvas, graph, preview.skipIds)
@@ -434,7 +463,9 @@ function recordScenePicture(
   r: SkiaRenderer,
   canvas: Canvas,
   graph: SceneGraph,
-  sceneVersion: number
+  overlays: RenderOverlays,
+  sceneVersion: number,
+  contentOwnerKey: string
 ): void {
   r.scenePicture?.delete()
   const prevViewport = r.worldViewport
@@ -476,7 +507,9 @@ function recordScenePicture(
   const recCanvas = recorder.beginRecording(bounds)
   if (pageNode) {
     for (const childId of pageNode.childIds) {
-      r.renderNode(recCanvas, graph, childId, {})
+      r.renderNode(recCanvas, graph, childId, {
+        sceneContentOwnerIds: overlays.sceneContentOwnerIds
+      })
     }
   }
   r.scenePicture = recorder.finishRecordingAsPicture()
@@ -485,5 +518,6 @@ function recordScenePicture(
   r.scenePictureVersion = sceneVersion
   r.scenePicturePositionPreviewVersion = graph.positionPreviewVersion
   r.scenePicturePageId = r.pageId
+  r.scenePictureContentOwnerKey = contentOwnerKey
   canvas.drawPicture(r.scenePicture)
 }

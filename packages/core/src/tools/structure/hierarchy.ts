@@ -64,22 +64,3 @@ export const flattenNodes = defineTool({
     return nodeSummary(result)
   }
 })
-
-export const nodeToComponent = defineTool({
-  name: 'node_to_component',
-  mutates: true,
-  description: 'Convert one or more frames/groups into components.',
-  params: {
-    ids: { type: 'string[]', description: 'Node IDs to convert', required: true }
-  },
-  execute: (figma, { ids }) => {
-    const results: { id: string; name: string; originalId: string }[] = []
-    for (const id of ids) {
-      const node = figma.getNodeById(id)
-      if (!node) continue
-      const comp = figma.createComponentFromNode(node)
-      results.push({ id: comp.id, name: comp.name, originalId: id })
-    }
-    return { converted: results }
-  }
-})

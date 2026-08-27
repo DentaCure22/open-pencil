@@ -1,0 +1,67 @@
+{
+  "name": "mote",
+  "frameSize": {
+    "width": 16,
+    "height": 16
+  },
+  "layout": {
+    "columns": 4,
+    "rows": 2
+  },
+  "sources": {
+    "1x": "mote-sprite.png",
+    "2x": "mote-sprite@2x.png",
+    "3x": "mote-sprite@3x.png",
+    "animatedPreview": "mote-motion.webp"
+  },
+  "frames": [
+    {
+      "id": "calm-hover",
+      "column": 0,
+      "row": 0,
+      "durationMs": 260
+    },
+    {
+      "id": "curious-lean",
+      "column": 1,
+      "row": 0,
+      "durationMs": 110
+    },
+    {
+      "id": "compact-squash",
+      "column": 2,
+      "row": 0,
+      "durationMs": 90
+    },
+    {
+      "id": "upward-stretch",
+      "column": 3,
+      "row": 0,
+      "durationMs": 110
+    },
+    {
+      "id": "quick-dart",
+      "column": 0,
+      "row": 1,
+      "durationMs": 90
+    },
+    {
+      "id": "mid-spin",
+      "column": 1,
+      "row": 1,
+      "durationMs": 110
+    },
+    {
+      "id": "bounce-recoil",
+      "column": 2,
+      "row": 1,
+      "durationMs": 120
+    },
+    {
+      "id": "settled-hover",
+      "column": 3,
+      "row": 1,
+      "durationMs": 300
+    }
+  ]
+}

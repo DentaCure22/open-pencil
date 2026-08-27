@@ -1,21 +1,39 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
+  CODE_OBJECT_BOARD_PERMISSIONS,
+  codeObjectAgentPreset,
   createUserCodeObjectDocument,
+  isCodeObjectAgentPresetId,
   isCodeObjectKind,
+  isCodeObjectModality,
+  normalizeCodeObjectAppearance,
   normalizeCodeObjectSurface,
   parseCodeObjectDocument,
   preflightCodeObjectSource,
-  serializeCodeObjectPluginData
+  serializeCodeObjectPluginData,
+  type CodeObjectAgentPreset,
+  type CodeObjectBoardPermission,
+  type CodeObjectModality
 } from '@open-pencil/core/code-object'
+import {
+  isMermaidDiagramContainer,
+  type MermaidAppearance,
+  type MermaidSceneSpec
+} from '@open-pencil/core/diagram'
+import {
+  createMermaidDiagramInGraph,
+  isBoardNativeCreateType,
+  replaceMermaidDiagramInGraph,
+  type BoardNativeCreateType
+} from '@open-pencil/core/editor'
 import { CONTENT_SOURCE_REVISION, contentSourcePluginData } from '@open-pencil/core/io'
 import { searchBoardMemory } from '@open-pencil/core/tools'
 import {
   TransformMatrix,
   type ImageScaleMode,
-  type NodeType,
   type Rect,
   type SceneNode
 } from '@open-pencil/scene-graph'
@@ -39,6 +57,8 @@ import {
   writeAuthorityBoardDocument,
   type AuthorityBoardDocument
 } from './document'
+import { compileHeadlessMermaidScenes } from './mermaid-compiler'
+import { readAuthorityMermaidSource } from './mermaid-readback'
 import { authorityNodeSummary } from './node-summary'
 import { normalizeAuthorityRpcArgs } from './rpc-args'
 import { renderAuthorityBoardScreenshot } from './screenshot'
@@ -59,25 +79,6 @@ const DEFAULT_PAGE_LIMIT = 50
 const QUERY_INDEX_LIMIT = 8
 const BOARD_APPLY_OPERATION_LIMIT = 100
 const BOARD_APPLY_IMAGE_LIMIT_BYTES = 32 * 1024 * 1024
-const BOARD_APPLY_NODE_TYPES = new Set<NodeType>([
-  'FRAME',
-  'RECTANGLE',
-  'ROUNDED_RECTANGLE',
-  'ELLIPSE',
-  'TEXT',
-  'LINE',
-  'STAR',
-  'POLYGON',
-  'VECTOR',
-  'BOOLEAN_OPERATION',
-  'GROUP',
-  'SECTION',
-  'COMPONENT',
-  'COMPONENT_SET',
-  'INSTANCE',
-  'CONNECTOR',
-  'SHAPE_WITH_TEXT'
-])
 const BOARD_APPLY_PROTECTED_FIELDS = new Set(['childIds', 'id', 'parentId', 'type'])
 
 type JsonRecord = Record<string, unknown>
@@ -185,11 +186,11 @@ function boardApplyOperations(args: JsonRecord): JsonRecord[] {
   })
 }
 
-function boardApplyNodeType(value: unknown): NodeType {
-  if (typeof value !== 'string' || !BOARD_APPLY_NODE_TYPES.has(value as NodeType)) {
+function boardApplyNodeType(value: unknown): BoardNativeCreateType {
+  if (!isBoardNativeCreateType(value)) {
     throw new Error(`board_apply create requires a supported non-page node type.`)
   }
-  return value as NodeType
+  return value
 }
 
 function boardApplyIndex(value: unknown): number | undefined {
@@ -271,6 +272,7 @@ type BoardApplyMutationState = {
   createdIds: Set<string>
   deletedIds: Set<string>
   document: AuthorityBoardDocument
+  mermaidPreflight: JsonRecord[]
   pageId: string
   preflightIds: Set<string>
 }
@@ -342,32 +344,32 @@ async function readBoardApplyImage(sourcePath: string): Promise<BoardApplyImage>
   }
 }
 
-function boardApplyCodeObjectBounds(
+function boardApplyBounds(
   value: unknown,
-  options: { partial: false }
+  options: { label: string; partial: false }
 ): Pick<SceneNode, 'height' | 'width' | 'x' | 'y'>
-function boardApplyCodeObjectBounds(
+function boardApplyBounds(
   value: unknown,
-  options: { partial: true }
+  options: { label: string; partial: true }
 ): Partial<Pick<SceneNode, 'height' | 'width' | 'x' | 'y'>>
-function boardApplyCodeObjectBounds(
+function boardApplyBounds(
   value: unknown,
-  options: { partial: boolean }
+  options: { label: string; partial: boolean }
 ): Partial<Pick<SceneNode, 'height' | 'width' | 'x' | 'y'>> {
-  if (!isRecord(value)) throw new TypeError('Code Object bounds must be an object.')
+  if (!isRecord(value)) throw new TypeError(`${options.label} bounds must be an object.`)
   const result: Partial<Pick<SceneNode, 'height' | 'width' | 'x' | 'y'>> = {}
   for (const field of ['x', 'y', 'width', 'height'] as const) {
     const candidate = value[field]
     if (candidate === undefined && options.partial) continue
     if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
-      throw new TypeError(`Code Object bounds.${field} must be a finite number.`)
+      throw new TypeError(`${options.label} bounds.${field} must be a finite number.`)
     }
     if ((field === 'width' || field === 'height') && candidate <= 0) {
-      throw new Error(`Code Object bounds.${field} must be positive.`)
+      throw new Error(`${options.label} bounds.${field} must be positive.`)
     }
     result[field] = candidate
   }
-  if (Object.keys(result).length === 0) throw new Error('Code Object bounds has no changes.')
+  if (Object.keys(result).length === 0) throw new Error(`${options.label} bounds has no changes.`)
   return result
 }
 
@@ -376,7 +378,7 @@ function boardApplyTypedCreateBounds(
   parentId: string,
   operation: JsonRecord
 ): Pick<SceneNode, 'height' | 'width' | 'x' | 'y'> {
-  const bounds = boardApplyCodeObjectBounds(operation.bounds, { partial: false })
+  const bounds = boardApplyBounds(operation.bounds, { label: 'Typed object', partial: false })
   const coordinateSpace = operation.coordinate_space
   if (coordinateSpace !== undefined && coordinateSpace !== 'page' && coordinateSpace !== 'parent') {
     throw new Error('board_apply coordinate_space must be "page" or "parent".')
@@ -420,11 +422,19 @@ function boardApplyCodeObjectRecord(value: unknown, field: string): JsonRecord {
   return structuredClone(value)
 }
 
-function boardApplyCodeObjectPermissions(value: unknown): unknown[] {
+function boardApplyCodeObjectPermissions(value: unknown): CodeObjectBoardPermission[] {
   if (!Array.isArray(value)) throw new TypeError('Code Object board_permissions must be an array.')
   if (value.length > 64)
     throw new Error('Code Object board_permissions must contain at most 64 entries.')
-  return structuredClone(value)
+  return value.map((permission) => {
+    if (
+      typeof permission !== 'string' ||
+      !CODE_OBJECT_BOARD_PERMISSIONS.includes(permission as CodeObjectBoardPermission)
+    ) {
+      throw new Error(`Unsupported Code Object board permission "${String(permission)}".`)
+    }
+    return permission as CodeObjectBoardPermission
+  })
 }
 
 function boardApplyCodeObjectSource(value: unknown, required: boolean): string | undefined {
@@ -435,37 +445,227 @@ function boardApplyCodeObjectSource(value: unknown, required: boolean): string |
   return value
 }
 
+function boardApplyMermaidSource(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new TypeError('Mermaid source must be a non-empty string.')
+  }
+  if (value.length > 100_000)
+    throw new Error('Mermaid source must contain at most 100,000 characters.')
+  return value
+}
+
+function boardApplyPluginValue(node: SceneNode, key: string): string | null {
+  return (
+    node.pluginData.find((entry) => entry.pluginId === 'open-pencil' && entry.key === key)?.value ??
+    null
+  )
+}
+
+function boardApplyMermaidAppearance(
+  value: unknown,
+  fallback: MermaidAppearance = 'auto'
+): MermaidAppearance {
+  if (value === undefined) return fallback
+  if (value === 'auto' || value === 'light' || value === 'dark') return value
+  throw new Error('Mermaid appearance must be auto, light, or dark.')
+}
+
+async function boardApplyMermaidScene(
+  source: string,
+  appearance: MermaidAppearance,
+  size: Pick<SceneNode, 'height' | 'width'>
+): Promise<MermaidSceneSpec> {
+  const scene = (await compileHeadlessMermaidScenes([source])).at(0)
+  if (!scene) throw new Error('Mermaid compilation returned no diagram.')
+  return { ...scene, appearance, height: size.height, source, width: size.width }
+}
+
+function recordBoardApplyMermaidPreflight(
+  state: BoardApplyMutationState,
+  objectId: string,
+  scene: MermaidSceneSpec
+): void {
+  state.mermaidPreflight.push({
+    contract: 'native_diagram',
+    object_id: objectId,
+    parser: scene.parser,
+    source_hash: createHash('sha256').update(scene.source).digest('hex'),
+    source_length: scene.source.length,
+    syntax: 'mermaid'
+  })
+}
+
+async function applyBoardCreateMermaid(
+  state: BoardApplyMutationState,
+  operation: JsonRecord
+): Promise<void> {
+  const id = requiredString(operation, 'object_id')
+  const parentId = requiredString(operation, 'parent_id')
+  if (parentId !== state.pageId) {
+    throw new Error('board_apply create_mermaid parent_id must equal the target page_id.')
+  }
+  const parent = boardApplyParent(state.document, state.pageId, parentId)
+  const source = boardApplyMermaidSource(operation.source)
+  const bounds = boardApplyBounds(operation.bounds, {
+    label: 'Mermaid diagram',
+    partial: false
+  })
+  const appearance = boardApplyMermaidAppearance(operation.appearance)
+  const scene = await boardApplyMermaidScene(source, appearance, bounds)
+  recordBoardApplyMermaidPreflight(state, id, scene)
+
+  const existing = state.document.graph.getNode(id)
+  if (existing) {
+    const suppliedName = optionalString(operation, 'name')
+    const matches =
+      isMermaidDiagramContainer(existing) &&
+      existing.parentId === parentId &&
+      parent.childIds.includes(id) &&
+      existing.x === bounds.x &&
+      existing.y === bounds.y &&
+      existing.width === bounds.width &&
+      existing.height === bounds.height &&
+      boardApplyPluginValue(existing, 'mermaid/source') === scene.source &&
+      boardApplyPluginValue(existing, 'mermaid/appearance') === appearance &&
+      (!suppliedName || existing.name === suppliedName)
+    if (!matches) {
+      throw new Error(
+        `board_apply create_mermaid object_id "${id}" already exists with different content.`
+      )
+    }
+    return
+  }
+
+  createMermaidDiagramInGraph(
+    state.document.graph,
+    parentId,
+    scene,
+    { x: bounds.x, y: bounds.y },
+    { diagramId: id, ownerId: id }
+  )
+  const name = optionalString(operation, 'name')
+  if (name) state.document.graph.updateNode(id, { name })
+  const insertIndex = boardApplyIndex(operation.index)
+  if (insertIndex !== undefined) state.document.graph.insertChildAt(id, parentId, insertIndex)
+  state.createdIds.add(id)
+  state.changedIds.add(id)
+}
+
+async function applyBoardUpdateMermaid(
+  state: BoardApplyMutationState,
+  operation: JsonRecord
+): Promise<void> {
+  const id = requiredString(operation, 'object_id')
+  const owner = boardApplyTarget(state.document, state.pageId, id)
+  if (!isMermaidDiagramContainer(owner) || owner.parentId !== state.pageId) {
+    throw new Error(`board_apply update_mermaid requires a page-owned Mermaid diagram.`)
+  }
+  const source = boardApplyMermaidSource(operation.source)
+  const currentAppearance = boardApplyPluginValue(owner, 'mermaid/appearance')
+  const appearance = boardApplyMermaidAppearance(
+    operation.appearance,
+    boardApplyMermaidAppearance(currentAppearance ?? undefined)
+  )
+  const scene = await boardApplyMermaidScene(source, appearance, owner)
+  recordBoardApplyMermaidPreflight(state, id, scene)
+
+  replaceMermaidDiagramInGraph(state.document.graph, state.pageId, id, scene)
+  const changes: JsonRecord = { name: optionalString(operation, 'name') ?? owner.name }
+  if (operation.bounds !== undefined) {
+    Object.assign(
+      changes,
+      boardApplyBounds(operation.bounds, { label: 'Mermaid diagram', partial: true })
+    )
+  }
+  state.document.graph.updateNode(id, changes)
+  state.changedIds.add(id)
+}
+
+function boardApplyCodeObjectPreset(operation: JsonRecord): CodeObjectAgentPreset | undefined {
+  const presetId = optionalString(operation, 'preset_id')
+  if (!presetId) return undefined
+  if (!isCodeObjectAgentPresetId(presetId)) {
+    throw new Error(`Unknown Code Object preset_id "${presetId}".`)
+  }
+  const preset = codeObjectAgentPreset(presetId)
+  if (operation.source !== undefined) {
+    throw new Error(
+      `Code Object preset "${preset.id}" owns its renderer; omit source and update props or state.`
+    )
+  }
+  if (operation.definition_id !== undefined) {
+    throw new Error(`Code Object preset "${preset.id}" owns definition_id.`)
+  }
+  return preset
+}
+
+function boardApplyCodeObjectModality(
+  operation: JsonRecord,
+  preset: CodeObjectAgentPreset | undefined
+): CodeObjectModality {
+  const supplied = optionalString(operation, 'modality')
+  if (supplied && !isCodeObjectModality(supplied)) {
+    throw new Error(`Unknown Code Object modality "${supplied}".`)
+  }
+  if (preset && supplied && supplied !== preset.modality) {
+    throw new Error(
+      `Code Object preset "${preset.id}" uses modality "${preset.modality}", not "${supplied}".`
+    )
+  }
+  if (preset) return preset.modality
+  if (supplied && isCodeObjectModality(supplied)) return supplied
+  return 'custom'
+}
+
+function boardApplyCodeObjectSurface(
+  operation: JsonRecord,
+  preset: CodeObjectAgentPreset | undefined
+) {
+  if (operation.surface !== undefined) {
+    return normalizeCodeObjectSurface(boardApplyCodeObjectRecord(operation.surface, 'surface'))
+  }
+  return preset ? { ...preset.surface } : undefined
+}
+
 function applyBoardCreateCodeObject(
   state: BoardApplyMutationState,
   operation: JsonRecord,
   operationIndex: number
 ): void {
   const id = requiredString(operation, 'object_id')
-  const name = requiredString(operation, 'name')
   const parentId = requiredString(operation, 'parent_id')
-  const source = boardApplyCodeObjectSource(operation.source, true)
-  if (!source) throw new TypeError('Code Object source is required.')
+  const preset = boardApplyCodeObjectPreset(operation)
+  const modality = boardApplyCodeObjectModality(operation, preset)
+  const name = optionalString(operation, 'name') ?? preset?.name
+  if (!name) throw new Error('name is required when preset_id is omitted.')
+  const source = preset?.source ?? boardApplyCodeObjectSource(operation.source, true)
+  if (!source) throw new TypeError('Code Object source is required when preset_id is omitted.')
   const bounds = boardApplyTypedCreateBounds(state, parentId, operation)
+  const surface = boardApplyCodeObjectSurface(operation, preset)
+  const suppliedProps =
+    operation.props === undefined ? {} : boardApplyCodeObjectRecord(operation.props, 'props')
+  const suppliedState =
+    operation.state === undefined ? {} : boardApplyCodeObjectRecord(operation.state, 'state')
   const codeObject = createUserCodeObjectDocument({
-    ...(operation.board_permissions !== undefined
-      ? { boardPermissions: boardApplyCodeObjectPermissions(operation.board_permissions) }
-      : {}),
-    definitionId: optionalString(operation, 'definition_id') ?? id,
-    name,
-    ...(operation.props !== undefined
-      ? { props: boardApplyCodeObjectRecord(operation.props, 'props') }
-      : {}),
-    source,
-    ...(operation.state !== undefined
-      ? { state: boardApplyCodeObjectRecord(operation.state, 'state') }
-      : {}),
-    ...(operation.surface !== undefined
+    ...(operation.appearance !== undefined
       ? {
-          surface: normalizeCodeObjectSurface(
-            boardApplyCodeObjectRecord(operation.surface, 'surface')
+          appearance: normalizeCodeObjectAppearance(
+            boardApplyCodeObjectRecord(operation.appearance, 'appearance')
           )
         }
-      : {})
+      : {}),
+    boardPermissions:
+      operation.board_permissions !== undefined
+        ? boardApplyCodeObjectPermissions(operation.board_permissions)
+        : [...(preset?.boardPermissions ?? [])],
+    definitionId: preset?.definitionId ?? optionalString(operation, 'definition_id') ?? id,
+    modality,
+    name,
+    ...(preset ? { presetId: preset.id } : {}),
+    props: { ...(preset ? structuredClone(preset.props) : {}), ...suppliedProps },
+    source,
+    state: { ...(preset ? structuredClone(preset.state) : {}), ...suppliedState },
+    ...(surface ? { surface } : {})
   })
   applyBoardCreate(
     state,
@@ -536,7 +736,7 @@ function applyBoardUpdateCodeObject(state: BoardApplyMutationState, operation: J
   const id = requiredString(operation, 'object_id')
   const node = hydrateBoardApplyTarget(state.document, state.pageId, id)
   const current = parseCodeObjectDocument(node)
-  if (!current || current.component !== 'user-code') {
+  if (current?.component !== 'user-code') {
     throw new Error(`board_apply update_code_object requires an authored Code Object.`)
   }
   const next = structuredClone(current)
@@ -550,6 +750,11 @@ function applyBoardUpdateCodeObject(state: BoardApplyMutationState, operation: J
   }
   const source = boardApplyCodeObjectSource(operation.source, false)
   if (source !== undefined) {
+    if (isCodeObjectAgentPresetId(current.presetId)) {
+      throw new Error(
+        `Code Object preset "${current.presetId}" owns its renderer; update props or state instead.`
+      )
+    }
     next.source = source
     state.preflightIds.add(id)
     changed = true
@@ -566,6 +771,12 @@ function applyBoardUpdateCodeObject(state: BoardApplyMutationState, operation: J
     next.boardPermissions = boardApplyCodeObjectPermissions(operation.board_permissions)
     changed = true
   }
+  if (operation.appearance !== undefined) {
+    next.appearance = normalizeCodeObjectAppearance(
+      boardApplyCodeObjectRecord(operation.appearance, 'appearance')
+    )
+    changed = true
+  }
   if (operation.surface !== undefined) {
     next.surface = normalizeCodeObjectSurface(
       boardApplyCodeObjectRecord(operation.surface, 'surface')
@@ -573,7 +784,10 @@ function applyBoardUpdateCodeObject(state: BoardApplyMutationState, operation: J
     changed = true
   }
   if (operation.bounds !== undefined) {
-    Object.assign(changes, boardApplyCodeObjectBounds(operation.bounds, { partial: true }))
+    Object.assign(
+      changes,
+      boardApplyBounds(operation.bounds, { label: 'Code Object', partial: true })
+    )
     changed = true
   }
   if (!changed) throw new Error('board_apply update_code_object has no changes.')
@@ -702,6 +916,8 @@ async function applyBoardOperation(
   index: number
 ): Promise<void> {
   const op = requiredString(operation, 'op')
+  if (op === 'create_mermaid') return applyBoardCreateMermaid(state, operation)
+  if (op === 'update_mermaid') return applyBoardUpdateMermaid(state, operation)
   if (op === 'create_image') return applyBoardCreateImage(state, operation, index)
   if (op === 'create_code_object') return applyBoardCreateCodeObject(state, operation, index)
   if (op === 'update_code_object') return applyBoardUpdateCodeObject(state, operation)
@@ -839,11 +1055,12 @@ function compactTraceGesture(
     }
   }
 
+  const resolvedGraph = document?.graph
   const resolved =
-    document && page
+    resolvedGraph && page
       ? requestedIds.flatMap((id) => {
-          const node = document?.graph.getNode(id)
-          return node && node.type !== 'CANVAS' && document?.graph.isDescendant(node.id, page.id)
+          const node = resolvedGraph.getNode(id)
+          return node && node.type !== 'CANVAS' && resolvedGraph.isDescendant(node.id, page.id)
             ? [node]
             : []
         })
@@ -1210,7 +1427,7 @@ export class LocalWorkspaceBoardRuntime {
     const head = await this.head()
     const { document, page } = this.validatedTarget(head, args)
     const objectIds = optionalStringArray(args, 'object_ids')
-    if (objectIds && objectIds.length > 0) {
+    if (objectIds.length > 0) {
       const missing = objectIds.filter((id) => {
         const node = document.graph.getNode(id)
         return !node || node.type === 'CANVAS' || !document.graph.isDescendant(id, page.id)
@@ -1222,7 +1439,7 @@ export class LocalWorkspaceBoardRuntime {
     const region = navigationRegionFrom(args)
     const intent = await this.store.queueNavigationIntent({
       contentDocumentId: head.identity.documentId,
-      ...(objectIds && objectIds.length > 0 ? { objectIds } : {}),
+      ...(objectIds.length > 0 ? { objectIds } : {}),
       pageId: page.id,
       ...(region ? { region } : {}),
       workspaceId: head.identity.workspaceId
@@ -1253,12 +1470,24 @@ export class LocalWorkspaceBoardRuntime {
     const changedIds = new Set<string>()
     const createdIds = new Set<string>()
     const deletedIds = new Set<string>()
+    const mermaidPreflight: JsonRecord[] = []
     const preflightIds = new Set<string>()
-    const state = { changedIds, createdIds, deletedIds, document, pageId: page.id, preflightIds }
+    const state = {
+      changedIds,
+      createdIds,
+      deletedIds,
+      document,
+      mermaidPreflight,
+      pageId: page.id,
+      preflightIds
+    }
     for (const [index, operation] of operations.entries()) {
       await applyBoardOperation(state, operation, index)
     }
-    const preflight = await preflightBoardCodeObjects(document, preflightIds)
+    const preflight = [
+      ...mermaidPreflight,
+      ...(await preflightBoardCodeObjects(document, preflightIds))
+    ]
 
     const requestId = optionalString(args, 'request_id') ?? `board-apply:${randomUUID()}`
     const receipt = await this.store.commit({
@@ -1369,8 +1598,8 @@ export class LocalWorkspaceBoardRuntime {
       ? objectReadCandidates(document, page.id, objectIds)
       : [...document.graph.getDescendants(page.id)]
     const detail = optionalString(args, 'detail') ?? 'summary'
-    if (!['code_object', 'full', 'summary'].includes(detail)) {
-      throw new Error('board_read detail must be summary, full, or code_object.')
+    if (!['code_object', 'full', 'mermaid', 'summary'].includes(detail)) {
+      throw new Error('board_read detail must be summary, full, mermaid, or code_object.')
     }
     const nodes = candidates.slice(0, limit).map((node) => {
       const summary = authorityNodeSummary(document.graph, node)
@@ -1378,6 +1607,9 @@ export class LocalWorkspaceBoardRuntime {
       if (detail === 'code_object') {
         const codeObject = parseCodeObjectDocument(node)
         return { ...summary, ...(codeObject ? { code_object: codeObject } : {}) }
+      }
+      if (detail === 'mermaid') {
+        return { ...summary, mermaid: readAuthorityMermaidSource(document, page.id, node.id) }
       }
       return summary
     })

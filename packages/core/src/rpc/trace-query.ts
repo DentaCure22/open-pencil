@@ -920,7 +920,7 @@ export function resolveTraceSpokenTurn(
       .slice(0, 1)
     // The live path already ages turns out via expiresAtEpochMs; the persisted store keeps them
     // forever, so "latest" must refuse to serve an anchor that is no longer fresh.
-    const newest = candidates[0]
+    const newest = candidates.at(0)
     if (
       options.includeExpired === true &&
       newest &&

@@ -1,5 +1,7 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { normalizeCodeObjectAppearance, type CodeObjectAppearance } from './appearance'
+import type { CodeObjectAgentPresetId, CodeObjectModality } from './preset'
 import { isCodeObjectViewportPresetId, type CodeObjectViewportPresetId } from './viewport'
 
 export const CODE_OBJECT_PLUGIN_ID = 'openpencil-code-object'
@@ -74,10 +76,13 @@ export type CodeObjectDocument<
   State extends JsonRecord = JsonRecord,
   BoardPermission = unknown
 > = {
+  appearance?: CodeObjectAppearance
   boardPermissions: BoardPermission[]
   component: Component
   definitionId: string
+  modality?: CodeObjectModality
   name: string
+  presetId?: CodeObjectAgentPresetId
   props: JsonRecord
   runtime: 'openpencil-code'
   schemaVersion: typeof CODE_OBJECT_SCHEMA_VERSION
@@ -90,7 +95,10 @@ export type CodeObjectDocument<
 }
 
 export type CodeObjectDocumentEnvelope = JsonRecord & {
+  appearance?: CodeObjectAppearance
   component: string
+  modality?: CodeObjectModality
+  presetId?: CodeObjectAgentPresetId
   runtime: 'openpencil-code'
   schemaVersion: typeof CODE_OBJECT_SCHEMA_VERSION
   state: JsonRecord
@@ -98,9 +106,12 @@ export type CodeObjectDocumentEnvelope = JsonRecord & {
 }
 
 export type CreateUserCodeObjectDocumentInput<BoardPermission = unknown> = {
+  appearance?: CodeObjectAppearance
   boardPermissions?: BoardPermission[]
   definitionId: string
+  modality?: CodeObjectModality
   name: string
+  presetId?: CodeObjectAgentPresetId
   props?: JsonRecord
   source: string
   state?: JsonRecord
@@ -171,10 +182,13 @@ export function createUserCodeObjectDocument<BoardPermission = unknown>(
   input: CreateUserCodeObjectDocumentInput<BoardPermission>
 ): CodeObjectDocument<'user-code', JsonRecord, BoardPermission> {
   return {
+    appearance: normalizeCodeObjectAppearance(input.appearance),
     boardPermissions: structuredClone(input.boardPermissions ?? []),
     component: 'user-code',
     definitionId: input.definitionId,
+    modality: input.modality ?? 'custom',
     name: input.name,
+    ...(input.presetId ? { presetId: input.presetId } : {}),
     props: structuredClone(input.props ?? {}),
     runtime: 'openpencil-code',
     schemaVersion: CODE_OBJECT_SCHEMA_VERSION,
@@ -198,6 +212,7 @@ export function createSmylrTrustedWebAppDocument<BoardPermission = unknown>(inpu
       launcherId: 'smylr',
       startScript: 'npm run dev'
     },
+    modality: 'live-app',
     name: input.label,
     props: { route: input.route },
     route: input.route,
@@ -253,6 +268,19 @@ export function codeObjectViewportPluginData(
   const nextDocument: CodeObjectDocumentEnvelope = structuredClone(codeObject)
   if (preset) nextDocument.viewport = { preset }
   else delete nextDocument.viewport
+  return serializeCodeObjectPluginData(node, nextDocument)
+}
+
+export function codeObjectAppearancePluginData(
+  node: SceneNode,
+  preference: CodeObjectAppearance['preference']
+): SceneNode['pluginData'] | null {
+  const codeObject = parseCodeObjectDocument(node)
+  if (!codeObject) return null
+  const current = normalizeCodeObjectAppearance(codeObject.appearance)
+  if (current.preference === preference) return node.pluginData
+  const nextDocument: CodeObjectDocumentEnvelope = structuredClone(codeObject)
+  nextDocument.appearance = { ...current, preference }
   return serializeCodeObjectPluginData(node, nextDocument)
 }
 

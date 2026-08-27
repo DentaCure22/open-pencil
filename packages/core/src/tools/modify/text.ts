@@ -1,4 +1,4 @@
-import type { CharacterStyleOverride, SceneNode } from '@open-pencil/scene-graph'
+import type { CharacterStyleOverride } from '@open-pencil/scene-graph'
 
 import { parseColor } from '#core/color'
 import { styleToWeight } from '#core/text/fonts'
@@ -153,7 +153,7 @@ export const setTextProperties = defineTool({
       updated.push('textAutoResize')
     }
     if (args.direction !== undefined) {
-      node.textDirection = args.direction as SceneNode['textDirection']
+      node.textDirection = args.direction
       updated.push('textDirection')
     }
     if (args.text_decoration !== undefined) {

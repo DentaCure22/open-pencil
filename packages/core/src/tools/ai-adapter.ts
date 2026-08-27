@@ -15,7 +15,7 @@ import type { FigmaAPI } from '#core/figma-api'
 
 import type { ToolDef, ParamDef } from './schema'
 
-type ValibotSchema = valibot.GenericSchema<unknown, unknown, valibot.BaseIssue<unknown>>
+type ValibotSchema = valibot.GenericSchema<unknown, unknown>
 
 export interface ToolLogEntry {
   tool: string
@@ -64,7 +64,10 @@ const MODEL_TOOL_RESULT_BYTE_LIMIT = 32 * 1024
 const UTF8_ENCODER = new TextEncoder()
 
 function boundedModelToolResult(result: unknown): unknown {
-  const serialized = JSON.stringify(result) ?? 'null'
+  const serialized =
+    result === undefined || typeof result === 'function' || typeof result === 'symbol'
+      ? 'null'
+      : JSON.stringify(result)
   const bytes = UTF8_ENCODER.encode(serialized).length
   if (bytes <= MODEL_TOOL_RESULT_BYTE_LIMIT) return result
   const summary =

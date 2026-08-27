@@ -30,7 +30,7 @@ export interface ReactSourceToSceneGraphOptions
   extends ReactSourceToDesignDocumentOptions, ToSceneGraphOptions {}
 
 function sourceIdFor(element: ReactSourceElement, path: string): string {
-  return sourceIdFromProps(element.props as JSXElementProps) ?? path
+  return sourceIdFromProps(element.props) ?? path
 }
 
 function nodePath(parentPath: string, element: ReactSourceElement, index: number): string {

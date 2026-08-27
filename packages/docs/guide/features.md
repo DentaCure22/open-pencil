@@ -13,7 +13,7 @@ Open and save native Figma files directly. The import/export pipeline uses the s
 - **Text** — canvas-native editing with IME support, double-click to enter edit mode
 - **Rich text** — per-character bold (<kbd>⌘</kbd><kbd>B</kbd>), italic (<kbd>⌘</kbd><kbd>I</kbd>), underline (<kbd>⌘</kbd><kbd>U</kbd>), strikethrough
 - **Auto-layout** — flexbox and CSS Grid via Yoga WASM: direction, gap, padding, justify, align, child sizing, grid tracks. <kbd>⇧</kbd><kbd>A</kbd> to toggle
-- **Components** — create (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd>), component sets (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd>), instances with override support, live sync
+- **Code Objects** — authored TypeScript/TSX surfaces organized by modality, with persisted state, normal Board transforms, and System/Light/Dark semantic tokens
 - **Variables** — design tokens with collections, modes (Light/Dark), color/float/string/boolean types, variable binding
 - **Sections** — organizational containers with auto-adopting children and title pills
 
@@ -23,7 +23,7 @@ The floating sidebar keeps navigation and work in one place:
 
 - **Layers** — document tree, search, visibility, and design-token access
 - **Chats** — Pi tasks and their conversation history
-- **Assets** — reusable components, media, and exports
+- **Assets** — Code Object presets and source-backed application surfaces
 - **Activity** — current and durable Trace evidence
 
 Selection-specific actions stay close to the object on the canvas and in the integrated tool rail. On smaller screens, the mobile drawer exposes Design controls and source for Code Objects that own editable code. Export is also available from the context menu and keyboard shortcut.

@@ -50,7 +50,8 @@ function parsedWindow(input: TraceResolveInput): EpochWindow | 'invalid' | undef
 
 function scopeMatches(scope: TraceQueryScope | undefined, filter: TraceQueryScope | undefined) {
   if (!filter) return true
-  return scope?.documentId === filter.documentId && scope?.pageId === filter.pageId
+  if (!scope) return false
+  return scope.documentId === filter.documentId && scope.pageId === filter.pageId
 }
 
 function windowSummaries(

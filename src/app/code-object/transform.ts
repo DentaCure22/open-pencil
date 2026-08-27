@@ -2,7 +2,11 @@ import { ref, type CSSProperties } from 'vue'
 
 import {
   CODE_OBJECT_VIEWPORT_PRESETS,
+  codeObjectAppearancePluginData,
   codeObjectViewportPluginData,
+  normalizeCodeObjectAppearance,
+  parseCodeObjectDocument,
+  type CodeObjectThemePreference,
   type CodeObjectViewportPresetId
 } from '@open-pencil/core/code-object'
 import type { SceneNode } from '@open-pencil/scene-graph'
@@ -204,6 +208,30 @@ export function applyCodeObjectViewportPreset(
       y: centerY - preset.height / 2
     },
     `Set ${preset.label} viewport`
+  )
+  return true
+}
+
+export function codeObjectThemePreference(
+  frame: SceneNode | null | undefined
+): CodeObjectThemePreference | null {
+  const document = parseCodeObjectDocument(frame)
+  return document ? normalizeCodeObjectAppearance(document.appearance).preference : null
+}
+
+export function applyCodeObjectThemePreference(
+  store: CodeObjectViewportStore,
+  frameId: string,
+  preference: CodeObjectThemePreference
+) {
+  const frame = store.graph.getNode(frameId)
+  if (!frame) return false
+  const pluginData = codeObjectAppearancePluginData(frame, preference)
+  if (!pluginData) return false
+  store.updateNodeWithUndo(
+    frame.id,
+    { pluginData },
+    preference === 'system' ? 'Follow system appearance' : `Use ${preference} appearance`
   )
   return true
 }

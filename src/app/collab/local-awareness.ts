@@ -45,7 +45,7 @@ export function createLocalAwarenessActions({
 
     const store = getStore()
     const peers = buildRemotePeers(
-      awareness.getStates() as Map<number, Record<string, unknown>>,
+      awareness.getStates(),
       awareness.clientID
     )
 

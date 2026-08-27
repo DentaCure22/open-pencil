@@ -246,19 +246,23 @@ export function parseDirections(
   }
   const directions = value.flatMap((direction) => {
     if (typeof direction !== 'string') {
-      throw new Error(`${label} contains an unsupported direction.`)
+      throw new TypeError(`${label} contains an unsupported direction.`)
     }
     const directionKey = direction.replace(' ', '-')
     const expansion = DIRECTION_EXPANSIONS.get(directionKey)
     if (expansion) return expansion
     const normalized = DIRECTION_ALIASES.get(directionKey) ?? directionKey
-    if (!DIRECTIONS.has(normalized as BoardBuildPlanDirection)) {
+    if (!isBoardBuildPlanDirection(normalized)) {
       throw new Error(`${label} contains an unsupported direction.`)
     }
-    return [normalized as BoardBuildPlanDirection]
+    return [normalized]
   })
   const selected = new Set(directions)
   return [...selected, ...DIRECTION_FALLBACK_ORDER.filter((direction) => !selected.has(direction))]
+}
+
+function isBoardBuildPlanDirection(value: string): value is BoardBuildPlanDirection {
+  return DIRECTIONS.has(value as BoardBuildPlanDirection)
 }
 
 export function parsePlacementTarget(value: unknown, label: string): BoardBuildPlanPlacementTarget {
@@ -305,6 +309,25 @@ export function parseLayoutAnchor(value: unknown, label: string): BoardBuildPlan
   return parseReference(value, label)
 }
 
+function parseRelativeOffset(
+  value: unknown,
+  label: string
+): BoardBuildPlanRelativeOffset | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new Error(`${label} must be an object.`)
+  exactFields(value, ['column', 'row'], label)
+  const column = value.column
+  const row = value.row
+  if (
+    (column !== -1 && column !== 0 && column !== 1) ||
+    (row !== -1 && row !== 0 && row !== 1) ||
+    (column === 0 && row === 0)
+  ) {
+    throw new Error(`${label} must use -1, 0, or 1 and cannot be zero/zero.`)
+  }
+  return { column, row }
+}
+
 export function parsePlacement(
   value: unknown,
   label: string,
@@ -327,23 +350,7 @@ export function parsePlacement(
     value.preferred_directions,
     `${label}.preferred_directions`
   )
-  let relativeOffset: BoardBuildPlanRelativeOffset | undefined
-  if (value.relative_offset !== undefined) {
-    if (!isRecord(value.relative_offset)) {
-      throw new Error(`${label}.relative_offset must be an object.`)
-    }
-    exactFields(value.relative_offset, ['column', 'row'], `${label}.relative_offset`)
-    const column = value.relative_offset.column
-    const row = value.relative_offset.row
-    if (
-      (column !== -1 && column !== 0 && column !== 1) ||
-      (row !== -1 && row !== 0 && row !== 1) ||
-      (column === 0 && row === 0)
-    ) {
-      throw new Error(`${label}.relative_offset must use -1, 0, or 1 and cannot be zero/zero.`)
-    }
-    relativeOffset = { column, row }
-  }
+  const relativeOffset = parseRelativeOffset(value.relative_offset, `${label}.relative_offset`)
   const target =
     allowTarget && value.target !== undefined
       ? parsePlacementTarget(value.target, `${label}.target`)

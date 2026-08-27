@@ -6,8 +6,8 @@ import { editorViewportInsets } from '@/app/editor/viewport-insets'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+const query = defineModel<string>('query', { default: '' })
 const editor = useEditorStore()
-const query = ref('')
 const previews = shallowRef<Record<string, string>>({})
 const expandedGroups = ref<Record<string, boolean>>({})
 let previewRequestId = 0
@@ -109,22 +109,6 @@ onBeforeUnmount(() => {
     data-test-id="workspace-project-assets"
     class="flex min-h-0 flex-1 flex-col overflow-hidden"
   >
-    <div class="shrink-0 px-3 pb-2">
-      <label class="relative block">
-        <icon-lucide-search
-          class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted/70"
-        />
-        <input
-          v-model="query"
-          type="search"
-          data-test-id="project-assets-search"
-          aria-label="Search project assets"
-          placeholder="Search project assets"
-          class="border-chrome-control-border h-8 w-full rounded-[7px] border bg-transparent pr-3 pl-8 text-[11px] text-surface outline-none placeholder:text-muted/70 focus:border-accent/35"
-        />
-      </label>
-    </div>
-
     <div class="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2.5 pb-3">
       <div
         v-if="mediaGroups.length === 0"

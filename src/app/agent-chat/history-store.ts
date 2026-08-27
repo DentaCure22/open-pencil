@@ -58,7 +58,8 @@ const { pause: pauseLiveStream, resume: resumeLiveStream } = useIntervalFn(
 )
 
 function historyPollingAllowed() {
-  return document?.visibilityState !== 'hidden'
+  if (typeof document === 'undefined') return true
+  return document.visibilityState !== 'hidden'
 }
 
 function syncHistoryPolling() {
@@ -242,7 +243,7 @@ async function hydrateRetainedTranscriptBatch(): Promise<boolean> {
   }
   const reconciled = reconcileAgentConversationHistory(current, next)
   if (!sameAgentConversationHistory(current, reconciled)) history.value = reconciled
-  const committed = history.value ?? current
+  const committed = history.value
   queueOpenTranscriptCompletion()
   return (
     nextTranscriptHydrationBatch([...transcriptRetainers.keys()], {
@@ -264,6 +265,8 @@ async function hydrateRetainedTranscripts(): Promise<void> {
       hydrateAgain = false
       const more = await hydrateRetainedTranscriptBatch()
       if (more) scheduleRemainingHydration()
+      // A second caller can flip this flag while the awaited batch is running.
+      // oxlint-disable-next-line typescript/no-unnecessary-condition
     } while (hydrateAgain)
   })().finally(() => {
     hydrateInFlight = null

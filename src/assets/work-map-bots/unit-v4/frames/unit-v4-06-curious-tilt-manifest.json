@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/unit-v4/source/unit-v4-06-curious-tilt-source.png",
+  "source_pixels": [
+    444,
+    444
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    55,
+    33,
+    444,
+    313
+  ],
+  "trimmed_pixels": [
+    389,
+    280
+  ],
+  "prepared_pixels": [
+    467,
+    467
+  ],
+  "padding_fraction": 0.1,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/unit-v4/frames/unit-v4-06-curious-tilt-master.png",
+      "pixels": [
+        467,
+        467
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/unit-v4/frames/unit-v4-06-curious-tilt.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/unit-v4/frames/unit-v4-06-curious-tilt@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/unit-v4/frames/unit-v4-06-curious-tilt@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

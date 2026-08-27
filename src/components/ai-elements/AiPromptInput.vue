@@ -31,14 +31,18 @@ import { browserCaptureSessions } from '@/app/browser-inspector/state'
 import {
   speechDictationActiveOwner,
   speechDictationAvailable,
+  speechDictationSpeaking,
+  speechDictationWaveform,
   startSpeechDictation,
   stopSpeechDictation
 } from '@/app/speech-dictation'
+import type { VoiceDictationContext } from '@/app/speech-dictation-bridge'
 import { toast } from '@/app/shell/ui'
 import { searchAgentWorkspaceFiles } from '@/app/agent-chat/workspace'
 import AiComposerCommandMenu from './AiComposerCommandMenu.vue'
 import AiModelAndEffortSelect from './AiModelAndEffortSelect.vue'
 import AiContextIndicator from './AiContextIndicator.vue'
+import AiVoiceWaveform from './AiVoiceWaveform.vue'
 import {
   createPastedTextAttachment,
   isPastedTextAttachment,
@@ -59,8 +63,11 @@ import {
 const {
   canRetry = false,
   canStop = false,
+  compact = false,
+  compactConversation = false,
   annotations = [],
   contextUsage,
+  dictationContext,
   disabled = false,
   label = 'Message input',
   modelValue,
@@ -72,7 +79,10 @@ const {
   annotations?: AgentPromptAnnotation[]
   canRetry?: boolean
   canStop?: boolean
+  compact?: boolean
+  compactConversation?: boolean
   contextUsage?: AgentConversationContextUsage
+  dictationContext?: VoiceDictationContext
   disabled?: boolean
   label?: string
   modelValue: string
@@ -105,6 +115,7 @@ const attachmentError = ref('')
 const annotatingImage = ref<File | null>(null)
 const imagePreviewUrls = ref(new Map<File, string>())
 const dictating = computed(() => speechDictationActiveOwner.value === dictationOwner)
+const dictationSpeaking = computed(() => dictating.value && speechDictationSpeaking.value)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const composerCursor = ref(modelValue.length)
 const composerFocused = ref(false)
@@ -144,6 +155,12 @@ const showRetry = computed(
     !showStop.value &&
     (status === 'error' || status === 'stopped') &&
     canRetry
+)
+const showDictation = computed(
+  () => speechDictationAvailable.value && (dictating.value || (!showStop.value && !showRetry.value))
+)
+const showSend = computed(
+  () => dictating.value || hasDraft.value || hasAnnotations.value || hasAttachments.value
 )
 
 const composerTrigger = computed(() => detectT3ComposerTrigger(modelValue, composerCursor.value))
@@ -273,7 +290,12 @@ function toggleDictation() {
     stopSpeechDictation(dictationOwner)
     return
   }
-  startSpeechDictation(dictationOwner, modelValue, (text) => emit('update:modelValue', text))
+  startSpeechDictation(
+    dictationOwner,
+    modelValue,
+    (text) => emit('update:modelValue', text),
+    dictationContext
+  )
 }
 
 function submitPrompt() {
@@ -301,7 +323,11 @@ function addFiles(files: File[]) {
   attachmentError.value = result.error ?? ''
 }
 
-defineExpose({ addFiles })
+function focusInput() {
+  textarea.value?.focus({ preventScroll: true })
+}
+
+defineExpose({ addFiles, focusInput })
 
 function addAttachments(event: Event) {
   const target = event.target
@@ -573,7 +599,14 @@ onBeforeUnmount(() => {
   />
   <form
     data-test-id="ai-prompt-input"
-    class="agent-conversation-column border-chrome-control-border bg-agent-composer focus-within:bg-agent-composer-active relative mb-3 flex shrink-0 flex-col rounded-[12px] border p-1 shadow-agent-composer focus-within:border-surface/15"
+    class="border-chrome-control-border bg-agent-composer focus-within:bg-agent-composer-active relative flex shrink-0 flex-col border p-1 focus-within:border-surface/15"
+    :class="
+      compact
+        ? compactConversation
+          ? 'agent-bot-composer mb-3 min-h-11 rounded-[22px] shadow-agent-composer'
+          : 'w-full rounded-[10px] shadow-none'
+        : 'agent-conversation-column mb-3 rounded-[12px] shadow-agent-composer'
+    "
     @paste="paste"
     @pointerdown="focusComposer"
     @submit.prevent="submitPrompt"
@@ -826,7 +859,14 @@ onBeforeUnmount(() => {
       :placeholder="placeholder"
       :value="modelValue"
       rows="1"
-      class="max-h-40 min-h-10 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 font-sans text-[13px] leading-5 text-agent-ink outline-none select-text placeholder:text-muted/80 disabled:cursor-default disabled:text-muted disabled:placeholder:text-muted"
+      class="max-h-40 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 font-sans text-agent-ink outline-none select-text placeholder:text-muted/80 disabled:cursor-default disabled:text-muted disabled:placeholder:text-muted"
+      :class="
+        compactConversation
+          ? 'min-h-10 py-2 pr-10 pl-10 text-[13px] leading-5'
+          : compact
+            ? 'min-h-8 py-1.5 text-[11.5px] leading-[18px]'
+            : 'min-h-10 py-2 text-[13px] leading-5'
+      "
       @input="input"
       @blur="composerBlur"
       @click="updateComposerCursor"
@@ -835,7 +875,11 @@ onBeforeUnmount(() => {
       @keyup="updateComposerCursor"
       @select="updateComposerCursor"
     />
-    <div data-test-id="ai-prompt-toolbar" class="flex h-8 min-w-0 items-center gap-0.5 px-0.5">
+    <div
+      data-test-id="ai-prompt-toolbar"
+      class="flex min-w-0 items-center gap-0.5 px-0.5"
+      :class="compactConversation ? 'pointer-events-none absolute inset-x-1 bottom-1 h-9' : 'h-8'"
+    >
       <DropdownMenuRoot :modal="false" @update:open="onAttachMenuOpenChange">
         <DropdownMenuTrigger as-child>
           <button
@@ -844,8 +888,9 @@ onBeforeUnmount(() => {
             aria-label="Add files, folders, or sessions"
             :disabled="disabled"
             class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 disabled:text-muted/45 data-[state=open]:bg-hover data-[state=open]:text-surface"
+            :class="compactConversation ? 'pointer-events-auto rounded-full bg-hover/80' : ''"
           >
-            <IconlyIcon name="plus" class="size-4" />
+            <icon-lucide-plus class="size-4 stroke-[1.8]" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuPortal>
@@ -941,17 +986,45 @@ onBeforeUnmount(() => {
         @change="addFolderAttachments"
       />
       <span class="min-w-1 flex-1" />
-      <AiContextIndicator v-if="contextUsage" :context-usage="contextUsage" />
-      <div class="min-w-0 max-w-[150px] shrink self-center overflow-hidden">
+      <AiContextIndicator v-if="!compact && contextUsage" :context-usage="contextUsage" />
+      <div v-if="!compact" class="min-w-0 max-w-[150px] shrink self-center overflow-hidden">
         <AiModelAndEffortSelect :scope="modelScope" />
       </div>
       <button
-        v-if="hasDraft || hasAnnotations || hasAttachments"
+        v-if="showDictation && (!compactConversation || !showSend)"
+        type="button"
+        data-test-id="ai-prompt-dictation"
+        :aria-label="dictating ? 'Stop dictation' : 'Start dictation'"
+        :aria-pressed="dictating"
+        :data-speaking="dictationSpeaking ? 'true' : 'false'"
+        :disabled="disabled"
+        class="flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 disabled:cursor-default disabled:text-muted/45"
+        :class="[
+          compactConversation ? 'pointer-events-auto bg-agent-bot-user-bubble text-white' : '',
+          dictating
+            ? compactConversation
+              ? 'border-white/35 text-white'
+              : 'border-surface/40 text-surface'
+            : compactConversation
+              ? 'hover:opacity-85'
+              : 'text-muted hover:bg-hover hover:text-surface'
+        ]"
+        @click="toggleDictation"
+      >
+        <icon-lucide-mic v-if="compactConversation && !dictating" class="size-4" />
+        <AiVoiceWaveform v-else :active="dictating" :levels="speechDictationWaveform" />
+      </button>
+      <button
+        v-if="showSend"
         type="submit"
         data-test-id="ai-prompt-send"
         :aria-label="sendLabel"
         :disabled="!canSend"
         class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-panel shadow-sm disabled:bg-transparent disabled:text-muted/35 disabled:shadow-none"
+        :class="[
+          showDictation && !compactConversation ? 'ml-1.5' : '',
+          compactConversation ? 'pointer-events-auto' : ''
+        ]"
       >
         <icon-lucide-arrow-up class="size-4" />
       </button>
@@ -961,6 +1034,7 @@ onBeforeUnmount(() => {
         data-test-id="ai-prompt-stop"
         aria-label="Stop response"
         class="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-panel shadow-sm"
+        :class="compactConversation ? 'pointer-events-auto' : ''"
         @click="$emit('stop')"
       >
         <span class="block size-3 rounded-[3px] bg-current" aria-hidden="true" />
@@ -971,29 +1045,18 @@ onBeforeUnmount(() => {
         data-test-id="ai-prompt-retry"
         aria-label="Retry message"
         class="flex size-8 shrink-0 items-center justify-center rounded-full bg-hover text-surface hover:bg-surface hover:text-panel"
+        :class="compactConversation ? 'pointer-events-auto' : ''"
         @click="$emit('retry')"
       >
         <icon-lucide-rotate-ccw class="size-4" />
       </button>
       <button
-        v-else-if="speechDictationAvailable"
-        type="button"
-        data-test-id="ai-prompt-dictation"
-        :aria-label="dictating ? 'Stop dictation' : 'Start dictation'"
-        :aria-pressed="dictating"
-        :disabled="disabled"
-        class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-hover hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 disabled:cursor-default disabled:text-muted/45 aria-pressed:bg-accent aria-pressed:text-white"
-        @click="toggleDictation"
-      >
-        <icon-lucide-mic-off v-if="dictating" class="size-4 stroke-[1.8]" />
-        <IconlyIcon name="voice" v-else class="size-4 stroke-[1.8]" />
-      </button>
-      <button
-        v-else
+        v-else-if="!showDictation"
         type="submit"
         aria-label="Send message"
         disabled
         class="flex size-8 shrink-0 items-center justify-center rounded-full bg-transparent text-muted/35"
+        :class="compactConversation ? 'pointer-events-auto' : ''"
       >
         <icon-lucide-arrow-up class="size-4" />
       </button>

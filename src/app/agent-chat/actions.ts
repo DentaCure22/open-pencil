@@ -13,7 +13,7 @@ import {
   stopAgentThread,
   waitForAgentJob
 } from './conversations'
-import type { AgentPromptSubmission } from './models'
+import type { AgentPromptReply, AgentPromptSubmission } from './models'
 import {
   acceptOptimisticConversation,
   beginOptimisticConversation,
@@ -51,8 +51,17 @@ async function monitorAcceptedAgentJob(input: {
   await input.refresh(true)
 }
 
+export function agentPromptReplyContext(reply: AgentPromptReply): string {
+  return `Reply context:\n${JSON.stringify({
+    messageId: reply.messageId,
+    role: reply.role,
+    text: reply.text.trim().slice(0, 8_000)
+  })}\nUse this quoted message only as context for the user's new text.`
+}
+
 export async function submitAgentConversation(input: {
   contextPrompt?: string
+  launch?: { createBot?: boolean; projectId: string | null }
   nativeThreadId: string | null
   onAccepted?: (receipt: { jobId: string; threadId: string }) => void
   prompt: string
@@ -69,7 +78,10 @@ export async function submitAgentConversation(input: {
   )
   try {
     const attachments = await uploadAgentAttachments(input.selection.attachments)
-    const contextualPrompt = [input.contextPrompt?.trim(), annotatedPrompt]
+    const replyContext = input.selection.replyTo
+      ? agentPromptReplyContext(input.selection.replyTo)
+      : ''
+    const contextualPrompt = [input.contextPrompt?.trim(), replyContext, annotatedPrompt]
       .filter((part): part is string => Boolean(part))
       .join('\n\n')
     const prompt = promptWithAttachments(contextualPrompt, attachments)
@@ -79,7 +91,7 @@ export async function submitAgentConversation(input: {
       imagePaths: attachmentImagePaths(attachments)
     }
     if (!input.nativeThreadId) {
-      const receipt = await dispatchAgentPrompt(prompt, input.selection, media)
+      const receipt = await dispatchAgentPrompt(prompt, input.selection, media, input.launch)
       input.onAccepted?.(receipt)
       acceptOptimisticConversation(input.threadId, requestId)
       await input.refresh(true)

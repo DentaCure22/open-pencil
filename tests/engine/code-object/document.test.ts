@@ -6,7 +6,9 @@ import {
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument,
   isCodeObjectKind,
+  normalizeCodeObjectAppearance,
   parseCodeObjectDocument,
+  resolveCodeObjectAppearance,
   serializeCodeObjectPluginData,
   SMYLR_CODE_OBJECT_FRAME_KIND,
   SMYLR_PRODUCTION_PLUGIN_ID
@@ -14,6 +16,37 @@ import {
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 describe('Code Object persisted document contract', () => {
+  test('normalizes system-aware appearance and resolves semantic token overrides', () => {
+    expect(normalizeCodeObjectAppearance(undefined)).toEqual({ preference: 'system' })
+    const appearance = normalizeCodeObjectAppearance({
+      preference: 'system',
+      tokens: {
+        dark: { accent: '  #ff66cc  ', unknown: 'ignored' },
+        light: { text: '#10121a' }
+      }
+    })
+
+    expect(appearance).toEqual({
+      preference: 'system',
+      tokens: {
+        dark: { accent: '#ff66cc' },
+        light: { text: '#10121a' }
+      }
+    })
+    expect(resolveCodeObjectAppearance(appearance, 'dark')).toMatchObject({
+      preference: 'system',
+      theme: 'dark',
+      tokens: { accent: '#ff66cc' }
+    })
+    expect(
+      resolveCodeObjectAppearance({ ...appearance, preference: 'light' }, 'dark')
+    ).toMatchObject({
+      preference: 'light',
+      theme: 'light',
+      tokens: { text: '#10121a' }
+    })
+  })
+
   test('serializes and parses one canonical user document without losing unrelated metadata', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
@@ -30,6 +63,8 @@ describe('Code Object persisted document contract', () => {
       source: 'export default function Metric() { return <strong>Revenue</strong> }',
       state: { value: 42 }
     })
+
+    expect(document.appearance).toEqual({ preference: 'system' })
 
     graph.updateNode(frame.id, { pluginData: serializeCodeObjectPluginData(frame, document) })
     const persisted = graph.getNode(frame.id)

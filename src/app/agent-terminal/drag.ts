@@ -315,6 +315,11 @@ function clearAgentConversationDragState() {
   }, 0)
 }
 
+export function completeAgentConversationDropOutsideBoard(): void {
+  clearAgentConversationDragState()
+  suppressAgentConversationClick = false
+}
+
 export function useAgentConversationDrop(
   canvasAreaRef: Ref<HTMLElement | null>,
   store: EditorStore
@@ -419,9 +424,11 @@ export function useAgentConversationDrop(
   function onDrop(event: DragEvent) {
     const pending = pendingAgentConversationDrag
     if (!pending) return
+    trackPointer(event.clientX, event.clientY)
+    measurePendingPoint()
+    if (!pending.overBoard) return
     event.preventDefault()
     event.stopPropagation()
-    measurePendingPoint()
     const point =
       pending.lastPoint ??
       pointFromClient(event.clientX, event.clientY) ??

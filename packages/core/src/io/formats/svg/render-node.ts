@@ -54,7 +54,7 @@ function vectorShapeElements(
         elements.push(
           svg('path', {
             d: path,
-            fill: strokeAttrs.stroke as string,
+            fill: strokeAttrs.stroke,
             'fill-opacity': strokeAttrs['stroke-opacity'],
             stroke: 'none'
           })

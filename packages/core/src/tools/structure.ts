@@ -6,13 +6,7 @@ export {
   nodeResize,
   renameNode
 } from './structure/basic'
-export {
-  flattenNodes,
-  groupNodes,
-  nodeToComponent,
-  reparentNode,
-  ungroupNode
-} from './structure/hierarchy'
+export { flattenNodes, groupNodes, reparentNode, ungroupNode } from './structure/hierarchy'
 
 export { nodeAncestors, nodeBindings, nodeChildren, nodeTree } from './structure/tree'
 

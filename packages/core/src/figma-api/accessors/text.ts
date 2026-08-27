@@ -50,16 +50,16 @@ export function installTextNodeProxyAccessors(
   })
 }
 
-function textValueAccessor<K extends keyof SceneNode>(
+function textValueAccessor(
   internals: NodeProxyInternals,
-  field: K
+  field: keyof SceneNode
 ): PropertyDescriptor {
   return {
-    get(this: ProxyThis): SceneNode[K] {
+    get(this: ProxyThis) {
       return raw(this, internals)[field]
     },
-    set(this: ProxyThis, value: SceneNode[K]) {
-      updateNode(this, internals, { [field]: value } as Pick<SceneNode, K>)
+    set(this: ProxyThis, value: SceneNode[keyof SceneNode]) {
+      updateNode(this, internals, { [field]: value })
     }
   }
 }

@@ -8,7 +8,6 @@ import * as Effects from '#core/canvas/effects'
 import * as Fills from '#core/canvas/fills'
 import * as Labels from '#core/canvas/labels/draw'
 import * as NodeEditOverlay from '#core/canvas/node-edit-overlay'
-import type { NodeEditOverlayState } from '#core/canvas/node-edit-overlay'
 import * as Overlays from '#core/canvas/overlays'
 import * as AiOverlays from '#core/canvas/overlays/ai'
 import * as PenOverlay from '#core/canvas/pen-overlay'
@@ -117,7 +116,7 @@ const rendererMethods: ThisType<SkiaRenderer> = {
       this,
       canvas,
       graph,
-      editState as NodeEditOverlayState | null
+      editState
     )
   },
 

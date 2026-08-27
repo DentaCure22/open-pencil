@@ -219,17 +219,14 @@ async function annotateImage(
                 ? `Annotate generated image ${String(imageIndex + 1)}`
                 : 'Annotate generated image'
             "
-            class="group/image relative block cursor-crosshair overflow-hidden border-0 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
-            :class="[
-              transparencyCheckerboardClass,
-              generation.part.images.length > 1 ? 'min-h-32 w-full' : 'w-fit max-w-full'
-            ]"
+            class="group/image relative block cursor-crosshair overflow-hidden rounded-[15px] border-0 bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            :class="generation.part.images.length > 1 ? 'min-h-32 w-full' : 'w-fit max-w-full'"
             @click="annotateImage(image, $event)"
           >
             <img
               :src="image.url"
               :alt="image.alt ?? 'Generated image'"
-              class="transition-transform duration-200 group-hover/image:scale-[1.01] motion-reduce:transition-none"
+              class="rounded-[14px] transition-transform duration-200 group-hover/image:scale-[1.01] motion-reduce:transition-none"
               :class="
                 generation.part.images.length > 1
                   ? 'h-full max-h-[240px] w-full object-contain'

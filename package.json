@@ -90,6 +90,7 @@
     "@univerjs/themes": "0.25.1",
     "@valibot/to-json-schema": "^1.6.0",
     "@vueuse/core": "^14.2.1",
+    "@wendellhu/redi": "1.1.1",
     "ai": "^6.0.174",
     "canvaskit-wasm": "^0.40.0",
     "culori": "^4.0.2",

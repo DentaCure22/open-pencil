@@ -353,6 +353,65 @@ test('adds Chrome DOM elements to a capture session for agent and Trace context'
   editor.canvas.assertNoErrors()
 })
 
+test('shows extension failures as a faded notice above the bottom toolbar', async () => {
+  await enterBoard()
+  await editor.page.evaluate(() => {
+    window.addEventListener('message', (event) => {
+      if (
+        event.source !== window ||
+        event.data?.contract !== 'openpencil-browser-element-command/v1' ||
+        event.data?.command?.kind !== 'activate-picker'
+      ) {
+        return
+      }
+      window.postMessage(
+        {
+          contract: 'openpencil-browser-element-command-result/v1',
+          ok: false,
+          reason: 'extension-unavailable',
+          requestId: event.data.requestId
+        },
+        window.location.origin
+      )
+    })
+  })
+
+  await editor.page.getByTestId('browser-inspector-select').click()
+
+  const notice = editor.page.getByTestId('browser-inspector-error')
+  const toolbar = editor.page.getByRole('toolbar', { name: 'Editor tools' })
+  await expect(notice).toHaveText('Reload the OpenPencil Chrome extension.')
+  await expect(editor.page.getByTestId('browser-inspector-selection-panel')).toHaveCount(0)
+  expect(
+    await notice.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        backdropFilter: style.backdropFilter,
+        transitionDuration: style.transitionDuration,
+        transitionProperty: style.transitionProperty,
+        willChange: style.willChange
+      }
+    })
+  ).toEqual({
+    backdropFilter: 'none',
+    transitionDuration: '0.22s',
+    transitionProperty: 'opacity',
+    willChange: 'opacity'
+  })
+
+  const [noticeBounds, toolbarBounds] = await Promise.all([
+    notice.boundingBox(),
+    toolbar.boundingBox()
+  ])
+  if (!noticeBounds || !toolbarBounds) throw new Error('Expected toolbar error notice bounds')
+  expect(noticeBounds.y + noticeBounds.height).toBeLessThanOrEqual(toolbarBounds.y - 7)
+  expect(noticeBounds.x + noticeBounds.width / 2).toBeCloseTo(
+    toolbarBounds.x + toolbarBounds.width / 2,
+    1
+  )
+  await expect(notice).toBeHidden({ timeout: 5_000 })
+})
+
 test('expands a capture session to the chat budget and bakes screenshot notes', async () => {
   await enterBoard()
   const result: {

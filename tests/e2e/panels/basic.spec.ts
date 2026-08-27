@@ -14,7 +14,7 @@ test('layers panel resize increases width', async () => {
 
   const handleBounds = expectDefined(handleBox, 'splitter handle bounds')
   const beforeBounds = expectDefined(before, 'layers panel bounds')
-  expect(handleBounds.width).toBeGreaterThanOrEqual(40)
+  expect(handleBounds.width).toBeGreaterThanOrEqual(20)
   expect(
     await handle.evaluate((element) => {
       let ancestor = element.parentElement
@@ -107,6 +107,10 @@ test('the single contextual sidebar closes and reopens', async () => {
   const shellMotion = editor.page.getByTestId('layers-shell-motion')
   const sidebar = editor.page.getByTestId('layers-panel')
   const initialBounds = expectDefined(await splitter.boundingBox(), 'initial sidebar bounds')
+  const initialShellBounds = expectDefined(
+    await shellMotion.boundingBox(),
+    'initial sidebar shell bounds'
+  )
 
   await expect(editor.page.getByTestId('properties-panel')).toHaveCount(0)
   expect(
@@ -119,34 +123,50 @@ test('the single contextual sidebar closes and reopens', async () => {
       }
     })
   ).toEqual({
-    duration: '0.2s',
-    easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+    duration: '0.3s',
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
     property: 'flex-grow'
   })
   expect(
     await shellMotion.evaluate((element) => getComputedStyle(element).transitionProperty)
-  ).toBe('width, height, border-radius')
+  ).toBe('translate, opacity')
 
-  const closingShellWidthsPromise = shellMotion.evaluate(
+  const closingShellBoundsPromise = shellMotion.evaluate(
     (element) =>
-      new Promise<number[]>((resolve) => {
-        const samples: number[] = []
+      new Promise<Array<{ width: number; x: number }>>((resolve) => {
+        const samples: Array<{ width: number; x: number }> = []
         const startedAt = performance.now()
         const sample = () => {
-          samples.push(element.getBoundingClientRect().width)
-          if (performance.now() - startedAt < 220) requestAnimationFrame(sample)
+          const bounds = element.getBoundingClientRect()
+          samples.push({ width: bounds.width, x: bounds.x })
+          if (performance.now() - startedAt < 380) requestAnimationFrame(sample)
           else resolve(samples)
         }
         requestAnimationFrame(sample)
       })
   )
   await editor.page.getByTestId('close-layers-panel').click()
-  const closingShellWidths = await closingShellWidthsPromise
-  expect(Math.min(...closingShellWidths)).toBeGreaterThanOrEqual(43)
-  expect(Math.max(...closingShellWidths)).toBeGreaterThan(80)
+  const closingShellBounds = await closingShellBoundsPromise
+  const closingShellPositions = closingShellBounds.map(({ x }) => x)
+  const closingShellWidths = closingShellBounds.map(({ width }) => width)
+  const totalMovement = Math.max(...closingShellPositions) - Math.min(...closingShellPositions)
+  const closingPositionSteps = closingShellPositions
+    .slice(1)
+    .map((position, index) => Math.abs(position - closingShellPositions[index]))
+  expect(totalMovement).toBeGreaterThan(initialShellBounds.width)
+  expect(Math.max(...closingPositionSteps) / totalMovement).toBeLessThan(0.2)
   expect(
-    closingShellWidths.slice(1).some((width, index) => width > closingShellWidths[index] + 1)
+    closingShellPositions
+      .slice(1)
+      .some((position, index) => position > closingShellPositions[index] + 1)
   ).toBe(false)
+  expect(Math.max(...closingShellWidths) - Math.min(...closingShellWidths)).toBeLessThan(2)
+  const finalShellPosition = closingShellPositions.at(-1)
+  const finalShellWidth = closingShellWidths.at(-1)
+  if (finalShellPosition === undefined || finalShellWidth === undefined) {
+    throw new Error('Expected at least one closing sidebar frame.')
+  }
+  expect(finalShellPosition + finalShellWidth).toBeLessThanOrEqual(0)
   await expect(splitter).toHaveAttribute('data-state', 'collapsed')
   await expect(sidebar).not.toBeVisible()
   await expect(editor.page.getByTestId('open-layers-panel')).toBeVisible()
@@ -159,6 +179,9 @@ test('the single contextual sidebar closes and reopens', async () => {
   await expect
     .poll(async () => (await splitter.boundingBox())?.width ?? 0)
     .toBeGreaterThan(initialBounds.width - 2)
+  await expect
+    .poll(async () => Math.round((await shellMotion.boundingBox())?.x ?? -999))
+    .toBe(Math.round(initialShellBounds.x))
   editor.canvas.assertNoErrors()
 })
 

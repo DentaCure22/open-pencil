@@ -137,8 +137,6 @@ function normalizeBoardShapeInput(
   input: CodeObjectCreateBoardShapeInput,
   ownedCount: number
 ): NormalizedBoardShapeInput | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
-  if (input.kind !== 'ellipse' && input.kind !== 'rectangle') return null
   const geometry = normalizeOwnedBoardGeometry(owner, input, ownedCount)
   const fill = validFill(input.fill)
   if (!geometry || !fill) return null
@@ -152,7 +150,6 @@ function normalizeBoardShapeInput(
 }
 
 function requiredShapeUpdatePermissions(input: CodeObjectUpdateBoardShapeInput): BoardPermission[] {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return []
   const permissions = new Set<BoardPermission>()
   if (
     input.x !== undefined ||
@@ -301,7 +298,6 @@ function normalizeAppearanceChanges(
 function normalizeBoardShapeChanges(
   input: CodeObjectUpdateBoardShapeInput
 ): Partial<SceneNode> | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const geometry = normalizeBoardGeometryChanges(input)
   const appearance = normalizeAppearanceChanges(input)
   return geometry && appearance ? { ...geometry, ...appearance } : null

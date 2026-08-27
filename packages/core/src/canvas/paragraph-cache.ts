@@ -28,7 +28,7 @@ export interface LiveParagraph {
 }
 
 export function estimateParagraphBytes(node: SceneNode): number {
-  return (node.text?.length ?? 0) * 64 + 4096
+  return node.text.length * 64 + 4096
 }
 
 function colorKey(color?: Float32Array): string {

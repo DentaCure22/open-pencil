@@ -115,9 +115,6 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
 
   const shortcuts: ShortcutDefinition[] = [
     ...commandShortcuts(
-      'selection.createComponent',
-      'selection.detachInstance',
-      'selection.createComponentSet',
       'selection.toggleVisibility',
       'selection.toggleLock',
       'selection.flipHorizontal',

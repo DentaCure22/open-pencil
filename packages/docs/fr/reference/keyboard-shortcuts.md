@@ -80,8 +80,6 @@ Carte complète des raccourcis compatibles Figma.
 | <kbd>⌘</kbd><kbd>G</kbd> | Group Selection | ✅ |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>G</kbd> | Ungroup | ✅ |
 | <kbd>⇧</kbd><kbd>A</kbd> | Add Auto Layout | ✅ |
-| <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> | Create Component | ✅ |
-| <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> | Create Component Set | ✅ |
 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> | Detach Instance | ✅ |
 | <kbd>⌘</kbd><kbd>]</kbd> | Bring Forward | 🔲 |
 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>]</kbd> | Bring to Front | 🔲 |

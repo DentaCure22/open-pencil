@@ -1,5 +1,5 @@
 import type { NodeChange, Paint, Effect as KiwiEffect } from '@open-pencil/kiwi/fig/codec'
-import type { SceneNode, ArcData, TextAutoResize } from '@open-pencil/scene-graph'
+import type { SceneNode, TextAutoResize } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -22,7 +22,7 @@ function applyOverridePaints(ov: Record<string, unknown>, updates: Partial<Scene
   if (ov.textData != null) {
     const td = ov.textData as { characters?: string }
     if (td.characters != null) updates.text = td.characters
-    const runs = importStyleRuns(ov as NodeChange)
+    const runs = importStyleRuns(ov)
     if (runs.length > 0) updates.styleRuns = runs
   }
   if (ov.fillPaints != null) updates.fills = convertFills(ov.fillPaints as Paint[])
@@ -56,7 +56,7 @@ function applyOverrideGeometry(ov: Record<string, unknown>, updates: Partial<Sce
     updates.bottomLeftRadius = ov.rectangleBottomLeftCornerRadius as number
   if (ov.rectangleCornerRadiiIndependent != null)
     updates.independentCorners = ov.rectangleCornerRadiiIndependent as boolean
-  if (ov.arcData != null) updates.arcData = mapArcData(ov.arcData as Partial<ArcData> | undefined)
+  if (ov.arcData != null) updates.arcData = mapArcData(ov.arcData)
   if (ov.frameMaskDisabled != null) updates.clipsContent = ov.frameMaskDisabled === false
 }
 

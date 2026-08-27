@@ -1,8 +1,8 @@
 import { computeAllLayouts } from '@open-pencil/core/layout'
 
 import { createAppPreviewSection } from '@/app/demo/sections/app-preview'
-import { createComponentsSection } from '@/app/demo/sections/components'
 import { createEffectsSection } from '@/app/demo/sections/effects'
+import { createPatternsSection } from '@/app/demo/sections/patterns'
 import { createStandaloneShapes } from '@/app/demo/sections/standalone'
 import { createDemoVariables } from '@/app/demo/sections/variables'
 import type { EditorStore } from '@/app/editor/session'
@@ -10,12 +10,12 @@ import type { EditorStore } from '@/app/editor/session'
 export function createDemoShapes(store: EditorStore) {
   const { graph } = store
 
-  const { btnCompId, badgeCompId } = createComponentsSection(store)
+  const { buttonPatternId, badgePatternId } = createPatternsSection(store)
   computeAllLayouts(store.graph)
   const { sidebarId, headerId, frameId, headerTitle, chartTitle } = createAppPreviewSection(
     store,
-    btnCompId,
-    badgeCompId
+    buttonPatternId,
+    badgePatternId
   )
 
   createStandaloneShapes(store)

@@ -1,5 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 
+import type { ResolvedCodeObjectAppearance } from '@open-pencil/core/code-object'
+
 import type { PdfPageImage } from '@/app/media-evidence/pdf'
 
 import type { CodeObjectDocument, CodeObjectState } from './model'
@@ -66,6 +68,7 @@ function deferredCodeObject(node: ReactNode) {
 }
 
 export type CodeObjectRenderContext = {
+  appearance: ResolvedCodeObjectAppearance
   document: CodeObjectDocument
   frameId: string
   interactionEnabled: boolean
@@ -91,10 +94,11 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
   defineCodeObjectCompatibilityAdapter({
     component: 'code-starter',
     displayName: 'Legacy Code Starter',
-    render: ({ document, interactionEnabled, onStateChange }) =>
+    render: ({ appearance, document, interactionEnabled, onStateChange }) =>
       document.component === 'code-starter'
         ? deferredCodeObject(
             <CodeStarter
+              appearance={appearance}
               interactionEnabled={interactionEnabled}
               onStateChange={onStateChange}
               state={document.state}
@@ -135,9 +139,15 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
   defineCodeObjectCompatibilityAdapter({
     component: 'signal-bloom',
     displayName: 'Signal bloom',
-    render: ({ document, onStateChange }) =>
+    render: ({ appearance, document, onStateChange }) =>
       document.component === 'signal-bloom'
-        ? deferredCodeObject(<SignalBloom onStateChange={onStateChange} state={document.state} />)
+        ? deferredCodeObject(
+            <SignalBloom
+              appearance={appearance}
+              onStateChange={onStateChange}
+              state={document.state}
+            />
+          )
         : null
   }),
   defineCodeObjectCompatibilityAdapter({
@@ -157,7 +167,7 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
   defineCodeObjectCompatibilityAdapter({
     component: 'office-document',
     displayName: 'Document',
-    render: ({ document, interactionEnabled, onStateChange, sourceFileName }) =>
+    render: ({ appearance, document, interactionEnabled, onStateChange, sourceFileName }) =>
       document.component === 'office-document'
         ? deferredCodeObject(
             <Document
@@ -165,6 +175,7 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
               interactionEnabled={interactionEnabled}
               onStateChange={onStateChange}
               state={document.state}
+              theme={appearance.theme}
             />
           )
         : null
@@ -172,7 +183,7 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
   defineCodeObjectCompatibilityAdapter({
     component: 'office-spreadsheet',
     displayName: 'Spreadsheet',
-    render: ({ document, interactionEnabled, onStateChange, sourceFileName }) =>
+    render: ({ appearance, document, interactionEnabled, onStateChange, sourceFileName }) =>
       document.component === 'office-spreadsheet'
         ? deferredCodeObject(
             <Spreadsheet
@@ -180,6 +191,7 @@ const CODE_OBJECT_COMPATIBILITY_ADAPTERS = [
               interactionEnabled={interactionEnabled}
               onStateChange={onStateChange}
               state={document.state}
+              theme={appearance.theme}
             />
           )
         : null

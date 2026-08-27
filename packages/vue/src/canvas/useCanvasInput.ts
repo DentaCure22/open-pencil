@@ -21,6 +21,7 @@ import { createCanvasTransformInput } from '#vue/canvas/transform-input/use'
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
 import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove, handleDrawUp } from '#vue/shared/input/draw'
+import type { MoveMembershipPolicy } from '#vue/shared/input/drop-target'
 import { cancelMove, handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
 import { handleNodeEditMove } from '#vue/shared/input/node-edit'
 import { setupPanZoom } from '#vue/shared/input/pan-zoom'
@@ -44,7 +45,8 @@ export function useCanvasInput(
   hitTestFrameTitle: (cx: number, cy: number) => SceneNode | null,
   onCursorMove?: (cx: number, cy: number) => void,
   getViewportInsets?: () => ViewportInsets,
-  isPointerBlocked?: () => boolean
+  isPointerBlocked?: () => boolean,
+  moveMembershipPolicy?: MoveMembershipPolicy
 ) {
   const drag = ref<DragState | null>(null)
   const cursorOverride = ref<string | null>(null)
@@ -271,7 +273,7 @@ export function useCanvasInput(
 
     if (handleNodeEditMouseUp(drag, editor)) return
 
-    if (d.type === 'move') handleMoveUp(d, editor)
+    if (d.type === 'move') handleMoveUp(d, editor, moveMembershipPolicy)
     else if (d.type === 'text-select') {
       drag.value = null
       return

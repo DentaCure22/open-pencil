@@ -35,7 +35,7 @@ describe('agent approval design contract', () => {
     expect(panel).toContain('class="flex flex-col gap-2"')
     expect(panel).toContain(':data-run-id="runId"')
     expect(panel).toContain(':status="hasApprovalSurface ? \'ready\' : uiStatus"')
-    expect(prompt).toContain('class="agent-conversation-column')
+    expect(prompt).toContain(": 'agent-conversation-column")
     expect(surface).toContain('class="agent-conversation-column')
     expect(surface).toContain('<slot name="approval" :run-id="run.id" />')
     expect(tokens).toContain('.agent-conversation-column')

@@ -41,7 +41,7 @@ export class WorkspaceTerminalSessions {
     if (this.#sessions.size >= MAX_SESSIONS) {
       const oldest = [...this.#sessions.values()].sort(
         (left, right) => left.lastUsedAt - right.lastUsedAt
-      )[0]
+      ).at(0)
       if (oldest) this.close(oldest.id)
     }
     const id = randomUUID()

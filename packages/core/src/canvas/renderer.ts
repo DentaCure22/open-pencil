@@ -87,6 +87,7 @@ export class SkiaRenderer {
   scenePictureVersion = -1
   scenePicturePositionPreviewVersion = -1
   scenePicturePageId: string | null = null
+  scenePictureContentOwnerKey = ''
   scenePictureBounds: Rect | null = null
   scenePictureBoundsVersion = -1
   scenePictureBoundsPageId: string | null = null
@@ -539,7 +540,9 @@ export class SkiaRenderer {
     dpr: number,
     layer: RenderPipeline.RenderLayer = 'full',
     selectionChromeOwnerIds?: ReadonlySet<string>,
-    hoverChromeOwnerIds?: ReadonlySet<string>
+    hoverChromeOwnerIds?: ReadonlySet<string>,
+    sceneContentOwnerIds?: ReadonlySet<string>,
+    selectionLabelOwnerIds?: ReadonlySet<string>
   ): void {
     RenderPipeline.renderFromEditorState(
       this,
@@ -552,7 +555,9 @@ export class SkiaRenderer {
       dpr,
       layer,
       selectionChromeOwnerIds,
-      hoverChromeOwnerIds
+      hoverChromeOwnerIds,
+      sceneContentOwnerIds,
+      selectionLabelOwnerIds
     )
   }
 

@@ -51,7 +51,7 @@ export function restoreUnchangedAuthorityPages(document: unknown, previous: unkn
       stack.push(...childIdsOf(node))
     }
   }
-  const restored = { ...next, nodes: [...merged] }
+  const restored: JsonRecord = { ...next, nodes: [...merged] }
   delete restored.retainedPageIds
   return restored
 }

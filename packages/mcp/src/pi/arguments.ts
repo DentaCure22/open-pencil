@@ -8,6 +8,7 @@ export { parsePiModelId }
 export type PiLaunchMode = 'fork' | 'new' | 'resume'
 
 export type PiRpcArgumentsInput = {
+  appendSystemPrompt?: string
   effort: string
   mcpConfigPath?: string
   mode: PiLaunchMode
@@ -58,6 +59,9 @@ export function piRpcArguments(input: PiRpcArgumentsInput): string[] {
   ]
   if (input.sessionDir) args.push('--session-dir', input.sessionDir)
   if (input.mcpConfigPath) args.push('--mcp-config', input.mcpConfigPath)
+  if (input.appendSystemPrompt) {
+    args.push('--append-system-prompt', input.appendSystemPrompt)
+  }
   if (input.mode === 'fork' && input.sourceSessionId) {
     args.push('--fork', input.sourceSessionId)
   }

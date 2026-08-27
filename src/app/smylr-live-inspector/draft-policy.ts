@@ -90,12 +90,9 @@ function remapLiveInspectorDraft(
     if (sourceKey && sourceIdentity(node.source) === sourceKey) sourceMatches.push(node)
     if (draft.note && node.label === draft.note) labelMatches.push(node)
   }
-  const match =
-    sourceMatches.length === 1
-      ? sourceMatches[0]
-      : labelMatches.length === 1
-        ? labelMatches[0]
-        : undefined
+  let match: SmylrLiveContainerNode | undefined
+  if (sourceMatches.length === 1) match = sourceMatches[0]
+  else if (labelMatches.length === 1) match = labelMatches[0]
   return match
     ? copyLiveInspectorPatchDraft({
         ...draft,

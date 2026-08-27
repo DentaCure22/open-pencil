@@ -1,6 +1,11 @@
 import { createRoot, type Root } from 'react-dom/client'
 
-import { normalizeCodeObjectSurface } from '@open-pencil/core/code-object'
+import {
+  normalizeCodeObjectSurface,
+  resolveCodeObjectAppearance,
+  type CodeObjectTheme,
+  type CodeObjectThemeTokens
+} from '@open-pencil/core/code-object'
 
 import {
   acknowledgeCodeObjectRuntimeMount,
@@ -29,7 +34,30 @@ export type CodeObjectSource = {
   fileName?: string
   interactionEnabled?: boolean
   onExtractPdfPage?: (pageNumber: number, image: PdfPageImage) => void
-  theme: 'dark' | 'light'
+  theme: CodeObjectTheme
+}
+
+const CODE_OBJECT_TOKEN_VARIABLES = {
+  accent: '--code-accent',
+  accentText: '--code-accent-text',
+  background: '--code-background',
+  border: '--code-border',
+  danger: '--code-danger',
+  focusRing: '--code-focus-ring',
+  radius: '--code-radius',
+  shadow: '--code-shadow',
+  success: '--code-success',
+  surface: '--code-surface',
+  surfaceElevated: '--code-surface-elevated',
+  text: '--code-text',
+  textMuted: '--code-text-muted',
+  warning: '--code-warning'
+} as const satisfies Record<keyof CodeObjectThemeTokens, string>
+
+function applyCodeObjectThemeTokens(element: HTMLElement, tokens: CodeObjectThemeTokens) {
+  for (const [key, variable] of Object.entries(CODE_OBJECT_TOKEN_VARIABLES)) {
+    element.style.setProperty(variable, tokens[key as keyof CodeObjectThemeTokens])
+  }
 }
 
 const runtimes = new Map<string, CodeObjectRuntime>()
@@ -65,11 +93,14 @@ export function renderCodeObject(
   const runtime = runtimeFor(frameId)
   if (!runtime) return false
   const surface = normalizeCodeObjectSurface(document.surface)
+  const appearance = resolveCodeObjectAppearance(document.appearance, source.theme)
   runtime.element.dataset.codeObjectSurfaceBackground = surface.background
   runtime.element.dataset.codeObjectSurfaceOverflow = surface.overflow
-  runtime.element.dataset.theme = source.theme
+  runtime.element.dataset.theme = appearance.theme
+  runtime.element.dataset.themePreference = appearance.preference
   runtime.element.style.background = surface.background === 'transparent' ? 'transparent' : ''
-  runtime.element.style.colorScheme = source.theme
+  runtime.element.style.colorScheme = appearance.theme
+  applyCodeObjectThemeTokens(runtime.element, appearance.tokens)
   runtime.element.style.overflow = surface.overflow === 'scroll' ? 'auto' : 'hidden'
   runtime.element.style.overscrollBehavior = surface.overflow === 'scroll' ? 'contain' : ''
   const generation = beginCodeObjectRuntimeRender(
@@ -78,6 +109,7 @@ export function renderCodeObject(
     runtime.element.parentElement !== null
   )
   const context = {
+    appearance,
     document,
     frameId,
     interactionEnabled: source.interactionEnabled ?? false,
@@ -88,6 +120,7 @@ export function renderCodeObject(
   }
   runtime.root.render(
     <AuthoredCodeObject
+      appearance={appearance}
       board={source.board}
       dispatchBoardAction={source.dispatchBoardAction}
       document={document}
@@ -96,7 +129,7 @@ export function renderCodeObject(
       interactionEnabled={context.interactionEnabled}
       onStateChange={onStateChange}
       renderComponent={() => renderCodeObjectCompatibilityAdapter(context)}
-      theme={source.theme}
+      theme={appearance.theme}
     />
   )
   return generation

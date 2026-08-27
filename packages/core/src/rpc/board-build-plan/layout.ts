@@ -11,18 +11,19 @@ import {
 } from './parsing'
 import type {
   BoardBuildPlanArtifact,
-  BoardBuildPlanBounds,
   BoardBuildPlanComposition,
+  BoardBuildPlanCompositionDensity,
+  BoardBuildPlanCompositionDirection,
+  BoardBuildPlanCompositionGeography,
   BoardBuildPlanCompositionPreferences,
+  BoardBuildPlanDirection,
   BoardBuildPlanFlowDirection,
   BoardBuildPlanFlowLayout,
   BoardBuildPlanGridAlign,
-  BoardBuildPlanGridCompilation,
   BoardBuildPlanGridLayout,
   BoardBuildPlanGridPlacement,
   BoardBuildPlanLayout,
   BoardBuildPlanLayoutAnchor,
-  BoardBuildPlanLayoutCompilation,
   BoardBuildPlanReference
 } from './types'
 
@@ -72,6 +73,59 @@ function layoutAnchorArtifactIndex(
   return anchorIndex
 }
 
+function parseGridMembers(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length < 2) {
+    throw new Error(`${label}.members must contain at least two aliases.`)
+  }
+  const members = value.map((member, index) =>
+    parseLayoutMember(member, `${label}.members[${index}]`)
+  )
+  if (new Set(members).size !== members.length) {
+    throw new Error(`${label}.members must contain unique aliases with one membership each.`)
+  }
+  return members
+}
+
+function assertGridArtifacts(
+  artifacts: readonly BoardBuildPlanArtifact[],
+  members: readonly string[],
+  anchor: BoardBuildPlanLayoutAnchor,
+  label: string
+): void {
+  const artifactIndexes = new Map(artifacts.map((artifact, index) => [artifact.alias, index]))
+  for (const member of members) {
+    if (!artifactIndexes.has(member)) {
+      throw new Error(`${label}.members references unknown alias "${member}".`)
+    }
+  }
+  const anchorIndex = layoutAnchorArtifactIndex(artifactIndexes, members, anchor, label, 'grid')
+  if (anchorIndex !== undefined) {
+    const memberIndexes = members.flatMap((member) => {
+      const index = artifactIndexes.get(member)
+      return index === undefined ? [] : [index]
+    })
+    if (anchorIndex >= Math.min(...memberIndexes)) {
+      throw new Error(`${label}.anchor alias must be created before every grid member.`)
+    }
+  }
+  for (const member of members) {
+    const artifactIndex = artifactIndexes.get(member)
+    const artifact = artifactIndex === undefined ? undefined : artifacts[artifactIndex]
+    if (!artifact) throw new Error(`${label}.members references unknown alias "${member}".`)
+    if (artifact.anchor || artifact.recipe.placement) {
+      throw new Error(`Grid member "${member}" may not declare anchor or recipe placement fields.`)
+    }
+  }
+}
+
+function parseGridAlign(value: unknown, label: string): BoardBuildPlanGridAlign {
+  const align = value ?? 'start'
+  if (align !== 'start' && align !== 'center' && align !== 'end') {
+    throw new Error(`${label}.align must be start, center, or end.`)
+  }
+  return align
+}
+
 function parseGridLayout(
   value: unknown,
   artifacts: readonly BoardBuildPlanArtifact[]
@@ -85,47 +139,11 @@ function parseGridLayout(
     label
   )
   if (value.kind !== 'grid') throw new Error(`${label}.kind must be grid.`)
-  if (!Array.isArray(value.members) || value.members.length < 2) {
-    throw new Error(`${label}.members must contain at least two aliases.`)
-  }
-  const members = value.members.map((member, index) =>
-    parseLayoutMember(member, `${label}.members[${index}]`)
-  )
-  if (new Set(members).size !== members.length) {
-    throw new Error(`${label}.members must contain unique aliases with one membership each.`)
-  }
-  const artifactIndexes = new Map(artifacts.map((artifact, index) => [artifact.alias, index]))
-  for (const member of members) {
-    if (!artifactIndexes.has(member)) {
-      throw new Error(`${label}.members references unknown alias "${member}".`)
-    }
-  }
+  const members = parseGridMembers(value.members, label)
   const anchor = parseLayoutAnchor(value.anchor, `${label}.anchor`)
-  const anchorIndex = layoutAnchorArtifactIndex(artifactIndexes, members, anchor, label, 'grid')
-  if (anchorIndex !== undefined) {
-    const memberIndexes = members.flatMap((member) => {
-      const index = artifactIndexes.get(member)
-      return index === undefined ? [] : [index]
-    })
-    const firstMemberIndex = Math.min(...memberIndexes)
-    if (anchorIndex >= firstMemberIndex) {
-      throw new Error(`${label}.anchor alias must be created before every grid member.`)
-    }
-  }
-  for (const member of members) {
-    const artifactIndex = artifactIndexes.get(member)
-    const artifact = artifactIndex === undefined ? undefined : artifacts[artifactIndex]
-    if (!artifact) throw new Error(`${label}.members references unknown alias "${member}".`)
-    if (artifact.anchor || artifact.recipe.placement) {
-      throw new Error(`Grid member "${member}" may not declare anchor or recipe placement fields.`)
-    }
-  }
-  const align = value.align ?? 'start'
-  if (align !== 'start' && align !== 'center' && align !== 'end') {
-    throw new Error(`${label}.align must be start, center, or end.`)
-  }
+  assertGridArtifacts(artifacts, members, anchor, label)
   return {
-    align,
+    align: parseGridAlign(value.align, label),
     anchor,
     column_gap:
       value.column_gap === undefined
@@ -272,6 +290,57 @@ function assertCompositionPreferenceMembers(
   }
 }
 
+function parseCompositionDensity(value: unknown, label: string): BoardBuildPlanCompositionDensity {
+  const density = value ?? 'balanced'
+  if (density !== 'airy' && density !== 'balanced' && density !== 'compact') {
+    throw new Error(`${label}.density must be airy, balanced, or compact.`)
+  }
+  return density
+}
+
+function parseCompositionDirection(
+  value: unknown,
+  label: string
+): BoardBuildPlanCompositionDirection | undefined {
+  if (value === undefined) return undefined
+  if (value !== 'horizontal' && value !== 'vertical') {
+    throw new Error(`${label}.direction must be horizontal or vertical.`)
+  }
+  return value
+}
+
+function parseCompositionPreferenceReferences(
+  value: unknown,
+  label: string,
+  memberKeys: ReadonlySet<string>
+): BoardBuildPlanReference[] | undefined {
+  if (value === undefined) return undefined
+  const references = parseCompositionReferences(value, label)
+  assertCompositionPreferenceMembers(references, memberKeys, label)
+  return references
+}
+
+function parseCompositionGroups(
+  value: unknown,
+  label: string,
+  memberKeys: ReadonlySet<string>
+): BoardBuildPlanReference[][] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length < 1 || value.length > 12) {
+    throw new Error(`${label}.groups must contain 1 to 12 groups.`)
+  }
+  const groups = value.map((group, index) =>
+    parseCompositionReferences(group, `${label}.groups[${index}]`)
+  )
+  const grouped = groups.flat()
+  assertCompositionPreferenceMembers(grouped, memberKeys, `${label}.groups`)
+  const groupedKeys = grouped.map(boardBuildPlanReferenceKey)
+  if (new Set(groupedKeys).size !== groupedKeys.length) {
+    throw new Error(`${label}.groups may assign each member at most once.`)
+  }
+  return groups
+}
+
 function parseCompositionPreferences(
   value: unknown,
   members: readonly BoardBuildPlanReference[]
@@ -281,47 +350,100 @@ function parseCompositionPreferences(
   if (!isRecord(value)) throw new Error(`${label} must be an object.`)
   exactFields(value, ['density', 'direction', 'emphasis', 'groups', 'reading_order'], label)
   const memberKeys = new Set(members.map(boardBuildPlanReferenceKey))
-  const density = value.density ?? 'balanced'
-  if (density !== 'airy' && density !== 'balanced' && density !== 'compact') {
-    throw new Error(`${label}.density must be airy, balanced, or compact.`)
-  }
-  const direction = value.direction
-  if (direction !== undefined && direction !== 'horizontal' && direction !== 'vertical') {
-    throw new Error(`${label}.direction must be horizontal or vertical.`)
-  }
-  const emphasis =
-    value.emphasis === undefined
-      ? undefined
-      : parseCompositionReferences(value.emphasis, `${label}.emphasis`)
-  if (emphasis) assertCompositionPreferenceMembers(emphasis, memberKeys, `${label}.emphasis`)
-  const readingOrder =
-    value.reading_order === undefined
-      ? undefined
-      : parseCompositionReferences(value.reading_order, `${label}.reading_order`)
-  if (readingOrder) {
-    assertCompositionPreferenceMembers(readingOrder, memberKeys, `${label}.reading_order`)
-  }
-  let groups: BoardBuildPlanReference[][] | undefined
-  if (value.groups !== undefined) {
-    if (!Array.isArray(value.groups) || value.groups.length < 1 || value.groups.length > 12) {
-      throw new Error(`${label}.groups must contain 1 to 12 groups.`)
-    }
-    groups = value.groups.map((group, index) =>
-      parseCompositionReferences(group, `${label}.groups[${index}]`)
-    )
-    const grouped = groups.flat()
-    assertCompositionPreferenceMembers(grouped, memberKeys, `${label}.groups`)
-    const groupedKeys = grouped.map(boardBuildPlanReferenceKey)
-    if (new Set(groupedKeys).size !== groupedKeys.length) {
-      throw new Error(`${label}.groups may assign each member at most once.`)
-    }
-  }
+  const density = parseCompositionDensity(value.density, label)
+  const direction = parseCompositionDirection(value.direction, label)
+  const emphasis = parseCompositionPreferenceReferences(
+    value.emphasis,
+    `${label}.emphasis`,
+    memberKeys
+  )
+  const readingOrder = parseCompositionPreferenceReferences(
+    value.reading_order,
+    `${label}.reading_order`,
+    memberKeys
+  )
+  const groups = parseCompositionGroups(value.groups, label, memberKeys)
   return {
     density,
     ...(direction ? { direction } : {}),
     ...(emphasis ? { emphasis } : {}),
     ...(groups ? { groups } : {}),
     ...(readingOrder ? { reading_order: readingOrder } : {})
+  }
+}
+
+function parseCompositionGeography(
+  value: unknown,
+  members: readonly BoardBuildPlanReference[],
+  label: string
+): BoardBuildPlanCompositionGeography {
+  const geography = value ?? 'preserve'
+  if (geography !== 'preserve' && geography !== 'recompose') {
+    throw new Error(`${label}.geography must be preserve or recompose.`)
+  }
+  if (geography === 'preserve' && members.some((member) => 'object_id' in member)) {
+    throw new Error(`${label} requires geography recompose to move existing Board objects.`)
+  }
+  return geography
+}
+
+function parseCompositionPlacement(
+  value: unknown,
+  label: string
+): BoardBuildPlanDirection | undefined {
+  if (value === undefined) return undefined
+  if (value !== 'above' && value !== 'below' && value !== 'left' && value !== 'right') {
+    throw new Error(`${label}.placement must be above, below, left, or right.`)
+  }
+  return value
+}
+
+function parseCompositionAnchor(
+  value: unknown,
+  placement: BoardBuildPlanDirection | undefined,
+  memberKeys: ReadonlySet<string>,
+  label: string
+): BoardBuildPlanLayoutAnchor | undefined {
+  const anchor = value === undefined ? undefined : parseLayoutAnchor(value, `${label}.anchor`)
+  if (!anchor && placement) {
+    throw new Error(`${label}.anchor is required when relative placement is requested.`)
+  }
+  if (anchor && !('kind' in anchor) && memberKeys.has(boardBuildPlanReferenceKey(anchor))) {
+    throw new Error(`${label}.anchor cannot also be a composition member.`)
+  }
+  return anchor
+}
+
+type AliasReference = Extract<BoardBuildPlanReference, { alias: string }>
+
+function assertCompositionArtifacts(
+  artifacts: readonly BoardBuildPlanArtifact[],
+  aliasMembers: readonly AliasReference[],
+  anchor: BoardBuildPlanLayoutAnchor | undefined,
+  label: string
+): void {
+  const artifactIndexes = new Map(artifacts.map((artifact, index) => [artifact.alias, index]))
+  for (const member of aliasMembers) {
+    const artifactIndex = artifactIndexes.get(member.alias)
+    const artifact = artifactIndex === undefined ? undefined : artifacts[artifactIndex]
+    if (!artifact) throw new Error(`${label}.members references unknown alias "${member.alias}".`)
+    if (artifact.anchor || artifact.recipe.placement) {
+      throw new Error(
+        `Composition member "${member.alias}" may not declare anchor or recipe placement fields.`
+      )
+    }
+  }
+  if (!anchor || !('alias' in anchor)) return
+  const anchorIndex = artifactIndexes.get(anchor.alias)
+  if (anchorIndex === undefined) {
+    throw new Error(`${label}.anchor references unknown alias "${anchor.alias}".`)
+  }
+  const memberIndexes = aliasMembers.flatMap((member) => {
+    const index = artifactIndexes.get(member.alias)
+    return index === undefined ? [] : [index]
+  })
+  if (memberIndexes.length > 0 && anchorIndex >= Math.min(...memberIndexes)) {
+    throw new Error(`${label}.anchor alias must be created before every alias member.`)
   }
 }
 
@@ -335,58 +457,11 @@ export function parseComposition(
   exactFields(value, ['anchor', 'geography', 'members', 'placement', 'preferences'], label)
   const members = parseCompositionReferences(value.members, `${label}.members`, 2)
   const memberKeys = new Set(members.map(boardBuildPlanReferenceKey))
-  const geography = value.geography ?? 'preserve'
-  if (geography !== 'preserve' && geography !== 'recompose') {
-    throw new Error(`${label}.geography must be preserve or recompose.`)
-  }
-  if (geography === 'preserve' && members.some((member) => 'object_id' in member)) {
-    throw new Error(`${label} requires geography recompose to move existing Board objects.`)
-  }
-  const placement = value.placement
-  if (
-    placement !== undefined &&
-    placement !== 'above' &&
-    placement !== 'below' &&
-    placement !== 'left' &&
-    placement !== 'right'
-  ) {
-    throw new Error(`${label}.placement must be above, below, left, or right.`)
-  }
-  const anchor =
-    value.anchor === undefined ? undefined : parseLayoutAnchor(value.anchor, `${label}.anchor`)
-  if (!anchor && placement) {
-    throw new Error(`${label}.anchor is required when relative placement is requested.`)
-  }
-  if (anchor && !('kind' in anchor) && memberKeys.has(boardBuildPlanReferenceKey(anchor))) {
-    throw new Error(`${label}.anchor cannot also be a composition member.`)
-  }
-  const artifactIndexes = new Map(artifacts.map((artifact, index) => [artifact.alias, index]))
-  const aliasMembers = members.filter(
-    (member): member is Extract<BoardBuildPlanReference, { alias: string }> => 'alias' in member
-  )
-  for (const member of aliasMembers) {
-    const artifactIndex = artifactIndexes.get(member.alias)
-    const artifact = artifactIndex === undefined ? undefined : artifacts[artifactIndex]
-    if (!artifact) throw new Error(`${label}.members references unknown alias "${member.alias}".`)
-    if (artifact.anchor || artifact.recipe.placement) {
-      throw new Error(
-        `Composition member "${member.alias}" may not declare anchor or recipe placement fields.`
-      )
-    }
-  }
-  if (anchor && 'alias' in anchor) {
-    const anchorIndex = artifactIndexes.get(anchor.alias)
-    if (anchorIndex === undefined) {
-      throw new Error(`${label}.anchor references unknown alias "${anchor.alias}".`)
-    }
-    const memberIndexes = aliasMembers.flatMap((member) => {
-      const index = artifactIndexes.get(member.alias)
-      return index === undefined ? [] : [index]
-    })
-    if (memberIndexes.length > 0 && anchorIndex >= Math.min(...memberIndexes)) {
-      throw new Error(`${label}.anchor alias must be created before every alias member.`)
-    }
-  }
+  const geography = parseCompositionGeography(value.geography, members, label)
+  const placement = parseCompositionPlacement(value.placement, label)
+  const anchor = parseCompositionAnchor(value.anchor, placement, memberKeys, label)
+  const aliasMembers = members.filter((member): member is AliasReference => 'alias' in member)
+  assertCompositionArtifacts(artifacts, aliasMembers, anchor, label)
   return {
     ...(anchor ? { anchor } : {}),
     geography,
@@ -412,169 +487,4 @@ export function parseLayout(
 export function boardBuildPlanLayoutMembers(layout: BoardBuildPlanLayout | undefined): string[] {
   if (!layout) return []
   return layout.kind === 'grid' ? layout.members : layout.ranks.flat()
-}
-
-function gridAlignmentOffset(
-  available: number,
-  size: number,
-  align: BoardBuildPlanGridAlign
-): number {
-  if (align === 'center') return (available - size) / 2
-  if (align === 'end') return available - size
-  return 0
-}
-
-type BoardBuildPlanFootprint = Pick<BoardBuildPlanBounds, 'height' | 'width'>
-
-function requiredLayoutFootprint(
-  member: string,
-  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>,
-  layoutKind: 'Flow' | 'Grid'
-): BoardBuildPlanFootprint {
-  const footprint = footprints[member]
-  if (
-    !footprint ||
-    !Number.isFinite(footprint.width) ||
-    !Number.isFinite(footprint.height) ||
-    footprint.width <= 0 ||
-    footprint.height <= 0
-  ) {
-    throw new Error(`${layoutKind} member "${member}" requires a positive finite footprint.`)
-  }
-  return footprint
-}
-
-function spacedAxis(sizes: readonly number[], gap: number): { size: number; starts: number[] } {
-  let cursor = 0
-  const starts = sizes.map((size) => {
-    const start = cursor
-    cursor += size + gap
-    return start
-  })
-  return { size: Math.max(0, cursor - gap), starts }
-}
-
-export function compileBoardBuildPlanGridLayout(
-  layout: BoardBuildPlanGridLayout,
-  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
-): BoardBuildPlanGridCompilation {
-  const memberFootprints = layout.members.map((member) =>
-    requiredLayoutFootprint(member, footprints, 'Grid')
-  )
-  const rowCount = Math.ceil(layout.members.length / layout.columns)
-  const columnWidths = Array.from({ length: layout.columns }, () => 0)
-  const rowHeights = Array.from({ length: rowCount }, () => 0)
-  memberFootprints.forEach((footprint, index) => {
-    const column = index % layout.columns
-    const row = Math.floor(index / layout.columns)
-    columnWidths[column] = Math.max(columnWidths[column] ?? 0, footprint.width)
-    rowHeights[row] = Math.max(rowHeights[row] ?? 0, footprint.height)
-  })
-  const columns = spacedAxis(columnWidths, layout.column_gap)
-  const rows = spacedAxis(rowHeights, layout.row_gap)
-  const aliases: Record<string, BoardBuildPlanBounds> = {}
-  layout.members.forEach((member, index) => {
-    const footprint = memberFootprints[index]
-    const column = index % layout.columns
-    const row = Math.floor(index / layout.columns)
-    const columnWidth = columnWidths[column]
-    const rowHeight = rowHeights[row]
-    const columnStart = columns.starts[column]
-    const rowStart = rows.starts[row]
-    if (
-      !footprint ||
-      columnWidth === undefined ||
-      rowHeight === undefined ||
-      columnStart === undefined ||
-      rowStart === undefined
-    ) {
-      throw new Error(`Grid member "${member}" could not be compiled.`)
-    }
-    aliases[member] = {
-      height: footprint.height,
-      width: footprint.width,
-      x: columnStart + gridAlignmentOffset(columnWidth, footprint.width, layout.align),
-      y: rowStart + gridAlignmentOffset(rowHeight, footprint.height, layout.align)
-    }
-  })
-  return {
-    aliases,
-    footprint: { height: rows.size, width: columns.size }
-  }
-}
-
-export function compileBoardBuildPlanFlowLayout(
-  layout: BoardBuildPlanFlowLayout,
-  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
-): BoardBuildPlanLayoutCompilation {
-  const horizontal = layout.direction === 'left' || layout.direction === 'right'
-  const ranks = layout.ranks.map((members) => {
-    const memberFootprints = members.map((member) =>
-      requiredLayoutFootprint(member, footprints, 'Flow')
-    )
-    return {
-      members,
-      memberFootprints,
-      primary: horizontal
-        ? Math.max(...memberFootprints.map(({ width }) => width))
-        : Math.max(...memberFootprints.map(({ height }) => height)),
-      secondary:
-        memberFootprints.reduce(
-          (total, footprint) => total + (horizontal ? footprint.height : footprint.width),
-          0
-        ) +
-        Math.max(0, memberFootprints.length - 1) * layout.node_gap
-    }
-  })
-  const primaryAxis = spacedAxis(
-    ranks.map((rank) => rank.primary),
-    layout.rank_gap
-  )
-  const secondarySize = Math.max(...ranks.map((rank) => rank.secondary))
-  const aliases: Record<string, BoardBuildPlanBounds> = {}
-
-  ranks.forEach((rank, rankIndex) => {
-    const primaryStart = primaryAxis.starts[rankIndex]
-    if (primaryStart === undefined) throw new Error(`Flow rank ${rankIndex} could not be compiled.`)
-    let secondaryCursor = gridAlignmentOffset(secondarySize, rank.secondary, layout.align)
-    rank.members.forEach((member, memberIndex) => {
-      const footprint = rank.memberFootprints[memberIndex]
-      if (!footprint) throw new Error(`Flow member "${member}" could not be compiled.`)
-      const raw = horizontal
-        ? {
-            height: footprint.height,
-            width: footprint.width,
-            x: primaryStart + (rank.primary - footprint.width) / 2,
-            y: secondaryCursor
-          }
-        : {
-            height: footprint.height,
-            width: footprint.width,
-            x: secondaryCursor,
-            y: primaryStart + (rank.primary - footprint.height) / 2
-          }
-      aliases[member] = {
-        ...raw,
-        x: layout.direction === 'left' ? primaryAxis.size - raw.x - raw.width : raw.x,
-        y: layout.direction === 'up' ? primaryAxis.size - raw.y - raw.height : raw.y
-      }
-      secondaryCursor += (horizontal ? footprint.height : footprint.width) + layout.node_gap
-    })
-  })
-
-  return {
-    aliases,
-    footprint: horizontal
-      ? { height: secondarySize, width: primaryAxis.size }
-      : { height: primaryAxis.size, width: secondarySize }
-  }
-}
-
-export function compileBoardBuildPlanLayout(
-  layout: BoardBuildPlanLayout,
-  footprints: Readonly<Record<string, BoardBuildPlanFootprint>>
-): BoardBuildPlanLayoutCompilation {
-  return layout.kind === 'grid'
-    ? compileBoardBuildPlanGridLayout(layout, footprints)
-    : compileBoardBuildPlanFlowLayout(layout, footprints)
 }

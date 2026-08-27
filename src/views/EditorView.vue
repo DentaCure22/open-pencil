@@ -5,7 +5,6 @@ import { SplitterGroup, SplitterPanel } from 'reka-ui'
 import {
   computed,
   defineAsyncComponent,
-  nextTick,
   onMounted,
   onUnmounted,
   provide,
@@ -17,9 +16,11 @@ import { useRoute } from 'vue-router'
 
 import { useViewportKind, formatShortcut, useI18n } from '@open-pencil/vue'
 
+import { agentChatsPanelOpenEpoch } from '@/app/agent-chat/panel'
 import { bindAutomationPersistence } from '@/app/automation/bridge/persistence'
 import { initializeOpenPencilCloud, openPencilCloud } from '@/app/cloud/workspace'
 import { useCollab, COLLAB_KEY } from '@/app/collab/use'
+import { mermaidDialogOpen } from '@/app/diagram/mermaid/dialog'
 import {
   captureReloadState,
   loadReloadState,
@@ -37,6 +38,7 @@ import {
 import { editorViewportInsets } from '@/app/editor/viewport-insets'
 import { useKeyboard } from '@/app/shell/keyboard/use'
 import {
+  LEFT_SIDEBAR_DEFAULT_PERCENT,
   LEFT_SIDEBAR_MAX_PERCENT,
   LEFT_SIDEBAR_MIN_PERCENT,
   loadEditorLayout,
@@ -113,9 +115,7 @@ import { createLocalWorkspaceDocumentAuthority } from '@/app/workspace-document/
 import { createLocalWorkspaceAuthorityHeadSynchronizer } from '@/app/workspace-document/local-authority/synchronizer'
 import EmptyBoardStart from '@/components/EmptyBoardStart.vue'
 import EditorCanvas from '@/components/EditorCanvas.vue'
-import CanvasZoomControls from '@/components/canvas/CanvasZoomControls.vue'
 import { modelMeterPanelOpenEpoch } from '@/app/model-meter/panel'
-import MermaidImportDialog from '@/components/diagram/MermaidImportDialog.vue'
 import LayersPanel from '@/components/LayersPanel.vue'
 import { provideMobileHud } from '@/components/MobileHud/context'
 import SafariBanner from '@/components/SafariBanner.vue'
@@ -126,6 +126,9 @@ import CloudWorkspaceGate from '@/components/cloud/CloudWorkspaceGate.vue'
 
 const MobileDrawer = defineAsyncComponent(() => import('@/components/MobileDrawer.vue'))
 const MobileHud = defineAsyncComponent(() => import('@/components/MobileHud/MobileHud.vue'))
+const MermaidImportDialog = defineAsyncComponent(
+  () => import('@/components/diagram/MermaidImportDialog.vue')
+)
 
 const route = useRoute()
 const params = useUrlSearchParams('history')
@@ -852,19 +855,40 @@ const layersSplitterPanelRef = ref<{
   resize: (size: number) => void
 } | null>(null)
 const layersShellMotionRef = ref<HTMLElement | null>(null)
-const closingSidebarWidth = ref<number | null>(null)
+const leftSidebarVisualWidth = ref<number | null>(null)
+const lastOpenSidebarPercent = ref(initialEditorLayout[0] ?? LEFT_SIDEBAR_DEFAULT_PERCENT)
 const leftSidebarResizing = ref(false)
 let sidebarTransitionEpoch = 0
+let sidebarVisualWidthTimer = 0
 
 function handleEditorLayout(layout: number[]) {
   if (layout.length !== 2) return
   currentEditorLayout.value = [...layout]
-  if (showLayersPanel.value) saveEditorLayout(layout)
+  if (showLayersPanel.value) {
+    lastOpenSidebarPercent.value = layout[0] ?? lastOpenSidebarPercent.value
+    saveEditorLayout(layout)
+  }
 }
 
+const leftSidebarEdgePercent = computed(
+  () => currentEditorLayout.value[0] ?? initialEditorLayout[0]
+)
 const leftSidebarResizeHandleStyle = computed<CSSProperties>(() => ({
-  left: `${currentEditorLayout.value[0] ?? initialEditorLayout[0]}%`
+  left: `${leftSidebarEdgePercent.value}%`
 }))
+const leftSidebarCloseRailStyle = computed<CSSProperties>(() => ({
+  left: `${leftSidebarEdgePercent.value}%`
+}))
+const layersShellMotionStyle = computed<CSSProperties | undefined>(() =>
+  leftSidebarVisualWidth.value === null ? undefined : { width: `${leftSidebarVisualWidth.value}px` }
+)
+
+function scheduleSidebarVisualWidthRelease(epoch: number) {
+  window.clearTimeout(sidebarVisualWidthTimer)
+  sidebarVisualWidthTimer = window.setTimeout(() => {
+    if (epoch === sidebarTransitionEpoch) leftSidebarVisualWidth.value = null
+  }, 320)
+}
 
 type LeftSidebarResizeSession = {
   frame: number
@@ -922,8 +946,8 @@ function finishLeftSidebarResize(options: { clientX?: number; revert?: boolean }
     if (session.handle.hasPointerCapture(session.pointerId)) {
       session.handle.releasePointerCapture(session.pointerId)
     }
-  } catch {
-    // The browser may have already released capture while cancelling the pointer.
+  } catch (error) {
+    console.warn('The browser released sidebar pointer capture before cleanup completed.', error)
   }
   session.releaseCursorLock()
   leftSidebarResizing.value = false
@@ -946,6 +970,9 @@ function beginLeftSidebarResize(event: PointerEvent) {
   const workspace = desktopWorkspaceBounds()
   if (!splitter || !workspace || event.button !== 0) return
   event.preventDefault()
+  sidebarTransitionEpoch += 1
+  window.clearTimeout(sidebarVisualWidthTimer)
+  leftSidebarVisualWidth.value = null
   const handle = event.currentTarget
   if (!(handle instanceof HTMLElement)) return
   try {
@@ -966,11 +993,6 @@ function beginLeftSidebarResize(event: PointerEvent) {
   }
   leftSidebarResizing.value = true
 }
-const layersShellMotionStyle = computed<CSSProperties | undefined>(() => {
-  return closingSidebarWidth.value === null
-    ? undefined
-    : { width: `${closingSidebarWidth.value}px` }
-})
 const lastOpenSidebarInsets = ref<ReturnType<typeof editorViewportInsets>>({})
 const sidebarFocusAdjustment = ref<{
   adjusted: EditorViewport
@@ -1000,20 +1022,12 @@ function protectSidebarFocus(nodeId: string, insets: ReturnType<typeof editorVie
 function closeLayersPanel() {
   lastOpenSidebarInsets.value = editorViewportInsets()
   const adjustment = sidebarFocusAdjustment.value
-  const expandedWidth = layersShellMotionRef.value?.getBoundingClientRect().width ?? null
-  const transitionEpoch = ++sidebarTransitionEpoch
-  closingSidebarWidth.value = expandedWidth
+  sidebarTransitionEpoch += 1
+  window.clearTimeout(sidebarVisualWidthTimer)
+  leftSidebarVisualWidth.value =
+    layersShellMotionRef.value?.getBoundingClientRect().width ?? leftSidebarVisualWidth.value
   showLayersPanel.value = false
   layersSplitterPanelRef.value?.collapse()
-  if (expandedWidth !== null) {
-    void nextTick(() => {
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          if (transitionEpoch === sidebarTransitionEpoch) closingSidebarWidth.value = null
-        })
-      })
-    })
-  }
   if (
     adjustment &&
     store.state.selectedIds.has(adjustment.nodeId) &&
@@ -1031,14 +1045,26 @@ watch(modelMeterPanelOpenEpoch, () => {
   openLayersPanel()
 })
 
+watch(agentChatsPanelOpenEpoch, () => {
+  openLayersPanel()
+})
+
 function openLayersPanel() {
   if (showLayersPanel.value) return
-  sidebarTransitionEpoch += 1
-  closingSidebarWidth.value = null
+  const transitionEpoch = ++sidebarTransitionEpoch
+  window.clearTimeout(sidebarVisualWidthTimer)
+  const workspace = desktopWorkspaceBounds()
+  if (workspace) {
+    leftSidebarVisualWidth.value = Math.max(
+      28,
+      (workspace.width * lastOpenSidebarPercent.value) / 100 - 12
+    )
+  }
   const selectedId =
     store.state.selectedIds.size === 1 ? store.state.selectedIds.values().next().value : null
   showLayersPanel.value = true
   layersSplitterPanelRef.value?.expand()
+  scheduleSidebarVisualWidthRelease(transitionEpoch)
   if (typeof selectedId !== 'string') {
     sidebarFocusAdjustment.value = null
     viewportAnimation.cancel()
@@ -1090,8 +1116,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  sidebarTransitionEpoch += 1
   cancelLeftSidebarResize()
+  sidebarTransitionEpoch += 1
+  window.clearTimeout(sidebarVisualWidthTimer)
   window.clearTimeout(workspaceLoadingLimit)
   stopSmylrPagePersistence?.()
   stopSmylrSelectionPersistence?.()
@@ -1139,7 +1166,7 @@ onUnmounted(() => {
         </span>
       </div>
     </div>
-    <MermaidImportDialog />
+    <MermaidImportDialog v-if="mermaidDialogOpen" />
 
     <!-- Desktop: full-bleed canvas under one contextual sidebar and its tool rail -->
     <div
@@ -1184,7 +1211,7 @@ onUnmounted(() => {
           :class="
             leftSidebarResizing
               ? 'transition-none'
-              : 'transition-[flex-grow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]'
+              : 'transition-[flex-grow] duration-300 ease-in-out'
           "
           @collapse="showLayersPanel = false"
           @expand="showLayersPanel = true"
@@ -1194,36 +1221,27 @@ onUnmounted(() => {
             data-test-id="layers-shell-motion"
             :data-sidebar-open="showLayersPanel ? 'true' : 'false'"
             :data-full-frame="fullFrameCodeObjectId ? 'true' : 'false'"
-            :style="layersShellMotionStyle"
             :data-resizing="leftSidebarResizing ? 'true' : 'false'"
-            class="pointer-events-auto absolute top-1/2 z-30 flex min-h-0 -translate-y-1/2 overflow-clip [contain:layout_paint_style] [interpolate-size:allow-keywords] will-change-[width,height,border-radius] motion-reduce:transition-none"
+            :style="layersShellMotionStyle"
+            class="pointer-events-auto absolute top-1/2 left-3 z-30 flex h-[calc(100%-1.5rem)] min-h-0 w-[calc(100%-0.75rem)] -translate-y-1/2 overflow-clip rounded-[14px] border border-chrome-border bg-sidebar shadow-chrome-panel [contain:layout_paint_style] will-change-[translate,opacity] motion-reduce:transition-none"
             :class="[
-              leftSidebarResizing ? 'transition-none' : 'transition-[width,height,border-radius]',
+              leftSidebarResizing
+                ? 'transition-none'
+                : 'transition-[translate,opacity] duration-300 ease-in-out',
               showLayersPanel
-                ? 'left-3 h-[calc(100%-1.5rem)] w-[calc(100%-0.75rem)] min-w-11 rounded-[14px] border border-chrome-border bg-sidebar shadow-chrome-panel duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
-                : 'left-0 h-11 w-7 min-w-7 rounded-r-[11px] bg-chrome/90 shadow-sm backdrop-blur-xl duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                ? 'translate-x-0 opacity-100'
+                : 'pointer-events-none -translate-x-[calc(100%+1rem)] opacity-0'
             ]"
           >
             <div
               data-test-id="layers-shell"
               :aria-hidden="!showLayersPanel"
               :inert="showLayersPanel ? undefined : true"
-              class="flex min-h-0 min-w-0 flex-col overflow-clip transition-[opacity,transform] motion-reduce:transition-none [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
-              :class="
-                showLayersPanel
-                  ? 'flex-1 translate-x-0 opacity-100 delay-75 duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
-                  : 'pointer-events-none h-0 w-0 flex-1 -translate-x-2 opacity-0 delay-0 duration-100 ease-in'
-              "
+              class="flex min-h-0 min-w-0 flex-col overflow-clip [--color-accent:#7c3aed] [[data-theme=dark]_&]:[--color-accent:#9b82f3]"
+              :class="showLayersPanel ? 'flex-1' : 'pointer-events-none h-0 w-0 flex-1'"
             >
               <LayersPanel />
             </div>
-            <Toolbar
-              embedded
-              :sidebar-open="showLayersPanel"
-              sidebar-tab-only
-              @close-sidebar="closeLayersPanel"
-              @open-sidebar="openLayersPanel"
-            />
           </div>
         </SplitterPanel>
         <SplitterPanel
@@ -1231,10 +1249,23 @@ onUnmounted(() => {
           :default-size="initialEditorLayout[1]"
           :min-size="32"
           data-test-id="canvas-chrome-area"
-          class="pointer-events-none relative min-w-0 bg-transparent"
+          class="pointer-events-none relative min-w-0 bg-transparent motion-reduce:transition-none"
+          :class="
+            leftSidebarResizing
+              ? 'transition-none'
+              : 'transition-[flex-grow] duration-300 ease-in-out'
+          "
         >
         </SplitterPanel>
       </SplitterGroup>
+      <Toolbar
+        v-if="!showEmptyBoardStart"
+        embedded
+        :sidebar-open="showLayersPanel"
+        sidebar-tab-only
+        @close-sidebar="closeLayersPanel"
+        @open-sidebar="openLayersPanel"
+      />
       <div
         role="separator"
         aria-label="Resize left sidebar"
@@ -1242,7 +1273,7 @@ onUnmounted(() => {
         tabindex="0"
         data-test-id="left-splitter-handle"
         :style="leftSidebarResizeHandleStyle"
-        class="absolute inset-y-0 z-40 w-10 -translate-x-1/2 cursor-col-resize touch-none transition-opacity select-none motion-reduce:transition-none"
+        class="absolute inset-y-0 z-40 w-5 -translate-x-full cursor-col-resize touch-none transition-opacity select-none motion-reduce:transition-none"
         :class="
           showLayersPanel && !showEmptyBoardStart
             ? 'pointer-events-auto opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
@@ -1261,17 +1292,24 @@ onUnmounted(() => {
           type="button"
           data-test-id="close-layers-panel"
           data-sidebar-edge-hinge="true"
+          data-sidebar-collapse-rail="true"
           aria-label="Close sidebar"
-          :style="leftSidebarResizeHandleStyle"
-          class="group/sidebar-hinge pointer-events-auto absolute top-1/2 z-50 flex h-11 w-8 -translate-x-full -translate-y-1/2 items-center justify-end text-muted/75 opacity-0 transition-[color,opacity] duration-150 hover:text-surface hover:opacity-100 focus-visible:text-surface focus-visible:opacity-100 focus-visible:outline-none motion-reduce:transition-none [@media(hover:none)]:opacity-100"
+          :style="leftSidebarCloseRailStyle"
+          class="group/sidebar-rail pointer-events-auto absolute inset-y-0 z-50 w-5 cursor-pointer bg-transparent text-muted/75 transition-colors duration-150 hover:text-surface focus-visible:text-surface focus-visible:outline-none motion-reduce:transition-none"
           @click.stop="closeLayersPanel"
           @pointerdown.stop
         >
           <span
-            class="flex size-5 items-center justify-center rounded-[5px] transition-shadow group-focus-visible/sidebar-hinge:ring-2 group-focus-visible/sidebar-hinge:ring-component/35 motion-reduce:transition-none"
+            data-sidebar-collapse-arrow="true"
+            class="peer/sidebar-arrow pointer-events-auto absolute top-1/2 left-0 flex size-5 -translate-y-1/2 items-center justify-center rounded-[5px] opacity-0 transition-[opacity,box-shadow] duration-150 group-hover/sidebar-rail:opacity-100 group-focus-visible/sidebar-rail:opacity-100 group-focus-visible/sidebar-rail:ring-2 group-focus-visible/sidebar-rail:ring-component/35 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
           >
             <icon-lucide-chevron-left class="size-3.5 stroke-[1.8]" />
           </span>
+          <span
+            data-sidebar-collapse-divider="true"
+            aria-hidden="true"
+            class="bg-chrome-border pointer-events-none absolute inset-y-0 left-0 w-px opacity-0 transition-opacity duration-150 group-hover/sidebar-rail:opacity-35 group-focus-visible/sidebar-rail:opacity-35 peer-hover/sidebar-arrow:opacity-0! motion-reduce:transition-none"
+          />
         </button>
       </Tip>
       <Toolbar
@@ -1346,6 +1384,5 @@ onUnmounted(() => {
         <EditorCanvas />
       </div>
     </div>
-    <CanvasZoomControls v-if="showChrome" />
   </div>
 </template>

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import {
+  activeAgentChatsPanelSelectedId,
   abandonAgentChatsNewTask,
   acceptAgentChatsNewTask,
   agentChatsPanelCreating,
@@ -26,6 +27,13 @@ afterEach(() => {
 })
 
 describe('agent chats new-task draft identity', () => {
+  test('never exposes an old selected chat while composing a new task', () => {
+    agentChatsPanelSelectedId.value = 'agent:old-thread'
+    agentChatsPanelCreating.value = true
+
+    expect(activeAgentChatsPanelSelectedId()).toBeNull()
+  })
+
   test('treats the shared slot and unique drafts as new-task ids', () => {
     expect(isAgentChatsNewTaskDraftId('new-task')).toBe(true)
     expect(isAgentChatsNewTaskDraftId('new-task:abc')).toBe(true)

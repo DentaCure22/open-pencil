@@ -32,8 +32,9 @@ describe('Narrated Trace editor surface contract', () => {
       Bun.file('src/components/narrated-trace/TraceDockButton.vue').exists()
     ])
 
-    expect(layers).toContain('left-panel-trace-tab')
-    expect(layers).toContain('<NarratedTracePanel')
+    expect(layers).not.toContain('left-panel-trace-tab')
+    expect(layers).not.toContain('<NarratedTracePanel')
+    expect(layers).toContain("openAgentRightPanel('activity')")
     expect(layers).not.toContain('assistant-handoff')
     expect(traceDockExists).toBe(false)
     expect(panel).not.toContain('narrated-trace-panel-start')

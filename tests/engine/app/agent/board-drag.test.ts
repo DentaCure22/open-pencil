@@ -88,7 +88,10 @@ describe('agent conversation Board drag', () => {
   })
 
   test('makes the open conversation header title pill draggable to place onto the board and double-clickable to rename', async () => {
-    const sidebar = await Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text()
+    const [rename, sidebar] = await Promise.all([
+      Bun.file('src/app/agent-chat/conversation-title-rename.ts').text(),
+      Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text()
+    ])
     expect(sidebar).toContain('data-test-id="agent-selected-header"')
     expect(sidebar).toContain('data-test-id="agent-selected-header-title"')
     expect(sidebar).toContain('rounded-[8px]')
@@ -99,16 +102,17 @@ describe('agent conversation Board drag', () => {
     expect(sidebar).toContain('active:cursor-grabbing')
     expect(sidebar).toContain('@dblclick="beginTitleRename"')
     expect(sidebar).toContain('data-test-id="agent-selected-header-rename-input"')
-    expect(sidebar).toContain('function beginTitleRename')
-    expect(sidebar).toContain('function commitTitleRename')
-    expect(sidebar).toContain('setAgentConversationTitle')
+    expect(rename).toContain('function beginTitleRename')
+    expect(rename).toContain('function commitTitleRename')
+    expect(rename).toContain('setAgentConversationTitle')
   })
 
   test('lets the Board drop overlay accept a live chat drag', async () => {
-    const [drag, canvas, sidebar] = await Promise.all([
+    const [drag, canvas, sidebar, workMapDrag] = await Promise.all([
       Bun.file('src/app/agent-terminal/drag.ts').text(),
       Bun.file('src/components/EditorCanvas.vue').text(),
-      Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text()
+      Bun.file('src/components/agent-chat/AgentChatsPanel.vue').text(),
+      Bun.file('src/app/agent-chat/work-map-drag.ts').text()
     ])
     expect(drag).toContain('pendingAgentConversationDrag')
     expect(drag).toContain('armAgentConversationPointerDrag')
@@ -121,7 +125,9 @@ describe('agent conversation Board drag', () => {
     expect(sidebar).toContain('@pointerdown="armNewThreadPointerDrag"')
     expect(sidebar).not.toContain('beginNewThreadDrag')
     expect(sidebar).not.toContain('beginSelectedThreadDrag')
-    expect(sidebar).toContain('@pointerdown="armThreadPointerDrag($event, thread)"')
+    expect(workMapDrag).toContain(
+      'armAgentConversationPointerDrag(event, threadDragPayload(thread))'
+    )
     expect(sidebar).toContain('@pointerdown="armSelectedThreadPointerDrag"')
   })
 

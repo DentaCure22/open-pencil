@@ -110,7 +110,6 @@ The running server reports the authoritative catalog for its version. The main g
 | `get_current_page` | Get the current page name and ID |
 | `get_node` | Get detailed properties of a node by ID |
 | `find_nodes` | Find nodes by name pattern and/or type |
-| `get_components` | List all components in the document |
 | `list_pages` | List all pages |
 | `list_variables` | List design variables |
 | `list_collections` | List variable collections |
@@ -131,9 +130,6 @@ The running server reports the authoritative catalog for its version. The main g
 | `create_slice` | Create an export slice |
 | `create_page` | Create a new page |
 | `render` | Render JSX to design nodes — create entire component trees in one call |
-| `create_component` | Convert a frame/group into a component |
-| `create_instance` | Create an instance of a component |
-| `node_to_component` | Convert an existing node into a component in-place |
 
 ### Modify
 

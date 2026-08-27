@@ -371,7 +371,7 @@ export function createYjsGraphSync({
     const type = fullProps.type as SceneNode['type'] | undefined
     if (!type) return
     const parentId = typeof fullProps.parentId === 'string' ? fullProps.parentId : null
-    store.graph.createNodeWithId(nodeId, type, parentId, fullProps as Partial<SceneNode>)
+    store.graph.createNodeWithId(nodeId, type, parentId, fullProps)
     if (parentId === null) store.graph.rootId = nodeId
   }
 

@@ -14,14 +14,11 @@ import { fontManager } from '#core/text/fonts'
 
 import { createAlignmentActions } from './alignment'
 import { createClipboardBridge } from './bridges/clipboard'
-import { createComponentBridge } from './bridges/components'
 import { createStructureBridge } from './bridges/structure'
 import { createUndoBridge } from './bridges/undo'
 import { createClipboardActions } from './clipboard'
 import { createColorSpaceActions } from './color-space'
 import { createComponentSyncScheduler } from './component-sync'
-import { createComponentActions } from './components'
-import { createDesignLibraryActions } from './design-library'
 import { createDiagramActions } from './diagram'
 import { createGraphEventSubscription } from './graph-events'
 import { createGraphReadActions } from './graph-reads'
@@ -174,9 +171,7 @@ export function createEditor(options?: EditorOptions) {
   const pages = createPageActions(ctx, viewport)
   const shapes = createShapeActions(ctx)
   const diagrams = createDiagramActions(ctx)
-  const designLibrary = createDesignLibraryActions(ctx)
   const structure = createStructureActions(ctx)
-  const components = createComponentActions(ctx)
   const clipboard = createClipboardActions(ctx)
   const colorSpace = createColorSpaceActions(ctx)
   const undoActions = createUndoActions(ctx)
@@ -185,7 +180,6 @@ export function createEditor(options?: EditorOptions) {
   const variables = createVariableActions(ctx)
   const alignment = createAlignmentActions(ctx)
   const clipboardBridge = createClipboardBridge(clipboard, selection)
-  const componentBridge = createComponentBridge(components, selection, structure, pages)
   const structureBridge = createStructureBridge(structure, selection)
   const undoBridge = createUndoBridge(undoActions, selection)
 
@@ -280,9 +274,6 @@ export function createEditor(options?: EditorOptions) {
     // Native diagram imports
     ...diagrams,
 
-    // Published components and design-token libraries
-    ...designLibrary,
-
     // Structure (group, reorder, reparent, z-order)
     ...structure,
 
@@ -308,9 +299,6 @@ export function createEditor(options?: EditorOptions) {
 
     // Clipboard — bridge functions that need selectedNodes
     ...clipboardBridge,
-
-    // Components — bridge functions
-    ...componentBridge,
 
     // Structure — bridge functions that need selectedNodes
     ...structureBridge

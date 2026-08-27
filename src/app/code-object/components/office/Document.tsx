@@ -1,3 +1,5 @@
+import type { CodeObjectTheme } from '@open-pencil/core/code-object'
+
 import type { CodeObjectState, OfficeDocumentState } from '@/app/code-object/model'
 
 import { UniverSurface } from './UniverSurface'
@@ -7,6 +9,7 @@ type DocumentProps = {
   interactionEnabled: boolean
   onStateChange: (state: CodeObjectState) => void
   state: OfficeDocumentState
+  theme: CodeObjectTheme
 }
 
 function DocumentSection({ index, section }: { index: number; section: string }) {
@@ -26,7 +29,10 @@ function DocumentSection({ index, section }: { index: number; section: string })
     )
   }
   return (
-    <p key={key} className="mb-5 whitespace-pre-line text-[14px] leading-[1.72] text-[#3b465c]">
+    <p
+      key={key}
+      className="mb-5 whitespace-pre-line text-[14px] leading-[1.72] text-[var(--code-text-muted)]"
+    >
       {section}
     </p>
   )
@@ -47,8 +53,8 @@ export function Document(props: DocumentProps) {
       {...props}
       kind="document"
       preview={
-        <article className="size-full overflow-hidden bg-[#e8eaee] px-9 py-8 text-[#172033]">
-          <div className="mx-auto min-h-full max-w-[650px] bg-white px-[72px] py-[68px] shadow-[0_2px_16px_rgba(15,23,42,0.12)]">
+        <article className="size-full overflow-hidden bg-[var(--code-background)] px-9 py-8 text-[var(--code-text)]">
+          <div className="mx-auto min-h-full max-w-[650px] bg-[var(--code-surface-elevated)] px-[72px] py-[68px] shadow-[var(--code-shadow)]">
             {sections.map((section, index) => (
               <DocumentSection index={index} key={`${index}-${section}`} section={section} />
             ))}

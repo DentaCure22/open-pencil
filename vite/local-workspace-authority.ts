@@ -126,15 +126,15 @@ export function openPencilLocalWorkspaceAuthorityPlugin(
   const stopChild = () => {
     const runningChild = child
     child = null
-    if (!runningChild || runningChild.exitCode !== null) return
+    if (runningChild?.exitCode !== null) return
 
     const processGroup = process.platform !== 'win32' ? -(runningChild.pid ?? 0) : 0
     const signal = (name: NodeJS.Signals) => {
       try {
         if (processGroup) process.kill(processGroup, name)
         else runningChild.kill(name)
-      } catch {
-        // The process already exited.
+      } catch (error) {
+        console.warn(`Could not send ${name} to the local workspace authority.`, error)
       }
     }
 

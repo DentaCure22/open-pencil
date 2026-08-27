@@ -200,22 +200,6 @@ export const APP_MENU_SCHEMA = [
       },
       { type: 'separator' },
       {
-        id: 'selection.createComponent',
-        label: 'Create Component',
-        command: 'selection.createComponent'
-      },
-      {
-        id: 'selection.createComponentSet',
-        label: 'Create Component Set',
-        command: 'selection.createComponentSet'
-      },
-      {
-        id: 'selection.detachInstance',
-        label: 'Detach Instance',
-        command: 'selection.detachInstance'
-      },
-      { type: 'separator' },
-      {
         id: 'selection.bringToFront',
         label: 'Bring to Front',
         command: 'selection.bringToFront'

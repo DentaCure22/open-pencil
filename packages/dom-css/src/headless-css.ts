@@ -107,11 +107,11 @@ function resolveCSSValue(value: string, customProperties: DesignStyleDeclaration
 
 function resolveSimpleCalc(value: string): string {
   const calc = value.match(/^calc\(([-\d.]+)(rem|px)?\s*\*\s*([-\d.]+)\)$/)
-  if (!calc?.[1] || !calc[3]) return value
+  if (!calc) return value
 
   const base = Number.parseFloat(calc[1])
   const multiplier = Number.parseFloat(calc[3])
-  const unit = calc[2] ?? 'px'
+  const unit = value.includes('rem') ? 'rem' : 'px'
   if (!Number.isFinite(base) || !Number.isFinite(multiplier)) return value
   return `${unit === 'rem' ? base * multiplier * 16 : base * multiplier}px`
 }

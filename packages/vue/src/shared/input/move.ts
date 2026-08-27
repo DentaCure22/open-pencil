@@ -2,7 +2,11 @@ import {
   computeAutoLayoutIndicator,
   computeAutoLayoutIndicatorForFrame
 } from '#vue/shared/input/auto-layout'
-import { applyMoveReparent, findMoveDropTarget } from '#vue/shared/input/drop-target'
+import {
+  applyMoveReparent,
+  findMoveDropTarget,
+  type MoveMembershipPolicy
+} from '#vue/shared/input/drop-target'
 export { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
 import { AUTO_LAYOUT_BREAK_THRESHOLD } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
@@ -160,7 +164,7 @@ export function cancelMove(d: DragMove, editor: Editor) {
   removeCancelledDuplicate(d, editor)
 }
 
-export function handleMoveUp(d: DragMove, editor: Editor) {
+export function handleMoveUp(d: DragMove, editor: Editor, membershipPolicy?: MoveMembershipPolicy) {
   if (!d.dragStarted) {
     editor.setLayoutInsertIndicator(null)
     editor.setSnapGuides([])
@@ -191,7 +195,7 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
 
   if (finalPositions) {
     applyFinalPositions(finalPositions, editor)
-    applyMoveReparent(editor)
+    applyMoveReparent(editor, membershipPolicy)
   }
 
   if (d.duplicated) {

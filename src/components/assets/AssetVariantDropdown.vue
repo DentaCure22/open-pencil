@@ -4,22 +4,17 @@ import { templateRef, unrefElement, useTimeoutFn } from '@vueuse/core'
 import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui'
 
 import { writeAssetVariantDrag } from '@/app/editor/assets/drag'
-import { useEditorStore } from '@/app/editor/active-store'
 import { smylrComponentPreviewRoute } from '@/app/smylr-component-library/code-object-canvas'
 
 import type { AssetVariant, InteractiveAsset } from './types'
 
 const { asset } = defineProps<{ asset: InteractiveAsset }>()
 const emit = defineEmits<{ openVariant: [variant: AssetVariant] }>()
-const editor = useEditorStore()
 const open = defineModel<boolean>('open', { default: false })
-const previewUrls = ref<Record<string, string>>({})
-const loadingPreviews = ref(false)
 const rootRef = templateRef('rootRef')
 const variantsListRef = templateRef('variantsListRef')
 const activePreviewIndex = ref<number | null>(null)
 const openingScrollLock = ref(false)
-let previewRequestId = 0
 const { start: startScrollUnlock, stop: stopScrollUnlock } = useTimeoutFn(
   () => {
     openingScrollLock.value = false
@@ -70,51 +65,12 @@ function handleComputedPreviewLoad() {
   if (openingScrollLock.value) stabilizeOpenAsset()
 }
 
-function revokePreviews() {
-  for (const url of Object.values(previewUrls.value)) URL.revokeObjectURL(url)
-  previewUrls.value = {}
-}
-
-function pageIdForNode(nodeId: string) {
-  const pageIds = new Set(editor.graph.getPages().map((page) => page.id))
-  let node = editor.graph.getNode(nodeId)
-  while (node) {
-    if (pageIds.has(node.id)) return node.id
-    node = node.parentId ? editor.graph.getNode(node.parentId) : undefined
-  }
-  return editor.state.currentPageId
-}
-
-async function loadScenePreviews() {
-  const requestId = ++previewRequestId
-  if (!open.value || asset.kind !== 'scene') return
-  loadingPreviews.value = true
-  const next: Record<string, string> = {}
-  try {
-    for (const variant of asset.variantItems) {
-      const node = editor.graph.getNode(variant.componentId)
-      if (!node) continue
-      const scale = Math.min(128 / Math.max(node.width, node.height, 1), 2)
-      const data = await editor.renderExportImage([node.id], scale, 'PNG', pageIdForNode(node.id))
-      if (requestId !== previewRequestId || !open.value) return
-      if (data) {
-        next[variant.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
-      }
-    }
-    revokePreviews()
-    previewUrls.value = next
-  } finally {
-    if (requestId === previewRequestId) loadingPreviews.value = false
-  }
-}
-
 watch(open, (isOpen) => {
   if (isOpen) {
     activePreviewIndex.value = null
     openingScrollLock.value = true
     stopScrollUnlock()
     startScrollUnlock()
-    void loadScenePreviews()
     void nextTick(() => {
       stabilizeOpenAsset()
     })
@@ -122,31 +78,13 @@ watch(open, (isOpen) => {
     stopScrollUnlock()
     openingScrollLock.value = false
     activePreviewIndex.value = null
-    previewRequestId += 1
-    revokePreviews()
   }
 })
-watch(
-  () => editor.state.sceneVersion,
-  () => {
-    if (open.value && asset.kind === 'scene') void loadScenePreviews()
-  }
-)
 onUnmounted(() => {
   stopScrollUnlock()
-  previewRequestId += 1
-  revokePreviews()
 })
 
 function beginDrag(event: DragEvent, variant: AssetVariant) {
-  if (variant.kind === 'scene') {
-    writeAssetVariantDrag(event, {
-      kind: 'scene',
-      componentId: variant.componentId,
-      label: variant.label
-    })
-    return
-  }
   writeAssetVariantDrag(event, {
     kind: 'computed',
     fixtureId: variant.fixtureId,
@@ -165,7 +103,6 @@ function openVariant(variant: AssetVariant) {
 }
 
 function computedPreviewSrc(asset: InteractiveAsset, variantId: string | null) {
-  if (asset.kind !== 'computed') return ''
   return `${window.location.origin}${smylrComponentPreviewRoute(asset, variantId ?? undefined, {
     embed: true,
     preview: true
@@ -173,7 +110,7 @@ function computedPreviewSrc(asset: InteractiveAsset, variantId: string | null) {
 }
 
 function usesTallComputedPreview() {
-  return asset.kind === 'computed' && asset.overlayWidth >= 480 && asset.overlayHeight >= 240
+  return asset.overlayWidth >= 480 && asset.overlayHeight >= 240
 }
 </script>
 
@@ -197,7 +134,7 @@ function usesTallComputedPreview() {
               draggable="true"
               data-test-id="asset-variant-item"
               :data-variant-id="variant.id"
-              :aria-label="`Open ${asset.name} ${variant.label}; drag to add it to this board`"
+              :aria-label="`Open ${asset.name} ${variant.label}; drag to add its Code Object to this board`"
               class="hover:bg-hover focus-visible:bg-hover group/variant flex min-w-0 cursor-grab flex-col items-stretch gap-1 rounded-[5px] px-1 py-1.5 text-left transition-colors active:cursor-grabbing"
               @dragstart="beginDrag($event, variant)"
               @dragend="endDrag"
@@ -212,19 +149,8 @@ function usesTallComputedPreview() {
                 class="relative flex w-full items-center justify-center overflow-hidden rounded-[4px]"
                 :class="usesTallComputedPreview() ? 'h-28' : 'h-16'"
               >
-                <img
-                  v-if="variant.kind === 'scene' && previewUrls[variant.id]"
-                  :src="previewUrls[variant.id]"
-                  :alt="`${variant.label} preview`"
-                  class="max-h-14 max-w-[5.5rem] object-contain"
-                />
                 <iframe
-                  v-else-if="
-                    variant.kind === 'computed' &&
-                    asset.kind === 'computed' &&
-                    variant.variantId !== null &&
-                    shouldRenderComputedPreview(variantIndex)
-                  "
+                  v-if="variant.variantId !== null && shouldRenderComputedPreview(variantIndex)"
                   :src="computedPreviewSrc(asset, variant.variantId)"
                   :title="`${asset.name} ${variant.label} preview`"
                   allowtransparency="true"
@@ -233,14 +159,10 @@ function usesTallComputedPreview() {
                   class="pointer-events-none size-full border-0 bg-transparent [color-scheme:normal]"
                   @load="handleComputedPreviewLoad"
                 />
-                <icon-lucide-loader-2
-                  v-else-if="loadingPreviews"
-                  class="text-muted size-4 animate-spin"
-                />
                 <span v-else class="flex flex-col items-center gap-1 text-component/80">
                   <icon-lucide-box class="size-6" />
                   <span class="text-[8px] leading-none font-semibold tracking-wide uppercase">
-                    Component
+                    Code Object
                   </span>
                 </span>
               </span>

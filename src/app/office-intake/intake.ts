@@ -50,7 +50,7 @@ function elementContents(xml: string, localName: string): string[] {
     `<(?:[\\w-]+:)?${localName}\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w-]+:)?${localName}>`,
     'gi'
   )
-  return Array.from(xml.matchAll(expression), (match) => match[1] ?? '')
+  return Array.from(xml.matchAll(expression), (match) => match.at(1) ?? '')
 }
 
 function attributeValue(tag: string, name: string): string | null {
@@ -59,7 +59,7 @@ function attributeValue(tag: string, name: string): string | null {
   return match?.[1] ?? match?.[2] ?? null
 }
 
-function archiveText(files: Record<string, Uint8Array>, path: string): string {
+function archiveText(files: Partial<Record<string, Uint8Array>>, path: string): string {
   const bytes = files[path]
   if (!bytes) throw new Error(`Office archive entry is missing: ${path}`)
   return strFromU8(bytes)
@@ -85,10 +85,10 @@ export function extractDocxText(bytes: Uint8Array): string {
 
 function columnIndex(reference: string): number {
   const letters = reference.match(/^[A-Z]+/i)?.[0]?.toUpperCase() ?? ''
-  return [...letters].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1
+  return letters.split('').reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1
 }
 
-function sharedStrings(files: Record<string, Uint8Array>): string[] {
+function sharedStrings(files: Partial<Record<string, Uint8Array>>): string[] {
   const source = files['xl/sharedStrings.xml']
   if (!source) return []
   return elementContents(strFromU8(source), 'si').map((item) =>
@@ -101,11 +101,11 @@ function cellValue(
   cellBody: string,
   strings: string[]
 ): OfficeSpreadsheetCell | null {
-  const formula = elementContents(cellBody, 'f')[0]
+  const formula = elementContents(cellBody, 'f').at(0)
   if (formula !== undefined) return `=${decodeXmlText(formula)}`
   const type = attributeValue(cellTag, 't')
   if (type === 'inlineStr') return elementContents(cellBody, 't').map(decodeXmlText).join('')
-  const raw = elementContents(cellBody, 'v')[0]
+  const raw = elementContents(cellBody, 'v').at(0)
   if (raw === undefined) return null
   const decoded = decodeXmlText(raw)
   if (type === 's') return strings[Number(decoded)] ?? ''
@@ -119,7 +119,8 @@ export function extractXlsxCells(bytes: Uint8Array): OfficeSpreadsheetCell[][] {
   const files = unzipSync(bytes)
   const worksheetPath = Object.keys(files)
     .filter((path) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(path))
-    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))[0]
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+    .at(0)
   if (!worksheetPath) throw new Error('The workbook has no worksheets')
   const worksheetXml = archiveText(files, worksheetPath)
   const strings = sharedStrings(files)
@@ -127,14 +128,14 @@ export function extractXlsxCells(bytes: Uint8Array): OfficeSpreadsheetCell[][] {
   const cellExpression =
     /(<(?:[\w-]+:)?c\b[^>]*\br=(?:"[^"]+"|'[^']+')[^>]*>)([\s\S]*?)<\/(?:[\w-]+:)?c>/gi
   for (const match of worksheetXml.matchAll(cellExpression)) {
-    const cellTag = match[1] ?? ''
+    const cellTag = match.at(1) ?? ''
     const reference = attributeValue(cellTag, 'r') ?? ''
     const rowIndex = Math.max(0, Number(reference.match(/\d+$/)?.[0] ?? '1') - 1)
     const column = columnIndex(reference)
     if (rowIndex >= MAX_SPREADSHEET_ROWS || column < 0 || column >= MAX_SPREADSHEET_COLUMNS) {
       continue
     }
-    const value = cellValue(cellTag, match[2] ?? '', strings)
+    const value = cellValue(cellTag, match.at(2) ?? '', strings)
     if (value === null) continue
     const row = (rows[rowIndex] ??= [])
     row[column] = value

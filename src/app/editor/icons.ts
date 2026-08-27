@@ -1,8 +1,6 @@
 import type { Component } from 'vue'
 import IconCircle from '~icons/lucide/circle'
 import IconColumns from '~icons/lucide/columns-3'
-import IconComponentSet from '~icons/lucide/component'
-import IconComponent from '~icons/lucide/diamond'
 import IconFrame from '~icons/lucide/frame'
 import IconGrid from '~icons/lucide/grid-3x3'
 import IconGroup from '~icons/lucide/group'
@@ -38,9 +36,6 @@ export const NODE_ICONS: Partial<Record<string, typeof IconSquare>> = {
   ELLIPSE: IconCircle,
   FRAME: IconFrame,
   GROUP: IconGroup,
-  COMPONENT: IconComponent,
-  COMPONENT_SET: IconComponentSet,
-  INSTANCE: IconComponent,
   LINE: IconMinus,
   TEXT: IconType,
   VECTOR: IconPenTool,
@@ -52,8 +47,6 @@ export const AUTO_LAYOUT_ICONS: Partial<Record<string, typeof IconSquare>> = {
   HORIZONTAL: IconColumns,
   GRID: IconGrid
 }
-
-export const COMPONENT_TYPES = new Set(['COMPONENT', 'COMPONENT_SET', 'INSTANCE'])
 
 export { IconFrame, IconSquare }
 

@@ -1,6 +1,10 @@
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+export type MoveMembershipPolicy = {
+  shouldDetach?: (child: SceneNode, parent: SceneNode) => boolean
+}
+
 function isFrameContainer(node: SceneNode | undefined): node is SceneNode {
   return node?.type === 'FRAME' || node?.type === 'SECTION'
 }
@@ -57,8 +61,15 @@ export function findMoveDropTarget(cx: number, cy: number, editor: Editor): Scen
   return dropTarget
 }
 
-export function reparentOutsideNodes(editor: Editor) {
+export function reparentOutsideNodes(editor: Editor, policy?: MoveMembershipPolicy) {
   editor.detachOutsideFrameMembership(editor.state.selectedIds)
+  if (!policy?.shouldDetach) return
+  for (const id of editor.state.selectedIds) {
+    const child = editor.graph.getNode(id)
+    const parent = child?.parentId ? editor.graph.getNode(child.parentId) : undefined
+    if (!child || !isFrameContainer(parent) || !policy.shouldDetach(child, parent)) continue
+    editor.reparentNodes([child.id], parent.parentId ?? editor.state.currentPageId)
+  }
 }
 
 function absorbOverlappingSiblings(editor: Editor, frameId: string) {
@@ -87,7 +98,7 @@ function absorbOverlappingSiblings(editor: Editor, frameId: string) {
   }
 }
 
-export function applyMoveReparent(editor: Editor) {
+export function applyMoveReparent(editor: Editor, policy?: MoveMembershipPolicy) {
   const selectedIds = [...editor.state.selectedIds]
   const dropId = editor.state.dropTargetId
   const droppingOnCurrentParent =
@@ -102,7 +113,7 @@ export function applyMoveReparent(editor: Editor) {
     if (joinId && selectedIds.every((id) => editor.graph.getNode(id)?.parentId !== joinId)) {
       editor.reparentNodes(selectedIds, joinId)
     } else {
-      reparentOutsideNodes(editor)
+      reparentOutsideNodes(editor, policy)
     }
   }
 

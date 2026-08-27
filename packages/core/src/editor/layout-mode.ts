@@ -20,7 +20,7 @@ export function createLayoutModeActions(ctx: EditorContext) {
 
     const updated = ctx.graph.getNode(id)
     if (!updated) return
-    const finalState = pickState(updated, Object.keys(previous) as (keyof SceneNode)[])
+    const finalState = pick(updated, Object.keys(previous) as (keyof SceneNode)[])
 
     ctx.undo.push({
       label: mode === 'NONE' ? 'Remove auto layout' : 'Add auto layout',
@@ -58,10 +58,6 @@ function captureLayoutState(node: SceneNode): Partial<SceneNode> {
     width: node.width,
     height: node.height
   }
-}
-
-function pickState(node: SceneNode, keys: (keyof SceneNode)[]): Partial<SceneNode> {
-  return pick(node, keys) as Partial<SceneNode>
 }
 
 function layoutModeUpdates(

@@ -5,19 +5,22 @@ import {
   approveExtensionUiRequest,
   denyExtensionUiRequest,
   messageApprovalPreview,
+  type AgentExtensionUiRequest,
+  type AgentExtensionUiResponse,
   type MessageApprovalPreview,
   type MessageApprovalState
 } from '@/app/agent-chat/approval'
-import type { AgentExtensionUiRequest, AgentExtensionUiResponse } from '@/app/agent-chat/approval'
 import messagesAppIconUrl from '@/assets/messages-app-icon.png'
 
 const {
   busy = false,
+  messageMode = 'task',
   preview,
   request,
   state = 'pending'
 } = defineProps<{
   busy?: boolean
+  messageMode?: 'bot-text' | 'task'
   preview?: MessageApprovalPreview
   request?: AgentExtensionUiRequest
   state?: MessageApprovalState
@@ -28,7 +31,13 @@ const emit = defineEmits<{
 }>()
 
 const message = computed(() => preview ?? (request ? messageApprovalPreview(request) : null))
+const botTextMode = computed(() => messageMode === 'bot-text')
 const approval = computed(() => (request ? approveExtensionUiRequest(request) : null))
+const choiceOptions = computed(() => {
+  if (!request) return []
+  if (request.method === 'select') return request.options ?? []
+  return ['Allow', 'Cancel']
+})
 const statusLabel = computed(() => {
   if (state === 'sending') return 'Sending'
   if (state === 'sent') return 'Sent'
@@ -45,6 +54,19 @@ function deny() {
   if (request) {
     emit('respond', request.id, denyExtensionUiRequest(request))
   }
+}
+
+function choose(option: string) {
+  if (!request) return
+  if (request.method === 'select') {
+    emit('respond', request.id, { value: option })
+    return
+  }
+  emit('respond', request.id, { confirmed: option === 'Allow' })
+}
+
+function choiceKey(index: number): string {
+  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1)
 }
 </script>
 
@@ -122,6 +144,54 @@ function deny() {
           </button>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section
+    v-else-if="request && botTextMode"
+    class="overflow-hidden rounded-[20px] bg-agent-assistant-bubble p-3 text-[13px] text-agent-ink"
+    data-test-id="agent-ui-approval"
+    data-presentation="bot-text"
+  >
+    <div class="flex min-w-0 items-start gap-3">
+      <div class="min-w-0 flex-1">
+        <h3 class="text-[14px] leading-5 font-medium">{{ request.title }}</h3>
+        <p
+          v-if="request.message && request.message !== request.title"
+          class="mt-1 text-[12px] leading-[17px] text-muted"
+        >
+          {{ request.message }}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label="Dismiss choices"
+        class="flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-hover/70 hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30 disabled:opacity-45"
+        :disabled="busy"
+        @click="deny"
+      >
+        <icon-lucide-x class="size-4" />
+      </button>
+    </div>
+    <div
+      v-if="choiceOptions.length"
+      class="border-agent-approval-border mt-3 overflow-hidden rounded-[13px] border"
+    >
+      <button
+        v-for="(option, index) in choiceOptions"
+        :key="option"
+        type="button"
+        class="border-agent-approval-border flex min-h-11 w-full items-center gap-2.5 border-b px-3 text-left text-[13px] last:border-b-0 hover:bg-hover/65 focus-visible:bg-hover/65 focus-visible:outline-none disabled:opacity-45"
+        :disabled="busy"
+        @click="choose(option)"
+      >
+        <span
+          class="border-agent-approval-border bg-hover/60 flex size-6 shrink-0 items-center justify-center rounded-[5px] border text-[11px] font-medium text-muted"
+        >
+          {{ choiceKey(index) }}
+        </span>
+        <span class="min-w-0 flex-1">{{ option }}</span>
+      </button>
     </div>
   </section>
 

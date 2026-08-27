@@ -10,7 +10,7 @@ import {
 describe('app menu shortcut conversion', () => {
   test('looks up canonical shortcut tokens from the menu schema', () => {
     expect(appMenuShortcut('save-as')).toBe('MOD+SHIFT+S')
-    expect(appMenuShortcut('selection.createComponent')).toBe('MOD+ALT+K')
+    expect(appMenuShortcut('selection.group')).toBe('MOD+G')
   })
 
   test('converts shortcut tokens to tinykeys bindings', () => {

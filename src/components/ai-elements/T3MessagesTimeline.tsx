@@ -10,12 +10,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactNode,
-  type SVGProps
+  type KeyboardEvent
 } from 'react'
 
-import { assistantMarkdownNodes, isSafeMarkdownUrl, type AssistantMarkdownNode } from './markdown'
 import {
   isMediaGenerationTool,
   isVideoGenerationTool,
@@ -26,20 +23,15 @@ import {
   type AiToolKind
 } from './model'
 import {
-  nextStreamedLength,
-  prefersStreamedTextMotion,
-  sliceStreamedText,
-  splitStreamedTextTail
-} from './streamed-text'
-import {
   computeStableT3MessagesTimelineRows,
   deriveT3MessagesTimelineRows,
   deriveT3TimelineEntries,
   type StableT3MessagesTimelineRowsState,
   type T3MessagesTimelineRow,
-  type T3TimelineNarrativeEntry,
   type T3TimelineWorkEntry
 } from './t3-messages-timeline.logic'
+import { T3NarrativeRow as NarrativeRow } from './T3NarrativeRow'
+import { ChevronDown, ChevronRight, ToolIcon, XMark } from './T3TimelineIcons'
 import type { AiConversationStatus, AiMessage } from './types'
 
 export interface T3MessagesTimelineProps {
@@ -49,353 +41,6 @@ export interface T3MessagesTimelineProps {
   startedAt?: string
   status: AiConversationStatus
   workingLabel?: string
-}
-
-const INITIAL_ANIMATED_TAIL_LENGTH = 18
-const IDEAL_FRAME_MS = 1_000 / 60
-
-function initialStreamedText(value: string): string {
-  return sliceStreamedText(value, Math.max(0, value.length - INITIAL_ANIMATED_TAIL_LENGTH))
-}
-
-function useSmoothedText(text: string, streaming: boolean): string {
-  const [displayed, setDisplayed] = useState(() =>
-    streaming && prefersStreamedTextMotion() ? initialStreamedText(text) : text
-  )
-  const displayedRef = useRef(displayed)
-  const incomingRef = useRef(text)
-  const frameRef = useRef(0)
-  const previousFrameAtRef = useRef(0)
-  const streamingRef = useRef(streaming)
-
-  useEffect(() => {
-    displayedRef.current = displayed
-  }, [displayed])
-
-  useEffect(() => {
-    streamingRef.current = streaming
-    if (!prefersStreamedTextMotion()) {
-      displayedRef.current = text
-      incomingRef.current = text
-      setDisplayed(text)
-      return
-    }
-    if (!text.startsWith(displayedRef.current)) {
-      // Provider rewrites are authoritative. Snapping the rewritten tail is
-      // less disruptive than deleting already painted words frame by frame.
-      displayedRef.current = text
-      incomingRef.current = text
-      previousFrameAtRef.current = 0
-      setDisplayed(text)
-      return
-    }
-    incomingRef.current = text
-
-    const paint = (now: number) => {
-      frameRef.current = 0
-      const current = displayedRef.current
-      const incoming = incomingRef.current
-      if (current.length >= incoming.length) {
-        if (current !== incoming) {
-          displayedRef.current = incoming
-          setDisplayed(incoming)
-        }
-        previousFrameAtRef.current = 0
-        return
-      }
-      const elapsedMs = previousFrameAtRef.current
-        ? now - previousFrameAtRef.current
-        : IDEAL_FRAME_MS
-      previousFrameAtRef.current = now
-      const length = nextStreamedLength({
-        displayed: current.length,
-        elapsedMs,
-        finishing: !streamingRef.current,
-        incoming: incoming.length
-      })
-      const next = sliceStreamedText(incoming, length)
-      displayedRef.current = next
-      setDisplayed(next)
-      if (next.length < incomingRef.current.length) frameRef.current = requestAnimationFrame(paint)
-      else previousFrameAtRef.current = 0
-    }
-
-    if (displayedRef.current.length < incomingRef.current.length && !frameRef.current) {
-      frameRef.current = requestAnimationFrame(paint)
-    }
-  }, [streaming, text])
-
-  useEffect(
-    () => () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current)
-    },
-    []
-  )
-
-  return displayed
-}
-
-function StreamingText({ active, text }: { active: boolean; text: string }) {
-  if (!active) return text
-  const split = splitStreamedTextTail(text)
-  return (
-    <>
-      {split.stable}
-      {split.tail.map((segment) =>
-        segment.value !== undefined ? (
-          segment.value
-        ) : (
-          <span className="t3-stream-word" key={segment.key}>
-            {segment.glyphs?.map((glyph) => (
-              <span className="t3-stream-glyph" key={glyph.key}>
-                {glyph.value}
-              </span>
-            ))}
-          </span>
-        )
-      )}
-    </>
-  )
-}
-
-function InlineMarkdownNode({
-  active,
-  children,
-  node,
-  nodeKey
-}: {
-  active: boolean
-  children: ReactNode
-  node: AssistantMarkdownNode
-  nodeKey: string
-}): ReactNode {
-  switch (node.type) {
-    case 'strong':
-      return <strong key={nodeKey}>{children}</strong>
-    case 'emphasis':
-      return <em key={nodeKey}>{children}</em>
-    case 'delete':
-      return <del key={nodeKey}>{children}</del>
-    case 'link':
-      if (!isSafeMarkdownUrl(node.url)) return <span key={nodeKey}>{children}</span>
-      return (
-        <a href={node.url} key={nodeKey} rel="noreferrer" target="_blank">
-          {children}
-        </a>
-      )
-    case 'inlineCode':
-      return <code key={nodeKey}>{node.value}</code>
-    case 'code':
-      return (
-        <pre key={nodeKey}>
-          <code>{node.value}</code>
-        </pre>
-      )
-    case 'break':
-      return <br key={nodeKey} />
-    case 'thematicBreak':
-      return <hr key={nodeKey} />
-    case 'text':
-      return <StreamingText active={active} key={nodeKey} text={node.value ?? ''} />
-    default:
-      if (children) return <span key={nodeKey}>{children}</span>
-      return node.value ? <span key={nodeKey}>{node.value}</span> : null
-  }
-}
-
-function MarkdownNodes({
-  nodes,
-  streamingTail = false
-}: {
-  nodes: AssistantMarkdownNode[]
-  streamingTail?: boolean
-}): ReactNode {
-  return nodes.map((node, index) => {
-    const active = streamingTail && index === nodes.length - 1
-    const children = node.children?.length ? (
-      <MarkdownNodes nodes={node.children} streamingTail={active} />
-    ) : null
-    const nodeKey = `${node.type}-${String(index)}`
-    if (node.type === 'paragraph') return <p key={nodeKey}>{children}</p>
-    if (node.type === 'heading') {
-      const depth = Math.min(4, Math.max(1, node.depth ?? 2))
-      if (depth === 1) return <h1 key={nodeKey}>{children}</h1>
-      if (depth === 2) return <h2 key={nodeKey}>{children}</h2>
-      if (depth === 3) return <h3 key={nodeKey}>{children}</h3>
-      return <h4 key={nodeKey}>{children}</h4>
-    }
-    if (node.type === 'list') {
-      if (node.ordered) return <ol key={nodeKey}>{children}</ol>
-      return <ul key={nodeKey}>{children}</ul>
-    }
-    if (node.type === 'listItem') return <li key={nodeKey}>{children}</li>
-    if (node.type === 'blockquote') return <blockquote key={nodeKey}>{children}</blockquote>
-    return (
-      <InlineMarkdownNode
-        active={active}
-        children={children}
-        key={nodeKey}
-        node={node}
-        nodeKey={nodeKey}
-      />
-    )
-  })
-}
-
-const NarrativeRow = memo(function NarrativeRow({
-  message
-}: {
-  message: T3TimelineNarrativeEntry
-}) {
-  const streaming = message.state === 'streaming'
-  const displayed = useSmoothedText(message.text.trim(), streaming)
-  const nodes = useMemo(() => assistantMarkdownNodes(displayed), [displayed])
-  return (
-    <div
-      aria-live={streaming ? 'polite' : undefined}
-      className="t3-activity-markdown min-w-0 px-1 py-0.5 font-sans text-[13px] leading-5 font-normal text-surface"
-      data-state={message.state}
-      data-test-id={message.narrativeKind === 'commentary' ? 'ai-commentary' : 'ai-reasoning'}
-    >
-      {nodes.length ? (
-        <MarkdownNodes nodes={nodes} streamingTail={streaming} />
-      ) : (
-        <p>{displayed}</p>
-      )}
-    </div>
-  )
-})
-
-function Svg({ children, ...props }: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      {...props}
-    >
-      {children}
-    </svg>
-  )
-}
-
-function ChevronDown(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Svg {...props}>
-      <path d="m6 9 6 6 6-6" />
-    </Svg>
-  )
-}
-
-function ChevronRight(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Svg {...props}>
-      <path d="m9 18 6-6-6-6" />
-    </Svg>
-  )
-}
-
-function XMark(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Svg {...props}>
-      <path d="M18 6 6 18M6 6l12 12" />
-    </Svg>
-  )
-}
-
-function ToolIcon({ kind, ...props }: { kind: AiToolKind } & SVGProps<SVGSVGElement>) {
-  if (kind === 'command') {
-    return (
-      <Svg {...props}>
-        <path d="m4 17 6-6-6-6M12 19h8" />
-      </Svg>
-    )
-  }
-  if (kind === 'search') {
-    return (
-      <Svg {...props}>
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </Svg>
-    )
-  }
-  if (kind === 'web') {
-    return (
-      <Svg {...props}>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
-      </Svg>
-    )
-  }
-  if (kind === 'read') {
-    return (
-      <Svg {...props}>
-        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-        <circle cx="12" cy="12" r="2.5" />
-      </Svg>
-    )
-  }
-  if (kind === 'edit') {
-    return (
-      <Svg {...props}>
-        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-      </Svg>
-    )
-  }
-  if (kind === 'list') {
-    return (
-      <Svg {...props}>
-        <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />
-      </Svg>
-    )
-  }
-  if (kind === 'mail') {
-    return (
-      <Svg {...props}>
-        <rect height="14" rx="2" width="20" x="2" y="5" />
-        <path d="m3 7 9 6 9-6" />
-      </Svg>
-    )
-  }
-  if (kind === 'message') {
-    return (
-      <Svg {...props}>
-        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
-      </Svg>
-    )
-  }
-  if (kind === 'image' || kind === 'video') {
-    return (
-      <Svg {...props}>
-        <rect height="18" rx="2" width="18" x="3" y="3" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="m21 15-5-5L5 21" />
-      </Svg>
-    )
-  }
-  if (kind === 'handoff') {
-    return (
-      <Svg {...props}>
-        <path d="M6 3v12M18 9v12M6 15c0-3 3-6 6-6h6M14 5l4 4-4 4" />
-      </Svg>
-    )
-  }
-  if (kind === 'connected-app') {
-    return (
-      <Svg {...props}>
-        <path d="m12 22 1-5-4-2 6-13-1 8 5 2Z" />
-      </Svg>
-    )
-  }
-  return (
-    <Svg {...props}>
-      <path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.4 2.4-3-3Z" />
-    </Svg>
-  )
 }
 
 function compactOutput(value?: string): string {
@@ -484,6 +129,9 @@ const ToolRow = memo(function ToolRow({ entry }: { entry: T3TimelineWorkEntry })
     event.preventDefault()
     toggle()
   }
+  let iconTone = 'text-muted'
+  if (state === 'error') iconTone = 'text-red-400'
+  else if (state === 'approval') iconTone = 'text-amber-400'
 
   return (
     <div
@@ -499,9 +147,7 @@ const ToolRow = memo(function ToolRow({ entry }: { entry: T3TimelineWorkEntry })
       tabIndex={hasDetail ? 0 : undefined}
     >
       <div className="flex min-w-0 select-none items-center gap-1.5 transition-[opacity,translate] duration-200">
-        <span
-          className={`flex size-6 shrink-0 items-center justify-center ${state === 'error' ? 'text-red-400' : state === 'approval' ? 'text-amber-400' : 'text-muted'}`}
-        >
+        <span className={`flex size-6 shrink-0 items-center justify-center ${iconTone}`}>
           {state === 'error' ? (
             <XMark className="block size-4 shrink-0 opacity-80" />
           ) : (

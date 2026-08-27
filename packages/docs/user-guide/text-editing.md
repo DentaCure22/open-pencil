@@ -84,4 +84,4 @@ Change the font weight in the Typography section of the properties panel. Availa
 - The font list is preloaded at startup so the picker opens without delay.
 - IME input (Chinese, Japanese, Korean) is fully supported.
 - Rich text formatting is preserved when opening and saving .fig files.
-- See [Components](./components) for how text overrides work in component instances.
+- Imported Figma instance text and override data are preserved for compatibility.

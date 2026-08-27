@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OpenPencil startup diagnostic</title>
+    <script>
+      window.addEventListener('error', (event) => {
+        document.getElementById('diagnostic').textContent =
+          'error: ' + String(event.error?.stack || event.message || event)
+      })
+      window.addEventListener('unhandledrejection', (event) => {
+        document.getElementById('diagnostic').textContent =
+          'rejection: ' + String(event.reason?.stack || event.reason || event)
+      })
+    </script>
+  </head>
+  <body>
+    <pre id="diagnostic">pending</pre>
+    <div id="app"></div>
+    <script type="module">
+      import('/src/main.ts').catch((error) => {
+        document.getElementById('diagnostic').textContent =
+          'import: ' + String(error?.stack || error)
+      })
+    </script>
+  </body>
+</html>

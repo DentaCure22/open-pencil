@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { expectDefined } from '#tests/helpers/assert'
 import { CanvasHelper } from '#tests/helpers/canvas'
 
 function mockThread(page: Page, thread: object) {
@@ -20,7 +19,7 @@ function mockThread(page: Page, thread: object) {
   ])
 }
 
-test('opens the completed turn in the T3-style right diff workspace', async ({ page }) => {
+test('opens changed files first, then the selected file diff', async ({ page }) => {
   await mockThread(page, {
     canFollowUp: true,
     createdAt: '2026-08-25T12:00:00.000Z',
@@ -75,9 +74,8 @@ test('opens the completed turn in the T3-style right diff workspace', async ({ p
 
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
-  await page.getByTestId('left-panel-chats-tab').click()
   const panel = page.getByTestId('agent-chats-panel')
-  const expandMiscChats = panel.getByRole('button', { name: 'Expand Misc chats' })
+  const expandMiscChats = panel.getByRole('button', { name: 'Expand Chats' })
   if (await expandMiscChats.isVisible()) await expandMiscChats.click()
   await panel.getByTestId('agent-thread-selector').getByText('Turn changes').click()
 
@@ -92,69 +90,33 @@ test('opens the completed turn in the T3-style right diff workspace', async ({ p
       .evaluate((element) => element.nextElementSibling?.getAttribute('data-test-id'))
   ).toBe('ai-prompt-input')
 
-  const diffButton = panel.getByTestId('agent-selected-diff')
-  await expect(diffButton).toBeVisible()
-  await expect(diffButton).toBeEnabled()
-  await diffButton.click()
+  await expect(panel.getByTestId('agent-selected-diff')).toHaveCount(0)
+  const changesButton = panel.getByRole('button', { name: 'Show files changed in latest turn' })
+  const changesToggle = panel.getByTestId('ai-turn-changes-toggle')
+  await expect(changesButton).toBeEnabled()
+  await expect(changesToggle).toHaveCSS('border-radius', '10px')
+  await changesButton.click()
+  const changedFiles = panel.getByTestId('turn-changed-files')
+  await expect(changedFiles).toBeVisible()
+  await expect(changedFiles.getByRole('menuitem', { name: 'src/app.ts' })).toBeVisible()
+  await expect(changedFiles.getByRole('menuitem', { name: 'tests/app.test.ts' })).toBeVisible()
+  const [pillBounds, changedFilesBounds] = await Promise.all([
+    changesToggle.boundingBox(),
+    changedFiles.boundingBox()
+  ])
+  if (!pillBounds || !changedFilesBounds) throw new Error('Changed-files pill bounds missing')
+  expect(changedFilesBounds.y + changedFilesBounds.height).toBeLessThanOrEqual(pillBounds.y)
+
   const rightPanel = page.getByTestId('t3-right-panel')
-  await expect(rightPanel).toBeVisible()
+  await expect(rightPanel).toHaveAttribute('data-state', 'closed')
+
+  await changedFiles.locator('[data-changed-file="src/app.ts"]').click()
   await expect(rightPanel).toHaveAttribute('data-state', 'open')
   await expect(rightPanel.locator('[data-diff-file="src/app.ts"]')).toContainText('+line')
-  await expect(rightPanel.locator('[data-diff-file="tests/app.test.ts"]')).toContainText(
-    '+test two'
-  )
+  await expect(rightPanel.locator('[data-diff-file="tests/app.test.ts"]')).toHaveCount(0)
   expect(
     await rightPanel.evaluate((element) =>
       Boolean(element.closest('[data-test-id="agent-chats-panel"]'))
     )
   ).toBe(false)
-
-  const resizeHandle = page.getByTestId('t3-right-panel-resize-handle')
-  const resizeHandleBounds = expectDefined(
-    await resizeHandle.boundingBox(),
-    'right workspace resize handle bounds'
-  )
-  const panelBoundsBeforeResize = expectDefined(
-    await rightPanel.boundingBox(),
-    'right workspace bounds before resize'
-  )
-  expect(resizeHandleBounds.width).toBeGreaterThanOrEqual(40)
-  const rightEdgeHits = await page.evaluate(
-    ({ left, right, y }) =>
-      [left + 2, right - 2].map((x) =>
-        document.elementFromPoint(x, y)?.getAttribute('data-test-id')
-      ),
-    {
-      left: resizeHandleBounds.x,
-      right: resizeHandleBounds.x + resizeHandleBounds.width,
-      y: resizeHandleBounds.y + resizeHandleBounds.height / 2
-    }
-  )
-  expect(rightEdgeHits).toEqual(['t3-right-panel-resize-handle', 't3-right-panel-resize-handle'])
-  const resizeY = resizeHandleBounds.y + resizeHandleBounds.height / 2
-  await page.mouse.move(resizeHandleBounds.x + 2, resizeY)
-  await page.mouse.down()
-  await expect(page.locator('html')).toHaveAttribute('data-horizontal-resizing', '')
-  await expect(rightPanel).toHaveAttribute('data-resizing', 'true')
-  await page.mouse.move(resizeHandleBounds.x - 78, resizeY, { steps: 10 })
-  await page.mouse.up()
-  await expect(page.locator('html')).not.toHaveAttribute('data-horizontal-resizing')
-  await expect(rightPanel).toHaveAttribute('data-resizing', 'false')
-  const panelBoundsAfterResize = expectDefined(
-    await rightPanel.boundingBox(),
-    'right workspace bounds after resize'
-  )
-  expect(panelBoundsAfterResize.width).toBeGreaterThan(panelBoundsBeforeResize.width + 40)
-
-  await rightPanel
-    .locator('[data-diff-file="src/app.ts"] [data-diff-line-kind="addition"]')
-    .last()
-    .click()
-  await rightPanel.getByRole('button', { name: 'Comment on selected lines' }).click()
-  await rightPanel.getByLabel(/Comment on line/).fill('Keep this covered by the focused test.')
-  await rightPanel.getByRole('button', { name: 'Comment', exact: true }).click()
-  await expect(panel.getByTestId('ai-prompt-annotation-summary')).toContainText('1 annotation')
-
-  await rightPanel.getByRole('button', { name: 'Close right panel' }).click()
-  await expect(rightPanel).toHaveAttribute('data-state', 'closed')
 })

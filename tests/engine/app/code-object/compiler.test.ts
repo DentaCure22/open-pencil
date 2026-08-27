@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
+import { WORK_PLAN_CODE_OBJECT_SOURCE } from '@open-pencil/core/code-object'
+
 import { clearCompiledCodeObjectCache, compileCodeObjectSource } from '@/app/code-object/compiler'
 
 describe('authored Code Object compiler', () => {
@@ -26,5 +28,13 @@ describe('authored Code Object compiler', () => {
 
     expect(compiled.component).toBeNull()
     expect(compiled.error).toContain('can only import')
+  })
+
+  test('resolves the rich work-plan renderer from the bundled UI runtime', () => {
+    clearCompiledCodeObjectCache()
+    const compiled = compileCodeObjectSource(WORK_PLAN_CODE_OBJECT_SOURCE)
+
+    expect(compiled.error).toBeNull()
+    expect(typeof compiled.component).toBe('function')
   })
 })

@@ -33,9 +33,6 @@ export function useSelectionCapabilities() {
     canGroup: computed(() => selectedCount.value >= 2),
     canFrameSelection: computed(() => hasSelection.value),
     canUngroup: computed(() => selection.isGroup.value),
-    canCreateComponent: computed(() => hasSelection.value),
-    canCreateComponentSet: selection.canCreateComponentSet,
-    canDetachInstance: computed(() => selection.isInstance.value),
     canWrapInAutoLayout: computed(() => hasSelection.value),
     canBringToFront: computed(() => hasSelection.value),
     canSendToBack: computed(() => hasSelection.value),
@@ -62,8 +59,6 @@ export function useSelectionCapabilities() {
         )
       )
     }),
-    canGoToMainComponent: computed(() => selection.isInstance.value),
-    canCreateInstance: computed(() => selectedNode.value?.type === 'COMPONENT'),
     canMoveToPage: useSceneComputed(() => hasSelection.value && editor.graph.getPages().length > 1),
     canSelectAll: useSceneComputed(
       () => editor.graph.getChildren(editor.state.currentPageId).length > 0

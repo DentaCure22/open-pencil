@@ -43,7 +43,6 @@ export function smylrComponentSurfaceHeight(
 export function isSmylrComponentCodeObject(node: SceneNode | null | undefined) {
   return Boolean(
     isCodeObjectFrame(node) &&
-    node &&
     pluginValue(node, 'componentKind') === SMYLR_COMPONENT_CODE_OBJECT_KIND &&
     codeObjectDocument(node)?.component === 'smylr-production-app'
   )

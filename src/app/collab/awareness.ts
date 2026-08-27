@@ -42,7 +42,7 @@ export function buildRemotePeers(
 
 export function remotePeersToCursors(peers: RemotePeer[], currentPageId: string) {
   return peers
-    .filter((p) => p.cursor && p.cursor.pageId === currentPageId)
+    .filter((p) => p.cursor?.pageId === currentPageId)
     .map((p) => {
       const cursor = p.cursor as NonNullable<RemotePeer['cursor']>
       return {

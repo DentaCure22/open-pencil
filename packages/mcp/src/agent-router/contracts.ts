@@ -93,17 +93,20 @@ export type AgentTodoBrief = {
   constraints?: string[]
   context?: string
   desiredOutcome?: string
+  documentHtml?: string
   goal: string
   knownFacts?: string[]
   openQuestions?: string[]
   references?: AgentTodoBriefReference[]
   suggestedNextStep?: string
+  title?: string
 }
 
 export type AgentTodoDraft = {
   brief: AgentTodoBrief
   createdByThreadId?: string
   kind: 'todo'
+  presetId?: 'todo-document'
   projectId: string
   todoId: string
 }
@@ -112,6 +115,7 @@ const AGENT_CONVERSATION_PREVIEW_LIMIT = 3
 
 export type AgentConversationThread = {
   activeTurnStartedAt?: string
+  botId?: string
   canFollowUp: boolean
   contextUsage?: AgentConversationContextUsage
   compactForkPending?: boolean
@@ -125,6 +129,7 @@ export type AgentConversationThread = {
   model: string
   pendingUiRequests?: AgentExtensionUiRequest[]
   piHistoryInitialized?: boolean
+  projectId?: string | null
   recentUpdate: string
   sessionId: string | null
   state: AgentConversationState
@@ -133,6 +138,7 @@ export type AgentConversationThread = {
   todoDraft?: AgentTodoDraft
   toolScope?: AgentToolScope
   updatedAt: string
+  workspaceRoot?: string
   workerId: string
 }
 
@@ -145,18 +151,22 @@ export type AgentTodoDraftRequest = {
   threadId?: string
   title: string
   todoId: string
+  workspaceRoot?: string
 }
 
 export type AgentDispatchRequest = {
   attachments?: AgentConversationAttachmentPart[]
+  botId?: string
   displayPrompt?: string
   effort?: string
   evidencePath?: string
   historyScope?: 'effectiveContext' | 'full'
   imagePaths?: string[]
   model?: string
+  projectId?: string | null
   prompt: string
   toolScope?: AgentToolScope
+  workspaceRoot?: string
 }
 
 export type AgentDispatchReceipt = {
@@ -181,6 +191,7 @@ export interface AgentConversationRouter {
   conversationPreviews(): AgentConversationThread[]
   conversations(): AgentConversationThread[]
   createTodoDraft(request: AgentTodoDraftRequest): AgentConversationThread
+  updateTodoDraft(threadId: string, brief: AgentTodoBrief): AgentConversationThread | null
   delete(threadId: string): boolean
   dispatch(request: AgentDispatchRequest): Promise<AgentDispatchReceipt>
   ensureTitle(threadId: string): boolean
@@ -189,6 +200,7 @@ export interface AgentConversationRouter {
     prompt: string,
     selection?: {
       attachments?: AgentConversationAttachmentPart[]
+      botId?: string | null
       displayPrompt?: string
       effort?: string
       evidencePath?: string
@@ -213,6 +225,7 @@ export interface AgentConversationRouter {
     prompt: string,
     selection?: {
       attachments?: AgentConversationAttachmentPart[]
+      botId?: string | null
       displayPrompt?: string
       effort?: string
       evidencePath?: string
@@ -265,11 +278,13 @@ function isTodoBrief(value: unknown): value is AgentTodoBrief {
     (value.constraints === undefined || isStringArray(value.constraints)) &&
     isOptionalString(value.context) &&
     isOptionalString(value.desiredOutcome) &&
+    isOptionalString(value.documentHtml) &&
     (value.knownFacts === undefined || isStringArray(value.knownFacts)) &&
     (value.openQuestions === undefined || isStringArray(value.openQuestions)) &&
     (value.references === undefined ||
       (Array.isArray(value.references) && value.references.every(isTodoBriefReference))) &&
-    isOptionalString(value.suggestedNextStep)
+    isOptionalString(value.suggestedNextStep) &&
+    isOptionalString(value.title)
   )
 }
 
@@ -279,6 +294,7 @@ function isTodoDraft(value: unknown): value is AgentTodoDraft {
     isTodoBrief(value.brief) &&
     isOptionalString(value.createdByThreadId) &&
     value.kind === 'todo' &&
+    (value.presetId === undefined || value.presetId === 'todo-document') &&
     typeof value.projectId === 'string' &&
     typeof value.todoId === 'string'
   )
@@ -337,10 +353,7 @@ function isConversationTurnChanges(value: unknown): value is AgentConversationTu
   )
 }
 
-function isOptionalArray<T>(
-  value: unknown,
-  predicate: (candidate: unknown) => candidate is T
-): boolean {
+function isOptionalArray(value: unknown, predicate: (candidate: unknown) => boolean): boolean {
   return value === undefined || (Array.isArray(value) && value.every(predicate))
 }
 
@@ -428,15 +441,20 @@ function hasRequiredConversationFields(value: Record<string, unknown>): boolean 
 function hasValidConversationOptions(value: Record<string, unknown>): boolean {
   return (
     isOptionalString(value.activeTurnStartedAt) &&
+    isOptionalString(value.botId) &&
     (value.lastPiEntryId === undefined || typeof value.lastPiEntryId === 'string') &&
     (value.toolScope === undefined ||
       value.toolScope === 'board-worker' ||
       value.toolScope === 'general') &&
     (value.compactForkPending === undefined || typeof value.compactForkPending === 'boolean') &&
     (value.forkedFromId === undefined || typeof value.forkedFromId === 'string') &&
+    (value.projectId === undefined ||
+      value.projectId === null ||
+      typeof value.projectId === 'string') &&
     (value.piHistoryInitialized === undefined || typeof value.piHistoryInitialized === 'boolean') &&
     isOptionalString(value.title) &&
-    (value.todoDraft === undefined || isTodoDraft(value.todoDraft))
+    (value.todoDraft === undefined || isTodoDraft(value.todoDraft)) &&
+    isOptionalString(value.workspaceRoot)
   )
 }
 
@@ -452,6 +470,7 @@ export function previewAgentConversation(
 ): AgentConversationThread {
   return {
     ...(thread.activeTurnStartedAt ? { activeTurnStartedAt: thread.activeTurnStartedAt } : {}),
+    ...(thread.botId ? { botId: thread.botId } : {}),
     canFollowUp: thread.canFollowUp,
     ...(thread.contextUsage ? { contextUsage: thread.contextUsage } : {}),
     createdAt: thread.createdAt,
@@ -473,6 +492,7 @@ export function previewAgentConversation(
     ...(thread.pendingUiRequests?.length
       ? { pendingUiRequests: thread.pendingUiRequests.map((request) => ({ ...request })) }
       : {}),
+    ...(thread.projectId !== undefined ? { projectId: thread.projectId } : {}),
     recentUpdate: thread.recentUpdate,
     sessionId: thread.sessionId,
     state: thread.state,
@@ -481,6 +501,7 @@ export function previewAgentConversation(
     ...(thread.todoDraft ? { todoDraft: structuredClone(thread.todoDraft) } : {}),
     ...(thread.toolScope ? { toolScope: thread.toolScope } : {}),
     updatedAt: thread.updatedAt,
+    ...(thread.workspaceRoot ? { workspaceRoot: thread.workspaceRoot } : {}),
     workerId: thread.workerId
   }
 }

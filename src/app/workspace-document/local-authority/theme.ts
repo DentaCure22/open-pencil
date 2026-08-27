@@ -13,7 +13,7 @@ export function createLocalWorkspaceThemeConsumer(dependencies: LocalWorkspaceTh
     if (inFlight) return inFlight
     inFlight = (async () => {
       const intent = await dependencies.readIntent()
-      if (!intent || intent.consumedAt !== null) return false
+      if (intent?.consumedAt !== null) return false
       dependencies.applyTheme(intent.theme)
       return dependencies.consumeIntent(intent.sequence)
     })().finally(() => {

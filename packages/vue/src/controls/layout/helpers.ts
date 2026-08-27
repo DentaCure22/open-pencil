@@ -222,7 +222,7 @@ export function createLayoutActions({
     if (node.value) {
       editor.commitNodeUpdate(
         node.value.id,
-        { [key]: previous } as Partial<SceneNode>,
+        { [key]: previous },
         `Change ${key}`
       )
     }

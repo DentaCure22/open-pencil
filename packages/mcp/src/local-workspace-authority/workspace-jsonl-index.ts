@@ -88,15 +88,20 @@ function compactText(value: string): string | undefined {
   return result || undefined
 }
 
-function nodeText(node: SceneNode): string | undefined {
-  if (node.type === 'TEXT') return compactText(node.text)
+type WorkspaceJsonlIndexNode = Pick<SceneNode, 'id' | 'name' | 'pluginData' | 'type'> & {
+  mermaidSource?: unknown
+  text?: unknown
+}
+
+function nodeText(node: WorkspaceJsonlIndexNode): string | undefined {
+  if (node.type === 'TEXT' && typeof node.text === 'string') return compactText(node.text)
   if ('mermaidSource' in node && typeof node.mermaidSource === 'string') {
     return compactText(node.mermaidSource)
   }
   return undefined
 }
 
-function searchableText(node: SceneNode, text: string | undefined): string {
+function searchableText(node: WorkspaceJsonlIndexNode, text: string | undefined): string {
   return boundedUtf8(
     [node.id, node.name || node.id, node.type, text]
       .filter((value): value is string => typeof value === 'string' && Boolean(value))
@@ -217,15 +222,42 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function indexNode(id: string, node: WorkspaceJsonlIndexPatchNode): SceneNode {
+type WorkspaceJsonlPluginDataEntry = {
+  key?: unknown
+  pluginId?: unknown
+  value?: unknown
+}
+
+function isWorkspaceJsonlPluginDataEntry(value: unknown): value is WorkspaceJsonlPluginDataEntry {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function indexPluginData(value: unknown): SceneNode['pluginData'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (!isWorkspaceJsonlPluginDataEntry(entry)) return []
+    const { key, pluginId, value: pluginValue } = entry
+    return typeof key === 'string' &&
+      typeof pluginId === 'string' &&
+      typeof pluginValue === 'string'
+      ? [{ key, pluginId, value: pluginValue }]
+      : []
+  })
+}
+
+function indexNode(
+  id: string,
+  node: WorkspaceJsonlIndexPatchNode,
+  type: SceneNode['type']
+): WorkspaceJsonlIndexNode {
   return {
     id,
     mermaidSource: typeof node.mermaidSource === 'string' ? node.mermaidSource : undefined,
     name: typeof node.name === 'string' ? node.name : id,
-    pluginData: Array.isArray(node.pluginData) ? node.pluginData : [],
+    pluginData: indexPluginData(node.pluginData),
     text: typeof node.text === 'string' ? node.text : '',
-    type: typeof node.type === 'string' ? node.type : 'FRAME'
-  } as SceneNode
+    type
+  }
 }
 
 function patchedRecord(
@@ -234,7 +266,7 @@ function patchedRecord(
   dx: number,
   dy: number
 ): WorkspaceJsonlIndexRecord {
-  const next = indexNode(record.id, node)
+  const next = indexNode(record.id, node, record.type)
   const text = nodeText(next)
   const sourceNodeId = canonicalMemorySourceNodeId(next)
   const width = finiteNumber(node.width)
@@ -267,8 +299,6 @@ function metadataSupportsPatch(
 ): boolean {
   const metadata = previous.index.metadata
   return (
-    metadata.contract === WORKSPACE_JSONL_INDEX_CONTRACT &&
-    metadata.projectionVersion === WORKSPACE_JSONL_INDEX_PROJECTION_VERSION &&
     metadata.documentId === source.identity.documentId &&
     metadata.workspaceId === source.identity.workspaceId &&
     previous.index.records.length === metadata.recordCount

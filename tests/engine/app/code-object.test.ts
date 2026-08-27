@@ -5,8 +5,10 @@ import { deserializeSceneGraph, serializeSceneGraph } from '@open-pencil/core/ki
 
 import { clearCompiledCodeObjectCache, compileCodeObjectSource } from '@/app/code-object/compiler'
 import {
+  CODE_OBJECT_MODALITIES,
   CODE_OBJECT_PRESETS,
   codeObjectDocument,
+  codeObjectPresetGroupsForQuery,
   createCodeObjectBoardClient,
   createCodeObject,
   createCodeObjectFromPreset,
@@ -419,6 +421,34 @@ describe('Code Objects', () => {
       hue: 5,
       spread: 0.55
     })
+  })
+
+  test('organizes presets through one explicit modality contract', () => {
+    expect(CODE_OBJECT_MODALITIES.map((modality) => modality.id)).toEqual([
+      'custom',
+      'work',
+      'document',
+      'media',
+      'spatial',
+      'data-interface',
+      'board-tool',
+      'live-app',
+      'agent',
+      'visual-experience'
+    ])
+
+    const groups = codeObjectPresetGroupsForQuery('')
+    expect(groups.flatMap((group) => group.presets.map((preset) => preset.id)).sort()).toEqual(
+      CODE_OBJECT_PRESETS.map((preset) => preset.id).sort()
+    )
+    expect(
+      groups.every((group) =>
+        group.presets.every((preset) => preset.modality === group.modality.id)
+      )
+    ).toBe(true)
+    expect(codeObjectPresetGroupsForQuery('documents').map((group) => group.modality.id)).toEqual([
+      'document'
+    ])
   })
 
   test('creates architecture and Kanban as two independent frameless Code Objects', () => {

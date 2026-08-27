@@ -29,7 +29,7 @@ describe('Pi RPC arguments', () => {
     ])
   })
 
-  test('does not append a launch system prompt', () => {
+  test('does not append a launch system prompt for an ordinary chat', () => {
     const args = piRpcArguments({
       effort: 'high',
       mode: 'new',
@@ -38,6 +38,23 @@ describe('Pi RPC arguments', () => {
     })
     expect(args).not.toContain('--append-system-prompt')
     expect(args.join(' ')).not.toContain('meaningful milestones')
+  })
+
+  test('appends one durable Bot charter file to the system prompt', () => {
+    const charterPath = '/tmp/OpenPencil Bot/bot-charters/dental/AGENTS.md'
+    const args = piRpcArguments({
+      appendSystemPrompt: charterPath,
+      effort: 'high',
+      mode: 'resume',
+      model: 'xai-auth/grok-4.6',
+      sessionId: 'thread-1'
+    })
+
+    expect(args).toEqual(
+      expect.arrayContaining(['--append-system-prompt', charterPath, '--session-id', 'thread-1'])
+    )
+    expect(args.filter((argument) => argument === '--append-system-prompt')).toHaveLength(1)
+    expect(args.at(args.indexOf('--append-system-prompt') + 1)).toBe(charterPath)
   })
 
   test('forks from the source session into a new session id', () => {

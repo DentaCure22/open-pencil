@@ -43,13 +43,11 @@ function clipToolPart(
 
 function clipMessageTools(message: AiMessage): AiMessage {
   if (!message.parts?.length) return message
-  let changed = false
   const parts = message.parts.map((part) => {
     if (part.type !== 'tool') return part
-    const next = clipToolPart(part)
-    if (next !== part) changed = true
-    return next
+    return clipToolPart(part)
   })
+  const changed = parts.some((part, index) => part !== message.parts?.at(index))
   return changed ? { ...message, parts } : message
 }
 
@@ -59,14 +57,11 @@ export function boundLoadedTranscript(messages: AiMessage[]): AiMessage[] {
     if (message.role === 'user') userIndexes.push(index)
   })
   if (userIndexes.length === 0) return messages
-  const keepFullFrom =
-    userIndexes[Math.max(0, userIndexes.length - LOADED_TRANSCRIPT_FULL_TURN_LIMIT)] ?? 0
-  let changed = false
+  const keepFullFrom = userIndexes.at(-LOADED_TRANSCRIPT_FULL_TURN_LIMIT) ?? userIndexes.at(0) ?? 0
   const next = messages.map((message, index) => {
     if (index >= keepFullFrom) return message
-    const clipped = clipMessageTools(message)
-    if (clipped !== message) changed = true
-    return clipped
+    return clipMessageTools(message)
   })
+  const changed = next.some((message, index) => message !== messages.at(index))
   return changed ? next : messages
 }

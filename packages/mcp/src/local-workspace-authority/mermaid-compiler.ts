@@ -2,7 +2,7 @@ import mermaid from 'mermaid'
 
 import { createMermaidSvgSpec, type MermaidSceneSpec } from '@open-pencil/core/diagram'
 
-export class MermaidSourceValidationError extends Error {
+export class MermaidSourceValidationError extends TypeError {
   constructor(message: string, cause: unknown) {
     super(`Mermaid source validation failed: ${message} No mutation was applied.`, { cause })
     this.name = 'MermaidSourceValidationError'

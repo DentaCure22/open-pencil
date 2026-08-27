@@ -34,7 +34,6 @@ function messageLine(message: AgentConversationMessage): string {
     const text = clipLine(message.text)
     return text ? `User: ${text}` : ''
   }
-  if (message.role !== 'assistant') return ''
   const text = clipLine(message.text)
   if (text) return `Assistant: ${text}`
   const commentary = message.parts
@@ -64,14 +63,13 @@ export function compactForkMessages(thread: AgentConversationThread): AgentConve
     if (message.role === 'user') userIndexes.push(index)
   })
   const start = userIndexes[Math.max(0, userIndexes.length - COMPACT_FORK_TURN_LIMIT)] ?? 0
-  return thread.messages.slice(start).flatMap((message) => {
+  return thread.messages.slice(start).flatMap((message): AgentConversationMessage[] => {
     if (message.role === 'user') {
       const text = clipLine(message.text)
       return text
         ? [{ createdAt: message.createdAt, id: randomUUID(), role: 'user' as const, text }]
         : []
     }
-    if (message.role !== 'assistant') return []
     const text = clipLine(message.text)
     const commentary = message.parts
       ?.filter((part) => part.type === 'commentary')
@@ -113,6 +111,11 @@ export function resolvePiForkLaunch(
   source: AgentConversationThread,
   request: AgentDispatchRequest
 ): PiForkPlan {
+  const inheritedRequest: AgentDispatchRequest = {
+    ...request,
+    projectId: request.projectId === undefined ? source.projectId : request.projectId,
+    workspaceRoot: request.workspaceRoot ?? source.workspaceRoot
+  }
   const historyScope: AgentHistoryScope = request.historyScope ?? 'effectiveContext'
   const idle = !request.prompt.trim()
   if (historyScope === 'full') {
@@ -121,7 +124,7 @@ export function resolvePiForkLaunch(
       forkedFromId: source.id,
       idle,
       mode: { forkedFromId: source.id, kind: 'fork', sessionId: source.sessionId },
-      request,
+      request: inheritedRequest,
       seedMessages: cloneForkMessages(source.messages)
     }
   }
@@ -131,9 +134,9 @@ export function resolvePiForkLaunch(
     idle,
     mode: { forkedFromId: source.id, kind: 'new' },
     request: idle
-      ? request
+      ? inheritedRequest
       : {
-          ...request,
+          ...inheritedRequest,
           displayPrompt,
           prompt: compactForkPrompt(source, request.prompt)
         },

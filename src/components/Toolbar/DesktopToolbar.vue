@@ -16,6 +16,7 @@ import ContextCommentToolbarControl from '@/components/context-comment/ContextCo
 import { IconlyChat } from '@/components/icons/iconly'
 import TraceAnnotationControls from '@/components/narrated-trace/TraceAnnotationControls.vue'
 import { narratedTraceAnnotationTool, setNarratedTraceAnnotationTool } from '@/app/narrated-trace'
+import { browserInspectorState } from '@/app/browser-inspector/state'
 import { useBottomToolbarBounds } from '@/app/shell/bottom-toolbar-bounds'
 import { toolbarToolTestId, ToolbarItem } from '@open-pencil/vue'
 
@@ -54,6 +55,8 @@ const emit = defineEmits<{
 
 const reducedMotion = usePreferredReducedMotion()
 const toolbarScrollViewportRef = ref<HTMLElement | null>(null)
+const browserInspectorErrorVisible = ref(false)
+const BROWSER_INSPECTOR_ERROR_LINGER_MS = 4_000
 const {
   horizontalInsets: toolbarHorizontalInsets,
   horizontalStyle: toolbarHorizontalStyle,
@@ -73,6 +76,19 @@ watch(
   () => sidebarOpen,
   () => void nextTick(queueToolbarBoundsRefresh),
   { flush: 'post' }
+)
+
+watch(
+  () => browserInspectorState.error,
+  (error, _, onCleanup) => {
+    browserInspectorErrorVisible.value = Boolean(error)
+    if (!error) return
+    const timer = window.setTimeout(() => {
+      browserInspectorErrorVisible.value = false
+    }, BROWSER_INSPECTOR_ERROR_LINGER_MS)
+    onCleanup(() => window.clearTimeout(timer))
+  },
+  { immediate: true }
 )
 
 watch(
@@ -149,17 +165,41 @@ function toggleSidebar() {
     :data-toolbar-orientation="embedded ? 'vertical' : 'horizontal'"
     :data-toolbar-left-inset="embedded ? undefined : toolbarHorizontalInsets.left"
     :data-toolbar-right-inset="embedded ? undefined : toolbarHorizontalInsets.right"
+    :aria-hidden="sidebarTabOnly && sidebarOpen ? 'true' : undefined"
+    :inert="sidebarTabOnly && sidebarOpen ? true : undefined"
     :style="toolbarHorizontalStyle"
-    class="z-30 flex shrink-0 items-center justify-center"
+    class="z-30 flex shrink-0 items-center justify-center transition-opacity motion-reduce:transition-none"
     :class="[
-      sidebarTabOnly && sidebarOpen ? 'pointer-events-none' : 'pointer-events-auto',
+      sidebarTabOnly && sidebarOpen
+        ? 'pointer-events-none opacity-0 duration-200 ease-in-out'
+        : sidebarTabOnly
+          ? 'pointer-events-auto opacity-100 delay-75 duration-200 ease-in-out'
+          : 'pointer-events-auto',
       embedded
         ? sidebarTabOnly
-          ? 'absolute top-1/2 left-0 h-11 w-7 -translate-y-1/2'
+          ? 'bg-chrome/90 absolute top-1/2 left-3 h-11 w-7 -translate-y-1/2 overflow-clip rounded-[11px] shadow-sm backdrop-blur-xl'
           : [sidebarOpen ? 'self-stretch bg-chrome' : 'h-auto', 'w-11']
         : 'absolute bottom-3 min-w-0'
     ]"
   >
+    <Transition
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="!embedded && browserInspectorState.error && browserInspectorErrorVisible"
+        data-test-id="browser-inspector-error"
+        class="border-chrome-border/70 bg-chrome/80 pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-30 flex max-w-[min(360px,calc(100%-8px))] -translate-x-1/2 items-start gap-1.5 rounded-[10px] border px-2.5 py-1.5 text-[10px] leading-4 text-muted/80 shadow-sm transition-opacity duration-[220ms] ease-out will-change-[opacity] motion-reduce:transition-none"
+        role="status"
+        aria-live="polite"
+      >
+        <icon-lucide-circle-alert class="mt-0.5 size-3 shrink-0 text-red-400/60" />
+        <span>{{ browserInspectorState.error }}</span>
+      </div>
+    </Transition>
+
     <RekaToolbarRoot as-child :orientation="embedded ? 'vertical' : 'horizontal'" loop>
       <div
         :data-test-id="sidebarTabOnly ? 'sidebar-toggle-toolbar' : 'toolbar'"
@@ -174,25 +214,30 @@ function toggleSidebar() {
             : 'border-chrome-border bg-chrome shadow-chrome w-fit max-w-full min-w-0 flex-row overflow-hidden rounded-[14px] border p-1 backdrop-blur-2xl'
         "
       >
-        <Tip
-          v-if="embedded && (!sidebarTabOnly || !sidebarOpen)"
-          :label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
-          side="right"
-        >
+        <Tip v-if="embedded" :label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'" side="right">
           <button
             type="button"
-            :data-test-id="sidebarOpen ? 'close-layers-panel' : 'open-layers-panel'"
+            :data-test-id="
+              sidebarTabOnly && sidebarOpen
+                ? undefined
+                : sidebarOpen
+                  ? 'close-layers-panel'
+                  : 'open-layers-panel'
+            "
             :aria-label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
             class="pointer-events-auto absolute z-20 flex shrink-0 cursor-pointer items-center justify-center text-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/35"
             :class="
               sidebarTabOnly
-                ? 'inset-0 h-11 w-7 rounded-r-[10px] border-y border-r border-chrome-border hover:bg-hover/70 focus-visible:ring-inset'
+                ? 'inset-0 h-11 w-7 rounded-[10px] border border-chrome-border hover:bg-hover/70 focus-visible:ring-inset'
                 : 'top-2 left-1.5 size-8 rounded-full hover:bg-hover'
             "
             @click="toggleSidebar"
           >
-            <icon-lucide-panel-left-close v-if="sidebarOpen" class="size-4" />
-            <icon-lucide-panel-left-open v-else class="size-4 stroke-[1.7]" />
+            <icon-lucide-panel-left-open
+              v-if="sidebarTabOnly || !sidebarOpen"
+              class="size-4 stroke-[1.7]"
+            />
+            <icon-lucide-panel-left-close v-else class="size-4" />
           </button>
         </Tip>
         <span
@@ -205,7 +250,7 @@ function toggleSidebar() {
           ref="toolbarScrollViewportRef"
           data-test-id="toolbar-scroll-viewport"
           class="scrollbar-none min-w-0 max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x"
-          :class="embedded ? 'overflow-visible' : ''"
+          :class="embedded ? 'overflow-visible' : 'flex-1'"
           @wheel.stop="scrollToolbarTools"
         >
           <div
@@ -234,7 +279,7 @@ function toggleSidebar() {
                 >
                   <motion.span
                     :key="activeIndicatorTool"
-                    class="absolute inset-0 origin-center rounded-full bg-accent shadow-sm ring-1 ring-accent/40"
+                    class="absolute inset-0 origin-center rounded-[10px] bg-hover"
                     data-test-id="toolbar-active-indicator-bubble"
                     :initial="false"
                     :animate="activeIndicatorStretch"
@@ -290,22 +335,24 @@ function toggleSidebar() {
               </Tip>
             </div>
             <SelectionToolControls />
-            <span
-              :class="embedded ? 'my-0.5 h-px w-6' : 'mx-0.5 h-6 w-px'"
-              class="shrink-0 self-center bg-border"
-              aria-hidden="true"
-            />
-            <WorkspaceButton />
-            <span
-              :class="embedded ? 'my-0.5 h-px w-6' : 'mx-0.5 h-6 w-px'"
-              class="shrink-0 self-center bg-border"
-              aria-hidden="true"
-            />
-            <CollabPanel />
-            <span v-if="embedded" class="mt-0.5 size-8 shrink-0" aria-hidden="true" />
-            <div :class="embedded ? 'absolute bottom-2 left-1.5' : 'relative'" class="z-20">
-              <AppMenu :side="embedded ? 'right' : 'top'" />
-            </div>
+          </div>
+        </div>
+        <div
+          v-if="!sidebarTabOnly"
+          data-test-id="toolbar-fixed-utilities"
+          class="flex shrink-0 items-center gap-0.5"
+          :class="embedded ? 'flex-col' : 'flex-row'"
+        >
+          <span
+            :class="embedded ? 'my-0.5 h-px w-6' : 'mx-0.5 h-6 w-px'"
+            class="shrink-0 self-center bg-border"
+            aria-hidden="true"
+          />
+          <WorkspaceButton />
+          <CollabPanel />
+          <span v-if="embedded" class="mt-0.5 size-8 shrink-0" aria-hidden="true" />
+          <div :class="embedded ? 'absolute bottom-2 left-1.5' : 'relative'" class="z-20">
+            <AppMenu :side="embedded ? 'right' : 'top'" />
           </div>
         </div>
       </div>

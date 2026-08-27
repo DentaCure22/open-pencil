@@ -13,6 +13,7 @@ export const LOCAL_AUTHORITY_BOARD_CAPABILITIES = [
   'board.read.memory_search',
   'board.read.screenshot.persisted',
   'board.write.batch',
+  'board.write.mermaid',
   'trace.read.persisted'
 ] as const
 

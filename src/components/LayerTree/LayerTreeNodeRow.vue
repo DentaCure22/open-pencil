@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { COMPONENT_TYPES, nodeIcon } from '@/app/editor/icons'
+import { nodeIcon } from '@/app/editor/icons'
 import LayerTreeActions from './LayerTreeActions.vue'
 import LayerTreeDisclosure from './LayerTreeDisclosure.vue'
 import LayerTreeDropIndicator from './LayerTreeDropIndicator.vue'
@@ -21,6 +21,7 @@ const { node, level, hasChildren, selected, padLeft, expanded, actions, chrome }
 const emit = defineEmits<{
   hoverEnd: [id: string]
   hoverStart: [id: string]
+  openObject: [id: string]
   renameStart: [id: string, name: string]
 }>()
 </script>
@@ -55,13 +56,7 @@ const emit = defineEmits<{
     <component
       :is="nodeIcon(node)"
       class="size-3 shrink-0"
-      :class="
-        selected
-          ? 'text-accent opacity-100'
-          : COMPONENT_TYPES.has(node.type)
-            ? 'text-component opacity-100'
-            : 'opacity-65'
-      "
+      :class="selected ? 'text-accent opacity-100' : 'opacity-65'"
     />
     <span class="min-w-0 flex-1 truncate">{{ node.name }}</span>
 
@@ -71,6 +66,7 @@ const emit = defineEmits<{
       :node="node"
       :selected="selected"
       @toggle-lock="actions.toggleLock"
+      @open-object="emit('openObject', node.id)"
       @toggle-visibility="actions.toggleVisibility"
     />
     <span

@@ -73,7 +73,7 @@ function fencedSources(source: string, language: string): string[] {
   const escaped = language.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const fence = '```'
   const pattern = new RegExp(`${fence}${escaped}\\s*\\n([\\s\\S]*?)\\n${fence}`, 'gi')
-  return [...source.matchAll(pattern)].map((match) => match[1]?.trim() ?? '')
+  return [...source.matchAll(pattern)].map((match) => match[1].trim())
 }
 
 function parseJsonFence(source: string, context: string): JsonRecord {

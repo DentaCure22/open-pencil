@@ -4,6 +4,10 @@
 export type CanvasRenderLayer = 'full' | 'scene' | 'overlays'
 
 export interface UseCanvasOptions {
+  /** Returns the nodes whose native scene paint is replaced by product-owned surfaces. */
+  sceneContentOwnerIds?: () => ReadonlySet<string>
+  /** Returns true when product chrome replaces a selected Frame's native title. */
+  ownsSelectionLabel?: (nodeId: string) => boolean
   /**
    * Returns true when a node has a product-owned overlay that replaces native
    * selection and hover chrome.

@@ -2,6 +2,7 @@
 import { useEventListener } from '@vueuse/core'
 import {
   computed,
+  defineAsyncComponent,
   onMounted,
   onUnmounted,
   ref,
@@ -15,6 +16,11 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import { assetHashFromReference } from '@open-pencil/scene-graph/images'
 import { applyMoveReparent, applyMoveSnap } from '@open-pencil/vue'
 
+import {
+  shouldDetachFromFluidProjectSpace,
+  workMapProjectSpaceBindings
+} from '@/app/agent-chat/project-space'
+import { useAgentWorkMapPersistence } from '@/app/agent-chat/work-map-persistence'
 import { useEditorStore } from '@/app/editor/active-store'
 import { forwardFrameSurfaceWheel } from '@/app/editor/canvas/embedded-surface-wheel'
 import { focusCanvasSurface } from '@/app/editor/canvas/surface/focus'
@@ -68,18 +74,34 @@ import {
 import { readOpenPencilWorkspaceIdentity } from '@/app/workspace-document/identity'
 import { carriesAttachmentDrag, readAttachmentDrag } from '@/app/agent-chat/attachments'
 import { agentBoardObjectDocument } from '@/app/agent-terminal/board-object'
-import AgentConversationBoardSurface from '@/components/agent-terminal/AgentConversationBoardSurface.vue'
 import SmylrTrustedWebApp from '@/components/code-object/SmylrTrustedWebApp.vue'
 import CodeObjectTransformControls from '@/components/code-object/CodeObjectTransformControls.vue'
 
 import { useCodeObjectRuntimeResidency } from './useCodeObjectRuntimeResidency'
 import { useTrustedWebAppRuntimeResidency } from './useTrustedWebAppRuntimeResidency'
 
+const AgentConversationBoardSurface = defineAsyncComponent(
+  () => import('@/components/agent-terminal/AgentConversationBoardSurface.vue')
+)
+
 type TemplateRefValue = Element | ComponentPublicInstance | null
 type TemplateRefHandler = (value: TemplateRefValue) => void
 type TemplateRefBinder = (frameId: string, value: TemplateRefValue) => void
 
 const store = useEditorStore()
+const { load: loadCanvasWorkMap, workMap } = useAgentWorkMapPersistence()
+const projectSpaceFrameIds = computed(
+  () =>
+    new Set(
+      workMapProjectSpaceBindings(workMap.value, store.state.currentPageId).map(
+        ({ frameId }) => frameId
+      )
+    )
+)
+const projectMoveMembershipPolicy = {
+  shouldDetach: (child: SceneNode, parent: SceneNode) =>
+    projectSpaceFrameIds.value.has(parent.id) && shouldDetachFromFluidProjectSpace(child, parent)
+}
 const { resolvedTheme } = useAppTheme()
 const syncTick = ref(0)
 const conversationSurfacesReady = ref(false)
@@ -242,7 +264,9 @@ function paintOwnedHoverChrome(frameId: string | null) {
 }
 
 function syncOwnedHoverChrome(frameId: string | null, previousFrameId: string | null) {
-  if (previousFrameId) boundSurfaceHosts.get(previousFrameId)?.removeAttribute('data-hovered')
+  if (previousFrameId) {
+    boundSurfaceHosts.get(previousFrameId)?.removeAttribute('data-hovered')
+  }
   paintOwnedHoverChrome(frameId)
 }
 
@@ -298,6 +322,10 @@ function surfaceCanvasStyle(frame: SceneNode) {
     } satisfies CSSProperties
   }
   return resolveCanvasStyle(frame)
+}
+
+function frameOverlayCanvasStyle(frame: SceneNode) {
+  return { ...surfaceCanvasStyle(frame), contain: 'layout' } satisfies CSSProperties
 }
 
 function runtimeSurfaceCanvasStyle(frame: SceneNode) {
@@ -696,7 +724,7 @@ function endShapeMove(event: PointerEvent) {
   store.graph.clearNodePositionPresentation(frame.id)
   if (next.x !== drag.startX || next.y !== drag.startY) {
     store.updateNode(frame.id, next)
-    applyMoveReparent(store)
+    applyMoveReparent(store, projectMoveMembershipPolicy)
     store.commitMoveWithReparent(drag.snapInput.originals)
   }
 }
@@ -808,6 +836,7 @@ watch(fullFrameCodeObjectId, (frameId, previousFrameId) => {
 
 onMounted(() => {
   mounted = true
+  if (!workMap.value) void loadCanvasWorkMap()
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       conversationSurfacesReady.value = true
@@ -974,9 +1003,9 @@ onUnmounted(() => {
     </div>
 
     <div
-      class="pointer-events-none absolute top-0 left-0 z-[7]"
+      class="group pointer-events-none absolute top-0 left-0 z-[7]"
       :data-test-id="`code-object-overlay-${frame.id}`"
-      :style="surfaceCanvasStyle(frame)"
+      :style="frameOverlayCanvasStyle(frame)"
     >
       <div
         v-if="modeFor(frame.id) === 'design' && !isSmylrContainerMode(frame)"
@@ -999,6 +1028,7 @@ onUnmounted(() => {
         @pointerup.stop.prevent="endShapeMove"
         @wheel="handleDesignSurfaceWheel($event)"
       />
+
     </div>
 
     <CodeObjectTransformControls

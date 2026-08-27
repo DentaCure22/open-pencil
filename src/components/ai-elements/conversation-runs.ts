@@ -1,8 +1,11 @@
+import { boardObjectChangesFromMessages } from '@/app/agent-chat/board-object-changes'
+
 import { isRetiredMemoryTool, latestMessageCreatedAt } from './model'
-import type { AiMessage, AiTurnChanges } from './types'
+import type { AiBoardObjectChange, AiMessage, AiTurnChanges } from './types'
 
 export type ConversationRun = {
   activity: AiMessage[]
+  boardChanges: AiBoardObjectChange[]
   changes?: AiTurnChanges
   endedAt?: string
   id: string
@@ -30,7 +33,7 @@ function withoutRetiredMemoryTools(message: AiMessage): AiMessage | null {
   const parts = message.parts?.filter(
     (part) => part.type !== 'tool' || !isRetiredMemoryTool(part.name)
   )
-  if (parts && parts.length === (message.parts?.length ?? 0)) return message
+  if (parts?.length === (message.parts?.length ?? 0)) return message
   if (!parts?.length && !message.text.trim()) return null
   return { ...message, parts }
 }
@@ -47,6 +50,23 @@ function commentaryFromText(message: AiMessage): AiMessage {
       : [{ state: 'complete', text, type: 'commentary' }, ...(message.parts ?? [])],
     text: ''
   }
+}
+
+function isActivePreamble(
+  lastAnswer: AiMessage | undefined,
+  messages: readonly AiMessage[],
+  active: boolean | undefined
+) {
+  if (!active || !lastAnswer || lastAnswer.completedAt) return false
+  if (lastAnswer.text.length <= 240 && !lastAnswer.text.includes('\n')) return true
+  const lastAnswerIndex = messages.indexOf(lastAnswer)
+  return messages
+    .slice(lastAnswerIndex + 1)
+    .some((message) =>
+      message.parts?.some(
+        (part) => part.type === 'tool' && (part.state === 'pending' || part.state === 'running')
+      )
+    )
 }
 
 export function conversationRuns(
@@ -71,29 +91,7 @@ export function conversationRuns(
     const answers = run.messages.filter((message) => message.text.trim())
     const lastAnswer = answers.at(-1)
     const earlierAnswers = new Set(answers.slice(0, -1).map((message) => message.id))
-    const lastAnswerIndex = lastAnswer ? run.messages.indexOf(lastAnswer) : -1
-    const compactUnfinishedText = Boolean(
-      lastAnswer &&
-      !lastAnswer.completedAt &&
-      lastAnswer.text.length <= 240 &&
-      !lastAnswer.text.includes('\n')
-    )
-    const followedByRunningTool = Boolean(
-      lastAnswer &&
-      run.messages
-        .slice(lastAnswerIndex + 1)
-        .some((message) =>
-          message.parts?.some(
-            (part) => part.type === 'tool' && (part.state === 'pending' || part.state === 'running')
-          )
-        )
-    )
-    const activePreamble = Boolean(
-      options.active &&
-      lastAnswer &&
-      !lastAnswer.completedAt &&
-      (compactUnfinishedText || followedByRunningTool)
-    )
+    const activePreamble = isActivePreamble(lastAnswer, run.messages, options.active)
     if (activePreamble && lastAnswer) earlierAnswers.add(lastAnswer.id)
     const media = run.messages.filter(
       (message) => !message.text.trim() && hasVisibleMessageContent(message)
@@ -117,6 +115,7 @@ export function conversationRuns(
 
     return {
       activity,
+      boardChanges: boardObjectChangesFromMessages(run.messages),
       ...(run.prompt?.changes ? { changes: run.prompt.changes } : {}),
       endedAt: run.prompt?.completedAt ?? latestMessageCreatedAt(run.messages),
       id: run.id,

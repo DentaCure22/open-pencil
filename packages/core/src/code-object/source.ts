@@ -42,6 +42,10 @@ type SucraseTokenizerRuntime = {
   isTopLevelDeclaration: (token: Token) => boolean
 }
 
+type SucraseRuntimeFile = Omit<File, 'tokens'> & {
+  tokens: Array<Token | undefined>
+}
+
 export type CodeObjectStaticPreflight = {
   contract: typeof CODE_OBJECT_STATIC_PREFLIGHT_CONTRACT
   execution: 'not_attempted'
@@ -87,9 +91,9 @@ const REFERENCE_ROLES = new Set<SucraseIdentifierRole>([
   IdentifierRole.ObjectShorthand
 ])
 
-function parsedSource(source: string): File | null {
+function parsedSource(source: string): SucraseRuntimeFile | null {
   try {
-    return parse(source, true, true, false) as File
+    return parse(source, true, true, false) as SucraseRuntimeFile
   } catch {
     return null
   }
@@ -147,10 +151,13 @@ function bindingRange(scopes: Scope[], token: Token, tokenIndex: number): Bindin
   return { endTokenIndex: scope.endTokenIndex, startTokenIndex: scope.startTokenIndex }
 }
 
-function localBindings(source: string, file: File): Map<BlockedAmbientName, BindingRange[]> {
+function localBindings(
+  source: string,
+  file: SucraseRuntimeFile
+): Map<BlockedAmbientName, BindingRange[]> {
   const bindings = new Map<BlockedAmbientName, BindingRange[]>()
   file.tokens.forEach((token, tokenIndex) => {
-    if (token.isType) return
+    if (!token || token.isType) return
     const name = blockedName(source, token)
     if (!name) return
     const range = bindingRange(file.scopes, token, tokenIndex)
@@ -256,7 +263,11 @@ function importedModules(source: string): string[] {
   return modules
 }
 
-function isSyntacticClassComponent(file: File, source: string, classIndex: number): boolean {
+function isSyntacticClassComponent(
+  file: SucraseRuntimeFile,
+  source: string,
+  classIndex: number
+): boolean {
   for (let cursor = classIndex + 1; cursor < file.tokens.length; cursor++) {
     const token = file.tokens[cursor]
     if (!token) return false
@@ -284,6 +295,7 @@ function hasSyntacticDefaultComponent(source: string): boolean {
   const file = parsedSource(source)
   if (!file) return false
   return file.tokens.some((token, index) => {
+    if (!token) return false
     const next = file.tokens[index + 1]
     if (tokenName(source, token) !== 'export' || !next || tokenName(source, next) !== 'default') {
       return false

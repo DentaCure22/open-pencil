@@ -1,0 +1,67 @@
+{
+  "name": "unit",
+  "frameSize": {
+    "width": 16,
+    "height": 16
+  },
+  "layout": {
+    "columns": 4,
+    "rows": 2
+  },
+  "sources": {
+    "1x": "unit-sprite.png",
+    "2x": "unit-sprite@2x.png",
+    "3x": "unit-sprite@3x.png",
+    "animatedPreview": "unit-motion.webp"
+  },
+  "frames": [
+    {
+      "id": "calm-hover",
+      "column": 0,
+      "row": 0,
+      "durationMs": 260
+    },
+    {
+      "id": "inquisitive-tilt",
+      "column": 1,
+      "row": 0,
+      "durationMs": 110
+    },
+    {
+      "id": "module-orbit",
+      "column": 2,
+      "row": 0,
+      "durationMs": 120
+    },
+    {
+      "id": "compact-fold",
+      "column": 3,
+      "row": 0,
+      "durationMs": 100
+    },
+    {
+      "id": "fast-dash",
+      "column": 0,
+      "row": 1,
+      "durationMs": 90
+    },
+    {
+      "id": "banking-turn",
+      "column": 1,
+      "row": 1,
+      "durationMs": 110
+    },
+    {
+      "id": "separated-pieces",
+      "column": 2,
+      "row": 1,
+      "durationMs": 120
+    },
+    {
+      "id": "settled-hover",
+      "column": 3,
+      "row": 1,
+      "durationMs": 300
+    }
+  ]
+}

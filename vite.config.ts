@@ -71,7 +71,14 @@ export default defineConfig(async ({ command, mode }) => {
       exclude: ['@open-pencil/core', '@open-pencil/kiwi'],
       // Code Objects and Board capture are loaded on demand. Prebundle their runtimes so
       // the first interaction does not invalidate the dependency graph mid-session.
-      include: ['html2canvas', 'react', 'react-dom/client', 'react/jsx-dev-runtime']
+      include: [
+        'html2canvas',
+        'mermaid',
+        'react',
+        'react-dom/client',
+        'react/jsx-dev-runtime',
+        'recharts'
+      ]
     },
     server: {
       ...createDevServerOptions({ host, smylrEmbed }),

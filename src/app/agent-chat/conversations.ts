@@ -31,6 +31,7 @@ export type AgentTodoDraft = {
     constraints?: string[]
     context?: string
     desiredOutcome?: string
+    documentHtml?: string
     goal: string
     knownFacts?: string[]
     openQuestions?: string[]
@@ -41,9 +42,11 @@ export type AgentTodoDraft = {
       note?: string
     }>
     suggestedNextStep?: string
+    title?: string
   }
   createdByThreadId?: string
   kind: 'todo'
+  presetId?: 'todo-document'
   projectId: string
   todoId: string
 }
@@ -66,6 +69,7 @@ export type AgentConversationThread = {
   newerAfter?: string | null
   olderBefore?: string | null
   pendingUiRequests: AgentExtensionUiRequest[]
+  projectId?: string | null
   recentUpdate: string
   state: AgentConversationState
   task: string
@@ -73,6 +77,7 @@ export type AgentConversationThread = {
   todoDraft?: AgentTodoDraft
   turns?: AgentConversationTurn[]
   updatedAt: string
+  workspaceRoot?: string
 }
 
 export type AgentConversationHistory = {
@@ -102,6 +107,7 @@ export type RemoteAgentConversation = {
   newerAfter?: string | null
   olderBefore?: string | null
   pendingUiRequests?: AgentExtensionUiRequest[]
+  projectId?: string | null
   recentUpdate: string
   state: 'completed' | 'needs_attention' | 'running' | 'stopped'
   task: string
@@ -109,6 +115,7 @@ export type RemoteAgentConversation = {
   todoDraft?: AgentTodoDraft
   turns?: AgentConversationTurn[]
   updatedAt: string
+  workspaceRoot?: string
 }
 
 type AgentDispatchReceipt = {
@@ -124,7 +131,8 @@ type AgentJob = {
 export async function dispatchAgentPrompt(
   message: string,
   selection: AgentModelSelection,
-  media: AgentPromptMedia = {}
+  media: AgentPromptMedia = {},
+  launch: { createBot?: boolean; projectId: string | null } = { projectId: null }
 ): Promise<AgentDispatchReceipt> {
   const response = await localWorkspaceAuthorityFetch('/agent-router/v1/pi/dispatch', {
     body: JSON.stringify({
@@ -133,6 +141,7 @@ export async function dispatchAgentPrompt(
       displayPrompt: media.displayPrompt,
       effort: selection.effort,
       model: selection.model,
+      ...launch,
       ...boardWorkerLaunchFields(message)
     }),
     headers: { 'Content-Type': 'application/json' },
@@ -334,6 +343,7 @@ export function mapRemoteAgentConversation(thread: RemoteAgentConversation): Omi
             : null
         }),
     pendingUiRequests: thread.pendingUiRequests?.map((request) => ({ ...request })) ?? [],
+    ...(thread.projectId !== undefined ? { projectId: thread.projectId } : {}),
     recentUpdate: thread.recentUpdate,
     state: thread.state,
     task: thread.task,
@@ -342,7 +352,8 @@ export function mapRemoteAgentConversation(thread: RemoteAgentConversation): Omi
     ...(agentConversationTurns(thread.id, thread.turns)
       ? { turns: agentConversationTurns(thread.id, thread.turns) }
       : {}),
-    updatedAt: thread.updatedAt
+    updatedAt: thread.updatedAt,
+    ...(thread.workspaceRoot ? { workspaceRoot: thread.workspaceRoot } : {})
   }
 }
 

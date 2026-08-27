@@ -122,7 +122,7 @@ heavy('fig export roundtrip', () => {
 
   beforeAll(async () => {
     const buf = readFileSync(resolve(FIXTURES, 'gold-preview.fig'))
-    parsed = await parseFigFile(buf.buffer as ArrayBuffer)
+    parsed = await parseFigFile(Uint8Array.from(buf).buffer)
   })
 
   test('exportFigFile produces valid .fig', async () => {

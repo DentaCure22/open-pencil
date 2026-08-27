@@ -5,12 +5,13 @@ import {
   filterT3ComposerItems,
   replaceT3ComposerTrigger,
   resolveT3ThreadStatus,
+  summarizeT3ThreadStatuses,
   T3_COMPOSER_COMMANDS,
   T3_COMPOSER_SKILLS
 } from '@/components/ai-elements/t3-chat-chrome.logic'
 
 describe('T3 Code thread statuses', () => {
-  test('prioritizes approval, input, active, failure, and unseen completion states', () => {
+  test('prioritizes approval, input, active, and unseen completion states', () => {
     const base = { pendingUiRequests: [], recentUpdate: '', state: 'completed' as const }
     expect(resolveT3ThreadStatus(base, { unread: true })).toMatchObject({
       label: 'Completed',
@@ -22,14 +23,14 @@ describe('T3 Code thread statuses', () => {
     })
     expect(
       resolveT3ThreadStatus({ ...base, recentUpdate: 'Provider failed', state: 'stopped' })
-    ).toMatchObject({ label: 'Failed', tone: 'red' })
+    ).toBeNull()
     expect(
       resolveT3ThreadStatus({
         ...base,
-        recentUpdate: 'Pi RPC process exited.',
+        recentUpdate: 'Pi stopped responding.',
         state: 'needs_attention'
       })
-    ).toMatchObject({ label: 'Failed', tone: 'red' })
+    ).toMatchObject({ label: 'Failed', pulse: false, tone: 'red' })
     expect(
       resolveT3ThreadStatus({
         ...base,
@@ -44,6 +45,19 @@ describe('T3 Code thread statuses', () => {
         pendingUiRequests: [{ id: 'input', method: 'select', requestedAt: '', title: 'Choose' }]
       })
     ).toMatchObject({ label: 'Awaiting Input', tone: 'indigo' })
+  })
+
+  test('summarizes child activity as working, then failed, then completed', () => {
+    const completed = { label: 'Completed', pulse: false, tone: 'emerald' as const }
+    const failed = { label: 'Failed', pulse: false, tone: 'red' as const }
+    const working = { label: 'Working', pulse: true, tone: 'sky' as const }
+
+    expect(summarizeT3ThreadStatuses([completed])).toEqual(completed)
+    expect(summarizeT3ThreadStatuses([completed, failed])).toEqual(failed)
+    expect(summarizeT3ThreadStatuses([completed, failed, working])).toEqual(working)
+    expect(
+      summarizeT3ThreadStatuses([{ label: 'Pending Approval', pulse: false, tone: 'amber' }])
+    ).toBeUndefined()
   })
 })
 

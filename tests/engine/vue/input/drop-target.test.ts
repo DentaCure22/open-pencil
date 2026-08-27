@@ -58,6 +58,33 @@ describe('move reparent', () => {
     expect(editor.graph.getNode(card.id)?.parentId).toBe(frame.id)
   })
 
+  test('lets a product-owned frame detach a deliberately crossing child', () => {
+    const editor = createEditor()
+    const pageId = editor.state.currentPageId
+    const frame = editor.graph.createNode('FRAME', pageId, {
+      name: 'Project space',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 400
+    })
+    const card = editor.graph.createNode('RECTANGLE', frame.id, {
+      name: 'Card',
+      x: 360,
+      y: 20,
+      width: 100,
+      height: 80
+    })
+    editor.select([card.id])
+    editor.setDropTarget(frame.id)
+
+    applyMoveReparent(editor, {
+      shouldDetach: (child, parent) => child.x + child.width / 2 > parent.width
+    })
+
+    expect(editor.graph.getNode(card.id)?.parentId).toBe(pageId)
+  })
+
   test('reparents onto another frame under the pointer', () => {
     const editor = createEditor()
     const pageId = editor.state.currentPageId

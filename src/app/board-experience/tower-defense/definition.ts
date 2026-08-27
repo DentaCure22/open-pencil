@@ -105,8 +105,8 @@ function pointOnPath(path: PathGeometry, progress: number): BoardExperiencePoint
   let remaining = Math.min(1, Math.max(0, progress)) * path.totalLength
   for (let index = 0; index < path.segmentLengths.length; index += 1) {
     const length = path.segmentLengths[index] ?? 0
-    const start = path.points[index]
-    const end = path.points[index + 1]
+    const start = path.points.at(index)
+    const end = path.points.at(index + 1)
     if (!start || !end) continue
     if (remaining <= length) {
       const ratio = length <= 0 ? 0 : remaining / length

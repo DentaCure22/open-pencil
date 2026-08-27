@@ -223,6 +223,11 @@ describe('MCP server', () => {
     expect(names).not.toContain('board_build')
     expect(names).not.toContain('query_trace_history')
     expect(names).not.toContain('get_codegen_prompt')
+    const workMapApply = tools.find((tool) => tool.name === 'workmap_apply')
+    expect(workMapApply).toBeDefined()
+    const workMapSchema = JSON.stringify(workMapApply?.inputSchema)
+    expect(workMapSchema).toContain('create_bot')
+    expect(workMapSchema).toContain('create_routine')
     expect(tools.length).toBeGreaterThan(30)
   })
 

@@ -124,22 +124,24 @@ Server starts on port 7600 (override with `PORT` env var). Endpoints:
 
 ## Board workflow
 
-The MCP service provides bounded Board discovery and live controls. Persisted Board authoring does
-not use `board_build`, `board_change`, a mutation handshake, or a Board-specific CLI.
+The MCP service provides bounded Board discovery, guarded authoring, and live controls. Persisted
+Board authoring uses `board_apply`; the authority owns concurrency checks and the atomic save.
 
 For agent Board work:
 
-1. Read the live Board identity and selected IDs with the available Board context tool.
-2. Use `workspace.index.jsonl` only when an exact object or page ID still needs discovery.
-3. Read and edit the exact records in `workspace.json` with ordinary file tools.
-4. Preserve stable IDs, hierarchy, connections, Code Object source/state, and unrelated records.
-5. Re-read the saved records. Use a Board screenshot only when rendered-pixel proof matters.
+1. Read the live page and selected IDs with `board_where` when location matters.
+2. Discover saved objects with `board_query`, then carry exact IDs forward.
+3. Apply related operations together with `board_apply`.
+4. Read exact IDs again only when the receipt omits required saved-state evidence.
+5. Use a Board screenshot only when rendered-pixel proof matters.
 
 Trace is optional read-only context. Read the bounded adjacent `trace-context.json`, verify its
 status and expiry, then follow its exact IDs into `workspace.json`.
 
-Mermaid and Code Objects remain source-backed Board records. Edit their persisted source and
-descriptor fields directly instead of routing them through a second semantic authoring API.
+Mermaid and Code Objects remain source-backed Board records. Use `create_mermaid` and
+`update_mermaid` operations for static topology; use `create_code_object` and
+`update_code_object` for interactive or behavior-heavy surfaces. Read exact Mermaid source with
+`board_query` and `detail: "mermaid"`.
 
 ## AI Agent Skill
 
@@ -170,7 +172,6 @@ The running server reports the authoritative catalog for its version. The main g
 | `get_current_page`   | Get the current page name and ID                                                       |
 | `get_node`           | Get detailed properties of a node by ID                                                |
 | `find_nodes`         | Find nodes by name pattern and/or type                                                 |
-| `get_components`     | List all components in the document                                                    |
 | `list_pages`         | List all pages                                                                         |
 | `list_variables`     | List design variables                                                                  |
 | `list_collections`   | List variable collections                                                              |
@@ -191,9 +192,6 @@ The running server reports the authoritative catalog for its version. The main g
 | `create_slice`           | Create an export slice                                                                         |
 | `create_page`            | Create a new page                                                                              |
 | `render`                 | Render JSX to design nodes — create entire component trees in one call                         |
-| `create_component`       | Convert a frame/group into a component                                                         |
-| `create_instance`        | Create an instance of a component                                                              |
-| `node_to_component`      | Convert an existing node into a component in-place                                             |
 
 ### Modify
 

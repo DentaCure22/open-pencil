@@ -11,7 +11,11 @@ import {
 import * as ReactJsxRuntime from 'react/jsx-runtime'
 import { transform } from 'sucrase'
 
-import { normalizeCodeObjectSurface, type CodeObjectSurface } from '@open-pencil/core/code-object'
+import {
+  normalizeCodeObjectSurface,
+  type CodeObjectSurface,
+  type ResolvedCodeObjectAppearance
+} from '@open-pencil/core/code-object'
 
 import {
   CODE_OBJECT_BOARD_API_VERSION,
@@ -22,6 +26,7 @@ import type { CodeObjectDocument, CodeObjectState } from '@/app/code-object/mode
 import * as CodeObjectUi from '@/app/code-object/ui-runtime'
 
 export type AuthoredCodeObjectProps = {
+  appearance: ResolvedCodeObjectAppearance
   board: CodeObjectBoardClient
   boardApiVersion: typeof CODE_OBJECT_BOARD_API_VERSION
   dispatchBoardAction: DispatchCodeObjectBoardAction
@@ -342,6 +347,7 @@ function CodeObjectCompileFailure({
 }
 
 export function AuthoredCodeObject({
+  appearance,
   board,
   dispatchBoardAction,
   document,
@@ -352,6 +358,7 @@ export function AuthoredCodeObject({
   renderComponent,
   theme
 }: {
+  appearance: ResolvedCodeObjectAppearance
   board: CodeObjectBoardClient
   dispatchBoardAction: DispatchCodeObjectBoardAction
   document: CodeObjectDocument
@@ -381,6 +388,7 @@ export function AuthoredCodeObject({
   return (
     <CodeObjectErrorBoundary frameId={frameId} generation={generation} source={document.source}>
       <AuthoredComponent
+        appearance={appearance}
         board={board}
         boardApiVersion={CODE_OBJECT_BOARD_API_VERSION}
         dispatchBoardAction={dispatchBoardAction}

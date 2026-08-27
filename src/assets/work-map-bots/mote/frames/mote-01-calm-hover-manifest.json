@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/mote/source/mote-01-calm-hover-source.png",
+  "source_pixels": [
+    443,
+    443
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    124,
+    127,
+    367,
+    348
+  ],
+  "trimmed_pixels": [
+    243,
+    221
+  ],
+  "prepared_pixels": [
+    303,
+    303
+  ],
+  "padding_fraction": 0.12,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/mote/frames/mote-01-calm-hover-master.png",
+      "pixels": [
+        303,
+        303
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/mote/frames/mote-01-calm-hover.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/mote/frames/mote-01-calm-hover@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/mote/frames/mote-01-calm-hover@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -6,9 +6,14 @@ export type BrowserCaptureDragPayload = {
   sessionId: string
 }
 
-type BrowserCaptureDragReader = Pick<DataTransfer, 'getData' | 'types'>
-type BrowserCaptureDragWriter = BrowserCaptureDragReader &
-  Pick<DataTransfer, 'effectAllowed' | 'setData'>
+type BrowserCaptureDragReader = {
+  getData: (format: string) => string
+  types: Iterable<string>
+}
+type BrowserCaptureDragWriter = BrowserCaptureDragReader & {
+  effectAllowed: DataTransfer['effectAllowed']
+  setData: (format: string, data: string) => void
+}
 
 function optionalIdentifier(value: unknown): string | null | undefined {
   if (value === undefined) return undefined

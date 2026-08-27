@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/unit-v2/source/unit-v2-05-reopen-pulse-source.png",
+  "source_pixels": [
+    443,
+    444
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    47,
+    59,
+    386,
+    314
+  ],
+  "trimmed_pixels": [
+    339,
+    255
+  ],
+  "prepared_pixels": [
+    407,
+    407
+  ],
+  "padding_fraction": 0.1,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/unit-v2/frames/unit-v2-05-reopen-pulse-master.png",
+      "pixels": [
+        407,
+        407
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/unit-v2/frames/unit-v2-05-reopen-pulse.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/unit-v2/frames/unit-v2-05-reopen-pulse@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/unit-v2/frames/unit-v2-05-reopen-pulse@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

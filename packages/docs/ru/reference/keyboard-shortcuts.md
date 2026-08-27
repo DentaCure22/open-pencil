@@ -82,7 +82,6 @@
 | <kbd>⌘</kbd><kbd>G</kbd> | Сгруппировать | ✅ |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>G</kbd> | Разгруппировать | ✅ |
 | <kbd>⇧</kbd><kbd>A</kbd> | Добавить Auto Layout | ✅ |
-| <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> | Создать компонент | ✅ |
 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> | Создать набор компонентов | ✅ |
 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> | Открепить экземпляр | ✅ |
 | <kbd>⌘</kbd><kbd>]</kbd> | Переместить вперёд | 🔲 |

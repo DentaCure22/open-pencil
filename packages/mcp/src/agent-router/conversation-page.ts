@@ -35,10 +35,6 @@ export type AgentConversationPage = AgentConversationThread & {
   turns: AgentConversationTurnPreview[]
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
 function clipText(value: string, maximum: number): string {
   if (value.length <= maximum) return value
   return `${value.slice(0, Math.max(0, maximum - 1)).trimEnd()}…`
@@ -53,26 +49,24 @@ function clipPageToolText(value: string): string {
   return clipReplayText(value, half, CONVERSATION_PAGE_TOOL_CHARS - half)
 }
 
-function clipToolPart(part: Record<string, unknown>): Record<string, unknown> {
-  const next = { ...part }
-  if (typeof next.output === 'string') next.output = clipPageToolText(next.output)
-  if (typeof next.input === 'string' && next.input.length > CONVERSATION_PAGE_TOOL_CHARS) {
-    next.input = clipPageToolText(next.input)
-  }
-  return next
+type AgentConversationPart = NonNullable<AgentConversationMessage['parts']>[number]
+type AgentConversationToolPart = Extract<AgentConversationPart, { type: 'tool' }>
+
+function clipToolPart(part: AgentConversationToolPart): AgentConversationToolPart {
+  const output = typeof part.output === 'string' ? clipPageToolText(part.output) : part.output
+  const input =
+    typeof part.input === 'string' && part.input.length > CONVERSATION_PAGE_TOOL_CHARS
+      ? clipPageToolText(part.input)
+      : part.input
+  return output === part.output && input === part.input ? part : { ...part, input, output }
 }
 
 function clipMessageForPage(message: AgentConversationMessage): AgentConversationMessage {
   if (!message.parts?.length) return message
-  let changed = false
   const parts = message.parts.map((part) => {
-    if (!isRecord(part) || part.type !== 'tool') return part
-    const clipped = clipToolPart(part)
-    if (clipped !== part && (clipped.output !== part.output || clipped.input !== part.input)) {
-      changed = true
-    }
-    return clipped
+    return part.type === 'tool' ? clipToolPart(part) : part
   })
+  const changed = parts.some((part, index) => part !== message.parts?.at(index))
   return changed ? { ...message, parts } : message
 }
 
@@ -81,15 +75,14 @@ function messageText(message: AgentConversationMessage): string {
   if (text) return text
   return (message.parts ?? [])
     .flatMap((part) => {
-      if (!isRecord(part)) return []
-      if ((part.type === 'text' || part.type === 'commentary') && typeof part.text === 'string') {
+      if (part.type === 'commentary') {
         return [part.text.trim()]
       }
-      if (part.type === 'attachment' && typeof part.name === 'string') {
+      if (part.type === 'attachment') {
         return [`Attachment: ${part.name}`]
       }
       if (part.type === 'image') {
-        return [typeof part.alt === 'string' && part.alt.trim() ? part.alt.trim() : 'Image']
+        return [part.alt?.trim() || 'Image']
       }
       return []
     })
@@ -112,7 +105,7 @@ export function conversationTurnIndex(
       turns.push(current)
       continue
     }
-    if (message.role !== 'assistant' || !current) continue
+    if (!current) continue
     const response = messageText(message)
     if (!response) continue
     current.response = clipText(
@@ -128,7 +121,7 @@ function userTurnStarts(messages: readonly AgentConversationMessage[]): number[]
 }
 
 function turnEnd(starts: readonly number[], startIndex: number, messageCount: number): number {
-  const next = starts[starts.indexOf(startIndex) + 1]
+  const next = starts.at(starts.indexOf(startIndex) + 1)
   return next ?? messageCount
 }
 
@@ -206,7 +199,7 @@ function pageThread(
     messageTotal: thread.messages.length,
     messages,
     newerAfter: messages.at(-1)?.id ?? null,
-    olderBefore: messages[0]?.id ?? null,
+    olderBefore: messages.at(0)?.id ?? null,
     turns: conversationTurnIndex(thread.messages)
   }
 }

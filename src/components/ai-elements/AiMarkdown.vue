@@ -1,18 +1,27 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue'
+import { computed, provide, shallowRef, watch } from 'vue'
 
+import type { AiBoardObjectChange } from '@/app/agent-chat/types'
 import AiMarkdownNodes from './AiMarkdownNodes.vue'
+import { boardObjectLinkContextKey, linkBoardObjectReferences } from './board-object-links'
 import { createAssistantMarkdownParser } from './markdown'
 import { useStreamedText } from './streamed-text'
 
 const {
+  boardObjects = [],
   content,
   streaming = false,
   variant = 'answer'
 } = defineProps<{
+  boardObjects?: AiBoardObjectChange[]
   content: string
   streaming?: boolean
-  variant?: 'activity' | 'answer'
+  variant?: 'activity' | 'answer' | 'bot-text'
+}>()
+
+const emit = defineEmits<{
+  'hover-board-object': [id: string | null, pageId?: string]
+  'open-board-object': [id: string, pageId?: string]
 }>()
 
 const parser = shallowRef(createAssistantMarkdownParser(streaming ? 'streaming' : 'static'))
@@ -27,7 +36,47 @@ const displayed = useStreamedText(
   () => content,
   () => streaming
 )
-const blocks = computed(() => parser.value.blocks(displayed.value))
+const boardObjectById = computed(
+  () => new Map(boardObjects.map((object) => [object.id, object] as const))
+)
+const boardObjectsSignature = computed(() =>
+  boardObjects.map((object) => `${object.id}:${object.name}`).join('\0')
+)
+const blocks = computed(() => {
+  const parsed = parser.value.blocks(displayed.value)
+  if (streaming || boardObjects.length === 0) return parsed
+  const linkedIds = new Set<string>()
+  return parsed.map((block) => ({
+    ...block,
+    nodes: linkBoardObjectReferences(block.nodes, boardObjects, linkedIds)
+  }))
+})
+const botTextBlocks = computed(() =>
+  blocks.value.flatMap((block, blockIndex) =>
+    block.nodes.flatMap((node, nodeIndex) =>
+      node.type === 'thematicBreak'
+        ? []
+        : [
+            {
+              key: `${String(blockIndex)}:${String(nodeIndex)}`,
+              nodes: [node],
+              root: node
+            }
+          ]
+    )
+  )
+)
+
+provide(boardObjectLinkContextKey, {
+  hover(id) {
+    const object = id ? boardObjectById.value.get(id) : undefined
+    emit('hover-board-object', id, object?.pageId)
+  },
+  open(id) {
+    const object = boardObjectById.value.get(id)
+    emit('open-board-object', id, object?.pageId)
+  }
+})
 </script>
 
 <template>
@@ -36,24 +85,80 @@ const blocks = computed(() => parser.value.blocks(displayed.value))
     class="assistant-markdown"
     :class="[
       streaming ? 'assistant-markdown-streaming' : '',
-      variant === 'activity' ? 'assistant-markdown-activity' : ''
+      variant === 'activity' ? 'assistant-markdown-activity' : '',
+      variant === 'bot-text' ? 'assistant-markdown-bot-text' : ''
     ]"
     :data-streaming="streaming ? 'true' : undefined"
   >
-    <template v-if="blocks.length">
+    <template v-if="blocks.length && variant === 'bot-text'">
+      <div v-for="(block, index) in botTextBlocks" :key="block.key" class="assistant-text-bubble">
+        <AiMarkdownNodes
+          v-memo="[
+            block.root,
+            boardObjectsSignature,
+            streaming && index === botTextBlocks.length - 1
+          ]"
+          :nodes="block.nodes"
+          :streaming-tail="streaming && index === botTextBlocks.length - 1"
+        />
+      </div>
+    </template>
+    <template v-else-if="blocks.length">
       <AiMarkdownNodes
         v-for="(block, index) in blocks"
         :key="index"
-        v-memo="[block.root, streaming && index === blocks.length - 1]"
+        v-memo="[block.root, boardObjectsSignature, streaming && index === blocks.length - 1]"
         :nodes="block.nodes"
         :streaming-tail="streaming && index === blocks.length - 1"
       />
     </template>
-    <p v-else class="whitespace-pre-wrap">{{ displayed }}</p>
+    <p
+      v-else
+      class="whitespace-pre-wrap"
+      :class="variant === 'bot-text' ? 'assistant-text-bubble' : ''"
+    >
+      {{ displayed }}
+    </p>
   </div>
 </template>
 
 <style scoped>
+.assistant-markdown-bot-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.assistant-text-bubble {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 20px;
+  background: var(--color-agent-assistant-bubble);
+  padding: 0.55rem 0.9rem;
+  overflow-wrap: anywhere;
+}
+.assistant-text-bubble :deep(> :first-child) {
+  margin-top: 0 !important;
+}
+.assistant-text-bubble :deep(> :last-child) {
+  margin-bottom: 0 !important;
+}
+.assistant-text-bubble :deep(p:last-child) {
+  margin-bottom: 0 !important;
+}
+.assistant-text-bubble :deep(.assistant-markdown-table) {
+  margin-block: 0 !important;
+}
+.assistant-text-bubble :deep(ul),
+.assistant-text-bubble :deep(ol) {
+  margin-block: 0.15rem !important;
+  padding-left: 1.15rem;
+}
+.assistant-text-bubble :deep(li) {
+  margin-block: 0.1rem !important;
+}
+
 .assistant-markdown-activity {
   min-width: 0;
   font: inherit;

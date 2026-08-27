@@ -14,6 +14,7 @@ import {
   WORKSPACE_JSONL_INDEX_FILE,
   workspaceJsonlIndexIsCurrent,
   type WorkspaceJsonlIndex,
+  type WorkspaceJsonlIndexRecord,
   writeWorkspaceJsonlIndex
 } from './workspace-jsonl-index'
 

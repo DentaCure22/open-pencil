@@ -1,6 +1,5 @@
 import type {
   CanvasKit,
-  FontWeight,
   Paragraph,
   TextFontFeatures,
   TextFontVariations,
@@ -250,7 +249,7 @@ function pushStyleRun(
       ),
       fontSize: runFontSize,
       fontStyle: {
-        weight: { value: style.fontWeight ?? node.fontWeight } as FontWeight,
+        weight: { value: style.fontWeight ?? node.fontWeight },
         slant: (style.italic ?? node.italic) ? ck.FontSlant.Italic : ck.FontSlant.Upright
       },
       fontVariations: textFontVariations(style.fontVariations ?? node.fontVariations),
@@ -335,7 +334,7 @@ export function buildParagraph(
       ),
       fontSize: baseFontSize,
       fontStyle: {
-        weight: { value: node.fontWeight } as FontWeight,
+        weight: { value: node.fontWeight },
         slant: node.italic ? ck.FontSlant.Italic : ck.FontSlant.Upright
       },
       fontVariations: textFontVariations(node.fontVariations),

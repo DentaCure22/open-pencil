@@ -1,4 +1,3 @@
-export { getComponents } from './read/components'
 export { listAvailableFonts, listFonts } from './read/fonts'
 export { diffJsx, getJsx } from './read/jsx'
 export {

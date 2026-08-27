@@ -1,35 +1,32 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { Context, Hono, Next } from 'hono'
 
-import {
-  resolveAgentAttachmentImagePaths,
-  resolveAgentConversationAttachments
-} from '#mcp/agent-attachments/paths'
 import { AgentAttachmentStore } from '#mcp/agent-attachments/store'
 import { bearerToken, isAuthorized } from '#mcp/auth'
-import { localWorkspaceTraceEvidencePath } from '#mcp/local-workspace-authority/agent-context'
 import type { LocalWorkspaceAuthorityStore } from '#mcp/local-workspace-authority/store'
 import { defaultUsageLedgerPath, readUsageTurns, rollupUsageSnapshot } from '#mcp/pi/usage-ledger'
 
 import {
   previewAgentConversation,
-  type AgentConversationAttachmentPart,
   type AgentConversationRouter,
-  type AgentTodoBrief,
-  type AgentToolScope
+  type AgentTodoBrief
 } from './contracts'
+import { registerConversationActionRoutes, threadEvidencePinId } from './conversation-actions'
 import { pageAgentConversation, type AgentConversationPageQuery } from './conversation-page'
 import { AGENT_MEDIA_ROUTE, agentMediaFileName, agentMediaMimeType } from './media'
+import { isRecord, optionalText, requiredText, todoBrief } from './route-input'
 import { WorkspaceTerminalSessions } from './terminal-sessions'
+import { normalizeTodoCodeObjectBrief } from './todo-document'
 import {
   parseWorkMapOperations,
   WorkMapStore,
   type WorkMapActor,
   type WorkMapOperation
 } from './work-map'
+import type { WorkMapRoutineScheduler } from './work-map-routine-scheduler'
 import { readAgentWorkspaceFile, searchAgentWorkspaceFiles } from './workspace-files'
 
 const ROUTE = '/agent-router/v1/pi'
@@ -38,27 +35,27 @@ const FOCUSED_CONVERSATION_PREVIEW_LIMIT = 6
 type RouteOptions = {
   attachmentStore?: AgentAttachmentStore
   authorityRoot: string
+  boardSpace?: {
+    assertBoardSpaceParent(input: {
+      frameId: string
+      pageId: string
+      parentFrameId: string | null
+    }): Promise<void>
+  }
   getAuthToken(): string | null
   router: AgentConversationRouter
   traceEvidence: Pick<
     LocalWorkspaceAuthorityStore,
     'pinTraceEvidence' | 'releaseTraceEvidencePins' | 'unpinTraceEvidence'
   >
+  routineScheduler?: Pick<WorkMapRoutineScheduler, 'runNow'>
   workMap?: WorkMapStore
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
 function optionalPositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined
   const parsed = Number.parseInt(value, 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
-function toolScope(value: unknown): AgentToolScope | undefined {
-  return value === 'board-worker' || value === 'general' ? value : undefined
 }
 
 function conversationPageQuery(context: Context): AgentConversationPageQuery {
@@ -85,85 +82,59 @@ function workMapErrorResponse(context: Context, error: unknown) {
   return context.json({ code: 'work_map_update_error', error: message }, status)
 }
 
-function workMapActor(value: unknown): WorkMapActor {
+function workMapActor(value: unknown): Extract<WorkMapActor, { kind: 'agent' }> {
   if (!isRecord(value)) return { kind: 'agent' }
   const currentThreadId =
     typeof value.currentThreadId === 'string' ? value.currentThreadId.trim() : ''
   return { ...(currentThreadId ? { currentThreadId } : {}), kind: 'agent' }
 }
 
-function requiredText(value: unknown, field: string, maximum: number): string {
-  const text = typeof value === 'string' ? value.trim() : ''
-  if (!text) throw new TypeError(`${field} is required.`)
-  if (text.length > maximum) throw new TypeError(`${field} is too long.`)
-  return text
+type WorkMapBoardSpaceProject = {
+  id: string
+  parentId?: string
+  spaceFrameId?: string
+  spacePageId?: string
 }
 
-function optionalText(value: unknown, field: string, maximum: number): string | undefined {
-  if (value === undefined) return undefined
-  const text = typeof value === 'string' ? value.trim() : ''
-  if (text.length > maximum) throw new TypeError(`${field} is too long.`)
-  return text || undefined
-}
+async function assertWorkMapBoardSpaceParents(
+  workMap: WorkMapStore,
+  operations: readonly WorkMapOperation[],
+  boardSpace: RouteOptions['boardSpace']
+): Promise<void> {
+  if (!boardSpace) return
+  const projects = new Map<string, WorkMapBoardSpaceProject>(
+    workMap.snapshot().projects.map((project) => [project.id, { ...project }])
+  )
 
-function optionalTextList(value: unknown, field: string): string[] | undefined {
-  if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.length > 24) {
-    throw new TypeError(`${field} must contain at most 24 items.`)
-  }
-  return value.map((item, index) => requiredText(item, `${field}[${String(index)}]`, 1_000))
-}
+  for (const operation of operations) {
+    if (operation.op === 'create_project' && operation.project_id) {
+      projects.set(operation.project_id, {
+        id: operation.project_id,
+        ...(operation.parent_id ? { parentId: operation.parent_id } : {})
+      })
+      continue
+    }
+    if (
+      operation.op !== 'set_project_space' ||
+      operation.frame_id === null ||
+      operation.page_id === null
+    ) {
+      continue
+    }
 
-function todoBrief(value: unknown): AgentTodoBrief {
-  if (!isRecord(value)) throw new TypeError('Todo brief is required.')
-  const references = value.references
-  if (references !== undefined && (!Array.isArray(references) || references.length > 24)) {
-    throw new TypeError('Todo references must contain at most 24 items.')
-  }
-  return {
-    ...(optionalTextList(value.acceptance, 'acceptance')
-      ? { acceptance: optionalTextList(value.acceptance, 'acceptance') }
-      : {}),
-    ...(optionalTextList(value.constraints, 'constraints')
-      ? { constraints: optionalTextList(value.constraints, 'constraints') }
-      : {}),
-    ...(optionalText(value.context, 'context', 4_000)
-      ? { context: optionalText(value.context, 'context', 4_000) }
-      : {}),
-    ...(optionalText(value.desiredOutcome, 'desiredOutcome', 2_000)
-      ? { desiredOutcome: optionalText(value.desiredOutcome, 'desiredOutcome', 2_000) }
-      : {}),
-    goal: requiredText(value.goal, 'Todo goal', 2_000),
-    ...(optionalTextList(value.knownFacts, 'knownFacts')
-      ? { knownFacts: optionalTextList(value.knownFacts, 'knownFacts') }
-      : {}),
-    ...(optionalTextList(value.openQuestions, 'openQuestions')
-      ? { openQuestions: optionalTextList(value.openQuestions, 'openQuestions') }
-      : {}),
-    ...(Array.isArray(references)
-      ? {
-          references: references.map((reference, index) => {
-            if (!isRecord(reference)) {
-              throw new TypeError(`references[${String(index)}] is invalid.`)
-            }
-            const kind = requiredText(reference.kind, 'Reference kind', 40)
-            if (!['board_object', 'chat', 'file', 'image', 'trace_evidence', 'url'].includes(kind)) {
-              throw new TypeError(`references[${String(index)}] has an invalid kind.`)
-            }
-            return {
-              id: requiredText(reference.id, 'Reference ID', 1_000),
-              kind: kind as NonNullable<AgentTodoBrief['references']>[number]['kind'],
-              label: requiredText(reference.label, 'Reference label', 240),
-              ...(optionalText(reference.note, 'Reference note', 1_000)
-                ? { note: optionalText(reference.note, 'Reference note', 1_000) }
-                : {})
-            }
-          })
-        }
-      : {}),
-    ...(optionalText(value.suggestedNextStep, 'suggestedNextStep', 2_000)
-      ? { suggestedNextStep: optionalText(value.suggestedNextStep, 'suggestedNextStep', 2_000) }
-      : {})
+    const project = projects.get(operation.project_id)
+    if (!project) continue
+    const parentFrameId = project.parentId
+      ? (projects.get(project.parentId)?.spaceFrameId ?? null)
+      : null
+    if (project.parentId && !parentFrameId) continue
+    await boardSpace.assertBoardSpaceParent({
+      frameId: operation.frame_id,
+      pageId: operation.page_id,
+      parentFrameId
+    })
+    project.spaceFrameId = operation.frame_id
+    project.spacePageId = operation.page_id
   }
 }
 
@@ -171,11 +142,77 @@ function stableTodoChatId(prefix: string, seed: string): string {
   return `${prefix}:${createHash('sha256').update(seed).digest('hex').slice(0, 24)}`
 }
 
+function todoChatCreatorThreadId(
+  body: Record<string, unknown>,
+  actorKind: 'agent' | 'user'
+): string | undefined {
+  return actorKind === 'agent'
+    ? requiredText(body.currentThreadId, 'Current thread ID', 240)
+    : undefined
+}
+
+function todoChatActor(
+  actorKind: 'agent' | 'user',
+  creatorThreadId: string | undefined,
+  createdThreadId: string
+): WorkMapActor {
+  return actorKind === 'agent'
+    ? {
+        createdThreadIds: [createdThreadId],
+        currentThreadId: creatorThreadId,
+        kind: 'agent'
+      }
+    : { kind: 'user' }
+}
+
+type PreparedTodoChat = {
+  brief: AgentTodoBrief
+  creatorThreadId?: string
+  effort?: string
+  explicitTitle?: string
+  model?: string
+  projectId: string
+  requestId: string
+  threadId: string
+  title: string
+  todoId: string
+}
+
+function prepareTodoChat(
+  body: Record<string, unknown>,
+  actorKind: 'agent' | 'user',
+  router: AgentConversationRouter
+): PreparedTodoChat | null {
+  const projectId = requiredText(body.projectId, 'Project ID', 240)
+  const requestId = requiredText(body.requestId, 'Request ID', 240)
+  const parsedBrief = todoBrief(body.brief)
+  const explicitTitle = optionalText(body.title, 'Todo title', 240)
+  const title = explicitTitle ?? parsedBrief.goal.trim().replace(/\s+/g, ' ').slice(0, 240)
+  const brief = normalizeTodoCodeObjectBrief(parsedBrief, title)
+  const creatorThreadId = todoChatCreatorThreadId(body, actorKind)
+  const creator = creatorThreadId ? router.conversation(creatorThreadId) : null
+  if (creatorThreadId && !creator) return null
+  const seed = [actorKind, creatorThreadId ?? 'user', projectId, requestId].join(':')
+  return {
+    brief,
+    ...(creatorThreadId ? { creatorThreadId } : {}),
+    effort: typeof body.effort === 'string' ? body.effort : creator?.effort,
+    ...(explicitTitle ? { explicitTitle } : {}),
+    model: typeof body.model === 'string' ? body.model : creator?.model,
+    projectId,
+    requestId,
+    threadId: stableTodoChatId('todo-chat', seed),
+    title,
+    todoId: stableTodoChatId('todo', seed)
+  }
+}
+
 function operationThreadIds(operations: readonly WorkMapOperation[]): string[] {
   return [
     ...new Set(
       operations.flatMap((operation) => {
         if (operation.op === 'place_chat') return [operation.thread_id]
+        if (operation.op === 'create_bot') return [operation.thread_id]
         if (operation.op === 'create_todo' && operation.thread_id) return [operation.thread_id]
         if (operation.op === 'update_todo' && operation.thread_id) return [operation.thread_id]
         return []
@@ -184,47 +221,16 @@ function operationThreadIds(operations: readonly WorkMapOperation[]): string[] {
   ]
 }
 
-function threadEvidencePinId(threadId: string): string {
-  return `agent-thread:${threadId}`
-}
-
-function evidenceImageAlt(value: unknown): string {
-  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 255) : 'Attached image'
-}
-
-async function visibleEvidenceAttachment(
-  authorityRoot: string,
-  evidenceId: string,
-  alt: unknown
-): Promise<AgentConversationAttachmentPart | null> {
-  const bytes = await readFile(localWorkspaceTraceEvidencePath(authorityRoot, evidenceId)).catch(
-    () => null
-  )
-  return bytes
-    ? {
-        alt: evidenceImageAlt(alt),
-        type: 'image',
-        url: `data:image/png;base64,${bytes.toString('base64')}`
-      }
-    : null
-}
-
-async function visibleConversationAttachments(
-  authorityRoot: string,
-  value: unknown,
-  evidenceId: string,
-  evidenceAlt: unknown
-): Promise<AgentConversationAttachmentPart[]> {
-  const attachments = await resolveAgentConversationAttachments(authorityRoot, value)
-  if (!evidenceId) return attachments
-  const evidence = await visibleEvidenceAttachment(authorityRoot, evidenceId, evidenceAlt)
-  return evidence ? [evidence, ...attachments] : attachments
-}
-
 export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
   const attachmentStore = options.attachmentStore ?? new AgentAttachmentStore(options.authorityRoot)
   const terminalSessions = new WorkspaceTerminalSessions()
   const workMap = options.workMap ?? new WorkMapStore()
+  const ensureBotDirectories = () =>
+    workMap.ensureBotDirectories((threadId) => {
+      const thread = options.router.conversation(threadId)
+      return thread?.title?.trim() || thread?.task?.trim()
+    })
+  ensureBotDirectories()
   app.use(`${ROUTE}/*`, async (context: Context, next: Next) => {
     const expected = options.getAuthToken()
     if (!expected) {
@@ -328,7 +334,10 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
           : options.router.conversations()
     })
   )
-  app.get(`${ROUTE}/work-map`, (context) => context.json(workMap.snapshot()))
+  app.get(`${ROUTE}/work-map`, (context) => {
+    ensureBotDirectories()
+    return context.json(workMap.snapshot())
+  })
 
   async function createTodoChat(context: Context, actorKind: 'agent' | 'user') {
     const body = await context.req.json().catch(() => null)
@@ -338,72 +347,57 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
     let createdThreadId = ''
     let threadExisted = false
     try {
-      const projectId = requiredText(body.projectId, 'Project ID', 240)
-      const title = requiredText(body.title, 'Todo title', 240)
-      const requestId = requiredText(body.requestId, 'Request ID', 240)
-      const creatorThreadId =
-        actorKind === 'agent'
-          ? requiredText(body.currentThreadId, 'Current thread ID', 240)
-          : undefined
-      const creator = creatorThreadId
-        ? options.router.conversation(creatorThreadId)
-        : null
-      if (creatorThreadId && !creator) {
+      const prepared = prepareTodoChat(body, actorKind, options.router)
+      if (!prepared) {
         return context.json(
           { code: 'agent_thread_not_found', error: 'Active agent conversation not found' },
           404
         )
       }
-      const seed = [actorKind, creatorThreadId ?? 'user', projectId, requestId].join(':')
-      const todoId = stableTodoChatId('todo', seed)
-      createdThreadId = stableTodoChatId('todo-chat', seed)
+      createdThreadId = prepared.threadId
       threadExisted = Boolean(options.router.conversation(createdThreadId))
+      const project = workMap.project(prepared.projectId)
       const thread = options.router.createTodoDraft({
-        brief: todoBrief(body.brief),
-        ...(creatorThreadId ? { createdByThreadId: creatorThreadId } : {}),
-        effort:
-          typeof body.effort === 'string' ? body.effort : creator?.effort,
-        model: typeof body.model === 'string' ? body.model : creator?.model,
-        projectId,
+        brief: prepared.brief,
+        ...(prepared.creatorThreadId ? { createdByThreadId: prepared.creatorThreadId } : {}),
+        effort: prepared.effort,
+        model: prepared.model,
+        projectId: prepared.projectId,
         threadId: createdThreadId,
-        title,
-        todoId
+        title: prepared.explicitTitle ?? '',
+        todoId: prepared.todoId,
+        ...(project?.workspaceRoot ? { workspaceRoot: project.workspaceRoot } : {})
       })
-      const actor: WorkMapActor =
-        actorKind === 'agent'
-          ? {
-              createdThreadIds: [createdThreadId],
-              currentThreadId: creatorThreadId,
-              kind: 'agent'
-            }
-          : { kind: 'user' }
       const receipt = workMap.apply({
-        actor,
+        actor: todoChatActor(actorKind, prepared.creatorThreadId, createdThreadId),
         expectedRevision: body.expectedRevision as number,
         operations: [
           {
             description: thread.todoDraft?.brief.context || thread.todoDraft?.brief.goal,
             op: 'create_todo',
-            project_id: projectId,
+            project_id: prepared.projectId,
             thread_id: createdThreadId,
-            title,
-            todo_id: todoId
+            title: prepared.title,
+            todo_id: prepared.todoId
           }
         ],
-        requestId: `todo-chat:${requestId}`
+        requestId: `todo-chat:${prepared.requestId}`
       })
+      await attachmentStore.claim(createdThreadId, body.attachments).catch(() => undefined)
+      if (!prepared.explicitTitle) options.router.ensureTitle(createdThreadId)
       const snapshot = workMap.snapshot()
       return context.json(
         {
           ...snapshot,
           receipt,
           thread,
-          todo: snapshot.todos.find((todo) => todo.id === todoId) ?? null
+          todo: snapshot.todos.find((todo) => todo.id === prepared.todoId) ?? null
         },
         threadExisted ? 200 : 201
       )
     } catch (error) {
       if (createdThreadId && !threadExisted) options.router.delete(createdThreadId)
+      await attachmentStore.discardPending(body.attachments)
       return workMapErrorResponse(context, error)
     }
   }
@@ -429,6 +423,7 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
           404
         )
       }
+      await assertWorkMapBoardSpaceParents(workMap, operations, options.boardSpace)
       const receipt = workMap.apply({
         actor: { kind: 'user' },
         expectedRevision: body.expectedRevision as number,
@@ -466,6 +461,7 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
           404
         )
       }
+      await assertWorkMapBoardSpaceParents(workMap, operations, options.boardSpace)
       const receipt = workMap.apply({
         actor,
         expectedRevision: body.expectedRevision as number,
@@ -473,6 +469,20 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
         requestId: typeof body.requestId === 'string' ? body.requestId : undefined
       })
       return context.json({ ...workMap.snapshot(), receipt })
+    } catch (error) {
+      return workMapErrorResponse(context, error)
+    }
+  })
+  app.post(`${ROUTE}/work-map/routines/:routineId/run`, (context) => {
+    if (!options.routineScheduler) {
+      return context.json(
+        { code: 'routine_scheduler_unavailable', error: 'Bot scheduler unavailable' },
+        503
+      )
+    }
+    try {
+      const inboxItem = options.routineScheduler.runNow(context.req.param('routineId'))
+      return context.json({ inboxItem, ...workMap.snapshot() }, 202)
     } catch (error) {
       return workMapErrorResponse(context, error)
     }
@@ -502,6 +512,55 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
         ? pageAgentConversation(thread, conversationPageQuery(context))
         : thread
     )
+  })
+
+  app.patch(`${ROUTE}/conversations/:threadId/todo-draft`, async (context) => {
+    const body = await context.req.json().catch(() => null)
+    if (!isRecord(body)) {
+      return context.json({ code: 'invalid_request', error: 'Invalid Todo update body' }, 400)
+    }
+    const threadId = context.req.param('threadId')
+    try {
+      const current = options.router.conversation(threadId)
+      if (!current?.todoDraft) {
+        await attachmentStore.discardPending(body.attachments)
+        return context.json(
+          { code: 'agent_todo_not_found', error: 'Todo conversation not found' },
+          404
+        )
+      }
+      const parsedBrief = isRecord(body.brief)
+        ? todoBrief(body.brief)
+        : normalizeTodoCodeObjectBrief(
+            {
+              ...current.todoDraft.brief,
+              documentHtml: requiredText(body.documentHtml, 'Todo document HTML', 200_000),
+              ...(optionalText(body.title, 'Todo title', 240)
+                ? { title: optionalText(body.title, 'Todo title', 240) }
+                : {})
+            },
+            optionalText(body.title, 'Todo title', 240) ||
+              current.title ||
+              current.todoDraft.brief.goal
+          )
+      const brief = normalizeTodoCodeObjectBrief(
+        parsedBrief,
+        parsedBrief.title || current.title || parsedBrief.goal
+      )
+      const thread = options.router.updateTodoDraft(threadId, brief)
+      if (!thread) {
+        await attachmentStore.discardPending(body.attachments)
+        return context.json(
+          { code: 'agent_todo_not_found', error: 'Todo conversation not found' },
+          404
+        )
+      }
+      await attachmentStore.claim(threadId, body.attachments)
+      return context.json({ thread })
+    } catch (error) {
+      await attachmentStore.discardPending(body.attachments)
+      return errorResponse(context, error)
+    }
   })
 
   app.get(`${ROUTE}/jobs/:jobId`, (context) => {
@@ -586,159 +645,11 @@ export function registerAgentRoutes(app: Hono, options: RouteOptions): void {
     return context.json(receipt)
   })
 
-  async function acceptConversationMessage(context: Context, action: 'followUp' | 'steer') {
-    const body = await context.req.json().catch(() => null)
-    const threadId = context.req.param('threadId')
-    if (!isRecord(body) || !threadId) {
-      return context.json({ code: 'invalid_request', error: 'Invalid request body' }, 400)
-    }
-    const evidenceId = typeof body.evidenceId === 'string' ? body.evidenceId.trim() : ''
-    const attachmentReferences = [body.attachments, body.attachmentImagePaths]
-    const attachments = await visibleConversationAttachments(
-      options.authorityRoot,
-      body.attachments,
-      evidenceId,
-      body.evidenceAlt
-    )
-    const pinId = threadEvidencePinId(threadId)
-    const pinResult = evidenceId
-      ? await options.traceEvidence.pinTraceEvidence(evidenceId, pinId)
-      : 'already_pinned'
-    if (pinResult === 'missing') {
-      await attachmentStore.discardPending(attachmentReferences)
-      return context.json(
-        { code: 'trace_evidence_not_found', error: 'Trace evidence not found' },
-        404
-      )
-    }
-    try {
-      const startingTodoId =
-        action === 'followUp'
-          ? options.router.conversation(threadId)?.todoDraft?.todoId
-          : undefined
-      const receipt = await options.router[action](
-        threadId,
-        typeof body.message === 'string' ? body.message : '',
-        {
-          ...(attachments.length ? { attachments } : {}),
-          displayPrompt: typeof body.displayPrompt === 'string' ? body.displayPrompt : undefined,
-          effort: typeof body.effort === 'string' ? body.effort : undefined,
-          ...(evidenceId
-            ? {
-                evidencePath: localWorkspaceTraceEvidencePath(options.authorityRoot, evidenceId)
-              }
-            : {}),
-          imagePaths: resolveAgentAttachmentImagePaths(
-            options.authorityRoot,
-            body.attachmentImagePaths
-          ),
-          model: typeof body.model === 'string' ? body.model : undefined,
-          toolScope: toolScope(body.toolScope)
-        }
-      )
-      if (startingTodoId) {
-        const todo = workMap.snapshot().todos.find((candidate) => candidate.id === startingTodoId)
-        if (todo?.status === 'todo') {
-          try {
-            workMap.apply({
-              actor: { kind: 'user' },
-              expectedRevision: workMap.snapshot().revision,
-              operations: [{ op: 'update_todo', status: 'in_motion', todo_id: todo.id }],
-              requestId: `todo-start:${receipt.jobId}`
-            })
-          } catch {
-            // The chat already started; the worker can reconcile a concurrent Work Map edit.
-          }
-        }
-      }
-      await attachmentStore.claim(threadId, attachmentReferences).catch(() => undefined)
-      return context.json(receipt, 202)
-    } catch (error) {
-      if (evidenceId && pinResult === 'pinned') {
-        await options.traceEvidence.unpinTraceEvidence(evidenceId, pinId)
-      }
-      await attachmentStore.discardPending(attachmentReferences)
-      return errorResponse(context, error)
-    }
-  }
-
-  app.post(`${ROUTE}/conversations/:threadId/follow-up`, (context) =>
-    acceptConversationMessage(context, 'followUp')
-  )
-  app.post(`${ROUTE}/conversations/:threadId/steer`, (context) =>
-    acceptConversationMessage(context, 'steer')
-  )
-
-  async function acceptConversationLaunch(context: Context, sourceThreadId?: string) {
-    const body = await context.req.json().catch(() => null)
-    if (!isRecord(body)) {
-      return context.json({ code: 'invalid_request', error: 'Invalid request body' }, 400)
-    }
-    const evidenceId = typeof body.evidenceId === 'string' ? body.evidenceId.trim() : ''
-    const attachmentReferences = [body.attachments, body.attachmentImagePaths]
-    const attachments = await visibleConversationAttachments(
-      options.authorityRoot,
-      body.attachments,
-      evidenceId,
-      body.evidenceAlt
-    )
-    const pendingPinId = `agent-dispatch:${randomUUID()}`
-    const pinResult = evidenceId
-      ? await options.traceEvidence.pinTraceEvidence(evidenceId, pendingPinId)
-      : 'already_pinned'
-    if (pinResult === 'missing') {
-      await attachmentStore.discardPending(attachmentReferences)
-      return context.json(
-        { code: 'trace_evidence_not_found', error: 'Trace evidence not found' },
-        404
-      )
-    }
-    try {
-      const request = {
-        ...(attachments.length ? { attachments } : {}),
-        displayPrompt: typeof body.displayPrompt === 'string' ? body.displayPrompt : undefined,
-        effort: typeof body.effort === 'string' ? body.effort : '',
-        ...(evidenceId
-          ? {
-              evidencePath: localWorkspaceTraceEvidencePath(options.authorityRoot, evidenceId)
-            }
-          : {}),
-        imagePaths: resolveAgentAttachmentImagePaths(
-          options.authorityRoot,
-          body.attachmentImagePaths
-        ),
-        model: typeof body.model === 'string' ? body.model : '',
-        prompt: typeof body.prompt === 'string' ? body.prompt : '',
-        toolScope: toolScope(body.toolScope),
-        ...(body.historyScope === 'full' || body.historyScope === 'effectiveContext'
-          ? { historyScope: body.historyScope }
-          : {})
-      }
-      const receipt = sourceThreadId
-        ? await options.router.fork(sourceThreadId, request)
-        : await options.router.dispatch(request)
-      await attachmentStore.claim(receipt.threadId, attachmentReferences).catch(() => undefined)
-      if (evidenceId) {
-        const threadPin = await options.traceEvidence.pinTraceEvidence(
-          evidenceId,
-          threadEvidencePinId(receipt.threadId)
-        )
-        if (threadPin !== 'missing') {
-          await options.traceEvidence.unpinTraceEvidence(evidenceId, pendingPinId)
-        }
-      }
-      return context.json(receipt, 202)
-    } catch (error) {
-      if (evidenceId && pinResult === 'pinned') {
-        await options.traceEvidence.unpinTraceEvidence(evidenceId, pendingPinId)
-      }
-      await attachmentStore.discardPending(attachmentReferences)
-      return errorResponse(context, error)
-    }
-  }
-
-  app.post(`${ROUTE}/conversations/:threadId/fork`, (context) =>
-    acceptConversationLaunch(context, context.req.param('threadId'))
-  )
-  app.post(`${ROUTE}/dispatch`, (context) => acceptConversationLaunch(context))
+  registerConversationActionRoutes(app, {
+    attachmentStore,
+    authorityRoot: options.authorityRoot,
+    router: options.router,
+    traceEvidence: options.traceEvidence,
+    workMap
+  })
 }

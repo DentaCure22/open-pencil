@@ -8,8 +8,9 @@ import {
 } from '#mcp/pi/session-idle'
 
 describe('session idle unload', () => {
-  test('defaults to 21 minutes so extract can finish first', () => {
+  test('defaults to a short five-minute reuse window', () => {
     expect(resolveIdleUnloadMs({})).toBe(DEFAULT_IDLE_UNLOAD_MS)
+    expect(DEFAULT_IDLE_UNLOAD_MS).toBe(5 * 60 * 1_000)
     expect(resolveIdleUnloadGraceMs({})).toBe(30_000)
   })
 

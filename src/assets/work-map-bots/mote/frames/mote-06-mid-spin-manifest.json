@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/mote/source/mote-06-mid-spin-source.png",
+  "source_pixels": [
+    444,
+    444
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    127,
+    73,
+    328,
+    330
+  ],
+  "trimmed_pixels": [
+    201,
+    257
+  ],
+  "prepared_pixels": [
+    319,
+    319
+  ],
+  "padding_fraction": 0.12,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/mote/frames/mote-06-mid-spin-master.png",
+      "pixels": [
+        319,
+        319
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/mote/frames/mote-06-mid-spin.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/mote/frames/mote-06-mid-spin@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/mote/frames/mote-06-mid-spin@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

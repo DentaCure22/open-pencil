@@ -8,6 +8,14 @@ describe('tool definitions', () => {
     expect(new Set(names).size).toBe(names.length)
   })
 
+  test('does not expose legacy native component authoring tools', () => {
+    const names = new Set(ALL_TOOLS.map((tool) => tool.name))
+    expect(names.has('create_component')).toBe(false)
+    expect(names.has('create_instance')).toBe(false)
+    expect(names.has('get_components')).toBe(false)
+    expect(names.has('node_to_component')).toBe(false)
+  })
+
   test('all tools have description and params', () => {
     for (const t of ALL_TOOLS) {
       expect(t.name).toBeTruthy()

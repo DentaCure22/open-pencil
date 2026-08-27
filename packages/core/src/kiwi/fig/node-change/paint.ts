@@ -2,7 +2,6 @@ import type { Paint, Effect as KiwiEffect } from '@open-pencil/kiwi/fig/codec'
 import { guidToString } from '@open-pencil/kiwi/fig/guid'
 import type {
   Fill,
-  FillType,
   Stroke,
   Effect,
   BlendMode,
@@ -47,7 +46,7 @@ function resolveColorVar(paint: Paint): Color | undefined {
 
 function convertBaseFill(p: Paint): Fill {
   return {
-    type: p.type as FillType,
+    type: p.type,
     color: convertColor(resolveColorVar(p) ?? p.color),
     opacity: p.opacity ?? 1,
     visible: p.visible ?? true,

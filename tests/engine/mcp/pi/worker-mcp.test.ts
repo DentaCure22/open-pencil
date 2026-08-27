@@ -27,16 +27,43 @@ describe('Board worker MCP surface', () => {
     expect(prompt).toStartWith('/skill:openpencil Make a cool object.\n\n')
     expect(prompt).toContain('call board_where and workmap_query')
     expect(prompt).toContain('expected_revision from workmap_query and an operations array')
+    expect(prompt).toContain(
+      'active Bot directory as the shared project boundary for its Bot and every chat placed there'
+    )
+    expect(prompt).toContain('its non-null workspaceRoot as the filesystem root')
+    expect(prompt).toContain('keep new project files inside it')
+    expect(prompt).toContain('clean up task-created temporary files')
+    expect(prompt).toContain('ask before writing outside it')
+    expect(prompt).toContain(
+      'Use the active project space from workmap_query as the exact Board parent'
+    )
+    expect(prompt).toContain(
+      'If the active directory is a sub-bot, its space must be nested inside the parent Bot space'
+    )
+    expect(prompt).toContain('create or reparent the sub-bot frame under that exact parent frame')
+    expect(prompt).toContain('keep new artifacts contained, non-overlapping, and ordered')
+    expect(prompt).toContain(
+      'Creating a Bot, sub-bot, charter chat, or Todo alone must never create an empty Board frame'
+    )
+    expect(prompt).toContain('first Board object and space is null')
+    expect(prompt).toContain('bind its exact page and frame IDs with set_project_space')
+    expect(prompt).toContain('never guess by name or replace an existing binding')
     expect(prompt).toContain('Never emit XML or a pseudo tool call')
-    expect(prompt).toContain('todo states, not chat locations')
+    expect(prompt).toContain('Todo and In motion are the active todo states')
     expect(prompt).toContain('Keep hammering until the requested result is verified')
-    expect(prompt).toContain('then mark it Finished')
-    expect(prompt).toContain('leave the todo In motion')
-    expect(prompt).toContain('Use workmap_create_todo_chat')
+    expect(prompt).toContain('report the settled outcome in chat')
+    expect(prompt).toContain('leave archival to the user')
+    expect(prompt).toContain('Keep clarification and planning in Todo')
+    expect(prompt).toContain('explicitly move the current linked todo to In motion')
+    expect(prompt).toContain('keep the current status')
+    expect(prompt).toContain('Use workmap_capture_future_work')
+    expect(prompt).toContain('use workmap_update_todo_object')
+    expect(prompt).toContain('make this chat a Bot')
+    expect(prompt).toContain('attach any requested schedule atomically')
     expect(prompt).toContain('never another chat')
     expect(prompt).not.toContain('Needs you')
     expect(prompt).not.toContain('Review when')
-    expect(prompt).not.toContain('Only the user marks Finished')
+    expect(prompt).not.toContain('Finished are todo states')
     expect(prompt).not.toContain('work-plan skill')
     expect(boardWorkerPrompt('/skill:openpencil Make a cool object.')).toBe(
       '/skill:openpencil Make a cool object.'
@@ -55,8 +82,9 @@ describe('Board worker MCP surface', () => {
       'set_theme',
       'trace_query',
       'workmap_apply',
-      'workmap_create_todo_chat',
-      'workmap_query'
+      'workmap_capture_future_work',
+      'workmap_query',
+      'workmap_update_todo_object'
     ])
     expect(WORKER_BOARD_TOOL_NAMES).not.toContain('dispatch_work')
   })
@@ -220,8 +248,9 @@ describe('Board worker MCP surface', () => {
         'openpencil_set_theme',
         'openpencil_trace_query',
         'openpencil_workmap_apply',
-        'openpencil_workmap_create_todo_chat',
+        'openpencil_workmap_capture_future_work',
         'openpencil_workmap_query',
+        'openpencil_workmap_update_todo_object',
         ...WORKER_MEDIA_EAGER_TOOL_NAMES,
         'pi_edit',
         'mcp'

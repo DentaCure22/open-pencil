@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/unit-v3/source/unit-v3-02-scan-left-source.png",
+  "source_pixels": [
+    444,
+    443
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    46,
+    95,
+    385,
+    325
+  ],
+  "trimmed_pixels": [
+    339,
+    230
+  ],
+  "prepared_pixels": [
+    407,
+    407
+  ],
+  "padding_fraction": 0.1,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-02-scan-left-master.png",
+      "pixels": [
+        407,
+        407
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-02-scan-left.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-02-scan-left@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-02-scan-left@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

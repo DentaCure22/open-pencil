@@ -49,7 +49,8 @@ function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
     }, delay)
     function handleAbort() {
       clearTimeout(timer)
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+      const reason = signal?.reason
+      reject(reason instanceof Error ? reason : new DOMException('Aborted', 'AbortError'))
     }
     signal?.addEventListener('abort', handleAbort, { once: true })
   })
@@ -163,7 +164,7 @@ export async function connectDurableYjsProvider({
   }
 
   async function compactNextBatch(): Promise<DurableYjsPendingUpdate | null> {
-    const first = pendingBatches[0]
+    const first = pendingBatches.at(0)
     if (!first) return null
 
     let totalBytes = 0
@@ -369,6 +370,8 @@ export async function connectDurableYjsProvider({
         await hydrateDocument()
         return
       } catch (error) {
+        // Hydration can clear this flag before a later persistence callback rejects.
+        // oxlint-disable-next-line typescript/no-unnecessary-condition
         if (!loading || signal?.aborted) throw error
         destroyDocument(remoteDocument)
         remoteDocument = null

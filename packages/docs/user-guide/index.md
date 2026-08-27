@@ -32,5 +32,5 @@ Throughout this guide, keyboard shortcuts use Mac notation: <kbd>⌘</kbd> = <kb
 ## Advanced Features
 
 - [Auto Layout](./auto-layout) — flexbox-based automatic positioning
-- [Components](./components) — reusable components, instances, and overrides
+- [Legacy Figma Components](./components) — import and round-trip compatibility
 - [Variables](./variables) — design variables, collections, modes, and fill bindings

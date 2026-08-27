@@ -3,6 +3,7 @@ import { CONFIGURED_CODE_OBJECT_SOURCE } from '@open-pencil/core/code-object'
 export const FINANCIAL_DASHBOARD_SOURCE = CONFIGURED_CODE_OBJECT_SOURCE
 
 export const ANALYTICS_CHART_SOURCE = `type CodeObjectProps = {
+  appearance: { theme: 'dark' | 'light'; tokens: Record<string, string> }
   interactionEnabled: boolean
   props: { title?: string }
   setState: (next: { range: '7d' | '30d' | '90d' }) => void
@@ -19,12 +20,14 @@ function RangeButton({
   active,
   children,
   disabled,
-  onClick
+  onClick,
+  tokens
 }: {
   active: boolean
   children: string
   disabled: boolean
   onClick: () => void
+  tokens: Record<string, string>
 }) {
   return (
     <button
@@ -34,8 +37,8 @@ function RangeButton({
         border: 0,
         borderRadius: 999,
         padding: '7px 11px',
-        background: active ? '#d8ff69' : '#ffffff0c',
-        color: active ? '#172018' : '#b9c3bc',
+        background: active ? tokens.accent : tokens.surface,
+        color: active ? tokens.accentText : tokens.textMuted,
         cursor: disabled ? 'default' : 'pointer',
         fontSize: 12,
         fontWeight: 700
@@ -47,11 +50,13 @@ function RangeButton({
 }
 
 export default function AnalyticsChart({
+  appearance,
   interactionEnabled,
   props,
   setState,
   state
 }: CodeObjectProps) {
+  const { tokens } = appearance
   const values = SERIES[state.range] ?? SERIES['30d']
   const maximum = Math.max(...values)
   return (
@@ -61,24 +66,24 @@ export default function AnalyticsChart({
         boxSizing: 'border-box',
         minHeight: '100%',
         padding: 28,
-        color: '#f2f7f3',
+        color: tokens.text,
         fontFamily: 'Inter, ui-sans-serif, system-ui',
-        background: 'linear-gradient(150deg, #111b17, #1d3026)'
+        background: tokens.background
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <p style={{ margin: 0, color: '#8ca899', fontSize: 11, fontWeight: 800 }}>
+          <p style={{ margin: 0, color: tokens.textMuted, fontSize: 11, fontWeight: 800 }}>
             CODE OBJECT PRESET
           </p>
           <h1 style={{ margin: '8px 0 4px', fontSize: 26 }}>
             {props.title ?? 'Activation trend'}
           </h1>
-          <p style={{ margin: 0, color: '#8ca899', fontSize: 13 }}>
+          <p style={{ margin: 0, color: tokens.textMuted, fontSize: 13 }}>
             Interactive chart · persisted range
           </p>
         </div>
-        <strong style={{ color: '#d8ff69', fontSize: 30 }}>+18.4%</strong>
+        <strong style={{ color: tokens.accent, fontSize: 30 }}>+18.4%</strong>
       </div>
       <div
         style={{
@@ -88,8 +93,9 @@ export default function AnalyticsChart({
           gap: 9,
           marginTop: 28,
           padding: '18px 16px 0',
-          borderRadius: 18,
-          background: '#08100c88'
+          border: \`1px solid \${tokens.border}\`,
+          borderRadius: tokens.radius,
+          background: tokens.surface
         }}
       >
         {values.map((value, index) => (
@@ -100,7 +106,7 @@ export default function AnalyticsChart({
               flex: 1,
               height: \`\${Math.max(8, (value / maximum) * 100)}%\`,
               borderRadius: '7px 7px 2px 2px',
-              background: index === values.length - 1 ? '#d8ff69' : '#5e8f76'
+              background: index === values.length - 1 ? tokens.accent : tokens.success
             }}
           />
         ))}
@@ -112,6 +118,7 @@ export default function AnalyticsChart({
             active={state.range === range}
             disabled={!interactionEnabled}
             onClick={() => setState({ range })}
+            tokens={tokens}
           >
             {range}
           </RangeButton>
@@ -122,27 +129,32 @@ export default function AnalyticsChart({
 }`
 
 export const INTERACTIVE_FORM_SOURCE = `type CodeObjectProps = {
+  appearance: { theme: 'dark' | 'light'; tokens: Record<string, string> }
   interactionEnabled: boolean
   setState: (next: { email: string; name: string; status: 'draft' | 'submitted' }) => void
   state: { email: string; name: string; status: 'draft' | 'submitted' }
 }
 
-const fieldStyle = {
-  boxSizing: 'border-box',
-  width: '100%',
-  border: '1px solid #d6d5e3',
-  borderRadius: 11,
-  padding: '11px 12px',
-  background: 'white',
-  color: '#28263b',
-  fontSize: 14
-} as const
+function fieldStyle(tokens: Record<string, string>) {
+  return {
+    boxSizing: 'border-box',
+    width: '100%',
+    border: \`1px solid \${tokens.border}\`,
+    borderRadius: tokens.radius,
+    padding: '11px 12px',
+    background: tokens.surfaceElevated,
+    color: tokens.text,
+    fontSize: 14
+  } as const
+}
 
 export default function InteractiveForm({
+  appearance,
   interactionEnabled,
   setState,
   state
 }: CodeObjectProps) {
+  const { tokens } = appearance
   return (
     <main
       data-test-id="saved-form"
@@ -150,16 +162,16 @@ export default function InteractiveForm({
         boxSizing: 'border-box',
         minHeight: '100%',
         padding: 30,
-        color: '#28263b',
+        color: tokens.text,
         fontFamily: 'Inter, ui-sans-serif, system-ui',
-        background: 'linear-gradient(145deg, #f6f3ff, #ebe8f6)'
+        background: tokens.background
       }}
     >
-      <p style={{ margin: 0, color: '#7869b5', fontSize: 11, fontWeight: 800 }}>
+      <p style={{ margin: 0, color: tokens.accent, fontSize: 11, fontWeight: 800 }}>
         CODE OBJECT PRESET
       </p>
       <h1 style={{ margin: '8px 0 6px', fontSize: 27 }}>Research signup</h1>
-      <p style={{ margin: '0 0 24px', color: '#747083', fontSize: 13 }}>
+      <p style={{ margin: '0 0 24px', color: tokens.textMuted, fontSize: 13 }}>
         Form values are serializable Code Object state.
       </p>
       <label style={{ display: 'grid', gap: 7, marginBottom: 15, fontSize: 12, fontWeight: 700 }}>
@@ -170,7 +182,7 @@ export default function InteractiveForm({
           onChange={(event) =>
             setState({ ...state, name: event.currentTarget.value, status: 'draft' })
           }
-          style={fieldStyle}
+          style={fieldStyle(tokens)}
         />
       </label>
       <label style={{ display: 'grid', gap: 7, marginBottom: 20, fontSize: 12, fontWeight: 700 }}>
@@ -182,7 +194,7 @@ export default function InteractiveForm({
           onChange={(event) =>
             setState({ ...state, email: event.currentTarget.value, status: 'draft' })
           }
-          style={fieldStyle}
+          style={fieldStyle(tokens)}
         />
       </label>
       <button
@@ -191,10 +203,10 @@ export default function InteractiveForm({
         style={{
           width: '100%',
           border: 0,
-          borderRadius: 11,
+          borderRadius: tokens.radius,
           padding: '12px 16px',
-          background: interactionEnabled ? '#6653b6' : '#a8a2c2',
-          color: 'white',
+          background: interactionEnabled ? tokens.accent : tokens.textMuted,
+          color: tokens.accentText,
           cursor: interactionEnabled ? 'pointer' : 'default',
           fontWeight: 800
         }}

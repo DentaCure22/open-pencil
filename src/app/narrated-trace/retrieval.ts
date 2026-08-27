@@ -81,7 +81,7 @@ export function scrubNarratedTraceQueryReceiptForMicTurns(turnIds?: readonly str
   return true
 }
 
-function statusCopy(result: NarratedTraceQueryResult) {
+function statusCopy(result: NarratedTraceQueryResult): { detail: string; title: string } {
   switch (result.status) {
     case 'matched':
       return {
@@ -104,6 +104,7 @@ function statusCopy(result: NarratedTraceQueryResult) {
         title: 'Trace unavailable'
       }
   }
+  throw new Error(`Unknown Trace retrieval status: ${String(result.status)}`)
 }
 
 function scopeLabel(scope: NarratedTraceScope) {
@@ -153,7 +154,7 @@ function retrievalWindow(
   if (sourceSpokenTurn) {
     return { endedAt: sourceSpokenTurn.endedAt, startedAt: sourceSpokenTurn.startedAt }
   }
-  const firstMatch = result.matches[0]
+  const firstMatch = result.matches.at(0)
   if (!firstMatch) return undefined
   return { endedAt: firstMatch.endedAt, startedAt: firstMatch.startedAt }
 }
@@ -163,17 +164,12 @@ export function publishNarratedTraceQueryReceipt(
   result: NarratedTraceQueryResult,
   completedAt = new Date().toISOString()
 ) {
+  const scope = input.scope ?? result.sourceSpokenTurn?.scope ?? result.matches.at(0)?.scope
   narratedTraceLastQuery.value = {
     completedAt,
     ...(input.query?.trim() ? { query: input.query.trim() } : {}),
     result: structuredClone(result),
-    ...((input.scope ?? result.sourceSpokenTurn?.scope ?? result.matches[0]?.scope)
-      ? {
-          scope: structuredClone(
-            input.scope ?? result.sourceSpokenTurn?.scope ?? result.matches[0]?.scope
-          )
-        }
-      : {})
+    ...(scope ? { scope: structuredClone(scope) } : {})
   }
 }
 

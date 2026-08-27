@@ -88,10 +88,11 @@ export function sortAgentConversationThreads(
     const pinDifference =
       Number(isAgentConversationPinned(right)) - Number(isAgentConversationPinned(left))
     if (pinDifference) return pinDifference
-    const byUser = agentConversationLastUserMessageAt(right).localeCompare(
+    const byActivity = right.updatedAt.localeCompare(left.updatedAt)
+    if (byActivity) return byActivity
+    return agentConversationLastUserMessageAt(right).localeCompare(
       agentConversationLastUserMessageAt(left)
     )
-    return byUser || right.updatedAt.localeCompare(left.updatedAt)
   })
 }
 

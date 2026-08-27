@@ -200,7 +200,7 @@ export function buildLiveInspectorTokenSuggestions(
   addSuggestion(
     suggestions,
     knownTokens,
-    WEIGHT_BY_VALUE.get(styles['font-weight']?.trim() ?? ''),
+    WEIGHT_BY_VALUE.get(styles['font-weight'].trim()),
     'type weight'
   )
   addSuggestion(

@@ -96,7 +96,7 @@ export class WebFontResolver {
         )
       }
       return originalFetch(input, init)
-    }) as typeof fetch
+    })
 
     try {
       return await operation()

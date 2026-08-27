@@ -8,12 +8,17 @@ import IconLoaderCircle from '~icons/lucide/loader-circle'
 import IconMaximize2 from '~icons/lucide/maximize-2'
 import IconMinimize2 from '~icons/lucide/minimize-2'
 import IconMonitor from '~icons/lucide/monitor'
+import IconPanelRightOpen from '~icons/lucide/panel-right-open'
 import IconRefreshCw from '~icons/lucide/refresh-cw'
 import IconScanSearch from '~icons/lucide/scan-search'
 import IconSmartphone from '~icons/lucide/smartphone'
+import IconMoon from '~icons/lucide/moon'
+import IconSun from '~icons/lucide/sun'
+import IconSunMoon from '~icons/lucide/sun-moon'
 import IconTablet from '~icons/lucide/tablet'
 
 import { useSceneComputed } from '@open-pencil/vue'
+import type { CodeObjectThemePreference } from '@open-pencil/core/code-object'
 
 import {
   readLocalAppStatus,
@@ -23,12 +28,15 @@ import {
 import { fullFrameCodeObjectId, toggleCodeObjectFullFrame } from '@/app/code-object/full-frame'
 import { codeObjectDocument, isCodeObjectFrame } from '@/app/code-object/model'
 import {
+  applyCodeObjectThemePreference,
   applyCodeObjectViewportPreset,
   CODE_OBJECT_VIEWPORT_PRESETS,
+  codeObjectThemePreference,
   codeObjectViewportPresetId,
   type CodeObjectViewportPresetId
 } from '@/app/code-object/transform'
 import { useEditorStore } from '@/app/editor/active-store'
+import { openAgentRightPanel } from '@/app/agent-chat/right-panel'
 import { IconlyPlay as IconPlay } from '@/components/icons/iconly'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import {
@@ -56,14 +64,17 @@ const toolsOpen = ref(false)
 const localAppStatus = ref<LocalAppStatus | null>(null)
 let localAppStatusRequest = 0
 
-const selectedCodeObject = useSceneComputed(() => {
+const selectedObject = useSceneComputed(() => {
   if (store.state.selectedIds.size !== 1) return null
   const [selectedId] = store.state.selectedIds
-  const selected = selectedId ? store.graph.getNode(selectedId) : null
-  return isCodeObjectFrame(selected) ? selected : null
+  return selectedId ? (store.graph.getNode(selectedId) ?? null) : null
 })
+const selectedCodeObject = computed(() =>
+  isCodeObjectFrame(selectedObject.value) ? selectedObject.value : null
+)
 
 const activePresetId = computed(() => codeObjectViewportPresetId(selectedCodeObject.value))
+const activeThemePreference = computed(() => codeObjectThemePreference(selectedCodeObject.value))
 
 const selectedSmylrProductionFrame = computed(() => {
   const frame = selectedCodeObject.value
@@ -113,6 +124,23 @@ const viewportIcons = {
   tablet: IconTablet
 } satisfies Record<CodeObjectViewportPresetId, Component>
 
+const appearanceOptions = [
+  { icon: IconSunMoon, label: 'Follow system appearance', preference: 'system' },
+  { icon: IconSun, label: 'Use light appearance', preference: 'light' },
+  { icon: IconMoon, label: 'Use dark appearance', preference: 'dark' }
+] as const satisfies ReadonlyArray<{
+  icon: Component
+  label: string
+  preference: CodeObjectThemePreference
+}>
+
+function setAppearancePreference(preference: CodeObjectThemePreference) {
+  const frame = selectedCodeObject.value
+  if (!frame || !applyCodeObjectThemePreference(store, frame.id, preference)) return
+  store.select([frame.id])
+  toolsOpen.value = false
+}
+
 function resizeViewport(presetId: CodeObjectViewportPresetId) {
   const frame = selectedCodeObject.value
   if (!frame || !applyCodeObjectViewportPreset(store, frame.id, presetId)) return
@@ -133,6 +161,11 @@ function duplicateObject() {
   }
   toolsOpen.value = false
   toast.info('Code Object duplicated')
+}
+
+function openSelectedObject() {
+  const object = selectedObject.value
+  if (object) openAgentRightPanel('object', { objectId: object.id })
 }
 
 async function refreshLocalAppStatus(launcherId: string) {
@@ -243,6 +276,15 @@ watch(selectedSmylrProductionFrame, (frame, previousFrame) => {
 </script>
 
 <template>
+  <Tip v-if="selectedObject" label="Open in Object panel" side="right">
+    <ToolButton
+      :icon="IconPanelRightOpen"
+      label="Open in Object panel"
+      variant="utility"
+      data-test-id="selection-open-object"
+      @click="openSelectedObject"
+    />
+  </Tip>
   <template v-if="selectedCodeObject">
     <span class="my-0.5 h-px w-6 self-center bg-border" aria-hidden="true" />
     <HoverCardRoot
@@ -296,6 +338,20 @@ watch(selectedSmylrProductionFrame, (frame, previousFrame) => {
             class="mx-0.5 h-5 w-px bg-border"
             aria-hidden="true"
           />
+          <IconButton
+            v-for="option in appearanceOptions"
+            :key="option.preference"
+            :active="activeThemePreference === option.preference"
+            :label="option.label"
+            side="top"
+            class="size-8 rounded-lg aria-pressed:bg-accent aria-pressed:text-white"
+            :data-test-id="`code-object-theme-${option.preference}`"
+            @click="setAppearancePreference(option.preference)"
+          >
+            <component :is="option.icon" class="size-4" />
+          </IconButton>
+
+          <span class="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
           <IconButton
             v-for="preset in CODE_OBJECT_VIEWPORT_PRESETS"
             :key="preset.id"

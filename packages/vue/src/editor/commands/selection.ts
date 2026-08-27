@@ -60,49 +60,6 @@ export function createSelectionCommands({
       enabled: capabilities.canUngroup,
       run: () => editor.ungroupSelected()
     },
-    'selection.createComponent': {
-      id: 'selection.createComponent',
-      get label() {
-        return t.value.createComponent
-      },
-      enabled: capabilities.canCreateComponent,
-      run: () => editor.createComponentFromSelection()
-    },
-    'selection.createComponentSet': {
-      id: 'selection.createComponentSet',
-      get label() {
-        return t.value.createComponentSet
-      },
-      enabled: capabilities.canCreateComponentSet,
-      run: () => editor.createComponentSetFromComponents()
-    },
-    'selection.createInstance': {
-      id: 'selection.createInstance',
-      get label() {
-        return t.value.createInstance
-      },
-      enabled: capabilities.canCreateInstance,
-      run: () => {
-        const node = selection.selectedNode.value
-        if (node?.type === 'COMPONENT') editor.createInstanceFromComponent(node.id)
-      }
-    },
-    'selection.detachInstance': {
-      id: 'selection.detachInstance',
-      get label() {
-        return t.value.detachInstance
-      },
-      enabled: capabilities.canDetachInstance,
-      run: () => editor.detachInstance()
-    },
-    'selection.goToMainComponent': {
-      id: 'selection.goToMainComponent',
-      get label() {
-        return t.value.goToMainComponent
-      },
-      enabled: capabilities.canGoToMainComponent,
-      run: () => editor.goToMainComponent()
-    },
     'selection.wrapInAutoLayout': {
       id: 'selection.wrapInAutoLayout',
       get label() {

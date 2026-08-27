@@ -27,19 +27,20 @@ function styleValue(value: ReactStylePatchRequest['value']): string {
   return typeof value === 'string' ? JSON.stringify(value) : String(value)
 }
 
-function explicitSourceAnchor(source: string, sourceId: string): RegExpMatchArray {
+function explicitSourceAnchor(source: string, sourceId: string): number {
   const escaped = escapeRegExp(sourceId)
   const pattern = new RegExp(
     `(?:data-open-pencil-source-id|id)\\s*=\\s*(?:"${escaped}"|'${escaped}')`,
     'g'
   )
   const matches = [...source.matchAll(pattern)]
-  if (matches.length !== 1 || matches[0]?.index === undefined) {
+  const match = matches.length === 1 ? matches.at(0) : undefined
+  if (!match) {
     throw new TypeError(
       `Safe React patching requires exactly one explicit source ID "${sourceId}" in JSX`
     )
   }
-  return matches[0]
+  return Number(match.index)
 }
 
 function openingTagRange(source: string, anchorIndex: number): { start: number; end: number } {
@@ -86,8 +87,9 @@ function parsedStyleProperties(body: string): ParsedStyleProperty[] {
   const properties: ParsedStyleProperty[] = []
   let covered = ''
   for (const match of body.matchAll(propertyPattern)) {
-    if (match.index === undefined || !match[1]) continue
-    const key = match[1].replace(/^['"]|['"]$/g, '')
+    const rawKey = match.at(1)
+    if (!rawKey) continue
+    const key = rawKey.replace(/^['"]|['"]$/g, '')
     const separatorLength = match[0].startsWith(',') ? 1 : 0
     const start = match.index + separatorLength
     properties.push({ key, start, end: match.index + match[0].length })
@@ -114,13 +116,13 @@ export function patchReactInlineStyle(
   if (!/^[A-Za-z_$][\w$-]*$/.test(request.property)) {
     throw new TypeError(`Invalid React style property "${request.property}"`)
   }
-  const anchor = explicitSourceAnchor(source, request.sourceId)
-  const range = openingTagRange(source, anchor.index ?? 0)
+  const anchorIndex = explicitSourceAnchor(source, request.sourceId)
+  const range = openingTagRange(source, anchorIndex)
   const opening = source.slice(range.start, range.end)
   const styleMatch = /style\s*=\s*\{\s*\{([\s\S]*?)\}\s*\}/.exec(opening)
   const serializedValue = styleValue(request.value)
 
-  if (!styleMatch || styleMatch.index === undefined) {
+  if (!styleMatch) {
     const insertion = opening.endsWith('/>') ? range.end - 2 : range.end - 1
     const replacement = ` style={{ ${request.property}: ${serializedValue} }}`
     return {
@@ -133,7 +135,7 @@ export function patchReactInlineStyle(
     }
   }
 
-  const body = styleMatch[1] ?? ''
+  const body = styleMatch.at(1) ?? ''
   const bodyStart = range.start + styleMatch.index + styleMatch[0].indexOf(body)
   const properties = parsedStyleProperties(body)
   const existing = properties.find((property) => property.key === request.property)

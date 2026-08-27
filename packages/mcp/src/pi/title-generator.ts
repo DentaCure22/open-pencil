@@ -136,6 +136,10 @@ export class PiConversationTitleGenerator implements ConversationTitleGenerator 
     this.active.clear()
   }
 
+  private isClosed(): boolean {
+    return this.closed
+  }
+
   async generate(input: ConversationTitleInput): Promise<string | null> {
     if (this.closed || !input.message.trim()) return null
     let rpc: PiRpcProcess | null = null
@@ -174,7 +178,7 @@ export class PiConversationTitleGenerator implements ConversationTitleGenerator 
           if (!settled) finish('')
         }
       })
-      if (this.closed) return null
+      if (this.isClosed()) return null
       this.active.add(rpc)
       const prompt = conversationTitlePrompt(input)
       const promptInput = await piPromptInputWithEvidence(

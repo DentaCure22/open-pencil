@@ -83,7 +83,7 @@ export function buildAuthorityBoardQueryIndex(
 
   for (const [order, node] of nodes.entries()) {
     documentOrder.set(node.id, order)
-    addId(parentIds, node.parentId, node.id)
+    if (node.parentId) addId(parentIds, node.parentId, node.id)
     addId(typeIds, node.type, node.id)
     indexText(nameTrigrams, oversizedNameIds, node.id, node.name, MAX_INDEXED_NAME_LENGTH)
     if (node.type === 'TEXT') {

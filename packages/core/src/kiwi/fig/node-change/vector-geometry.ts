@@ -1,5 +1,5 @@
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
-import type { GeometryPath, VectorNetwork, WindingRule } from '@open-pencil/scene-graph'
+import type { GeometryPath, VectorNetwork } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { decodeVectorNetworkBlob } from '#core/vector'
@@ -59,7 +59,7 @@ export function resolveGeometryPaths(
     const blob = blobs[p.commandsBlob]
     if (blob.length === 0) continue
     result.push({
-      windingRule: (p.windingRule === 'EVENODD' ? 'EVENODD' : 'NONZERO') as WindingRule,
+      windingRule: (p.windingRule === 'EVENODD' ? 'EVENODD' : 'NONZERO'),
       commandsBlob: blob
     })
   }

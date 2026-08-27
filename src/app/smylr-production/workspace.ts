@@ -213,7 +213,7 @@ function ensureProductionCodeObjectFrame(
   const nestedManagedFrame = managedFrames.find((candidate) => candidate.parentId !== pageNode.id)
   const frame =
     nestedManagedFrame ??
-    managedFrames[0] ??
+    managedFrames.at(0) ??
     pageNodes.find(
       (candidate) => candidate.type === 'FRAME' && candidate.name === `${page.label} / Current`
     )
@@ -240,7 +240,7 @@ function ensureProductionCodeObjectFrame(
   if (
     frame.name !== `${page.label} / Current` ||
     frame.cornerRadius !== DEFAULT_CODE_OBJECT_RADIUS ||
-    frame.clipsContent !== true ||
+    !frame.clipsContent ||
     JSON.stringify(frame.pluginData) !== JSON.stringify(nextPluginData)
   ) {
     graph.updateNode(frame.id, {
@@ -717,121 +717,160 @@ export function isSmylrFoundationsStale(store: EditorStore): boolean {
   return getSmylrFoundationsRevision(store) !== SMYLR_FOUNDATIONS_REVISION
 }
 
-/** Repair missing production pages without replacing user-authored ordinary boards. */
-export function repairSmylrProductionWorkspaceStructure(store: EditorStore): boolean {
-  if (!hasSmylrProductionWorkspace(store)) return false
+function removeRetiredProductionPages(store: EditorStore): boolean {
   let touched = false
-  const productionPageIds: string[] = []
-
   for (const page of store.graph.getPages()) {
     const kind = pluginValue(page, 'kind')
     const pageId = pluginValue(page, 'pageId')
-    const isManagedProductionPage = kind === 'smylr-production-page' || kind === 'smylr-flow-page'
-    if (isManagedProductionPage && pageId && SMYLR_RETIRED_PRODUCTION_PAGE_IDS.has(pageId)) {
-      store.deletePage(page.id)
-      touched = true
-    }
-  }
-
-  for (const page of SMYLR_PRODUCTION_PAGES) {
-    let currentPage = store.graph
-      .getPages()
-      .find(
-        (candidate) =>
-          pluginValue(candidate, 'kind') === 'smylr-production-page' &&
-          pluginValue(candidate, 'pageId') === page.id
-      )
-    if (!currentPage) {
-      currentPage = store.graph.addPage(page.label)
-      createCodeObjectPage(store.graph, page, currentPage)
-      touched = true
-    } else if (ensureProductionCodeObjectFrame(store.graph, page, currentPage)) {
-      touched = true
-    }
-    productionPageIds.push(currentPage.id)
-
-    let flowPage = store.graph
-      .getPages()
-      .find(
-        (candidate) =>
-          pluginValue(candidate, 'kind') === 'smylr-flow-page' &&
-          pluginValue(candidate, 'pageId') === page.id
-      )
-    if (!flowPage) {
-      const flowPageId = createFlowCanvasPage(store.graph, page)
-      flowPage = store.graph.getNode(flowPageId) ?? undefined
-      touched = true
-    }
-    if (flowPage) productionPageIds.push(flowPage.id)
-  }
-
-  let tokensPage = findFoundationsPage(store, SMYLR_TOKENS_PAGE_ID)
-  if (!tokensPage) {
-    tokensPage = store.graph.addPage('Design System')
-    createSmylrTokensDesignPage(store.graph, tokensPage)
+    const managed = kind === 'smylr-production-page' || kind === 'smylr-flow-page'
+    if (!managed || !pageId || !SMYLR_RETIRED_PRODUCTION_PAGE_IDS.has(pageId)) continue
+    store.deletePage(page.id)
     touched = true
   }
-  productionPageIds.push(tokensPage.id)
+  return touched
+}
 
-  let brandPage = findFoundationsPage(store, SMYLR_BRAND_PAGE_ID)
-  if (!brandPage) {
-    brandPage = store.graph.addPage('Brand Guidelines')
-    createSmylrBrandDesignPage(store.graph, brandPage)
+function ensureProductionPagePair(
+  store: EditorStore,
+  page: SmylrProductionPage
+): { pageIds: string[]; touched: boolean } {
+  let touched = false
+  let currentPage = store.graph
+    .getPages()
+    .find(
+      (candidate) =>
+        pluginValue(candidate, 'kind') === 'smylr-production-page' &&
+        pluginValue(candidate, 'pageId') === page.id
+    )
+  if (!currentPage) {
+    currentPage = store.graph.addPage(page.label)
+    createCodeObjectPage(store.graph, page, currentPage)
+    touched = true
+  } else if (ensureProductionCodeObjectFrame(store.graph, page, currentPage)) {
     touched = true
   }
-  productionPageIds.push(brandPage.id)
 
-  let productMapPage = productMapPageByIdentity(store.graph)
-  if (!productMapPage) {
-    productMapPage = store.graph.addPage(SMYLR_PRODUCT_MAP_PAGE_NAME)
+  let flowPage = store.graph
+    .getPages()
+    .find(
+      (candidate) =>
+        pluginValue(candidate, 'kind') === 'smylr-flow-page' &&
+        pluginValue(candidate, 'pageId') === page.id
+    )
+  if (!flowPage) {
+    const flowPageId = createFlowCanvasPage(store.graph, page)
+    flowPage = store.graph.getNode(flowPageId) ?? undefined
     touched = true
   }
-  if (ensureProductMapPageMetadata(store.graph, productMapPage)) touched = true
-  if (syncProductMapPage(store.graph, productMapPage)) touched = true
-  productionPageIds.push(productMapPage.id)
+  return { pageIds: [currentPage.id, ...(flowPage ? [flowPage.id] : [])], touched }
+}
 
-  const durableFlowPages: SceneNode[] = []
+function ensureFoundationDesignPage(
+  store: EditorStore,
+  pageId: string,
+  name: string,
+  create: (graph: SceneGraph, page: SceneNode) => unknown
+): { page: SceneNode; touched: boolean } {
+  const existing = findFoundationsPage(store, pageId)
+  if (existing) return { page: existing, touched: false }
+  const page = store.graph.addPage(name)
+  create(store.graph, page)
+  return { page, touched: true }
+}
+
+function ensureProductMapWorkspacePage(store: EditorStore): { page: SceneNode; touched: boolean } {
+  let page = productMapPageByIdentity(store.graph)
+  let touched = false
+  if (!page) {
+    page = store.graph.addPage(SMYLR_PRODUCT_MAP_PAGE_NAME)
+    touched = true
+  }
+  if (ensureProductMapPageMetadata(store.graph, page)) touched = true
+  if (syncProductMapPage(store.graph, page)) touched = true
+  return { page, touched }
+}
+
+function ensureDurableFlowPages(store: EditorStore): { pages: SceneNode[]; touched: boolean } {
+  const pages: SceneNode[] = []
+  let touched = false
   for (const definition of SMYLR_DURABLE_APP_FLOW_DEFINITIONS) {
-    let flowPage = appFlowPageByDefinition(store.graph, definition)
-    if (!flowPage) {
-      flowPage = createDurableAppFlowPage(store.graph, definition)
+    let page = appFlowPageByDefinition(store.graph, definition)
+    if (!page) {
+      page = createDurableAppFlowPage(store.graph, definition)
       touched = true
-    } else if (
-      definition.id === TECHNICAL_FLOW_SAVE_FINDING_ID
-        ? syncTechnicalFlowScene(store.graph, flowPage.id, definition).changed
-        : syncAppFlowPage(store.graph, flowPage, definition)
-    ) {
-      computeAllLayouts(store.graph, flowPage.id)
-      touched = true
+    } else {
+      const changed =
+        definition.id === TECHNICAL_FLOW_SAVE_FINDING_ID
+          ? syncTechnicalFlowScene(store.graph, page.id, definition).changed
+          : syncAppFlowPage(store.graph, page, definition)
+      if (changed) {
+        computeAllLayouts(store.graph, page.id)
+        touched = true
+      }
     }
-    durableFlowPages.push(flowPage)
-    productionPageIds.push(flowPage.id)
+    pages.push(page)
   }
+  return { pages, touched }
+}
 
+function orderManagedWorkspacePages(store: EditorStore, managedPageIds: string[]): boolean {
   const root = store.graph.getNode(store.graph.rootId)
-  if (!root) return touched
-  const foundationIds = new Set(productionPageIds)
+  if (!root) return false
+  const managedIds = new Set(managedPageIds)
   const remainingPageIds = root.childIds.filter((id) => {
     const node = store.graph.getNode(id)
-    return node?.type === 'CANVAS' && node.parentId === root.id && !foundationIds.has(id)
+    return node?.type === 'CANVAS' && node.parentId === root.id && !managedIds.has(id)
   })
-  const orderedPageIds = [...productionPageIds, ...remainingPageIds]
-  if (
-    orderedPageIds.length !== root.childIds.length ||
-    orderedPageIds.some((id, index) => root.childIds[index] !== id)
-  ) {
-    store.graph.updateNode(root.id, { childIds: orderedPageIds })
-    touched = true
+  const orderedPageIds = [...managedPageIds, ...remainingPageIds]
+  const unchanged =
+    orderedPageIds.length === root.childIds.length &&
+    orderedPageIds.every((id, index) => root.childIds[index] === id)
+  if (unchanged) return false
+  store.graph.updateNode(root.id, { childIds: orderedPageIds })
+  return true
+}
+
+/** Repair missing production pages without replacing user-authored ordinary boards. */
+export function repairSmylrProductionWorkspaceStructure(store: EditorStore): boolean {
+  if (!hasSmylrProductionWorkspace(store)) return false
+  let touched = removeRetiredProductionPages(store)
+  const productionPageIds: string[] = []
+
+  for (const page of SMYLR_PRODUCTION_PAGES) {
+    const result = ensureProductionPagePair(store, page)
+    productionPageIds.push(...result.pageIds)
+    if (result.touched) touched = true
   }
 
-  if (
-    ensureMapsAndFlowsSidebarPlacement(store.graph, [
-      { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMapPage.id },
-      ...durableFlowPages.map((page) => ({ label: page.name, pageId: page.id }))
-    ])
-  ) {
-    touched = true
-  }
+  const tokens = ensureFoundationDesignPage(
+    store,
+    SMYLR_TOKENS_PAGE_ID,
+    'Design System',
+    createSmylrTokensDesignPage
+  )
+  const brand = ensureFoundationDesignPage(
+    store,
+    SMYLR_BRAND_PAGE_ID,
+    'Brand Guidelines',
+    createSmylrBrandDesignPage
+  )
+  const productMap = ensureProductMapWorkspacePage(store)
+  const durableFlows = ensureDurableFlowPages(store)
+  productionPageIds.push(
+    tokens.page.id,
+    brand.page.id,
+    productMap.page.id,
+    ...durableFlows.pages.map((page) => page.id)
+  )
+  if (tokens.touched || brand.touched || productMap.touched || durableFlows.touched) touched = true
+  const reorderedPages = orderManagedWorkspacePages(store, productionPageIds)
+  if (reorderedPages) touched = true
+
+  const sidebarChanged = ensureMapsAndFlowsSidebarPlacement(store.graph, [
+    { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMap.page.id },
+    ...durableFlows.pages.map((page) => ({ label: page.name, pageId: page.id }))
+  ])
+  if (sidebarChanged) touched = true
 
   return touched
 }
@@ -847,22 +886,14 @@ function findFoundationsPage(store: EditorStore, pageId: string): SceneNode | nu
   return null
 }
 
-/**
- * Live-edit path: rebuild foundations boards **in place**.
- * - no replaceGraph
- * - no window reload
- * - optionally keep pan/zoom (HMR “just show the change”)
- */
-export async function refreshSmylrFoundationsBoardsInPlace(
-  store: EditorStore,
-  options: WorkspaceOptions = {}
-): Promise<boolean> {
-  if (!hasSmylrProductionWorkspace(store)) return false
+type FoundationTarget = 'brand' | 'tokens'
 
-  const pageId = options.selectedPageId
-  const preserveViewport = options.preserveViewport !== false
+function refreshFlowScenes(store: EditorStore): {
+  durableFlowPages: Array<{ definition: AppScreenFlowDefinition; page: SceneNode }>
+  productMapPage: SceneNode | null
+  touched: boolean
+} {
   let touched = false
-
   const dentalFlowPage = store.graph
     .getPages()
     .find(
@@ -870,12 +901,9 @@ export async function refreshSmylrFoundationsBoardsInPlace(
         pluginValue(page, 'kind') === 'smylr-flow-page' &&
         pluginValue(page, 'pageId') === 'dental-chart'
     )
-  if (dentalFlowPage) {
-    const flowResult = syncDentalChartAppFlowScene(store.graph, dentalFlowPage.id)
-    if (flowResult.changed) {
-      computeAllLayouts(store.graph, dentalFlowPage.id)
-      touched = true
-    }
+  if (dentalFlowPage && syncDentalChartAppFlowScene(store.graph, dentalFlowPage.id).changed) {
+    computeAllLayouts(store.graph, dentalFlowPage.id)
+    touched = true
   }
 
   const productMapPage = productMapPageByIdentity(store.graph)
@@ -897,14 +925,102 @@ export async function refreshSmylrFoundationsBoardsInPlace(
     }
     return [{ definition, page }]
   })
+  return { durableFlowPages, productMapPage, touched }
+}
+
+function foundationRefreshTargets(pageId?: string): FoundationTarget[] {
+  if (pageId === SMYLR_BRAND_PAGE_ID) return ['brand']
+  if (pageId) return ['tokens']
+  return ['tokens', 'brand']
+}
+
+async function rebuildFoundationTarget(
+  store: EditorStore,
+  target: FoundationTarget
+): Promise<boolean> {
+  const pageId = target === 'tokens' ? SMYLR_TOKENS_PAGE_ID : SMYLR_BRAND_PAGE_ID
+  const page = findFoundationsPage(store, pageId)
+  if (!page) return false
+  const selectedBefore = [...store.state.selectedIds]
+  store.select([])
+  for (const child of store.graph.getChildren(page.id)) {
+    try {
+      store.graph.deleteNode(child.id)
+    } catch (error) {
+      console.warn('[refresh foundations] delete child', child.id, error)
+    }
+  }
+
+  if (target === 'tokens') {
+    const module = await import('./create-tokens-page')
+    module.createSmylrTokensDesignPage(store.graph, page)
+  } else {
+    const module = await import('./create-brand-page')
+    module.createSmylrBrandDesignPage(store.graph, page)
+  }
+  const survivingSelection = selectedBefore.filter((id) => store.graph.getNode(id))
+  if (survivingSelection.length) store.select(survivingSelection)
+  return true
+}
+
+function currentFoundationBoardIds(store: EditorStore): string[] {
+  return store.graph
+    .getChildren(store.state.currentPageId)
+    .filter((node) => {
+      const kind = pluginValue(node, 'kind')
+      return (
+        kind === SMYLR_TOKENS_LIGHT_BOARD_KIND ||
+        kind === SMYLR_TOKENS_DARK_BOARD_KIND ||
+        kind === SMYLR_BRAND_BOARD_KIND
+      )
+    })
+    .map((node) => node.id)
+}
+
+async function restoreFoundationsViewport(
+  store: EditorStore,
+  preserveViewport: boolean,
+  saved: { panX: number; panY: number; zoom: number }
+): Promise<void> {
+  if (preserveViewport) {
+    if (!Number.isFinite(saved.zoom) || saved.zoom <= 0.02) return
+    store.state.zoom = saved.zoom
+    store.state.panX = saved.panX
+    store.state.panY = saved.panY
+    return
+  }
+  store.setTool('SELECT')
+  try {
+    await fitDesignBoardsToViewport(store, currentFoundationBoardIds(store))
+  } catch (error) {
+    console.warn('[refreshSmylrFoundationsBoardsInPlace] viewport fit skipped', error)
+  }
+}
+
+/**
+ * Live-edit path: rebuild foundations boards **in place**.
+ * - no replaceGraph
+ * - no window reload
+ * - optionally keep pan/zoom (HMR “just show the change”)
+ */
+export async function refreshSmylrFoundationsBoardsInPlace(
+  store: EditorStore,
+  options: WorkspaceOptions = {}
+): Promise<boolean> {
+  if (!hasSmylrProductionWorkspace(store)) return false
+
+  const pageId = options.selectedPageId
+  const preserveViewport = options.preserveViewport !== false
+  const refreshedFlows = refreshFlowScenes(store)
+  let touched = refreshedFlows.touched
 
   if (syncCodeObjectFlowBoards(store.graph)) touched = true
 
   if (
-    productMapPage &&
+    refreshedFlows.productMapPage &&
     ensureMapsAndFlowsSidebarPlacement(store.graph, [
-      { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: productMapPage.id },
-      ...durableFlowPages.map(({ definition, page }) => ({
+      { label: SMYLR_PRODUCT_MAP_PAGE_NAME, pageId: refreshedFlows.productMapPage.id },
+      ...refreshedFlows.durableFlowPages.map(({ definition, page }) => ({
         label: definition.label,
         pageId: page.id
       }))
@@ -913,56 +1029,16 @@ export async function refreshSmylrFoundationsBoardsInPlace(
     touched = true
   }
 
-  // Only refresh the page you're looking at (or both if unspecified).
-  let targets: Array<'tokens' | 'brand'> = ['tokens', 'brand']
-  if (pageId === SMYLR_BRAND_PAGE_ID) targets = ['brand']
-  else if (pageId) targets = ['tokens']
-
-  // Freeze camera
-  const savedZoom = store.state.zoom
-  const savedPanX = store.state.panX
-  const savedPanY = store.state.panY
+  const targets = foundationRefreshTargets(pageId)
+  const savedViewport = {
+    panX: store.state.panX,
+    panY: store.state.panY,
+    zoom: store.state.zoom
+  }
 
   await yieldAnimationFrames(1)
-
-  // Prefer the page currently open when smylr-page matches / is unset
   for (const target of targets) {
-    const wantId = target === 'tokens' ? SMYLR_TOKENS_PAGE_ID : SMYLR_BRAND_PAGE_ID
-    const page = findFoundationsPage(store, wantId)
-    if (!page) continue
-
-    // Only rebuild if this is the current page (when preserving viewport)
-    // or always when force multi-target.
-    if (preserveViewport && page.id !== store.state.currentPageId && targets.length > 1) {
-      // Still update the other foundations page quietly without switching camera.
-    }
-
-    const selectedBefore = [...store.state.selectedIds]
-    store.select([])
-
-    const children = [...store.graph.getChildren(page.id)]
-    for (const child of children) {
-      try {
-        store.graph.deleteNode(child.id)
-      } catch (err) {
-        console.warn('[refresh foundations] delete child', child.id, err)
-      }
-    }
-
-    // Dynamic import every time so Vite HMR delivers the NEW module
-    // (static imports stay frozen on the first version after page load).
-    if (target === 'tokens') {
-      const mod = await import('./create-tokens-page')
-      mod.createSmylrTokensDesignPage(store.graph, page)
-    } else {
-      const mod = await import('./create-brand-page')
-      mod.createSmylrBrandDesignPage(store.graph, page)
-    }
-    touched = true
-
-    // Restore selection only if nodes still exist (usually not after rebuild)
-    const still = selectedBefore.filter((id) => store.graph.getNode(id))
-    if (still.length) store.select(still)
+    if (await rebuildFoundationTarget(store, target)) touched = true
   }
 
   if (!touched) return false
@@ -970,35 +1046,10 @@ export async function refreshSmylrFoundationsBoardsInPlace(
   stampFoundationsRevision(store.graph)
   computeAllLayouts(store.graph, store.state.currentPageId)
 
-  // Keep tool + camera — this is the "don't reload the canvas" part.
-  if (preserveViewport) {
-    if (Number.isFinite(savedZoom) && savedZoom > 0.02) {
-      store.state.zoom = savedZoom
-      store.state.panX = savedPanX
-      store.state.panY = savedPanY
-    }
-  } else {
-    store.setTool('SELECT')
-    const boards = store.graph
-      .getChildren(store.state.currentPageId)
-      .filter((n) => {
-        const k = pluginValue(n, 'kind')
-        return (
-          k === SMYLR_TOKENS_LIGHT_BOARD_KIND ||
-          k === SMYLR_TOKENS_DARK_BOARD_KIND ||
-          k === SMYLR_BRAND_BOARD_KIND
-        )
-      })
-      .map((n) => n.id)
-    try {
-      await fitDesignBoardsToViewport(store, boards)
-    } catch (error) {
-      console.warn('[refreshSmylrFoundationsBoardsInPlace] viewport fit skipped', error)
-    }
-  }
+  await restoreFoundationsViewport(store, preserveViewport, savedViewport)
 
-  store.requestRender?.()
-  store.requestRepaint?.()
+  store.requestRender()
+  store.requestRepaint()
   return true
 }
 

@@ -162,8 +162,8 @@ export function useAppMenu() {
   }
 
   function groupLabel(group: AppMenuGroupSchema): string {
-    const key = group.label.toLowerCase() as keyof typeof menu.value
-    return menu.value[key] ?? group.label
+    const labels: Readonly<Record<string, string>> = menu.value
+    return labels[group.label.toLowerCase()] ?? group.label
   }
 
   function buildGroup(group: AppMenuGroupSchema): AppMenuGroup | null {

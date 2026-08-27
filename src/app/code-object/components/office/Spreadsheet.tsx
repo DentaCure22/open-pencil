@@ -1,3 +1,5 @@
+import type { CodeObjectTheme } from '@open-pencil/core/code-object'
+
 import type { CodeObjectState, OfficeSpreadsheetState } from '@/app/code-object/model'
 
 import { UniverSurface } from './UniverSurface'
@@ -7,6 +9,7 @@ type SpreadsheetProps = {
   interactionEnabled: boolean
   onStateChange: (state: CodeObjectState) => void
   state: OfficeSpreadsheetState
+  theme: CodeObjectTheme
 }
 
 type SavedSpreadsheetCell = {
@@ -62,13 +65,13 @@ export function Spreadsheet(props: SpreadsheetProps) {
       {...props}
       kind="spreadsheet"
       preview={
-        <section className="flex size-full flex-col overflow-hidden bg-white text-[#263238]">
-          <div className="grid h-7 shrink-0 grid-cols-[42px_repeat(8,minmax(110px,1fr))] border-b border-[#d9dee7] bg-[#f5f7fa] text-[11px] font-medium text-[#667085]">
-            <span className="border-r border-[#d9dee7]" />
+        <section className="flex size-full flex-col overflow-hidden bg-[var(--code-background)] text-[var(--code-text)]">
+          <div className="grid h-7 shrink-0 grid-cols-[42px_repeat(8,minmax(110px,1fr))] border-b border-[var(--code-border)] bg-[var(--code-surface)] text-[11px] font-medium text-[var(--code-text-muted)]">
+            <span className="border-r border-[var(--code-border)]" />
             {columns.slice(0, 8).map((column) => (
               <span
                 key={column}
-                className="flex items-center justify-center border-r border-[#d9dee7]"
+                className="flex items-center justify-center border-r border-[var(--code-border)]"
               >
                 {column}
               </span>
@@ -78,9 +81,9 @@ export function Spreadsheet(props: SpreadsheetProps) {
             {Array.from({ length: 22 }, (_, rowIndex) => (
               <div
                 key={rowIndex}
-                className="grid h-7 grid-cols-[42px_repeat(8,minmax(110px,1fr))] border-b border-[#e6e9ef] text-[11px]"
+                className="grid h-7 grid-cols-[42px_repeat(8,minmax(110px,1fr))] border-b border-[var(--code-border)] text-[11px]"
               >
-                <span className="flex items-center justify-center border-r border-[#d9dee7] bg-[#f8fafc] text-[#7a8496]">
+                <span className="flex items-center justify-center border-r border-[var(--code-border)] bg-[var(--code-surface)] text-[var(--code-text-muted)]">
                   {rowIndex + 1}
                 </span>
                 {columns.slice(0, 8).map((column, columnIndex) => {
@@ -91,8 +94,8 @@ export function Spreadsheet(props: SpreadsheetProps) {
                       key={column}
                       className={`flex items-center border-r border-[#e6e9ef] px-2 ${
                         header
-                          ? 'bg-[#eef4ff] font-semibold text-[#24406f]'
-                          : 'bg-white text-[#344054]'
+                          ? 'bg-[var(--code-surface)] font-semibold text-[var(--code-accent)]'
+                          : 'bg-[var(--code-background)] text-[var(--code-text)]'
                       }`}
                     >
                       {value === undefined ? '' : String(value)}
@@ -102,10 +105,10 @@ export function Spreadsheet(props: SpreadsheetProps) {
               </div>
             ))}
           </div>
-          <footer className="flex h-9 shrink-0 items-center gap-3 border-t border-[#d9dee7] bg-[#f8fafc] px-3 text-[11px]">
-            <span className="font-semibold text-[#2f65d9]">Overview</span>
-            <span className="h-4 w-px bg-[#d9dee7]" />
-            <span className="text-[#7a8496]">100%</span>
+          <footer className="flex h-9 shrink-0 items-center gap-3 border-t border-[var(--code-border)] bg-[var(--code-surface)] px-3 text-[11px]">
+            <span className="font-semibold text-[var(--code-accent)]">Overview</span>
+            <span className="h-4 w-px bg-[var(--code-border)]" />
+            <span className="text-[var(--code-text-muted)]">100%</span>
           </footer>
         </section>
       }

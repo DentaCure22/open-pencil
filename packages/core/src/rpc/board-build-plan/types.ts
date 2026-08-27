@@ -1,3 +1,5 @@
+import type { Rect } from '@open-pencil/scene-graph/primitives'
+
 import type { CodeObjectSurface } from '#core/code-object/document'
 import type { CodeObjectUiBlockName } from '#core/code-object/ui-block'
 import type { CodeObjectViewportPresetId } from '#core/code-object/viewport'
@@ -258,12 +260,7 @@ export type BoardBuildPlanTargetIdentity = {
   workspace_id: string
 }
 
-export type BoardBuildPlanBounds = {
-  height: number
-  width: number
-  x: number
-  y: number
-}
+export type BoardBuildPlanBounds = Rect
 
 export type BoardBuildPlanGridCompilation = {
   aliases: Record<string, BoardBuildPlanBounds>

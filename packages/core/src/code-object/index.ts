@@ -1,7 +1,66 @@
 export {
+  BRIEFING_REPORT_CODE_OBJECT_SOURCE,
+  createInboxBriefingReport,
+  INBOX_BRIEFING_REPORT_VERSION,
+  isInboxBriefingReport,
+  type InboxBriefingItem,
+  type InboxBriefingReport,
+  type InboxBriefingSection,
+  type InboxBriefingSectionTone
+} from './briefing'
+
+export {
+  CODE_OBJECT_THEME_PREFERENCES,
+  DEFAULT_CODE_OBJECT_APPEARANCE,
+  DEFAULT_CODE_OBJECT_THEME_TOKENS,
+  normalizeCodeObjectAppearance,
+  resolveCodeObjectAppearance,
+  type CodeObjectAppearance,
+  type CodeObjectTheme,
+  type CodeObjectThemePreference,
+  type CodeObjectThemeTokenOverrides,
+  type CodeObjectThemeTokens,
+  type ResolvedCodeObjectAppearance
+} from './appearance'
+
+export {
+  CODE_OBJECT_AGENT_PRESET_IDS,
+  CODE_OBJECT_AGENT_PRESETS,
+  CODE_OBJECT_BOARD_PERMISSIONS,
+  CODE_OBJECT_MODALITY_DEFINITIONS,
+  CODE_OBJECT_MODALITY_IDS,
+  CODE_OBJECT_MODALITY_STARTER_SOURCE,
+  codeObjectAgentPreset,
+  codeObjectAgentPresetForModality,
+  isCodeObjectAgentPresetId,
+  isCodeObjectModality,
+  WORK_PLAN_ARTIFACT_KINDS,
+  WORK_PLAN_BLOCK_TYPES,
+  WORK_PLAN_CHART_KINDS,
+  WORK_PLAN_CODE_OBJECT_SOURCE,
+  type CodeObjectAgentPreset,
+  type CodeObjectAgentPresetId,
+  type CodeObjectBoardPermission,
+  type CodeObjectModality,
+  type WorkPlan,
+  type WorkPlanArtifact,
+  type WorkPlanArtifactKind,
+  type WorkPlanBlock,
+  type WorkPlanBlockType,
+  type WorkPlanChart,
+  type WorkPlanChartKind,
+  type WorkPlanChartSeries,
+  type WorkPlanDiagram,
+  type WorkPlanItem,
+  type WorkPlanReference,
+  type WorkPlanTable
+} from './preset'
+
+export {
   CODE_OBJECT_KIND,
   CODE_OBJECT_PLUGIN_ID,
   CODE_OBJECT_SCHEMA_VERSION,
+  codeObjectAppearancePluginData,
   codeObjectViewportPluginData,
   createSmylrTrustedWebAppDocument,
   createUserCodeObjectDocument,

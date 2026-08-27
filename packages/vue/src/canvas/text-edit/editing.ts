@@ -100,8 +100,7 @@ export function createTextCompositionHandlers({
     const text = el.value
     if (!text) return
     if (
-      skipCommittedInput &&
-      text === skipCommittedInput.text &&
+      text === skipCommittedInput?.text &&
       Date.now() <= skipCommittedInput.until
     ) {
       el.value = ''

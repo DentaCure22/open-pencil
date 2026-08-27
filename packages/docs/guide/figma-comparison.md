@@ -22,7 +22,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Canvas guides | 🔲 | Figma supports draggable guides from rulers |
 | Actions menu / command palette | 🔲 | Figma's quick actions search |
 | Context menu | ✅ | Right-click with clipboard, z-order, grouping, component, visibility, lock, move-to-page actions |
-| Keyboard shortcuts | 🟡 | Core shortcuts + components + z-order + visibility/lock implemented; Scale, Arrow, Pencil, flip, text formatting not yet wired |
+| Keyboard shortcuts | 🟡 | Core shortcuts + z-order + visibility/lock implemented; Scale, Arrow, Pencil, flip, text formatting not yet wired |
 | Find and replace | 🔲 | Text search/replace across document |
 | Layer outlines view | 🔲 | Wireframe view of all layers |
 | Custom file thumbnails | 🔲 | Thumbnail generated on export, but no custom thumbnail picker |
@@ -156,18 +156,13 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Create components | 🟡 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> creates from frame/group or wraps selection; no component properties UI yet |
-| Component sets | 🟡 | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> combines components; dashed purple border; no variant property editing |
-| Component instances | 🟡 | Create instance from context menu with child cloning and componentId mapping; live sync from component; no override editing UI |
-| Variants | 🔲 | Variant switching and property-based selection |
-| Component properties | 🔲 | Boolean, text, instance swap properties |
-| Override propagation | ✅ | Changes to main component propagate to all instances; overrides preserved |
+| Imported Figma components | 🟡 | Component, set, instance, and override data render and round-trip for compatibility; they are not a native OpenPencil authoring system |
+| Native component authoring | 🔲 | Removed from Board menus, Assets, shortcuts, and agent tools; reusable design systems will become a Code Object modality |
+| Code Object presets | 🟡 | Authored reusable objects are grouped by modality and keep their own source, state, and runtime contract |
 | Variables (color, number, string, boolean) | 🟡 | `COLOR` full UI (dialog, TanStack Table, inline editing, undo/redo, demo collections); `FLOAT`/STRING/BOOLEAN defined but no editing UI |
 | Variable collections & modes | 🟡 | Collections, modes, activeMode switching work; no variable-driven theming UI yet |
 | Styles (color, text, effect, layout) | 🔲 | Reusable named style presets |
-| Libraries (publish, share, update) | 🔲 | Shared component/style libraries |
-| Detach instance | ✅ | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd> converts instance back to frame |
-| Go to main component | ✅ | Navigate to source component, cross-page |
+| Design-system libraries | 🔲 | Planned as a Code Object modality rather than native component masters and instances |
 
 ## Prototyping
 

@@ -1,5 +1,3 @@
-import type { SceneNode } from '@open-pencil/scene-graph'
-
 import { defineTool, nodeNotFound } from '#core/tools/schema'
 
 export const setLayout = defineTool({
@@ -62,7 +60,7 @@ export const setLayout = defineTool({
     if (args.align !== undefined) node.primaryAxisAlignItems = args.align
     if (args.counter_align !== undefined) node.counterAxisAlignItems = args.counter_align
     if (args.flow_direction !== undefined)
-      node.layoutDirection = args.flow_direction as SceneNode['layoutDirection']
+      node.layoutDirection = args.flow_direction
 
     if (args.padding !== undefined) {
       node.paddingTop = args.padding

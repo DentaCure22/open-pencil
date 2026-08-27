@@ -208,7 +208,7 @@ function readListedText(executable: string): string {
       encoding: 'utf8',
       timeout: 15_000
     })
-    return result.stdout?.trim() ?? ''
+    return result.stdout.trim()
   } catch {
     return ''
   }

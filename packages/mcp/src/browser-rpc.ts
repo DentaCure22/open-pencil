@@ -331,7 +331,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
         `${String(body.command)} is ambiguous across ${currentVisible ? 'visible writer-capable' : 'connected'} OpenPencil runtimes: ${runtimeIds.join(', ')}. Retry with one exact runtime_instance_id.`
       )
     }
-    const runtime = available[0]
+    const runtime = available.at(0)
     if (!runtime) return { body }
     return {
       body: {
@@ -515,7 +515,7 @@ export function createBrowserRpcBridge({ authToken, onConnectionChange }: Browse
     rejectPendingForSocket(ws, 'Browser disconnected')
     if (browserWs !== ws) return
     const fallback =
-      [...runtimes.values()].find((runtime) => runtime.active) ?? [...runtimes.values()][0]
+      [...runtimes.values()].find((runtime) => runtime.active) ?? [...runtimes.values()].at(0)
     browserWs = fallback?.ws ?? null
     browserToken = fallback?.token ?? null
     browserRuntimeInstanceId = fallback?.runtimeInstanceId ?? null

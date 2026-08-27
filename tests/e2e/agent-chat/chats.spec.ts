@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { setLocalStorageItem } from '#tests/helpers/storage'
 
 function mockThreads(page: Page, threads: object[]) {
   return Promise.all([
@@ -111,12 +112,11 @@ test('shows whole-turn timing while running and marks finished chats', async ({ 
   }
   const finished = worker(1)
   await mockThreads(page, [running, finished])
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'open-pencil:agent-thread-preferences-v1',
-      JSON.stringify({ 'thread-1': { unread: true } })
-    )
-  })
+  await setLocalStorageItem(
+    page,
+    'open-pencil:agent-thread-preferences-v1',
+    JSON.stringify({ 'thread-1': { unread: true } })
+  )
 
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
@@ -173,7 +173,7 @@ test('keeps one clean task list and preserves a conversation while navigating ba
   })
   await page.goto('/?test&no-rulers')
   await new CanvasHelper(page).waitForInit()
-  await page.getByTestId('left-panel-chats-tab').click()
+  await page.getByRole('button', { name: 'Chats', exact: true }).click()
 
   const panel = page.getByTestId('agent-chats-panel')
   const conversation = page.getByTestId('agent-selected-conversation')
@@ -1370,6 +1370,7 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
     return {
       backgroundImage: getComputedStyle(stage).backgroundImage,
       height: imageBox.height,
+      imageRadius: getComputedStyle(image).borderRadius,
       leftInset: imageBox.left - stageBox.left,
       objectFit: getComputedStyle(image).objectFit,
       rightInset: stageBox.right - imageBox.right,
@@ -1377,11 +1378,12 @@ test('renders AI Elements Vue parts and chat lifecycle controls', async ({ page 
     }
   })
   expect(completedImageSize?.height).toBeLessThanOrEqual(340)
-  expect(completedImageSize?.widthDifference).toBeGreaterThanOrEqual(16)
-  expect(completedImageSize?.leftInset).toBeGreaterThanOrEqual(7)
-  expect(completedImageSize?.rightInset).toBeGreaterThanOrEqual(7)
+  expect(completedImageSize?.widthDifference).toBeLessThanOrEqual(2)
+  expect(completedImageSize?.leftInset).toBeLessThanOrEqual(1)
+  expect(completedImageSize?.rightInset).toBeLessThanOrEqual(1)
+  expect(completedImageSize?.imageRadius).toBe('14px')
   expect(completedImageSize?.objectFit).toBe('contain')
-  expect(completedImageSize?.backgroundImage).toContain('linear-gradient')
+  expect(completedImageSize?.backgroundImage).toBe('none')
   await imageGeneration.getByRole('button', { name: 'Annotate generated image' }).click()
   const imageEditor = page.getByTestId('context-comment-screenshot-editor')
   await expect(imageEditor).toBeVisible()

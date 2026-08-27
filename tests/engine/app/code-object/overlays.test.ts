@@ -65,6 +65,19 @@ describe('Code Object overlays', () => {
     expect(residency).not.toContain('disposeCodeObjectsExcept')
   })
 
+  test('leaves Object-panel opening to the contextual selection controls', async () => {
+    const [overlays, selectionTools] = await Promise.all([
+      Bun.file('src/components/canvas/CodeObjectOverlays.vue').text(),
+      Bun.file('src/components/Toolbar/SelectionToolControls.vue').text()
+    ])
+
+    expect(overlays).not.toContain('data-test-id="open-code-object"')
+    expect(overlays).not.toContain('data-test-id="code-object-frame-chrome"')
+    expect(overlays).not.toContain('data-test-id="code-object-frame-title"')
+    expect(selectionTools).toContain('data-test-id="selection-open-object"')
+    expect(selectionTools).toContain("openAgentRightPanel('object', { objectId: object.id })")
+  })
+
   test('mounts one runtime when persisted page children repeat a frame id', () => {
     const store = createEditorStore()
     const frame = createCodeObjectFromPreset(store, 'earth-signals')

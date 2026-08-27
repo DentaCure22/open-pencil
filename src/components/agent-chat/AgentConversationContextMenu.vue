@@ -29,32 +29,43 @@ import { refreshAgentConversationHistory } from '@/app/agent-chat/history-store'
 import type { AgentReasoningEffort } from '@/app/agent-chat/models'
 import { agentChatsPanelSelectedId, agentChatsPanelView } from '@/app/agent-chat/panel'
 import {
+  applyAgentWorkMap,
+  getAgentWorkMap,
+  setAgentWorkMapTodosArchivedForThread
+} from '@/app/agent-chat/work-map'
+import {
   agentConversationCopyText,
   agentConversationDisplayTitle,
   agentConversationLastResponseText,
   isAgentConversationArchived,
-  isAgentConversationPinned,
   isAgentConversationUnread,
   setAgentConversationArchived,
-  setAgentConversationPinned,
   setAgentConversationTitle,
   setAgentConversationUnread
 } from '@/app/agent-chat/thread-preferences'
 import { toast } from '@/app/shell/ui'
 import { writeTauriClipboardText } from '@/app/tauri/clipboard'
+import AgentConversationArchiveDialog from '@/components/agent-chat/AgentConversationArchiveDialog.vue'
 import { useButtonUI } from '@/components/ui/button'
 import { useDialogUI } from '@/components/ui/dialog'
 import { useInputUI } from '@/components/ui/input'
 import { useMenuUI } from '@/components/ui/menu'
 
-const { thread } = defineProps<{ thread: AgentConversationThread | null }>()
+const { bot = false, thread } = defineProps<{
+  bot?: boolean
+  thread: AgentConversationThread | null
+}>()
+const emit = defineEmits<{
+  'archived-change': [thread: AgentConversationThread, archived: boolean]
+  'bot-change': [thread: AgentConversationThread, bot: boolean]
+}>()
 
 const renameOpen = ref(false)
+const archiveConfirmOpen = ref(false)
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const busy = ref(false)
 const title = computed(() => (thread ? agentConversationDisplayTitle(thread) : 'Task'))
-const pinned = computed(() => Boolean(thread && isAgentConversationPinned(thread)))
 const unread = computed(() => Boolean(thread && isAgentConversationUnread(thread)))
 const archived = computed(() => Boolean(thread && isAgentConversationArchived(thread)))
 
@@ -93,10 +104,38 @@ function commitRename() {
   toast.info('Task renamed')
 }
 
-function togglePinned() {
-  if (!thread) return
-  setAgentConversationPinned(thread, !pinned.value)
-  toast.info(pinned.value ? 'Task pinned' : 'Task unpinned')
+async function toggleBot() {
+  if (!thread || busy.value) return
+  busy.value = true
+  try {
+    const workMap = await getAgentWorkMap()
+    const existing = workMap.bots.find((candidate) => candidate.threadId === thread.nativeThreadId)
+    const todoProjectId = workMap.todos.find(
+      (todo) => todo.threadId === thread.nativeThreadId
+    )?.projectId
+    const placementProjectId = workMap.placements.find(
+      (placement) => placement.threadId === thread.nativeThreadId
+    )?.projectId
+    const nextBot = !existing
+    await applyAgentWorkMap({
+      expectedRevision: workMap.revision,
+      operations: existing
+        ? [{ bot_id: existing.id, op: 'delete_bot' }]
+        : [
+            {
+              op: 'create_bot',
+              project_id: todoProjectId ?? placementProjectId ?? null,
+              thread_id: thread.nativeThreadId
+            }
+          ]
+    })
+    emit('bot-change', thread, nextBot)
+    toast.info(nextBot ? 'Chat is now a Bot' : 'Bot removed; chat kept')
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : 'Bot update failed')
+  } finally {
+    busy.value = false
+  }
 }
 
 function toggleUnread() {
@@ -105,10 +144,31 @@ function toggleUnread() {
   toast.info(unread.value ? 'Marked as unread' : 'Marked as read')
 }
 
-function toggleArchived() {
-  if (!thread) return
-  setAgentConversationArchived(thread, !archived.value)
-  toast.info(archived.value ? 'Task archived' : 'Task restored')
+async function toggleArchived() {
+  if (!thread || busy.value) return
+  const next = !archived.value
+  busy.value = true
+  setAgentConversationArchived(thread, next)
+  try {
+    await setAgentWorkMapTodosArchivedForThread(thread.nativeThreadId, next)
+    emit('archived-change', thread, next)
+    toast.info(next ? 'Task archived' : 'Task restored')
+  } catch (cause) {
+    setAgentConversationArchived(thread, !next)
+    toast.error(cause instanceof Error ? cause.message : 'Task archive failed')
+  } finally {
+    busy.value = false
+  }
+}
+
+function requestArchivedChange() {
+  if (archived.value) {
+    void toggleArchived()
+    return
+  }
+  requestAnimationFrame(() => {
+    archiveConfirmOpen.value = true
+  })
 }
 
 async function startFork(historyScope: 'effectiveContext' | 'full') {
@@ -217,13 +277,14 @@ async function shareConversation() {
           align="start"
         >
           <ContextMenuItem
-            data-test-id="agent-conversation-pin"
+            data-test-id="agent-conversation-bot"
             :class="menu.item"
-            @select="togglePinned"
+            :disabled="busy"
+            @select="toggleBot"
           >
-            <icon-lucide-pin-off v-if="pinned" :class="menu.icon" />
-            <icon-lucide-pin v-else :class="menu.icon" />
-            <span>{{ pinned ? 'Unpin' : 'Pin' }}</span>
+            <icon-lucide-bot-off v-if="bot" :class="menu.icon" />
+            <icon-lucide-bot v-else :class="menu.icon" />
+            <span>{{ bot ? 'Remove Bot' : 'Make Bot' }}</span>
           </ContextMenuItem>
           <ContextMenuItem
             data-test-id="agent-conversation-rename"
@@ -244,7 +305,8 @@ async function shareConversation() {
           <ContextMenuItem
             data-test-id="agent-conversation-archive"
             :class="menu.item"
-            @select="toggleArchived"
+            :disabled="busy"
+            @select="requestArchivedChange"
           >
             <icon-lucide-archive-restore v-if="archived" :class="menu.icon" />
             <icon-lucide-archive v-else :class="menu.icon" />
@@ -317,6 +379,12 @@ async function shareConversation() {
         </ContextMenuContent>
       </ContextMenuPortal>
     </ContextMenuRoot>
+
+    <AgentConversationArchiveDialog
+      v-model:open="archiveConfirmOpen"
+      :title="title"
+      @confirm="toggleArchived"
+    />
 
     <DialogRoot v-model:open="renameOpen">
       <DialogPortal>

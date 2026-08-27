@@ -9,6 +9,14 @@ import {
   nodeForExplicitGeometryExport
 } from '#core/kiwi/fig/node-change/preserved-payload'
 
+type MaterializedPayload = {
+  colorVar?: unknown
+  firstBlob?: unknown
+  secondBlob?: unknown
+  stackJustify?: unknown
+  variableConsumptionMap?: unknown
+}
+
 function importedRectangle() {
   const graph = new SceneGraph()
   const node = graph.createNode('RECTANGLE', graph.getPages()[0].id, {
@@ -38,7 +46,7 @@ describe('preserved Figma payload export', () => {
 
     const materialized = materializeFigmaPayload(source, blobs, {
       blobIndexByHex
-    }) as Record<string, unknown>
+    }) as MaterializedPayload
 
     expect(materialized.firstBlob).toBe(0)
     expect(materialized.secondBlob).toBe(0)

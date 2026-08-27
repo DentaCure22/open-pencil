@@ -195,5 +195,5 @@ export function cloneSceneNode(src: SceneNode): SceneNode {
     childIds: [...src.childIds],
     id: src.id,
     parentId: src.parentId
-  } as SceneNode
+  }
 }

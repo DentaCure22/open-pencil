@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto'
-import { constants } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { constants, readFileSync } from 'node:fs'
 import { access } from 'node:fs/promises'
+import path from 'node:path'
 
 import { resolveAgentSelection, type AgentModelDefinition } from '#mcp/agent-models/catalog'
 import {
@@ -11,10 +12,12 @@ import {
   type AgentExtensionUiRequest,
   type AgentExtensionUiResponse,
   type AgentProviderUsage,
+  type AgentTodoBrief,
   type AgentTodoDraft,
   type AgentTodoDraftRequest
 } from '#mcp/agent-router/contracts'
 import type { AgentJobRecord } from '#mcp/agent-router/jobs'
+import { normalizeTodoCodeObjectBrief } from '#mcp/agent-router/todo-document'
 import { agentWorkerEnv } from '#mcp/agent-router/worker-env'
 
 import {
@@ -80,16 +83,151 @@ import {
 } from './worker-mcp'
 
 const MAX_PROMPT_BYTES = 128 * 1024
+const PI_SESSION_ID_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/
+
+type PiTurnSelection = {
+  attachments?: AgentDispatchRequest['attachments']
+  botId?: string | null
+  displayPrompt?: string
+  effort?: string
+  evidencePath?: string
+  imagePaths?: string[]
+  model?: string
+  toolScope?: AgentConversationThread['toolScope']
+}
+
+function selectedToolScope(
+  thread: AgentConversationThread,
+  selection?: PiTurnSelection
+): NonNullable<AgentConversationThread['toolScope']> {
+  return selection?.toolScope ?? thread.toolScope ?? 'general'
+}
+
+function followUpRequest(
+  thread: AgentConversationThread,
+  prompt: string,
+  selection: PiTurnSelection | undefined,
+  toolScope: NonNullable<AgentConversationThread['toolScope']>
+): AgentDispatchRequest {
+  const botId = selection?.botId === null ? undefined : selection?.botId?.trim() || thread.botId
+  return {
+    attachments: selection?.attachments,
+    ...(botId ? { botId } : {}),
+    displayPrompt: selection?.displayPrompt,
+    effort: selection?.effort ?? thread.effort,
+    evidencePath: selection?.evidencePath,
+    imagePaths: selection?.imagePaths,
+    model: selection?.model?.trim() || thread.model,
+    projectId: thread.projectId,
+    prompt,
+    toolScope,
+    workspaceRoot: thread.workspaceRoot
+  }
+}
+
+function steerRequest(
+  thread: AgentConversationThread,
+  prompt: string,
+  selection: PiTurnSelection | undefined,
+  toolScope: NonNullable<AgentConversationThread['toolScope']>
+): AgentDispatchRequest {
+  const botId = selection?.botId === null ? undefined : selection?.botId?.trim() || thread.botId
+  return {
+    attachments: selection?.attachments,
+    ...(botId ? { botId } : {}),
+    displayPrompt: selection?.displayPrompt,
+    effort: thread.effort,
+    evidencePath: selection?.evidencePath,
+    imagePaths: selection?.imagePaths,
+    model: thread.model,
+    projectId: thread.projectId,
+    prompt,
+    toolScope,
+    workspaceRoot: thread.workspaceRoot
+  }
+}
+
+function visibleTurnPrompt(selection: PiTurnSelection | undefined, prompt: string): string {
+  return selection?.displayPrompt ?? prompt
+}
+
+function todoActivationRequest(
+  request: ValidatedPiRequest,
+  thread: AgentConversationThread,
+  prompt: string,
+  selection?: PiTurnSelection
+): AgentDispatchRequest {
+  if (!thread.todoDraft) return request
+  return {
+    ...request,
+    displayPrompt: visibleTurnPrompt(selection, prompt),
+    prompt: todoDraftActivationPrompt(thread.todoDraft, request.prompt)
+  }
+}
+
+function freshContinuationRequest(
+  request: ValidatedPiRequest,
+  thread: AgentConversationThread,
+  prompt: string,
+  continuationImagePaths: string[],
+  selection?: PiTurnSelection
+): AgentDispatchRequest {
+  return {
+    ...request,
+    displayPrompt: visibleTurnPrompt(selection, prompt),
+    imagePaths: [...new Set([...continuationImagePaths, ...(selection?.imagePaths ?? [])])],
+    prompt: localContinuationRecoveryPrompt(thread, prompt)
+  }
+}
+
+function pendingCompactForkRequest(
+  request: ValidatedPiRequest,
+  thread: AgentConversationThread,
+  prompt: string,
+  selection?: PiTurnSelection
+): AgentDispatchRequest {
+  return {
+    ...request,
+    displayPrompt: visibleTurnPrompt(selection, prompt),
+    prompt: compactForkPrompt(thread, prompt)
+  }
+}
+
+function launchSessionId(thread: AgentConversationThread, mode: PiLaunch): string {
+  if (mode.kind === 'resume' || mode.kind === 'fork') return mode.sessionId
+  const candidate = mode.sessionId ?? thread.id
+  return PI_SESSION_ID_PATTERN.test(candidate) ? candidate : randomUUID()
+}
+
+function piProcessExited(process: PiRpcProcess): boolean {
+  return !process.isAlive
+}
+
+function agentContextPromptArguments(agentContextPath: string | undefined): {
+  appendSystemPrompt?: string
+} {
+  return agentContextPath ? { appendSystemPrompt: agentContextPath } : {}
+}
+
+function agentContextSessionSelection(
+  agentContextPath: string | undefined,
+  agentContextRevision: string | undefined
+): { agentContextPath?: string; agentContextRevision?: string } {
+  return {
+    ...(agentContextPath ? { agentContextPath } : {}),
+    ...(agentContextRevision ? { agentContextRevision } : {})
+  }
+}
 
 function latestUserMessageId(thread: AgentConversationThread): string | null {
   for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
     const message = thread.messages[index]
-    if (message?.role === 'user') return message.id
+    if (message.role === 'user') return message.id
   }
   return null
 }
 
-function todoDraftActivationPrompt(draft: AgentTodoDraft, userPrompt: string): string {
+export function todoDraftActivationPrompt(draft: AgentTodoDraft, userPrompt: string): string {
   const brief = draft.brief
   const section = (label: string, values: string[] | undefined) =>
     values?.length ? `\n${label}:\n${values.map((value) => `- ${value}`).join('\n')}` : ''
@@ -101,10 +239,13 @@ function todoDraftActivationPrompt(draft: AgentTodoDraft, userPrompt: string): s
         )
         .join('\n')}`
     : ''
-  return `You are opening a prepared Work Map Todo chat. This is the first active turn in the existing chat; do not create another chat or another todo. Call workmap_query first, then use workmap_apply to move todo ${draft.todoId} to In motion if needed. Work from the prepared brief and keep any plan flexible as the user refines it.
+  const documentHtml = brief.documentHtml
+    ? `\n\nThe Todo is one responsive Code Object using the todo-document preset. Its editable HTML below is the canonical Todo document rendered in the Object panel. Preserve user edits and useful references. When the conversation changes the Todo materially, update this same responsive document with workmap_update_todo_object; keep real text editable, let layouts reflow at narrow and wide panel sizes, and avoid fixed-width composition. Use it to shape the stable Plan Code Object only when the user asks to continue into planning.\n\nPrepared Todo Code Object HTML:\n\`\`\`html\n${brief.documentHtml.slice(0, 60_000)}${brief.documentHtml.length > 60_000 ? '\n<!-- document truncated in activation prompt -->' : ''}\n\`\`\``
+    : ''
+  return `You are opening a prepared Work Map Todo chat. This is the first active turn in the existing chat; do not create another chat or another todo. Call workmap_query first. Keep todo ${draft.todoId} in Todo while clarifying or planning; when substantive execution begins, explicitly use workmap_apply to move it to In motion. Work from the prepared brief and keep any plan flexible as the user refines it.
 
 Prepared brief:
-Goal: ${brief.goal}${brief.context ? `\nContext: ${brief.context}` : ''}${brief.desiredOutcome ? `\nDesired outcome: ${brief.desiredOutcome}` : ''}${section('Known facts', brief.knownFacts)}${section('Constraints', brief.constraints)}${section('Open questions', brief.openQuestions)}${section('Acceptance', brief.acceptance)}${brief.suggestedNextStep ? `\nSuggested next step: ${brief.suggestedNextStep}` : ''}${references}
+Goal: ${brief.goal}${brief.context ? `\nContext: ${brief.context}` : ''}${brief.desiredOutcome ? `\nDesired outcome: ${brief.desiredOutcome}` : ''}${section('Known facts', brief.knownFacts)}${section('Constraints', brief.constraints)}${section('Open questions', brief.openQuestions)}${section('Acceptance', brief.acceptance)}${brief.suggestedNextStep ? `\nSuggested next step: ${brief.suggestedNextStep}` : ''}${references}${documentHtml}
 
 The user's visible first message follows:
 ${userPrompt}`
@@ -301,6 +442,30 @@ export class PiAgentRouter implements AgentConversationRouter {
     return structuredClone(thread)
   }
 
+  updateTodoDraft(threadId: string, brief: AgentTodoBrief): AgentConversationThread | null {
+    const thread = this.state.threads.find((candidate) => candidate.id === threadId)
+    if (!thread?.todoDraft) return null
+    const now = new Date().toISOString()
+    const title = brief.title?.trim() || thread.title?.trim() || brief.goal.trim().slice(0, 240)
+    thread.todoDraft.brief = structuredClone(normalizeTodoCodeObjectBrief(brief, title))
+    thread.todoDraft.presetId = 'todo-document'
+    thread.task = brief.goal.trim()
+    thread.title = title
+    thread.recentUpdate = 'Todo updated.'
+    thread.updatedAt = now
+    this.state.persist()
+    try {
+      this.config.onConversationTitleChanged?.({
+        threadId: thread.id,
+        title,
+        todoId: thread.todoDraft.todoId
+      })
+    } catch (error) {
+      console.warn('Work Map title projection could not be refreshed.', error)
+    }
+    return structuredClone(thread)
+  }
+
   ensureTitle(threadId: string): boolean {
     const thread = this.state.threads.find((candidate) => candidate.id === threadId)
     if (!thread) return false
@@ -316,15 +481,7 @@ export class PiAgentRouter implements AgentConversationRouter {
   async followUp(
     threadId: string,
     prompt: string,
-    selection?: {
-      attachments?: AgentDispatchRequest['attachments']
-      displayPrompt?: string
-      effort?: string
-      evidencePath?: string
-      imagePaths?: string[]
-      model?: string
-      toolScope?: AgentConversationThread['toolScope']
-    }
+    selection?: PiTurnSelection
   ): Promise<AgentDispatchReceipt> {
     const thread = this.state.requireThread(threadId, { allowTodoDraft: true })
     const session = this.state.sessions.get(thread.id)
@@ -336,7 +493,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       this.cancelPendingUiRequests(session)
       this.state.persist()
     }
-    const requestedToolScope = selection?.toolScope ?? thread.toolScope ?? 'general'
+    const requestedToolScope = selectedToolScope(thread, selection)
     if (thread.toolScope && requestedToolScope !== thread.toolScope) {
       throw new Error('This Pi conversation cannot change tool scope; start a new chat instead.')
     }
@@ -345,36 +502,25 @@ export class PiAgentRouter implements AgentConversationRouter {
       if (session) this.state.disposeSession(thread.id)
       this.state.persist()
     }
-    const request = this.validate({
-      attachments: selection?.attachments,
-      displayPrompt: selection?.displayPrompt,
-      effort: selection?.effort ?? thread.effort,
-      evidencePath: selection?.evidencePath,
-      imagePaths: selection?.imagePaths,
-      model: selection?.model?.trim() || thread.model,
-      prompt,
-      toolScope: requestedToolScope
-    })
+    const request = this.validate(followUpRequest(thread, prompt, selection, requestedToolScope))
     if (!thread.sessionId && thread.todoDraft) {
       return this.launch(
-        this.validate({
-          ...request,
-          displayPrompt: selection?.displayPrompt ?? prompt,
-          prompt: todoDraftActivationPrompt(thread.todoDraft, request.prompt)
-        }),
-        { kind: 'new' },
+        this.validate(todoActivationRequest(request, thread, prompt, selection)),
+        {
+          kind: 'new'
+        },
         thread
       )
     }
     if (needsFreshContinuationSession(thread, prompt)) {
-      const imagePaths = [
-        ...new Set([...this.state.continuationImagePaths(thread), ...(selection?.imagePaths ?? [])])
-      ]
       const recoveryRequest = this.validate({
-        ...request,
-        displayPrompt: selection?.displayPrompt ?? prompt,
-        imagePaths,
-        prompt: localContinuationRecoveryPrompt(thread, prompt)
+        ...freshContinuationRequest(
+          request,
+          thread,
+          prompt,
+          this.state.continuationImagePaths(thread),
+          selection
+        )
       })
       this.state.disposeSession(thread.id)
       delete thread.lastPiEntryId
@@ -384,11 +530,7 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (thread.compactForkPending) {
       thread.compactForkPending = false
       return this.launch(
-        this.validate({
-          ...request,
-          displayPrompt: selection?.displayPrompt ?? prompt,
-          prompt: compactForkPrompt(thread, prompt)
-        }),
+        this.validate(pendingCompactForkRequest(request, thread, prompt, selection)),
         { kind: 'new' },
         thread
       )
@@ -401,15 +543,7 @@ export class PiAgentRouter implements AgentConversationRouter {
   async steer(
     threadId: string,
     prompt: string,
-    selection?: {
-      attachments?: AgentDispatchRequest['attachments']
-      displayPrompt?: string
-      effort?: string
-      evidencePath?: string
-      imagePaths?: string[]
-      model?: string
-      toolScope?: AgentConversationThread['toolScope']
-    }
+    selection?: PiTurnSelection
   ): Promise<AgentDispatchReceipt> {
     const thread = this.state.requireThread(threadId)
     const session = this.state.sessions.get(thread.id)
@@ -417,7 +551,7 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (!session?.activeJobId) {
       return this.followUp(threadId, prompt, selection)
     }
-    const requestedToolScope = selection?.toolScope ?? thread.toolScope ?? 'general'
+    const requestedToolScope = selectedToolScope(thread, selection)
     if (thread.toolScope && requestedToolScope !== thread.toolScope) {
       throw new Error('This Pi conversation cannot change tool scope; start a new chat instead.')
     }
@@ -426,16 +560,7 @@ export class PiAgentRouter implements AgentConversationRouter {
         'A running legacy Pi conversation cannot change tool scope; start a new chat.'
       )
     }
-    const request = this.validate({
-      attachments: selection?.attachments,
-      displayPrompt: selection?.displayPrompt,
-      effort: thread.effort,
-      evidencePath: selection?.evidencePath,
-      imagePaths: selection?.imagePaths,
-      model: thread.model,
-      prompt,
-      toolScope: requestedToolScope
-    })
+    const request = this.validate(steerRequest(thread, prompt, selection, requestedToolScope))
     const jobId = session.activeJobId
     const now = new Date().toISOString()
     const messageId = randomUUID()
@@ -524,7 +649,9 @@ export class PiAgentRouter implements AgentConversationRouter {
       sessionId: null,
       task: source.task,
       ...(source.title ? { title: source.title } : {}),
+      ...(plan.request.projectId !== undefined ? { projectId: plan.request.projectId } : {}),
       toolScope: plan.request.toolScope ?? source.toolScope ?? 'general',
+      ...(plan.request.workspaceRoot ? { workspaceRoot: plan.request.workspaceRoot } : {}),
       workerId: this.state.availableWorkerId()
     })
     this.state.threads.push(thread)
@@ -610,8 +737,19 @@ export class PiAgentRouter implements AgentConversationRouter {
     if (Buffer.byteLength(prompt, 'utf8') > MAX_PROMPT_BYTES) {
       throw new TypeError('The prompt is too large for Pi.')
     }
+    const workspaceRoot = request.workspaceRoot?.trim()
+    if (workspaceRoot && !path.isAbsolute(workspaceRoot)) {
+      throw new TypeError('A chat workspace must be an absolute directory.')
+    }
+    const botId = request.botId?.trim()
     const selection = resolveAgentSelection(this.models(), request.model, request.effort)
-    return { ...request, ...selection, prompt }
+    return {
+      ...request,
+      ...selection,
+      ...(botId ? { botId } : {}),
+      ...(workspaceRoot ? { workspaceRoot } : {}),
+      prompt
+    }
   }
 
   private async launch(
@@ -621,18 +759,11 @@ export class PiAgentRouter implements AgentConversationRouter {
     jobId: string = randomUUID()
   ): Promise<AgentDispatchReceipt> {
     const now = new Date().toISOString()
+    let startupLabel = 'Starting Pi.'
+    if (mode.kind === 'fork') startupLabel = 'Forking relevant Pi context.'
+    else if (mode.kind === 'new' && mode.forkedFromId) startupLabel = 'Starting a compact-fork.'
     const thread =
-      existing ??
-      createPiThread(
-        request,
-        mode.kind === 'fork'
-          ? 'Forking relevant Pi context.'
-          : mode.kind === 'new' && mode.forkedFromId
-            ? 'Starting a compact-fork.'
-            : 'Starting Pi.',
-        now,
-        this.state.availableWorkerId()
-      )
+      existing ?? createPiThread(request, startupLabel, now, this.state.availableWorkerId())
     if (!existing) {
       if (mode.kind !== 'resume' && mode.forkedFromId) thread.forkedFromId = mode.forkedFromId
       this.state.threads.push(thread)
@@ -643,6 +774,10 @@ export class PiAgentRouter implements AgentConversationRouter {
     thread.updatedAt = now
     thread.model = request.model
     thread.effort = request.effort
+    if (request.botId) thread.botId = request.botId
+    else delete thread.botId
+    if (request.projectId !== undefined) thread.projectId = request.projectId
+    if (request.workspaceRoot) thread.workspaceRoot = request.workspaceRoot
     this.state.jobs.register(jobId, thread.id, 'running')
     this.state.persist()
 
@@ -691,12 +826,46 @@ export class PiAgentRouter implements AgentConversationRouter {
         const current = this.state.threads.find((candidate) => candidate.id === thread.id)
         if (!current || current.title || current.task !== expectedTask) return false
         current.title = title
+        if (current.todoDraft) {
+          current.todoDraft.brief = normalizeTodoCodeObjectBrief(current.todoDraft.brief, title)
+          current.todoDraft.presetId = 'todo-document'
+        }
         current.updatedAt = new Date().toISOString()
         this.state.persist()
+        try {
+          this.config.onConversationTitleChanged?.({
+            threadId: current.id,
+            title,
+            ...(current.todoDraft ? { todoId: current.todoDraft.todoId } : {})
+          })
+        } catch (error) {
+          console.warn('Work Map title projection could not be refreshed.', error)
+        }
         return true
       })
       .catch(() => false)
       .finally(() => this.titleGenerations.delete(thread.id))
+  }
+
+  private agentContextPath(request: Pick<AgentDispatchRequest, 'botId'>): string | undefined {
+    const botId = request.botId?.trim()
+    if (!botId) return undefined
+    const filePath = this.config.agentContextPathForBot?.(botId)
+    if (!filePath) return undefined
+    if (!path.isAbsolute(filePath)) {
+      throw new Error('A Bot instruction file must use an absolute path.')
+    }
+    return filePath
+  }
+
+  private agentContextRevision(filePath: string | undefined): string | undefined {
+    if (!filePath) return undefined
+    try {
+      return createHash('sha256').update(readFileSync(filePath)).digest('hex')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`The Bot instruction file could not be read: ${detail}`)
+    }
   }
 
   private async ensureSession(
@@ -704,9 +873,27 @@ export class PiAgentRouter implements AgentConversationRouter {
     request: ValidatedPiRequest,
     mode: PiLaunch
   ): Promise<PiSession> {
+    const agentContextPath = this.agentContextPath(request)
+    const agentContextRevision = this.agentContextRevision(agentContextPath)
     const existing = this.state.sessions.get(thread.id)
-    if (existing && !existing.process.isClosing) return existing
-    if (mode.kind === 'new') {
+    if (
+      existing &&
+      !existing.process.isClosing &&
+      existing.agentContextPath === (agentContextPath ?? null) &&
+      existing.agentContextRevision === (agentContextRevision ?? null)
+    ) {
+      return existing
+    }
+    if (existing) this.state.disposeSession(thread.id, { graceMs: 0 })
+    const defaultWorkspaceRoot =
+      request.toolScope === 'board-worker'
+        ? (this.config.boardWorkerWorkspaceRoot ?? this.config.workspaceRoot)
+        : this.config.workspaceRoot
+    if (
+      mode.kind === 'new' &&
+      !agentContextPath &&
+      (!request.workspaceRoot || request.workspaceRoot === defaultWorkspaceRoot)
+    ) {
       const warm = await (request.toolScope === 'board-worker'
         ? this.boardPool.claim()
         : this.pool.claim())
@@ -736,7 +923,7 @@ export class PiAgentRouter implements AgentConversationRouter {
     applyPiStateTelemetry(thread, warm.state)
     thread.canFollowUp = true
     this.state.persist()
-    if (!warm.process.isAlive) {
+    if (piProcessExited(warm.process)) {
       this.state.sessions.delete(thread.id)
       return null
     }
@@ -749,9 +936,9 @@ export class PiAgentRouter implements AgentConversationRouter {
     mode: PiLaunch
   ): Promise<PiSession> {
     const launchMode: PiLaunchMode = mode.kind
-    let sessionId = thread.id
-    if (mode.kind === 'resume' || mode.kind === 'fork') sessionId = mode.sessionId
-    else if (mode.sessionId) sessionId = mode.sessionId
+    const sessionId = launchSessionId(thread, mode)
+    const agentContextPath = this.agentContextPath(request)
+    const agentContextRevision = this.agentContextRevision(agentContextPath)
     const mcpConfigPath =
       request.toolScope === 'board-worker' ? this.boardWorkerMcpConfigPath : this.mcpConfigPath
     if (request.toolScope === 'board-worker' && !mcpConfigPath) {
@@ -760,6 +947,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       )
     }
     const args = piRpcArguments({
+      ...agentContextPromptArguments(agentContextPath),
       effort: request.effort,
       ...(mcpConfigPath ? { mcpConfigPath } : {}),
       mode: launchMode,
@@ -769,12 +957,17 @@ export class PiAgentRouter implements AgentConversationRouter {
       ...(mode.kind === 'fork' ? { sourceSessionId: mode.sessionId } : {})
     })
     let rpc: PiRpcProcess | null = null
+    const workspaceRoot =
+      request.workspaceRoot ??
+      (request.toolScope === 'board-worker'
+        ? (this.config.boardWorkerWorkspaceRoot ?? this.config.workspaceRoot)
+        : this.config.workspaceRoot)
+    await access(workspaceRoot, constants.R_OK | constants.W_OK).catch(() => {
+      throw new Error(`Chat workspace is unavailable: ${workspaceRoot}`)
+    })
     rpc = await PiRpcProcess.start({
       args,
-      cwd:
-        request.toolScope === 'board-worker'
-          ? (this.config.boardWorkerWorkspaceRoot ?? this.config.workspaceRoot)
-          : this.config.workspaceRoot,
+      cwd: workspaceRoot,
       env:
         request.toolScope === 'board-worker'
           ? boardWorkerEnv(process.env, this.config.executable, thread.id)
@@ -788,6 +981,7 @@ export class PiAgentRouter implements AgentConversationRouter {
       }
     })
     const session = createPiSession(rpc, {
+      ...agentContextSessionSelection(agentContextPath, agentContextRevision),
       effort: request.effort,
       model: request.model
     })
@@ -848,7 +1042,9 @@ export class PiAgentRouter implements AgentConversationRouter {
     // Board workers launch from a neutral cwd, but their file tools edit the
     // configured project through absolute paths. Track the project for every
     // turn so those changes are not silently missed.
-    session.turnWorkspaceSnapshot = await captureTurnWorkspaceSnapshot(this.config.workspaceRoot)
+    session.turnWorkspaceSnapshot = await captureTurnWorkspaceSnapshot(
+      request.workspaceRoot ?? this.config.workspaceRoot
+    )
     this.state.clearIdleUnload(thread.id)
     thread.state = 'running'
     thread.model = request.model
@@ -1049,7 +1245,9 @@ export class PiAgentRouter implements AgentConversationRouter {
       })
       return
     }
-    const answer = session.finalResponse.trim() || threadClosingText(thread)
+    const fallbackAnswer =
+      session.lastError || session.lastToolError ? '' : threadClosingText(thread)
+    const answer = session.finalResponse.trim() || fallbackAnswer
     if (answer) {
       ensureVisibleFinalResponse(thread, answer, now)
       thread.state = 'completed'

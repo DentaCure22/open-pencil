@@ -10,6 +10,7 @@ const { node } = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  openObject: []
   toggleLock: []
   toggleVisibility: []
 }>()
@@ -22,6 +23,18 @@ const { menu: t } = useI18n()
     class="flex shrink-0 items-center gap-0.5"
     :class="!node.locked && node.visible ? 'opacity-0 group-hover/row:opacity-100' : ''"
   >
+    <Tip label="Open object">
+      <button
+        type="button"
+        data-test-id="layer-open-object"
+        :aria-label="`Open ${node.name} in Object panel`"
+        class="flex size-4 items-center justify-center rounded hover:bg-hover"
+        @pointerdown.stop
+        @click.stop="emit('openObject')"
+      >
+        <icon-lucide-panel-right-open class="size-3 text-surface/70" />
+      </button>
+    </Tip>
     <Tip :label="node.locked ? t.unlock : t.lock">
       <button
         type="button"

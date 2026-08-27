@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { parseCodeObjectDocument } from '@open-pencil/core/code-object'
+import { CODE_OBJECT_AGENT_PRESETS, parseCodeObjectDocument } from '@open-pencil/core/code-object'
 import { readContentSource } from '@open-pencil/core/io'
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { assetHashFromReference, computeImageHash } from '@open-pencil/scene-graph/images'
@@ -30,7 +30,9 @@ function savedDocument(graph: SceneGraph) {
   }
 }
 
-async function fixture(options: { withAnchor?: boolean; withCompact?: boolean } = {}) {
+async function fixture(
+  options: { withAnchor?: boolean; withCompact?: boolean; withNestedSpaces?: boolean } = {}
+) {
   const root = await mkdtemp(path.join(tmpdir(), 'openpencil-authority-board-'))
   roots.push(root)
   const graph = new SceneGraph()
@@ -52,6 +54,33 @@ async function fixture(options: { withAnchor?: boolean; withCompact?: boolean } 
         width: 280,
         x: 80,
         y: 90
+      })
+    : undefined
+  const parentSpace = options.withNestedSpaces
+    ? graph.createNodeWithId('frame:parent-space', 'FRAME', page.id, {
+        height: 600,
+        name: 'Parent Bot',
+        width: 900,
+        x: 40,
+        y: 40
+      })
+    : undefined
+  const childSpace = parentSpace
+    ? graph.createNodeWithId('frame:child-space', 'FRAME', parentSpace.id, {
+        height: 240,
+        name: 'Sub-bot',
+        width: 360,
+        x: 80,
+        y: 100
+      })
+    : undefined
+  const misplacedChildSpace = parentSpace
+    ? graph.createNodeWithId('frame:misplaced-child-space', 'FRAME', page.id, {
+        height: 240,
+        name: 'Misplaced sub-bot',
+        width: 360,
+        x: 1_000,
+        y: 100
       })
     : undefined
   const document = savedDocument(graph)
@@ -83,10 +112,13 @@ async function fixture(options: { withAnchor?: boolean; withCompact?: boolean } 
   if (!head) throw new Error('Expected initialized authority head')
   return {
     anchor,
+    childSpace,
     compact,
     graph,
     head,
+    misplacedChildSpace,
     page,
+    parentSpace,
     root,
     runtime: new LocalWorkspaceBoardRuntime(store),
     store
@@ -110,6 +142,17 @@ function contextArgs(f: Awaited<ReturnType<typeof fixture>>) {
   }
 }
 
+function seededShuffle<T>(values: readonly T[]): T[] {
+  const result = [...values]
+  let state = 0x5eedc0de
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (state * 1_664_525 + 1_013_904_223) >>> 0
+    const target = state % (index + 1)
+    ;[result[index], result[target]] = [result[target] as T, result[index] as T]
+  }
+  return result
+}
+
 type RpcResult = { [key: string]: unknown }
 type RpcResponse = { result?: RpcResult }
 
@@ -125,6 +168,35 @@ afterEach(async () => {
 })
 
 describe('local workspace authority Board runtime', () => {
+  test('validates root Bot and nested sub-bot space ancestry', async () => {
+    const f = await fixture({ withNestedSpaces: true })
+    if (!f.parentSpace || !f.childSpace || !f.misplacedChildSpace) {
+      throw new Error('Expected nested Board space fixture')
+    }
+
+    await expect(
+      f.store.assertBoardSpaceParent({
+        frameId: f.parentSpace.id,
+        pageId: f.page.id,
+        parentFrameId: null
+      })
+    ).resolves.toBeUndefined()
+    await expect(
+      f.store.assertBoardSpaceParent({
+        frameId: f.childSpace.id,
+        pageId: f.page.id,
+        parentFrameId: f.parentSpace.id
+      })
+    ).resolves.toBeUndefined()
+    await expect(
+      f.store.assertBoardSpaceParent({
+        frameId: f.misplacedChildSpace.id,
+        pageId: f.page.id,
+        parentFrameId: f.parentSpace.id
+      })
+    ).rejects.toThrow('must be a direct child of parent Bot frame')
+  })
+
   test('reads persisted Board context without exposing mutation handshakes', async () => {
     const f = await fixture({ withAnchor: true })
     const anchor = requireAnchor(f.anchor)
@@ -314,6 +386,39 @@ describe('local workspace authority Board runtime', () => {
     expect(document.graph.getNode('agent:text:1')?.text).toBe('Saved once')
   })
 
+  test('rejects legacy design-system nodes as new native Board objects', async () => {
+    const f = await fixture()
+    const context = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+
+    for (const type of ['COMPONENT', 'COMPONENT_SET', 'INSTANCE']) {
+      await expect(
+        f.runtime.sendRpc({
+          command: 'board_apply',
+          args: {
+            ...contextArgs(f).args,
+            context_token: context.context_token,
+            operations: [
+              {
+                node: {
+                  height: 100,
+                  id: `agent:legacy:${type.toLowerCase()}`,
+                  name: `Legacy ${type}`,
+                  type,
+                  width: 100
+                },
+                op: 'create',
+                parent_id: f.page.id
+              }
+            ],
+            request_id: `request:reject-${type.toLowerCase()}`
+          }
+        })
+      ).rejects.toThrow('supported non-page node type')
+    }
+
+    expect((await f.store.head())?.revision).toBe(f.head.revision)
+  })
+
   test('imports a completed local raster file as source-backed native Board media', async () => {
     const f = await fixture()
     const bytes = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3)
@@ -379,10 +484,7 @@ describe('local workspace authority Board runtime', () => {
   test('converts typed image page bounds when the parent is nested', async () => {
     const f = await fixture()
     const sourcePath = path.join(f.root, 'nested.png')
-    await writeFile(
-      sourcePath,
-      Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1)
-    )
+    await writeFile(sourcePath, Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1))
     const context = responseResult(await f.runtime.sendRpc(contextArgs(f)))
     const applied = responseResult(
       await f.runtime.sendRpc({
@@ -536,6 +638,10 @@ describe('local workspace authority Board runtime', () => {
           context_token: context.context_token,
           operations: [
             {
+              appearance: {
+                preference: 'system',
+                tokens: { light: { accent: '#315efb' } }
+              },
               bounds: { height: 240, width: 360, x: 100, y: 120 },
               name: 'Typed app',
               object_id: 'agent:typed-code:1',
@@ -575,6 +681,10 @@ describe('local workspace authority Board runtime', () => {
       y: 120
     })
     expect(parseCodeObjectDocument(node)).toMatchObject({
+      appearance: {
+        preference: 'system',
+        tokens: { light: { accent: '#315efb' } }
+      },
       component: 'user-code',
       definitionId: 'agent:typed-code:1',
       name: 'Typed app',
@@ -592,6 +702,7 @@ describe('local workspace authority Board runtime', () => {
           context_token: updateContext.context_token,
           operations: [
             {
+              appearance: { preference: 'dark' },
               bounds: { x: 180 },
               name: 'Typed app updated',
               object_id: 'agent:typed-code:1',
@@ -617,9 +728,255 @@ describe('local workspace authority Board runtime', () => {
     node = document.graph.getNode('agent:typed-code:1')
     expect(node).toMatchObject({ name: 'Typed app updated', x: 180 })
     expect(parseCodeObjectDocument(node)).toMatchObject({
+      appearance: { preference: 'dark' },
       name: 'Typed app updated',
       props: { message: 'Updated' }
     })
+  })
+
+  test('creates, reads, and updates a source-backed Mermaid diagram through typed actions', async () => {
+    const f = await fixture()
+    const source = 'flowchart TD\n  Assess --> Diagnose --> Treat\n'
+    const context = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    const created = responseResult(
+      await f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: context.context_token,
+          operations: [
+            {
+              appearance: 'light',
+              bounds: { height: 480, width: 720, x: 100, y: 120 },
+              name: 'Patient flow',
+              object_id: 'agent:mermaid:patient-flow',
+              op: 'create_mermaid',
+              parent_id: f.page.id,
+              source
+            }
+          ],
+          page_id: f.page.id,
+          request_id: 'request:typed-mermaid-create'
+        }
+      })
+    )
+
+    expect(created).toMatchObject({
+      changed_ids: ['agent:mermaid:patient-flow'],
+      created_ids: ['agent:mermaid:patient-flow'],
+      operations: 1,
+      preflight: [
+        expect.objectContaining({
+          contract: 'native_diagram',
+          object_id: 'agent:mermaid:patient-flow',
+          syntax: 'mermaid'
+        })
+      ],
+      status: 'committed',
+      verified: ['saved_state', 'static_preflight']
+    })
+
+    const readContext = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    const read = responseResult(
+      await f.runtime.sendRpc({
+        command: 'board_read',
+        args: {
+          ...contextArgs(f).args,
+          context_token: readContext.context_token,
+          detail: 'mermaid',
+          object_ids: ['agent:mermaid:patient-flow'],
+          page_id: f.page.id,
+          scope: 'objects'
+        }
+      })
+    )
+    expect(read.nodes).toEqual([
+      expect.objectContaining({
+        id: 'agent:mermaid:patient-flow',
+        mermaid: expect.objectContaining({
+          appearance: 'light',
+          bounds: { height: 480, width: 720, x: 100, y: 120 },
+          owner_id: 'agent:mermaid:patient-flow',
+          source
+        }),
+        name: 'Patient flow'
+      })
+    ])
+
+    const updatedSource = 'flowchart TD\n  Assess --> Plan --> Treat --> FollowUp'
+    const updateContext = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    const updated = responseResult(
+      await f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: updateContext.context_token,
+          operations: [
+            {
+              appearance: 'dark',
+              bounds: { x: 180 },
+              object_id: 'agent:mermaid:patient-flow',
+              op: 'update_mermaid',
+              source: updatedSource
+            }
+          ],
+          page_id: f.page.id,
+          request_id: 'request:typed-mermaid-update'
+        }
+      })
+    )
+    expect(updated).toMatchObject({
+      changed_ids: ['agent:mermaid:patient-flow'],
+      created_ids: [],
+      operations: 1,
+      status: 'committed',
+      verified: ['saved_state', 'static_preflight']
+    })
+    const head = await f.store.head()
+    if (!head) throw new Error('Expected typed Mermaid update')
+    const document = readAuthorityBoardDocument(head.document)
+    const node = document.graph.getNode('agent:mermaid:patient-flow')
+    expect(node).toMatchObject({
+      height: 480,
+      name: 'Patient flow',
+      width: 720,
+      x: 180,
+      y: 120
+    })
+    expect(
+      node?.pluginData.find(
+        (entry) => entry.pluginId === 'open-pencil' && entry.key === 'mermaid/source'
+      )?.value
+    ).toBe(updatedSource)
+
+    const revisionBeforeInvalid = head.revision
+    const invalidContext = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    await expect(
+      f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: invalidContext.context_token,
+          operations: [
+            {
+              object_id: 'agent:mermaid:patient-flow',
+              op: 'update_mermaid',
+              source: 'not a diagram'
+            }
+          ],
+          page_id: f.page.id,
+          request_id: 'request:typed-mermaid-invalid'
+        }
+      })
+    ).rejects.toThrow('Mermaid source validation failed')
+    expect((await f.store.head())?.revision).toBe(revisionBeforeInvalid)
+  })
+
+  test('creates and revises every modality from randomly ordered preset operations', async () => {
+    const f = await fixture()
+    const randomized = seededShuffle(CODE_OBJECT_AGENT_PRESETS)
+    const context = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    const created = responseResult(
+      await f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: context.context_token,
+          operations: randomized.map((preset, index) => ({
+            bounds: {
+              height: 220,
+              width: 340,
+              x: 40 + (index % 3) * 380,
+              y: 50 + Math.floor(index / 3) * 260
+            },
+            object_id: `agent:preset-trial:${preset.id}`,
+            op: 'create_code_object',
+            parent_id: f.page.id,
+            preset_id: preset.id
+          })),
+          page_id: f.page.id,
+          request_id: 'request:preset-modality-create'
+        }
+      })
+    )
+
+    expect(created.operations).toBe(CODE_OBJECT_AGENT_PRESETS.length)
+    expect(created.preflight).toHaveLength(CODE_OBJECT_AGENT_PRESETS.length)
+    let head = await f.store.head()
+    if (!head) throw new Error('Expected preset Code Object commit')
+    let document = readAuthorityBoardDocument(head.document)
+    const sources = new Map<string, string>()
+    for (const preset of randomized) {
+      const id = `agent:preset-trial:${preset.id}`
+      const codeObject = parseCodeObjectDocument(document.graph.getNode(id))
+      expect(codeObject).toMatchObject({
+        component: 'user-code',
+        definitionId: preset.definitionId,
+        modality: preset.modality,
+        name: preset.name,
+        presetId: preset.id,
+        props: preset.props,
+        state: preset.state,
+        surface: preset.surface
+      })
+      expect(typeof codeObject?.source).toBe('string')
+      sources.set(id, String(codeObject?.source))
+    }
+
+    const updateContext = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    const updated = responseResult(
+      await f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: updateContext.context_token,
+          operations: randomized.map((preset, index) => ({
+            object_id: `agent:preset-trial:${preset.id}`,
+            op: 'update_code_object',
+            props: { trial: { index, modality: preset.modality } },
+            state: { revision: 2 }
+          })),
+          page_id: f.page.id,
+          request_id: 'request:preset-modality-update'
+        }
+      })
+    )
+    expect(updated.operations).toBe(CODE_OBJECT_AGENT_PRESETS.length)
+    expect(updated.preflight).toEqual([])
+
+    head = await f.store.head()
+    if (!head) throw new Error('Expected preset Code Object update')
+    document = readAuthorityBoardDocument(head.document)
+    for (const [index, preset] of randomized.entries()) {
+      const id = `agent:preset-trial:${preset.id}`
+      expect(parseCodeObjectDocument(document.graph.getNode(id))).toMatchObject({
+        modality: preset.modality,
+        presetId: preset.id,
+        props: { trial: { index, modality: preset.modality } },
+        source: sources.get(id),
+        state: { revision: 2 }
+      })
+    }
+
+    const rejectedContext = responseResult(await f.runtime.sendRpc(contextArgs(f)))
+    await expect(
+      f.runtime.sendRpc({
+        command: 'board_apply',
+        args: {
+          ...contextArgs(f).args,
+          context_token: rejectedContext.context_token,
+          operations: [
+            {
+              object_id: `agent:preset-trial:${randomized[0]?.id ?? 'missing'}`,
+              op: 'update_code_object',
+              source: 'export default function Replacement() { return <main /> }'
+            }
+          ],
+          page_id: f.page.id,
+          request_id: 'request:preset-source-rejected'
+        }
+      })
+    ).rejects.toThrow('owns its renderer')
   })
 
   test('rejects removed semantic authoring commands', async () => {

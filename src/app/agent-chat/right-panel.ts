@@ -7,9 +7,15 @@ export type AgentRightPanelSurface =
   | 'diff'
   | 'files'
   | 'layers'
+  | 'object'
   | 'terminal'
 
 export interface AgentRightPanelContext {
+  inboxId?: string
+  objectId?: string
+  objectTitle?: string
+  objectThreadId?: string
+  objectTodoId?: string
   projectId?: string
   projectName?: string
 }
@@ -32,6 +38,15 @@ export function openAgentRightPanel(
 ) {
   agentRightPanelState.value = {
     ...agentRightPanelState.value,
+    ...(surface === 'object'
+      ? {
+          inboxId: undefined,
+          objectId: undefined,
+          objectThreadId: undefined,
+          objectTitle: undefined,
+          objectTodoId: undefined
+        }
+      : {}),
     ...context,
     activationNonce: agentRightPanelState.value.activationNonce + 1,
     open: true,

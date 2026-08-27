@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { inject } from 'vue'
+
 import AiCodeBlock from './AiCodeBlock.vue'
 import AiStreamingTextNode from './AiStreamingTextNode.vue'
+import { boardObjectLinkContextKey } from './board-object-links'
 import { isSafeMarkdownImageUrl, isSafeMarkdownUrl, type AssistantMarkdownNode } from './markdown'
 
 defineOptions({ name: 'AiMarkdownNodes' })
@@ -9,6 +12,8 @@ const { nodes, streamingTail = false } = defineProps<{
   nodes: AssistantMarkdownNode[]
   streamingTail?: boolean
 }>()
+
+const boardObjectLinks = inject(boardObjectLinkContextKey, null)
 
 function streamsInto(index: number) {
   return streamingTail && index === nodes.length - 1
@@ -101,6 +106,24 @@ function cellAlign(table: AssistantMarkdownNode, index: number) {
         :streaming-tail="streamsInto(index)"
       />
     </del>
+    <button
+      v-else-if="node.type === 'boardObjectLink' && node.boardObjectId && boardObjectLinks"
+      type="button"
+      data-test-id="ai-board-object-link"
+      :data-board-object-id="node.boardObjectId"
+      class="inline rounded-[3px] font-[inherit] leading-[inherit] text-accent underline decoration-accent/30 underline-offset-2 transition-colors hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-component/30"
+      @click="boardObjectLinks.open(node.boardObjectId)"
+      @focus="boardObjectLinks.hover(node.boardObjectId)"
+      @blur="boardObjectLinks.hover(null)"
+      @mouseenter="boardObjectLinks.hover(node.boardObjectId)"
+      @mouseleave="boardObjectLinks.hover(null)"
+    >
+      <AiMarkdownNodes
+        v-if="node.children?.length"
+        :nodes="node.children"
+        :streaming-tail="streamsInto(index)"
+      />
+    </button>
     <a
       v-else-if="node.type === 'link' && isSafeMarkdownUrl(node.url)"
       :href="node.url"

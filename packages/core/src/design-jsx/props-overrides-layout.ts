@@ -1,4 +1,4 @@
-import type { GridTrack, LayoutMode, SceneNode } from '@open-pencil/scene-graph'
+import type { GridTrack, SceneNode } from '@open-pencil/scene-graph'
 
 const ALIGN_MAP: Record<string, SceneNode['primaryAxisAlign']> = {
   start: 'MIN',
@@ -202,7 +202,7 @@ function applyAutoLayoutSizing(
 ): void {
   const direction = (props.flex as string | undefined) ?? 'col'
   const isVertical = direction === 'col' || direction === 'column'
-  overrides.layoutMode = (isVertical ? 'VERTICAL' : 'HORIZONTAL') as LayoutMode
+  overrides.layoutMode = (isVertical ? 'VERTICAL' : 'HORIZONTAL')
 
   overrides.primaryAxisSizing = 'HUG'
   overrides.counterAxisSizing = 'HUG'

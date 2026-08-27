@@ -38,7 +38,7 @@ export type SmylrTokenShadowPreview = {
 }
 
 export type SmylrTokenDefinition = {
-  category: SmylrTokenCategory | string
+  category: string
   cssProperty: string
   cssVariable: string
   label: string
@@ -99,7 +99,6 @@ function tokenColorPreview(value: string | undefined): Color | undefined {
   const parsed = parse(value)
   if (!parsed) return undefined
   const converted = toRgb(parsed)
-  if (!converted) return undefined
   return {
     r: clampUnit(converted.r),
     g: clampUnit(converted.g),

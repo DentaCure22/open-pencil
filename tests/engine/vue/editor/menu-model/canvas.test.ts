@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 
 import type { EditorCommandId } from '@open-pencil/vue'
 
@@ -11,9 +11,6 @@ function selection(overrides: Partial<CanvasMenuOptions['selection']> = {}) {
   return {
     hasSelection: ref(true),
     isGroup: ref(false),
-    isComponent: ref(false),
-    isInstance: ref(false),
-    canCreateComponentSet: ref(false),
     ...overrides
   } as CanvasMenuOptions['selection']
 }
@@ -51,24 +48,12 @@ describe('buildCanvasContextMenu', () => {
       'selection.outlineText',
       'selection.outlineStroke',
       '---',
-      'selection.createComponent',
-      '---',
       'selection.toggleVisibility',
       'selection.toggleLock',
       '---',
       'selection.flipHorizontal',
       'selection.flipVertical'
     ])
-  })
-
-  test('shows instance actions only for instances', () => {
-    expect(
-      itemIds(
-        buildCanvasContextMenu(
-          options({ selection: selection({ isInstance: computed(() => true) }) })
-        )
-      )
-    ).toContain('selection.detachInstance')
   })
 
   test('does not emit empty leading or repeated separators', () => {

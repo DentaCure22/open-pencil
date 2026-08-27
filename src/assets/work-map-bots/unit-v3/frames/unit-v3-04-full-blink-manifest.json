@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/unit-v3/source/unit-v3-04-full-blink-source.png",
+  "source_pixels": [
+    444,
+    443
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    59,
+    109,
+    391,
+    327
+  ],
+  "trimmed_pixels": [
+    332,
+    218
+  ],
+  "prepared_pixels": [
+    400,
+    400
+  ],
+  "padding_fraction": 0.1,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-04-full-blink-master.png",
+      "pixels": [
+        400,
+        400
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-04-full-blink.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-04-full-blink@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/unit-v3/frames/unit-v3-04-full-blink@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

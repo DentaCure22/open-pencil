@@ -46,7 +46,7 @@ function runGit(
       },
       (error, stdout) => {
         if (error) {
-          reject(error)
+          reject(new Error(error.message, { cause: error }))
           return
         }
         resolve(stdout)

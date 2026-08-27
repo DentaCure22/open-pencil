@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test'
 
 import {
+  createUserCodeObjectDocument,
   createSmylrTrustedWebAppDocument,
   parseCodeObjectDocument,
   serializeCodeObjectPluginData
@@ -8,11 +9,13 @@ import {
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import {
+  applyCodeObjectThemePreference,
   applyCodeObjectViewportPreset,
   codeObjectCanvasStyle,
   codeObjectScreenOverlayStyle,
   codeObjectViewportPresetId,
   createCodeObjectTransformController,
+  codeObjectThemePreference,
   liveIframeHostStyle,
   type CodeObjectTransformControllerStore
 } from '@/app/code-object/transform'
@@ -209,4 +212,41 @@ test('Code Object viewport clicks persist the same semantic preset used by agent
   expect(parseCodeObjectDocument(resized)).toMatchObject({
     viewport: { preset: 'phone' }
   })
+})
+
+test('Code Object appearance controls persist system, light, and dark without losing tokens', () => {
+  const graph = new SceneGraph()
+  const page = graph.getPages()[0]
+  const frame = graph.createNode('FRAME', page.id, { height: 320, width: 480 })
+  const document = createUserCodeObjectDocument({
+    appearance: {
+      preference: 'system',
+      tokens: { dark: { accent: '#ff66cc' } }
+    },
+    definitionId: 'theme-demo',
+    name: 'Theme demo',
+    source: 'export default function Demo() { return <main /> }'
+  })
+  graph.updateNode(frame.id, { pluginData: serializeCodeObjectPluginData(frame, document) })
+  const store = {
+    graph,
+    updateNodeWithUndo: mock((id: string, changes: Partial<SceneNode>) => {
+      graph.updateNode(id, changes)
+    })
+  }
+
+  expect(codeObjectThemePreference(graph.getNode(frame.id))).toBe('system')
+  expect(applyCodeObjectThemePreference(store, frame.id, 'dark')).toBe(true)
+  expect(codeObjectThemePreference(graph.getNode(frame.id))).toBe('dark')
+  expect(parseCodeObjectDocument(graph.getNode(frame.id))).toMatchObject({
+    appearance: {
+      preference: 'dark',
+      tokens: { dark: { accent: '#ff66cc' } }
+    }
+  })
+  expect(store.updateNodeWithUndo).toHaveBeenCalledWith(
+    frame.id,
+    { pluginData: expect.any(Array) },
+    'Use dark appearance'
+  )
 })

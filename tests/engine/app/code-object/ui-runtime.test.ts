@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import {
   ConfiguredBlock,
+  DataChart,
+  MermaidDiagram,
   normalizeEstimatesListModel,
   normalizeFinancialDashboardModel,
   normalizeVideoPlayerModel,
@@ -127,5 +129,23 @@ describe('Code Object UI runtime', () => {
     expect(configured).toContain('<video')
     expect(configured).toContain('controls=""')
     expect(configured).toContain('https://example.com/generated.webm')
+  })
+
+  test('exports the Plan diagram and data-chart primitives', () => {
+    const diagram = renderToStaticMarkup(
+      createElement(MermaidDiagram, { source: 'flowchart LR\n  Todo --> Plan' })
+    )
+    const chart = renderToStaticMarkup(
+      createElement(DataChart, {
+        model: {
+          kind: 'bar',
+          labels: ['Current', 'Proposed'],
+          series: [{ id: 'seconds', label: 'Seconds', values: [18, 4] }]
+        }
+      })
+    )
+
+    expect(diagram).toContain('Rendering diagram')
+    expect(chart).toContain('recharts-responsive-container')
   })
 })

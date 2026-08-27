@@ -29,33 +29,35 @@ test('collaboration controls live in the top toolbar', async () => {
   await expect(editor.page.getByTestId('properties-panel')).toHaveCount(0)
 })
 
-test('bottom toolbar stays between side chrome and scrolls when space is tight', async () => {
-  await editor.page.setViewportSize({ height: 821, width: 1280 })
+test('bottom toolbar pins utilities and scrolls editor tools when space is tight', async () => {
+  await editor.page.setViewportSize({ height: 821, width: 843 })
 
   const toolbarMotion = editor.page.getByTestId('toolbar-motion')
   const toolbar = editor.page.getByRole('toolbar', { name: 'Editor tools' })
   const scrollViewport = editor.page.getByTestId('toolbar-scroll-viewport')
-  const leftSidebar = editor.page.locator(
-    '[data-test-id="layers-shell-motion"][data-sidebar-open="true"]'
-  )
-  const zoomControls = editor.page.getByTestId('canvas-zoom-controls')
+  const fixedUtilities = editor.page.getByTestId('toolbar-fixed-utilities')
+  const leftSidebar = editor.page.getByTestId('layers-shell-motion')
 
   await expect(toolbar).toBeVisible()
+  await expect(editor.page.getByTestId('canvas-zoom-controls')).toHaveCount(0)
   await expect(scrollViewport).toBeVisible()
+  await expect(fixedUtilities.getByTestId('workspace-toolbar-button')).toBeVisible()
+  await expect(fixedUtilities.getByTestId('collab-share-button')).toBeVisible()
+  await expect(fixedUtilities.getByTestId('app-menu-toggle')).toBeVisible()
   await expect
     .poll(async () => Number(await toolbarMotion.getAttribute('data-toolbar-left-inset')))
     .toBeGreaterThan(12)
 
-  const [leftBounds, toolbarBounds, zoomBounds] = await Promise.all([
+  const [leftBounds, toolbarBounds, viewportWidth] = await Promise.all([
     leftSidebar.boundingBox(),
     toolbar.boundingBox(),
-    zoomControls.boundingBox()
+    editor.page.evaluate(() => document.documentElement.clientWidth)
   ])
-  if (!leftBounds || !toolbarBounds || !zoomBounds) {
+  if (!leftBounds || !toolbarBounds) {
     throw new Error('Expected sidebar-aware toolbar bounds')
   }
   expect(toolbarBounds.x).toBeGreaterThanOrEqual(leftBounds.x + leftBounds.width + 11)
-  expect(toolbarBounds.x + toolbarBounds.width).toBeLessThanOrEqual(zoomBounds.x - 11)
+  expect(toolbarBounds.x + toolbarBounds.width).toBeLessThanOrEqual(viewportWidth - 11)
 
   await editor.page.getByTestId('app-menu-toggle').click()
   await editor.page.getByTestId('settings-activity-toggle').click()
@@ -79,12 +81,19 @@ test('bottom toolbar stays between side chrome and scrolls when space is tight',
     scrollWidth: element.scrollWidth
   }))
   expect(overflowWithPanel.scrollWidth).toBeGreaterThan(overflowWithPanel.clientWidth)
+  const fixedUtilitiesBeforeScroll = await fixedUtilities.boundingBox()
+  if (!fixedUtilitiesBeforeScroll) {
+    throw new Error('Expected fixed toolbar utilities')
+  }
 
   await scrollViewport.hover()
   await editor.page.mouse.wheel(0, 180)
   await expect
     .poll(() => scrollViewport.evaluate((element) => element.scrollLeft))
     .toBeGreaterThan(overflowWithPanel.scrollLeft)
+  const fixedUtilitiesAfterScroll = await fixedUtilities.boundingBox()
+  expect(fixedUtilitiesAfterScroll?.x).toBeCloseTo(fixedUtilitiesBeforeScroll.x, 1)
+  expect(fixedUtilitiesAfterScroll?.width).toBeCloseTo(fixedUtilitiesBeforeScroll.width, 1)
 })
 
 test('shapes flyout opens', async () => {

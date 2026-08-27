@@ -140,8 +140,8 @@ export function useEditorNodeOverlayStyle(store: EditorStore, resolveStyle: Over
   const geometry = useEditorOverlayGeometryVersion(store)
   const cache = createEditorNodeOverlayStyleCache(store, geometry, resolveStyle)
 
-  onBeforeUnmount(cache.clear)
-  return cache.resolve
+  onBeforeUnmount(() => cache.clear())
+  return (node: SceneNode) => cache.resolve(node)
 }
 
 export function createEditorNodeOverlayStyleCache(

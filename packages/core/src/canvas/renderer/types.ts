@@ -12,8 +12,12 @@ export interface RulerTheme {
 }
 
 export interface RenderOverlays {
+  /** Nodes whose product-owned surface replaces only their native scene paint, not their children. */
+  sceneContentOwnerIds?: ReadonlySet<string>
   /** Selected nodes whose product-owned overlay replaces native selection chrome. */
   selectionChromeOwnerIds?: ReadonlySet<string>
+  /** Selected nodes whose product-owned overlay replaces only the native frame title. */
+  selectionLabelOwnerIds?: ReadonlySet<string>
   /** Hovered nodes whose product-owned overlay replaces the canvas hover stroke. */
   hoverChromeOwnerIds?: ReadonlySet<string>
   hoveredNodeId?: string | null

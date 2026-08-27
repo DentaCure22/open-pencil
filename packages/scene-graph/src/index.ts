@@ -13,6 +13,7 @@ export type { NodePreviewOptions } from './preview'
 
 import { omit } from 'es-toolkit/object'
 import { createNanoEvents } from 'nanoevents'
+/* eslint-disable max-lines -- SceneGraph is the stateful graph facade; specialized policies already live in focused modules. */
 
 import { cloneNodeProps } from './copy'
 import { bindNodeEvents } from './events'
@@ -479,7 +480,7 @@ export class SceneGraph {
     const entries = Object.entries(changes) as Array<[string, unknown]>
     changes = Object.fromEntries(
       entries.filter(([, value]) => value !== undefined)
-    ) as Partial<SceneNode>
+    )
     if (this.sourceMetadataPreservationDepth === 0) {
       clearEditedSourceMetadata(node, Object.keys(changes))
     }

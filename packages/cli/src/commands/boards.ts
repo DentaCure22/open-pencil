@@ -92,10 +92,15 @@ function parseNavigationObjects(value: string | undefined): string[] {
 function parseNavigationRegion(value: string | undefined): Rect | undefined {
   if (!value?.trim()) return undefined
   const parts = value.split(',').map((part) => Number.parseFloat(part.trim()))
-  const [x, y, width, height] = parts
+  const x = parts.at(0)
+  const y = parts.at(1)
+  const width = parts.at(2)
+  const height = parts.at(3)
   if (
     parts.length !== 4 ||
     parts.some((part) => !Number.isFinite(part)) ||
+    x === undefined ||
+    y === undefined ||
     width === undefined ||
     width <= 0 ||
     height === undefined ||
@@ -103,7 +108,7 @@ function parseNavigationRegion(value: string | undefined): Rect | undefined {
   ) {
     throw new Error('--region requires x,y,width,height with positive width and height.')
   }
-  return { height, width, x: x as number, y: y as number }
+  return { height, width, x, y }
 }
 
 export async function openBoardPage(

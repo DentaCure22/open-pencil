@@ -25,6 +25,21 @@ export type AiTurnChanges = {
   truncated?: boolean
 }
 
+export type AiBoardObjectChange = {
+  id: string
+  name: string
+  pageId?: string
+  type?: string
+  verb: 'created' | 'edited'
+}
+
+export type AiLinkedObject = {
+  chapterId: string
+  id: string
+  name: string
+  verb: 'created' | 'edited'
+}
+
 export type AiMessagePart =
   | { text: string; type: 'text' }
   | { state?: 'complete' | 'streaming'; text: string; type: 'commentary' }

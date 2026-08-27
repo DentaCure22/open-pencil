@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/mote/source/mote-08-settled-hover-source.png",
+  "source_pixels": [
+    444,
+    444
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    112,
+    115,
+    360,
+    334
+  ],
+  "trimmed_pixels": [
+    248,
+    219
+  ],
+  "prepared_pixels": [
+    308,
+    308
+  ],
+  "padding_fraction": 0.12,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/mote/frames/mote-08-settled-hover-master.png",
+      "pixels": [
+        308,
+        308
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/mote/frames/mote-08-settled-hover.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/mote/frames/mote-08-settled-hover@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/mote/frames/mote-08-settled-hover@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -1,5 +1,7 @@
 import type { IDocumentData, IWorkbookData, PluginCtor, Univer } from '@univerjs/core'
 
+import type { CodeObjectTheme } from '@open-pencil/core/code-object'
+
 import type {
   OfficeDocumentState,
   OfficeSpreadsheetCell,
@@ -20,6 +22,7 @@ type CreateOfficeRuntimeInput = {
   fileName: string
   kind: OfficeRuntimeKind
   state: OfficeDocumentState | OfficeSpreadsheetState
+  theme: CodeObjectTheme
 }
 
 type PresetPlugin = PluginCtor | [PluginCtor, unknown]
@@ -54,7 +57,7 @@ function documentTitle(fileName: string) {
 }
 
 function documentSnapshot(state: OfficeDocumentState, fileName: string): Partial<IDocumentData> {
-  if (state.snapshot) return structuredClone(state.snapshot) as Partial<IDocumentData>
+  if (state.snapshot) return structuredClone(state.snapshot)
   const content = state.seedText.replace(/\r?\n/g, '\r').trim()
   const dataStream = `${content}\r\n`
   return {
@@ -95,7 +98,7 @@ function spreadsheetSnapshot(
   state: OfficeSpreadsheetState,
   fileName: string
 ): Partial<IWorkbookData> {
-  if (state.snapshot) return structuredClone(state.snapshot) as Partial<IWorkbookData>
+  if (state.snapshot) return structuredClone(state.snapshot)
   const sheetId = 'openpencil-sheet-overview'
   const columnCount = Math.max(26, ...state.seedCells.map((row) => row.length))
   return {
@@ -129,7 +132,7 @@ export async function createOfficeRuntime(input: CreateOfficeRuntimeInput): Prom
       import('@univerjs/preset-docs-core/locales/en-US')
     ])
     univer = new Univer({
-      darkMode: false,
+      darkMode: input.theme === 'dark',
       locale: LocaleType.EN_US,
       locales: { [LocaleType.EN_US]: localeModule.default },
       logLevel: LogLevel.WARN,
@@ -153,7 +156,7 @@ export async function createOfficeRuntime(input: CreateOfficeRuntimeInput): Prom
       import('@univerjs/preset-sheets-core/locales/en-US')
     ])
     univer = new Univer({
-      darkMode: false,
+      darkMode: input.theme === 'dark',
       locale: LocaleType.EN_US,
       locales: { [LocaleType.EN_US]: localeModule.default },
       logLevel: LogLevel.WARN,

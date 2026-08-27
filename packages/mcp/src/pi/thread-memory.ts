@@ -6,10 +6,6 @@ export const THREAD_MEMORY_FULL_TURN_LIMIT = 6
 /** Stored tool output older than the live turn is clipped to this many characters. */
 export const THREAD_MEMORY_TOOL_OUTPUT_CHARS = 800
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
 function clipStoredToolText(value: string, budget: number): string {
   const half = Math.floor(budget / 2)
   return clipReplayText(value, half, budget - half)
@@ -155,17 +151,10 @@ export function collapseDuplicateTurnResponses(thread: AgentConversationThread):
   if (thread.messages.length === 0) return false
   const next: AgentConversationMessage[] = []
   let turn: AgentConversationMessage[] = []
-  let changed = false
 
   const flush = (): void => {
     if (!turn.length) return
     const collapsed = collapseTurnMessages(turn)
-    if (
-      collapsed.length !== turn.length ||
-      collapsed.some((message, index) => message !== turn[index])
-    ) {
-      changed = true
-    }
     next.push(...collapsed)
     turn = []
   }
@@ -180,31 +169,41 @@ export function collapseDuplicateTurnResponses(thread: AgentConversationThread):
   }
   flush()
 
+  const changed =
+    next.length !== thread.messages.length ||
+    next.some((message, index) => message !== thread.messages.at(index))
   if (!changed) return false
   thread.messages = next
   return true
 }
 
+type AgentConversationPart = NonNullable<AgentConversationMessage['parts']>[number]
+type AgentConversationToolPart = Extract<AgentConversationPart, { type: 'tool' }>
+
 function compactToolPart(
-  part: Record<string, unknown>,
+  part: AgentConversationToolPart,
   aggressive: boolean
-): Record<string, unknown> {
-  const next = { ...part }
-  if (typeof next.output === 'string') {
-    next.output = clipStoredToolText(
-      next.output,
-      aggressive ? 160 : THREAD_MEMORY_TOOL_OUTPUT_CHARS
-    )
-  }
+): AgentConversationToolPart {
+  const output =
+    typeof part.output === 'string'
+      ? clipStoredToolText(part.output, aggressive ? 160 : THREAD_MEMORY_TOOL_OUTPUT_CHARS)
+      : part.output
+  const input =
+    typeof part.input === 'string' &&
+    (aggressive || part.input.length > THREAD_MEMORY_TOOL_OUTPUT_CHARS)
+      ? clipStoredToolText(part.input, aggressive ? 120 : THREAD_MEMORY_TOOL_OUTPUT_CHARS)
+      : part.input
+  const images = part.images && part.images.length > 1 ? part.images.slice(0, 1) : part.images
+  const videos = part.videos && part.videos.length > 1 ? part.videos.slice(0, 1) : part.videos
   if (
-    typeof next.input === 'string' &&
-    (aggressive || next.input.length > THREAD_MEMORY_TOOL_OUTPUT_CHARS)
+    output === part.output &&
+    input === part.input &&
+    images === part.images &&
+    videos === part.videos
   ) {
-    next.input = clipStoredToolText(next.input, aggressive ? 120 : THREAD_MEMORY_TOOL_OUTPUT_CHARS)
+    return part
   }
-  if (Array.isArray(next.images) && next.images.length > 1) next.images = next.images.slice(0, 1)
-  if (Array.isArray(next.videos) && next.videos.length > 1) next.videos = next.videos.slice(0, 1)
-  return next
+  return { ...part, images, input, output, videos }
 }
 
 function compactMessage(
@@ -212,20 +211,10 @@ function compactMessage(
   aggressive: boolean
 ): AgentConversationMessage {
   if (!message.parts?.length) return message
-  let changed = false
   const parts = message.parts.map((part) => {
-    if (!isRecord(part) || part.type !== 'tool') return part
-    const compact = compactToolPart(part, aggressive)
-    if (
-      compact.output !== part.output ||
-      compact.input !== part.input ||
-      compact.images !== part.images ||
-      compact.videos !== part.videos
-    ) {
-      changed = true
-    }
-    return compact
+    return part.type === 'tool' ? compactToolPart(part, aggressive) : part
   })
+  const changed = parts.some((part, index) => part !== message.parts?.at(index))
   return changed ? { ...message, parts } : message
 }
 
@@ -238,16 +227,13 @@ export function compactAgentThreadMemory(thread: AgentConversationThread): boole
   const collapsed = collapseDuplicateTurnResponses(thread)
   const userIndexes = lastUserIndexes(thread.messages)
   if (userIndexes.length === 0) return collapsed
-  const keepFullFrom =
-    userIndexes[Math.max(0, userIndexes.length - THREAD_MEMORY_FULL_TURN_LIMIT)] ?? 0
-  const liveFrom = userIndexes[userIndexes.length - 1] ?? 0
-  let changed = false
+  const keepFullFrom = userIndexes.at(-THREAD_MEMORY_FULL_TURN_LIMIT) ?? userIndexes.at(0) ?? 0
+  const liveFrom = userIndexes.at(-1) ?? 0
   const messages = thread.messages.map((message, index) => {
     if (index >= liveFrom) return message
-    const next = compactMessage(message, index < keepFullFrom)
-    if (next !== message) changed = true
-    return next
+    return compactMessage(message, index < keepFullFrom)
   })
+  const changed = messages.some((message, index) => message !== thread.messages.at(index))
   if (changed) thread.messages = messages
   return changed || collapsed
 }

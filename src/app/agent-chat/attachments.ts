@@ -51,16 +51,24 @@ export function appendDraftAttachments(
   return { attachments: unique, ...(error ? { error } : {}) }
 }
 
-export function carriesAttachmentDrag(dataTransfer: DataTransfer | null): boolean {
+export type AttachmentDragReader = {
+  files: Iterable<File>
+  getData: (format: string) => string
+  types: Iterable<string>
+}
+
+export function carriesAttachmentDrag(
+  dataTransfer: Pick<AttachmentDragReader, 'getData' | 'types'> | null
+): boolean {
   if (!dataTransfer) return false
   const types = [...dataTransfer.types]
   return types.includes('Files') || hasBrowserCaptureDrag(dataTransfer)
 }
 
-export function readAttachmentDrag(dataTransfer: DataTransfer | null): File[] {
+export function readAttachmentDrag(dataTransfer: AttachmentDragReader | null): File[] {
   if (!dataTransfer) return []
   const capture = readBrowserCaptureDrag(dataTransfer)
   const captureAttachment = capture ? browserCaptureAttachmentFromDrag(capture) : null
   if (captureAttachment) return [captureAttachment]
-  return [...(dataTransfer.files ?? [])]
+  return [...dataTransfer.files]
 }

@@ -3,7 +3,7 @@ import type { ComputedRef } from 'vue'
 
 import type { Editor } from '@open-pencil/core/editor'
 import { FONT_WEIGHT_NAMES, weightToStyle } from '@open-pencil/core/text'
-import type { SceneNode, TextDecoration } from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { UseTypographyOptions } from '#vue/controls/typography/use'
 import { useSceneComputed } from '#vue/internal/scene-computed/use'
@@ -111,7 +111,7 @@ export function createTypographyActions({
     const current = node.value.textDecoration
     editor.updateNodeWithUndo(
       node.value.id,
-      { textDecoration: (current === deco ? 'NONE' : deco) as TextDecoration },
+      { textDecoration: current === deco ? 'NONE' : deco },
       `Toggle ${deco.toLowerCase()}`
     )
   }
@@ -135,11 +135,7 @@ export function createTypographyActions({
 
   function commitProp(key: string, _value: number | string, previous: number | string) {
     if (node.value) {
-      editor.commitNodeUpdate(
-        node.value.id,
-        { [key]: previous } as Partial<SceneNode>,
-        `Change ${key}`
-      )
+      editor.commitNodeUpdate(node.value.id, { [key]: previous }, `Change ${key}`)
     }
   }
 

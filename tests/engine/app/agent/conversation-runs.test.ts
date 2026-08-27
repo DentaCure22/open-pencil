@@ -42,6 +42,51 @@ describe('conversation runs', () => {
     expect(run?.changes).toEqual(changes)
   })
 
+  test('attaches Board object receipts to the same turn as its final answer', () => {
+    const [run] = conversationRuns([
+      message('user-1', 'user', 'Build two concepts.'),
+      message('tool-1', 'assistant', '', {
+        parts: [
+          {
+            name: 'openpencil_board_apply',
+            output: JSON.stringify({
+              result: {
+                changed_ids: ['concept-a', 'concept-b'],
+                created_ids: ['concept-a', 'concept-b'],
+                deleted_ids: [],
+                nodes: [
+                  { id: 'concept-a', name: 'Concept A', type: 'FRAME' },
+                  { id: 'concept-b', name: 'Concept B', type: 'FRAME' }
+                ]
+              },
+              target: { pageId: 'page-1' }
+            }),
+            state: 'success',
+            type: 'tool'
+          }
+        ]
+      }),
+      message('answer-1', 'assistant', 'Concept A and Concept B are ready.')
+    ])
+
+    expect(run?.boardChanges).toEqual([
+      {
+        id: 'concept-a',
+        name: 'Concept A',
+        pageId: 'page-1',
+        type: 'FRAME',
+        verb: 'created'
+      },
+      {
+        id: 'concept-b',
+        name: 'Concept B',
+        pageId: 'page-1',
+        type: 'FRAME',
+        verb: 'created'
+      }
+    ])
+  })
+
   test('does not lift commentary into a visible answer', () => {
     const [run] = conversationRuns([
       message('user-1', 'user', 'Add a spinner.'),

@@ -8,9 +8,6 @@ type SelectionState = ReturnType<typeof useSelectionState>
 
 type CanvasMenuCommand =
   | EditorCommandId
-  | 'selection.componentAction'
-  | 'selection.componentSetAction'
-  | 'selection.instanceActions'
   | 'selection.ungroupWhenGroup'
   | 'selection.moveToPageWhenAvailable'
 
@@ -40,7 +37,6 @@ const CANVAS_MENU_GROUPS = [
     'selection.outlineText',
     'selection.outlineStroke'
   ],
-  ['selection.componentAction', 'selection.componentSetAction', 'selection.instanceActions'],
   ['selection.toggleVisibility', 'selection.toggleLock'],
   ['selection.flipHorizontal', 'selection.flipVertical']
 ] satisfies readonly CanvasMenuGroup[]
@@ -58,36 +54,10 @@ function moveToPageItem({ otherPages, moveSelectionToPage, selection, t }: Canva
   return [{ label: t.moveToPage, sub } satisfies MenuActionNode]
 }
 
-function componentItems({ commandMenuItem, selection }: CanvasMenuOptions): MenuEntry[] {
-  return [
-    selection.isComponent.value
-      ? commandMenuItem('selection.createInstance')
-      : commandMenuItem('selection.createComponent')
-  ]
-}
-
-function componentSetItems({ commandMenuItem, selection }: CanvasMenuOptions): MenuEntry[] {
-  return selection.canCreateComponentSet.value
-    ? [commandMenuItem('selection.createComponentSet')]
-    : []
-}
-
-function instanceItems({ commandMenuItem, selection }: CanvasMenuOptions): MenuEntry[] {
-  return selection.isInstance.value
-    ? [commandMenuItem('selection.goToMainComponent'), commandMenuItem('selection.detachInstance')]
-    : []
-}
-
 function conditionalCommand(command: CanvasMenuCommand, options: CanvasMenuOptions): MenuEntry[] {
   switch (command) {
     case 'selection.moveToPageWhenAvailable':
       return moveToPageItem(options)
-    case 'selection.componentAction':
-      return componentItems(options)
-    case 'selection.componentSetAction':
-      return componentSetItems(options)
-    case 'selection.instanceActions':
-      return instanceItems(options)
     case 'selection.ungroupWhenGroup':
       return options.selection.isGroup.value ? [options.commandMenuItem('selection.ungroup')] : []
     default:

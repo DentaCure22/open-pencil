@@ -1,8 +1,14 @@
 import type { CSSProperties } from 'react'
 
+import type {
+  ResolvedCodeObjectAppearance,
+  CodeObjectThemeTokens
+} from '@open-pencil/core/code-object'
+
 import type { CodeStarterState } from '../model'
 
 type CodeStarterProps = {
+  appearance: ResolvedCodeObjectAppearance
   interactionEnabled: boolean
   onStateChange: (state: CodeStarterState) => void
   state: CodeStarterState
@@ -10,10 +16,7 @@ type CodeStarterProps = {
 
 const shellStyle: CSSProperties = {
   alignItems: 'stretch',
-  background:
-    'radial-gradient(circle at 18% 10%, rgba(122, 92, 255, 0.2), transparent 34%), #111217',
   boxSizing: 'border-box',
-  color: '#f7f7fb',
   display: 'flex',
   flexDirection: 'column',
   fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
@@ -25,30 +28,35 @@ const shellStyle: CSSProperties = {
 }
 
 const actionStyle: CSSProperties = {
-  background: '#b8a9ff',
   border: 0,
-  borderRadius: 10,
-  color: '#19171f',
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 700,
   padding: '13px 18px'
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  tokens,
+  value
+}: {
+  label: string
+  tokens: CodeObjectThemeTokens
+  value: string
+}) {
   return (
     <div
       style={{
-        background: 'rgba(255,255,255,0.055)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 12,
+        background: tokens.surface,
+        border: `1px solid ${tokens.border}`,
+        borderRadius: tokens.radius,
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
         padding: 18
       }}
     >
-      <span style={{ color: '#9395a1', fontSize: 11, fontWeight: 700, letterSpacing: 1.2 }}>
+      <span style={{ color: tokens.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: 1.2 }}>
         {label}
       </span>
       <strong style={{ fontSize: 28, letterSpacing: -0.8 }}>{value}</strong>
@@ -56,34 +64,57 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function CodeStarter({ interactionEnabled, onStateChange, state }: CodeStarterProps) {
+export function CodeStarter({
+  appearance,
+  interactionEnabled,
+  onStateChange,
+  state
+}: CodeStarterProps) {
+  const { theme, tokens } = appearance
   function increase() {
     if (!interactionEnabled) return
     onStateChange({ ...state, count: state.count + 1 })
   }
 
   return (
-    <main data-test-id="code-starter" style={shellStyle}>
+    <main
+      data-test-id="code-starter"
+      style={{
+        ...shellStyle,
+        background: `radial-gradient(circle at 18% 10%, ${tokens.focusRing}, transparent 34%), ${tokens.background}`,
+        color: tokens.text
+      }}
+    >
       <header style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ color: '#b8a9ff', fontSize: 11, fontWeight: 800, letterSpacing: 1.6 }}>
+        <span style={{ color: tokens.accent, fontSize: 11, fontWeight: 800, letterSpacing: 1.6 }}>
           OPENPENCIL CODE OBJECT
         </span>
         <h1 style={{ fontSize: 30, letterSpacing: -1, margin: 0 }}>{state.title}</h1>
-        <p style={{ color: '#a7a8b2', fontSize: 14, lineHeight: 1.55, margin: 0 }}>
-          One TSX component, one ReactDOM runtime, one ordinary board frame.
+        <p style={{ color: tokens.textMuted, fontSize: 14, lineHeight: 1.55, margin: 0 }}>
+          One TSX component, one ReactDOM runtime, one ordinary board frame · {theme}.
         </p>
       </header>
 
       <section style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
-        <Metric label="PERSISTED COUNT" value={String(state.count)} />
-        <Metric label="BOARD MODE" value={interactionEnabled ? 'Interact' : 'Design'} />
+        <Metric label="PERSISTED COUNT" tokens={tokens} value={String(state.count)} />
+        <Metric
+          label="BOARD MODE"
+          tokens={tokens}
+          value={interactionEnabled ? 'Interact' : 'Design'}
+        />
       </section>
 
       <button
         data-test-id="code-starter-increase"
         disabled={!interactionEnabled}
         onClick={increase}
-        style={{ ...actionStyle, opacity: interactionEnabled ? 1 : 0.55 }}
+        style={{
+          ...actionStyle,
+          background: tokens.accent,
+          borderRadius: tokens.radius,
+          color: tokens.accentText,
+          opacity: interactionEnabled ? 1 : 0.55
+        }}
         type="button"
       >
         {interactionEnabled ? 'Increase count' : 'Enter to interact'}

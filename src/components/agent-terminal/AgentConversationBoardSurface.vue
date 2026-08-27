@@ -25,6 +25,7 @@ import { AiConversationSurface, conversationStatus } from '@/components/ai-eleme
 import { plainConversationPreview } from '@/app/agent-chat/presentation'
 import { agentConversationDisplayTitle } from '@/app/agent-chat/thread-preferences'
 import { appendDraftAttachments } from '@/app/agent-chat/attachments'
+import { buildSpeechDictationContext } from '@/app/speech-dictation-context'
 import { resolveBrowserCaptureAttachments } from '@/app/browser-inspector/attachment'
 import {
   isAgentConversationDraftId,
@@ -135,6 +136,9 @@ const modelScope = computed(() =>
   })
 )
 const message = ref('')
+const dictationContext = computed(() =>
+  buildSpeechDictationContext({ composerText: message.value, thread: thread.value })
+)
 const annotations = ref<AgentPromptAnnotation[]>([])
 const attachments = ref<File[]>([])
 const sending = ref(false)
@@ -336,21 +340,24 @@ watch(
         Boolean(error && (lastMessage || lastAnnotations.length || lastAttachments.length))
       "
       :can-stop="canStop"
-      :chapter-rail-ready="interactionEnabled"
       :context-usage="thread?.contextUsage"
+      :dictation-context="dictationContext"
       :disabled="!canCompose"
-      empty-title="Conversation ready"
       :has-older="thread?.hasOlder === true"
-      input-label="Task conversation input"
       :loading-older="loadingOlder"
       :messages="conversationMessages"
-      :placeholder="isDraft ? 'Describe the task…' : steering ? 'Add instructions…' : 'Follow up…'"
-      :send-label="steering ? 'Steer task' : 'Send message'"
+      :presentation="{
+        chapterRailReady: interactionEnabled,
+        emptyTitle: 'Conversation ready',
+        inputLabel: 'Task conversation input',
+        placeholder: isDraft ? 'Describe the task…' : steering ? 'Add instructions…' : 'Follow up…',
+        sendLabel: steering ? 'Steer task' : 'Send message',
+        workingLabel: thread?.recentUpdate || ''
+      }"
       :scope="modelScope"
       :status="uiStatus"
       :status-message="statusMessage"
       :turns="thread?.turns"
-      :working-label="thread?.recentUpdate || ''"
       @load-older="loadOlderTranscript"
       @reveal-chapter="revealChapter"
       @retry="retry"

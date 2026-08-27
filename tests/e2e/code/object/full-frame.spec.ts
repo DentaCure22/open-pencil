@@ -40,6 +40,8 @@ test('opens a trusted iframe in Full Frame without replacing its runtime', async
   const shell = editor.page.getByTestId('layers-shell-motion')
   const toolbar = editor.page.getByTestId('toolbar-motion')
   const sidebarToggle = editor.page.getByTestId('sidebar-toggle-motion')
+  const expandedShellBounds = await shell.boundingBox()
+  if (!expandedShellBounds) throw new Error('Expanded sidebar shell bounds unavailable')
   await expect(toolbar).toHaveAttribute('data-sidebar-integrated', 'false')
   await expect(sidebarToggle).toHaveAttribute('data-sidebar-integrated', 'true')
   await editor.page.getByTestId('close-layers-panel').click()
@@ -48,18 +50,12 @@ test('opens a trusted iframe in Full Frame without replacing its runtime', async
   await expect(sidebarToggle).toHaveAttribute('data-sidebar-tab-only', 'true')
   await expect(editor.page.getByRole('button', { name: 'Move', exact: true })).toBeVisible()
   await expect(editor.page.getByTestId('open-layers-panel')).toBeVisible()
-  await expect
-    .poll(async () => {
-      const bounds = await shell.boundingBox()
-      return bounds
-        ? {
-            height: Math.round(bounds.height),
-            width: Math.round(bounds.width),
-            x: Math.round(bounds.x)
-          }
-        : null
-    })
-    .toEqual({ height: 44, width: 28, x: 0 })
+  await expect(shell).toHaveCSS('opacity', '0')
+  const collapsedShellBounds = await shell.boundingBox()
+  if (!collapsedShellBounds) throw new Error('Collapsed sidebar shell bounds unavailable')
+  expect(Math.abs(collapsedShellBounds.height - expandedShellBounds.height)).toBeLessThan(2)
+  expect(Math.abs(collapsedShellBounds.width - expandedShellBounds.width)).toBeLessThan(2)
+  expect(collapsedShellBounds.x + collapsedShellBounds.width).toBeLessThanOrEqual(0)
   await expect(editor.page.getByTestId('sidebar-compact-tab-drag-handle')).toHaveCount(0)
   await expect(editor.page.getByRole('toolbar', { name: 'Sidebar' })).toBeVisible()
 

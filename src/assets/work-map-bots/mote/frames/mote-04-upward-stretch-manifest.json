@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/mote/source/mote-04-upward-stretch-source.png",
+  "source_pixels": [
+    444,
+    443
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    122,
+    46,
+    325,
+    363
+  ],
+  "trimmed_pixels": [
+    203,
+    317
+  ],
+  "prepared_pixels": [
+    395,
+    395
+  ],
+  "padding_fraction": 0.12,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/mote/frames/mote-04-upward-stretch-master.png",
+      "pixels": [
+        395,
+        395
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/mote/frames/mote-04-upward-stretch.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/mote/frames/mote-04-upward-stretch@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/mote/frames/mote-04-upward-stretch@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

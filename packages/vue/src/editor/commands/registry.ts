@@ -23,15 +23,6 @@ export const EDITOR_COMMAND_METADATA = {
     contextTestId: 'context-frame-selection'
   },
   'selection.ungroup': { shortcut: 'MOD+SHIFT+G', keybinding: '$mod+Shift+KeyG' },
-  'selection.createComponent': {
-    shortcut: 'MOD+ALT+K',
-    keybinding: '$mod+Alt+KeyK',
-    contextTestId: 'context-create-component'
-  },
-  'selection.createComponentSet': { shortcut: 'MOD+SHIFT+K', keybinding: '$mod+Shift+KeyK' },
-  'selection.detachInstance': { shortcut: 'MOD+ALT+B', keybinding: '$mod+Alt+KeyB' },
-  'selection.goToMainComponent': {},
-  'selection.createInstance': {},
   'selection.wrapInAutoLayout': { shortcut: 'SHIFT+A', keybinding: 'Shift+KeyA' },
   'selection.bringToFront': {
     shortcut: ']',

@@ -94,7 +94,7 @@ export function createAppearanceActions({ editor, node, nodes, isMulti }: Appear
             topRightRadius: uniform,
             bottomRightRadius: uniform,
             bottomLeftRadius: uniform
-          } as Partial<SceneNode>,
+          },
           'Uniform corner radius'
         )
       } else {
@@ -106,7 +106,7 @@ export function createAppearanceActions({ editor, node, nodes, isMulti }: Appear
             topRightRadius: n.cornerRadius,
             bottomRightRadius: n.cornerRadius,
             bottomLeftRadius: n.cornerRadius
-          } as Partial<SceneNode>,
+          },
           'Independent corner radii'
         )
       }
@@ -125,12 +125,12 @@ export function createAppearanceActions({ editor, node, nodes, isMulti }: Appear
   function commitCornerProp(key: string, _value: number, previous: number) {
     if (isMulti.value) {
       for (const n of nodes.value) {
-        editor.commitNodeUpdate(n.id, { [key]: previous } as Partial<SceneNode>, `Change ${key}`)
+        editor.commitNodeUpdate(n.id, { [key]: previous }, `Change ${key}`)
       }
     } else {
       const n = node.value
       if (n) {
-        editor.commitNodeUpdate(n.id, { [key]: previous } as Partial<SceneNode>, `Change ${key}`)
+        editor.commitNodeUpdate(n.id, { [key]: previous }, `Change ${key}`)
       }
     }
   }

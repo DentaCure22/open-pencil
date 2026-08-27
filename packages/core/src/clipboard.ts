@@ -7,7 +7,6 @@ import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { shapeTextForClipboard } from './canvas/text'
 import { populateAndApplyOverrides } from './kiwi/fig/instance-overrides'
-import type { InstanceNodeChange } from './kiwi/fig/instance-overrides'
 import {
   nodeChangeToProps,
   shouldImportTextAsAutoSize,
@@ -282,7 +281,7 @@ export function importClipboardNodes(
 
   remapComponentIds(created, graph)
 
-  populateAndApplyOverrides(graph, guidMap as Map<string, InstanceNodeChange>, created, blobs)
+  populateAndApplyOverrides(graph, guidMap, created, blobs)
 
   for (const figmaId of internalTopLevel) {
     const ourId = created.get(figmaId)

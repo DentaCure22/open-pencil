@@ -69,7 +69,10 @@ const settleDelayMs = ${JSON.stringify(input.settleDelayMs ?? 10)}
 const streamBeforeSteer = ${JSON.stringify(input.streamBeforeSteer ?? '')}
 const commandLog = ${JSON.stringify(commandLog)}
 const launchLog = ${JSON.stringify(launchLog)}
-writeFileSync(launchLog, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }))
+writeFileSync(
+  launchLog,
+  JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), pid: process.pid })
+)
 const lines = readline.createInterface({ input: process.stdin })
 let promptCount = 0
 let promptStarted = false
@@ -437,6 +440,40 @@ describe('PiAgentRouter completion', () => {
     }
   })
 
+  test('launches a project chat from its bound workspace', async () => {
+    const stub = await createPiStub({ dynamicReplies: true })
+    const projectWorkspace = path.join(stub.root, 'dental-chart')
+    await mkdir(projectWorkspace)
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      warmPoolSize: 0,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      const receipt = await router.dispatch({
+        effort: 'high',
+        model: 'xai-auth/grok-4.6',
+        projectId: 'project:dental',
+        prompt: 'Update the Dental Chart.',
+        workspaceRoot: projectWorkspace
+      })
+      await router.waitForJob(receipt.jobId, 3_000)
+      const launch = JSON.parse(await readFile(stub.launchLog, 'utf8')) as { cwd: string }
+      const thread = router.conversation(receipt.threadId)
+
+      expect(await realpath(launch.cwd)).toBe(await realpath(projectWorkspace))
+      expect(thread).toMatchObject({
+        projectId: 'project:dental',
+        workspaceRoot: projectWorkspace
+      })
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
   test('holds a Messages tool call until the visible approval response arrives', async () => {
     const stub = await createPiStub({
       approvalRequest: messageApprovalRequest()
@@ -745,6 +782,7 @@ describe('PiAgentRouter completion', () => {
       executable: stub.executable,
       models: FALLBACK_PI_MODELS,
       sessionDir: stub.root,
+      warmPoolSize: 0,
       workspaceRoot: process.cwd()
     })
 
@@ -767,7 +805,25 @@ describe('PiAgentRouter completion', () => {
         id: 'todo-chat:patient-history',
         messages: [],
         sessionId: null,
-        state: 'completed'
+        state: 'completed',
+        todoDraft: { presetId: 'todo-document' }
+      })
+      const updated = router.updateTodoDraft(draft.id, {
+        context: 'Use a right-side panel so the chart stays visible.',
+        goal: 'Shape the patient-history quick panel',
+        references: [{ id: 'image:history-panel', kind: 'image', label: 'History panel mock' }]
+      })
+      expect(updated).toMatchObject({
+        messages: [],
+        sessionId: null,
+        state: 'completed',
+        task: 'Shape the patient-history quick panel',
+        todoDraft: {
+          brief: {
+            context: 'Use a right-side panel so the chart stays visible.',
+            references: [{ kind: 'image', label: 'History panel mock' }]
+          }
+        }
       })
       const receipt = await router.followUp(draft.id, 'Let’s compare two interaction directions.')
       await router.waitForJob(receipt.jobId, 3_000)
@@ -776,6 +832,9 @@ describe('PiAgentRouter completion', () => {
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line) as LoggedPiPrompt)
+      const launch = JSON.parse(await readFile(stub.launchLog, 'utf8')) as { argv: string[] }
+      const sessionIdIndex = launch.argv.indexOf('--session-id')
+      const sessionId = launch.argv[sessionIdIndex + 1]
       const prompt = commands.find((command) => command.type === 'prompt')?.message
 
       expect(receipt.threadId).toBe(draft.id)
@@ -785,9 +844,12 @@ describe('PiAgentRouter completion', () => {
         text: 'Let’s compare two interaction directions.'
       })
       expect(String(prompt)).toContain('Prepared brief:')
-      expect(String(prompt)).toContain('Shape patient history shortcuts')
+      expect(String(prompt)).toContain('Shape the patient-history quick panel')
       expect(String(prompt)).toContain('keep any plan flexible')
       expect(String(prompt)).not.toContain('work-plan skill')
+      expect(sessionIdIndex).toBeGreaterThan(-1)
+      expect(sessionId).not.toBe(draft.id)
+      expect(sessionId).toMatch(/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/)
     } finally {
       router.close()
       await rm(stub.root, { force: true, recursive: true })
@@ -1050,6 +1112,72 @@ describe('PiAgentRouter completion', () => {
     }
   })
 
+  test('does not promote commentary to a final answer after a provider error', async () => {
+    const stub = await createPiStub({
+      events: [
+        {
+          message: {
+            content: [
+              {
+                text: 'I’ll inspect the diagram contract before placing it.',
+                textSignature: '{"phase":"commentary"}',
+                type: 'text'
+              },
+              { arguments: {}, id: 'call-read-contract', name: 'read', type: 'toolCall' }
+            ],
+            model: 'grok-4.6',
+            provider: 'xai-auth',
+            role: 'assistant',
+            stopReason: 'toolUse'
+          },
+          type: 'message_end'
+        },
+        {
+          message: {
+            content: [],
+            errorMessage: 'xAI API error: Responses failed',
+            model: 'grok-4.6',
+            provider: 'xai-auth',
+            role: 'assistant',
+            stopReason: 'error'
+          },
+          type: 'message_end'
+        },
+        { type: 'agent_settled' }
+      ]
+    })
+    const router = new PiAgentRouter({
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      const receipt = await dispatch(router)
+      const job = await router.waitForJob(receipt.jobId, 3_000)
+      const thread = router.conversation(receipt.threadId)
+
+      expect(job).toMatchObject({ state: 'failed' })
+      expect(thread).toMatchObject({
+        recentUpdate: 'xAI API error: Responses failed',
+        state: 'needs_attention'
+      })
+      expect(thread?.messages.some((message) => message.text.includes('before placing it'))).toBe(
+        false
+      )
+      expect(
+        thread?.messages.some((message) =>
+          message.parts?.some(
+            (part) => part.type === 'commentary' && part.text.includes('before placing it')
+          )
+        )
+      ).toBe(true)
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
   test('sends Board evidence and attachment frames as images Pi can see directly', async () => {
     const stub = await createPiStub({
       events: [
@@ -1213,6 +1341,65 @@ describe('PiAgentRouter completion', () => {
       expect(thread?.recentUpdate).toContain('saved session is ready to resume')
       expect(commands.some((command) => command.type === 'get_state')).toBe(true)
       expect(commands.some((command) => command.type === 'abort')).toBe(true)
+    } finally {
+      router.close()
+      await rm(stub.root, { force: true, recursive: true })
+    }
+  })
+
+  test('launches a Bot with its charter, bypasses an unkeyed warm process, and reloads charter edits', async () => {
+    const stub = await createPiStub({ dynamicReplies: true })
+    const charterPath = path.join(stub.root, 'bot-charters', 'dental', 'AGENTS.md')
+    await mkdir(path.dirname(charterPath), { recursive: true })
+    await writeFile(charterPath, '# Dental Bot\n\nUse the first charter.\n')
+    const router = new PiAgentRouter({
+      agentContextPathForBot: (botId) => (botId === 'bot:dental' ? charterPath : undefined),
+      executable: stub.executable,
+      models: FALLBACK_PI_MODELS,
+      warmPoolSize: 1,
+      workspaceRoot: process.cwd()
+    })
+
+    try {
+      expect(await router.waitForWarmProcess()).toBe(true)
+      const warmLaunch = JSON.parse(await readFile(stub.launchLog, 'utf8')) as {
+        argv: string[]
+        pid: number
+      }
+      expect(warmLaunch.argv).not.toContain('--append-system-prompt')
+
+      const first = await router.dispatch({
+        botId: 'bot:dental',
+        effort: 'high',
+        model: 'xai-auth/grok-4.6',
+        prompt: 'Start the Dental Bot.'
+      })
+      const firstJob = await router.waitForJob(first.jobId, 3_000)
+      const firstLaunch = JSON.parse(await readFile(stub.launchLog, 'utf8')) as {
+        argv: string[]
+        pid: number
+      }
+      const firstCharterIndex = firstLaunch.argv.indexOf('--append-system-prompt')
+
+      expect(firstJob).toMatchObject({ state: 'completed' })
+      expect(firstCharterIndex).toBeGreaterThan(-1)
+      expect(firstLaunch.argv[firstCharterIndex + 1]).toBe(charterPath)
+      expect(firstLaunch.pid).not.toBe(warmLaunch.pid)
+      expect(router.conversation(first.threadId)).toMatchObject({ botId: 'bot:dental' })
+
+      await writeFile(charterPath, '# Dental Bot\n\nUse the revised charter.\n')
+      const second = await router.followUp(first.threadId, 'Continue with the revised charter.')
+      const secondJob = await router.waitForJob(second.jobId, 3_000)
+      const secondLaunch = JSON.parse(await readFile(stub.launchLog, 'utf8')) as {
+        argv: string[]
+        pid: number
+      }
+      const secondCharterIndex = secondLaunch.argv.indexOf('--append-system-prompt')
+
+      expect(secondJob).toMatchObject({ state: 'completed' })
+      expect(secondCharterIndex).toBeGreaterThan(-1)
+      expect(secondLaunch.argv[secondCharterIndex + 1]).toBe(charterPath)
+      expect(secondLaunch.pid).not.toBe(firstLaunch.pid)
     } finally {
       router.close()
       await rm(stub.root, { force: true, recursive: true })

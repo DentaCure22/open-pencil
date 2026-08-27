@@ -2,7 +2,7 @@
 import {
   codeObjectViewportInsets,
   createCodeObjectFromPreset,
-  type CodeComponentPresetId
+  type CodeObjectPresetId
 } from '@/app/code-object/model'
 import { useEditorStore } from '@/app/editor/active-store'
 import { narratedTraceAnnotationTool } from '@/app/narrated-trace'
@@ -12,7 +12,7 @@ const emit = defineEmits<{ startNative: [] }>()
 
 const store = useEditorStore()
 
-function startCodeObject(id: CodeComponentPresetId) {
+function startCodeObject(id: CodeObjectPresetId) {
   createCodeObjectFromPreset(store, id)
   requestAnimationFrame(() => store.zoomToSelection(codeObjectViewportInsets()))
 }

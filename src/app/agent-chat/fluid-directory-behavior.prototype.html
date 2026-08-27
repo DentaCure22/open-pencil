@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Fluid project territory — behavior prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #1f2429;
+        background: #f4f5f5;
+        font-synthesis: none;
+        --ink: #1f2429;
+        --muted: #747b82;
+        --hairline: rgba(39, 47, 54, 0.14);
+        --blue: #437ef7;
+        --blue-soft: rgba(67, 126, 247, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        background: #f4f5f5;
+      }
+
+      .work-map {
+        position: relative;
+        z-index: 20;
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        padding: 26px 24px;
+        background: rgba(255, 255, 255, 0.94);
+        border-right: 1px solid rgba(29, 36, 41, 0.08);
+        box-shadow: 12px 0 34px rgba(35, 42, 49, 0.05);
+      }
+
+      .work-map__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 29px;
+      }
+
+      .work-map h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 650;
+        letter-spacing: -0.025em;
+      }
+
+      .head-actions {
+        display: flex;
+        gap: 15px;
+        color: #68717a;
+        font-size: 16px;
+      }
+
+      .sidebar-label {
+        margin: 0 0 14px 20px;
+        color: #8c9298;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .project-row,
+      .sidebar-row {
+        display: flex;
+        min-height: 42px;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        border-radius: 10px;
+        color: #363c42;
+        font-size: 14px;
+      }
+
+      .project-row {
+        background: #f4f6f7;
+        box-shadow: inset 0 0 0 1px rgba(31, 38, 44, 0.045);
+        font-weight: 590;
+      }
+
+      .project-mark {
+        width: 17px;
+        height: 12px;
+        border: 1px solid rgba(68, 83, 96, 0.35);
+        border-radius: 5px 7px 5px 6px;
+        background: rgba(113, 167, 216, 0.14);
+        box-shadow: inset 3px 0 rgba(85, 143, 255, 0.18);
+      }
+
+      .project-row .spacer {
+        flex: 1;
+      }
+
+      .project-row .count {
+        display: grid;
+        width: 22px;
+        height: 22px;
+        place-items: center;
+        border-radius: 99px;
+        color: #6b737a;
+        background: #fff;
+        font-size: 11px;
+      }
+
+      .sidebar-stack {
+        margin: 5px 0 17px 14px;
+        padding: 7px 0 7px 17px;
+        border-left: 1px solid #d9dde0;
+      }
+
+      .sidebar-row {
+        min-height: 34px;
+        color: #747c83;
+        font-size: 13px;
+      }
+
+      .sidebar-row::before {
+        width: 5px;
+        height: 5px;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        content: "";
+      }
+
+      .prototype-note {
+        margin-top: auto;
+        padding: 14px 15px;
+        border: 1px solid rgba(35, 43, 49, 0.1);
+        border-radius: 14px;
+        background: #fafafa;
+      }
+
+      .prototype-note strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+
+      .prototype-note p {
+        margin: 0;
+        color: #757c82;
+        font-size: 11.5px;
+        line-height: 1.45;
+      }
+
+      .sidebar-state {
+        width: auto !important;
+        margin-top: 10px;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+      }
+
+      .canvas {
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        background-color: #f5f6f6;
+        background-image: radial-gradient(circle, rgba(94, 101, 107, 0.17) 0.75px, transparent 0.9px);
+        background-size: 19px 19px;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .canvas::after {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: rgba(255, 255, 255, 0.18);
+        content: "";
+      }
+
+      #territory-layer,
+      #objects-layer,
+      #labels-layer {
+        position: absolute;
+        inset: 0;
+      }
+
+      #territory-layer {
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      #territory-path {
+        cursor: grab;
+        fill: rgba(228, 234, 238, 0.42);
+        stroke: rgba(74, 83, 90, 0.6);
+        stroke-width: 1.15;
+        vector-effect: non-scaling-stroke;
+        filter: drop-shadow(0 14px 25px rgba(32, 41, 49, 0.055));
+        transition:
+          fill 180ms ease,
+          stroke 180ms ease,
+          stroke-width 180ms ease;
+      }
+
+      #territory-path[data-state="receiving"] {
+        fill: rgba(217, 229, 248, 0.5);
+        stroke: rgba(57, 112, 225, 0.78);
+        stroke-width: 1.7;
+      }
+
+      #territory-path[data-state="detaching"] {
+        fill: rgba(239, 233, 224, 0.34);
+        stroke: rgba(155, 112, 61, 0.72);
+        stroke-dasharray: 6 7;
+      }
+
+      #territory-path:active {
+        cursor: grabbing;
+      }
+
+      #objects-layer {
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      .board-object {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        padding: 17px 18px;
+        overflow: hidden;
+        border: 1px solid rgba(53, 61, 67, 0.14);
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.95) inset,
+          0 10px 24px rgba(34, 42, 48, 0.07);
+        pointer-events: auto;
+        cursor: grab;
+        backdrop-filter: blur(7px);
+        transition:
+          box-shadow 130ms ease,
+          border-color 130ms ease,
+          opacity 130ms ease;
+      }
+
+      .board-object:hover {
+        border-color: rgba(63, 85, 105, 0.28);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.95) inset,
+          0 14px 31px rgba(34, 42, 48, 0.09);
+      }
+
+      .board-object[data-dragging="true"] {
+        z-index: 40;
+        cursor: grabbing;
+        border-color: rgba(67, 126, 247, 0.48);
+        box-shadow:
+          0 0 0 3px rgba(67, 126, 247, 0.1),
+          0 18px 37px rgba(38, 48, 58, 0.16);
+      }
+
+      .board-object[data-member="false"] {
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .object-title {
+        margin: 0 0 11px;
+        font-size: 15px;
+        font-weight: 640;
+        letter-spacing: -0.016em;
+      }
+
+      .surface-illustration {
+        flex: 1;
+        min-height: 72px;
+        border: 1px solid rgba(67, 75, 82, 0.16);
+        border-radius: 7px;
+        background:
+          linear-gradient(90deg, transparent 0 28px, rgba(77, 86, 93, 0.13) 28px 29px, transparent 29px),
+          repeating-linear-gradient(0deg, rgba(100, 109, 116, 0.15) 0 1px, transparent 1px 19px),
+          rgba(250, 251, 251, 0.9);
+      }
+
+      .lines {
+        display: grid;
+        gap: 8px;
+        margin-top: 3px;
+      }
+
+      .lines i {
+        display: block;
+        height: 1px;
+        background: rgba(72, 80, 86, 0.25);
+      }
+
+      .lines i:nth-child(2) {
+        width: 78%;
+      }
+
+      .lines i:nth-child(3) {
+        width: 88%;
+      }
+
+      .membership {
+        position: absolute;
+        top: 9px;
+        right: 10px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #788089;
+        font-size: 9.5px;
+        font-weight: 650;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .membership::before {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #5b8ef6;
+        content: "";
+      }
+
+      .board-object[data-member="false"] .membership::before {
+        background: #a9afb4;
+      }
+
+      #labels-layer {
+        z-index: 4;
+        pointer-events: none;
+      }
+
+      .territory-title {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 30px;
+        padding: 0 13px 0 10px;
+        border-radius: 9px;
+        background: #f5f6f6;
+        color: #333b42;
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        pointer-events: auto;
+        cursor: grab;
+      }
+
+      .territory-title::before {
+        width: 8px;
+        height: 8px;
+        border: 1px solid rgba(67, 126, 247, 0.4);
+        border-radius: 50%;
+        background: rgba(67, 126, 247, 0.18);
+        content: "";
+      }
+
+      .drag-status {
+        position: absolute;
+        display: none;
+        padding: 7px 9px;
+        border: 1px solid rgba(40, 49, 56, 0.11);
+        border-radius: 8px;
+        color: #4d565e;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 9px 20px rgba(34, 40, 46, 0.1);
+        font-size: 10.5px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .drag-status[data-visible="true"] {
+        display: block;
+      }
+
+      .control-dock {
+        position: absolute;
+        z-index: 12;
+        right: 22px;
+        bottom: 21px;
+        left: 22px;
+        display: grid;
+        grid-template-columns: minmax(560px, 720px);
+        justify-content: start;
+        align-items: end;
+        gap: 18px;
+        pointer-events: none;
+      }
+
+      .rule-card,
+      .state-card {
+        pointer-events: auto;
+        border: 1px solid rgba(35, 43, 49, 0.11);
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 15px 38px rgba(37, 43, 49, 0.1);
+        backdrop-filter: blur(14px);
+      }
+
+      .rule-card {
+        display: grid;
+        grid-template-columns: auto minmax(250px, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        min-height: 67px;
+        padding: 10px 12px 10px 17px;
+        border-radius: 17px;
+      }
+
+      .rule-card__label strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 12px;
+      }
+
+      .rule-card__label span {
+        display: block;
+        color: #8b9197;
+        font-size: 10.5px;
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        padding: 3px;
+        border-radius: 11px;
+        background: rgba(58, 66, 74, 0.07);
+      }
+
+      .segmented button {
+        min-height: 34px;
+        padding: 0 13px;
+        border: 0;
+        border-radius: 8px;
+        color: #697178;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .segmented button[aria-pressed="true"] {
+        color: #2f3740;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(38, 44, 49, 0.11);
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 7px;
+      }
+
+      .quiet-button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid rgba(43, 51, 58, 0.1);
+        border-radius: 9px;
+        color: #596169;
+        background: rgba(255, 255, 255, 0.74);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .quiet-button:hover {
+        background: #fff;
+      }
+
+      .state-card {
+        width: 242px;
+        padding: 14px 15px;
+        border-radius: 15px;
+      }
+
+      .state-card h2 {
+        margin: 0 0 9px;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .state-row {
+        display: grid;
+        grid-template-columns: 67px 1fr;
+        gap: 7px;
+        margin: 6px 0;
+        font-size: 10.5px;
+        line-height: 1.35;
+      }
+
+      .state-row dt {
+        color: #969ca2;
+      }
+
+      .state-row dd {
+        margin: 0;
+        color: #4d555c;
+      }
+
+      .guide {
+        position: absolute;
+        z-index: 11;
+        top: 22px;
+        right: 22px;
+        width: 260px;
+        padding: 14px;
+        border: 1px solid rgba(37, 44, 50, 0.1);
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 12px 28px rgba(34, 40, 46, 0.07);
+        backdrop-filter: blur(12px);
+      }
+
+      .guide__tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 11px;
+      }
+
+      .guide__tabs button {
+        flex: 1;
+        min-height: 29px;
+        border: 0;
+        border-radius: 7px;
+        color: #828990;
+        background: transparent;
+        font-size: 10px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .guide__tabs button[aria-selected="true"] {
+        color: #394149;
+        background: rgba(56, 67, 76, 0.07);
+      }
+
+      .guide p {
+        min-height: 45px;
+        margin: 0 0 10px;
+        color: #626a71;
+        font-size: 11.5px;
+        line-height: 1.45;
+      }
+
+      .guide .quiet-button {
+        width: 100%;
+      }
+
+      @media (max-width: 1030px) {
+        body {
+          grid-template-columns: 245px minmax(0, 1fr);
+        }
+
+        .work-map {
+          padding-inline: 18px;
+        }
+
+        .control-dock {
+          grid-template-columns: 1fr;
+        }
+
+        .rule-card {
+          grid-template-columns: auto 1fr;
+        }
+
+        .action-buttons {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="work-map" aria-label="Work map">
+      <div class="work-map__head">
+        <h1>Work map</h1>
+        <div class="head-actions" aria-hidden="true"><span>⌕</span><span>＋</span></div>
+      </div>
+      <p class="sidebar-label">Project spaces</p>
+      <div class="project-row">
+        <span class="project-mark"></span>
+        <span>Dental Chart</span>
+        <span class="spacer"></span>
+        <span class="count" id="member-count">4</span>
+      </div>
+      <div class="sidebar-stack">
+        <div class="sidebar-row">Chats</div>
+        <div class="sidebar-row">Tasks</div>
+      </div>
+      <div class="project-row" style="background: transparent; box-shadow: none">
+        <span class="project-mark" style="background: transparent"></span>
+        <span>Chats</span>
+      </div>
+      <div class="prototype-note">
+        <strong>Prototype question</strong>
+        <p>
+          Can a project remain a real movable container while its boundary feels soft—and still make
+          membership obvious when an object crosses the edge?
+        </p>
+      </div>
+      <section class="state-card sidebar-state" aria-live="polite">
+        <h2>What the model thinks</h2>
+        <dl style="margin: 0">
+          <div class="state-row"><dt>Rule</dt><dd id="state-mode"></dd></div>
+          <div class="state-row"><dt>Members</dt><dd id="state-members"></dd></div>
+          <div class="state-row"><dt>Last event</dt><dd id="state-event"></dd></div>
+        </dl>
+      </section>
+    </aside>
+
+    <main class="canvas" id="canvas" aria-label="Fluid project territory prototype">
+      <svg id="territory-layer" aria-hidden="true">
+        <path id="territory-path" data-state="idle"></path>
+      </svg>
+      <div id="objects-layer"></div>
+      <div id="labels-layer">
+        <div class="territory-title" id="territory-title">Dental Chart</div>
+        <div class="drag-status" id="drag-status"></div>
+      </div>
+
+      <section class="guide" aria-label="Guided walkthroughs">
+        <div class="guide__tabs" role="tablist">
+          <button type="button" data-guide="move" aria-selected="true">Move frame</button>
+          <button type="button" data-guide="out" aria-selected="false">Pull out</button>
+          <button type="button" data-guide="in" aria-selected="false">Bring in</button>
+        </div>
+        <p id="guide-copy"></p>
+        <button type="button" class="quiet-button" id="play-guide">Play this case</button>
+      </section>
+
+      <div class="control-dock">
+        <section class="rule-card" aria-label="Boundary rule">
+          <div class="rule-card__label">
+            <strong>When an object leaves</strong>
+            <span>Switch rules, then drag Notes across the edge.</span>
+          </div>
+          <div class="segmented" id="mode-control">
+            <button type="button" data-mode="detach" aria-pressed="true">Detach</button>
+            <button type="button" data-mode="follow" aria-pressed="false">Boundary follows</button>
+            <button type="button" data-mode="snap" aria-pressed="false">Snap back</button>
+          </div>
+          <div class="action-buttons">
+            <button type="button" class="quiet-button" id="fit-button">Fit softly</button>
+            <button type="button" class="quiet-button" id="reset-button">Reset</button>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <script>
+      // Portable behavior module: pure state + geometry. The page below only renders and dispatches.
+      const FluidTerritoryModel = (() => {
+        const item = (id, title, x, y, w, h, member, kind = "lines") => ({
+          id,
+          title,
+          x,
+          y,
+          w,
+          h,
+          member,
+          kind,
+        });
+
+        const initialState = () => ({
+          mode: "detach",
+          project: { x: 85, y: 102, w: 640, h: 500 },
+          items: [
+            item("surface", "Current surface", 145, 174, 292, 173, true, "surface"),
+            item("plan", "Plan", 486, 174, 178, 173, true),
+            item("notes", "Notes", 325, 398, 166, 133, true),
+            item("research", "Research", 770, 328, 170, 141, false),
+          ],
+          lastEvent: "Ready — drag the title seam, the field, or any object.",
+        });
+
+        const moveProject = (state, dx, dy) => ({
+          ...state,
+          project: { ...state.project, x: state.project.x + dx, y: state.project.y + dy },
+          items: state.items.map((entry) =>
+            entry.member ? { ...entry, x: entry.x + dx, y: entry.y + dy } : entry,
+          ),
+          lastEvent: "Moved the project and every attached object together.",
+        });
+
+        const setItemPosition = (state, id, x, y) => ({
+          ...state,
+          items: state.items.map((entry) => (entry.id === id ? { ...entry, x, y } : entry)),
+        });
+
+        const overlapRatio = (entry, bounds) => {
+          const left = Math.max(entry.x, bounds.x);
+          const top = Math.max(entry.y, bounds.y);
+          const right = Math.min(entry.x + entry.w, bounds.x + bounds.w);
+          const bottom = Math.min(entry.y + entry.h, bounds.y + bounds.h);
+          const area = Math.max(0, right - left) * Math.max(0, bottom - top);
+          return area / (entry.w * entry.h);
+        };
+
+        const centerInside = (entry, bounds) => {
+          const cx = entry.x + entry.w / 2;
+          const cy = entry.y + entry.h / 2;
+          return cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h;
+        };
+
+        const distanceOutside = (entry, bounds) => {
+          const cx = entry.x + entry.w / 2;
+          const cy = entry.y + entry.h / 2;
+          const dx = Math.max(bounds.x - cx, 0, cx - (bounds.x + bounds.w));
+          const dy = Math.max(bounds.y - cy, 0, cy - (bounds.y + bounds.h));
+          return Math.hypot(dx, dy);
+        };
+
+        const decisionFor = (state, entry) => {
+          const ratio = overlapRatio(entry, state.project);
+          const inside = centerInside(entry, state.project);
+          const outside = distanceOutside(entry, state.project);
+
+          if (!entry.member) {
+            return inside && ratio >= 0.38 ? "attach" : "remain-outside";
+          }
+          if (state.mode === "follow") return "follow";
+          if (state.mode === "snap") return inside || ratio >= 0.5 ? "keep" : "snap";
+          return !inside && outside > 30 && ratio < 0.36 ? "detach" : "keep";
+        };
+
+        const expandToInclude = (project, entry, padding = 52) => {
+          const left = Math.min(project.x, entry.x - padding);
+          const top = Math.min(project.y, entry.y - padding);
+          const right = Math.max(project.x + project.w, entry.x + entry.w + padding);
+          const bottom = Math.max(project.y + project.h, entry.y + entry.h + padding);
+          return { x: left, y: top, w: right - left, h: bottom - top };
+        };
+
+        const fitToMembers = (state) => {
+          const members = state.items.filter((entry) => entry.member);
+          if (!members.length) return state;
+          const left = Math.min(...members.map((entry) => entry.x)) - 58;
+          const top = Math.min(...members.map((entry) => entry.y)) - 72;
+          const right = Math.max(...members.map((entry) => entry.x + entry.w)) + 58;
+          const bottom = Math.max(...members.map((entry) => entry.y + entry.h)) + 62;
+          return {
+            ...state,
+            project: { x: left, y: top, w: right - left, h: bottom - top },
+            lastEvent: "Soft-fit the territory around its current members.",
+          };
+        };
+
+        const dropItem = (state, id, origin) => {
+          const entry = state.items.find((candidate) => candidate.id === id);
+          const decision = decisionFor(state, entry);
+
+          if (decision === "attach") {
+            return {
+              ...state,
+              items: state.items.map((candidate) =>
+                candidate.id === id ? { ...candidate, member: true } : candidate,
+              ),
+              lastEvent: `${entry.title} joined Dental Chart.`,
+            };
+          }
+          if (decision === "detach") {
+            return {
+              ...state,
+              items: state.items.map((candidate) =>
+                candidate.id === id ? { ...candidate, member: false } : candidate,
+              ),
+              lastEvent: `${entry.title} left Dental Chart and stayed on the board.`,
+            };
+          }
+          if (decision === "snap") {
+            return {
+              ...state,
+              items: state.items.map((candidate) =>
+                candidate.id === id ? { ...candidate, x: origin.x, y: origin.y } : candidate,
+              ),
+              lastEvent: `${entry.title} snapped back into Dental Chart.`,
+            };
+          }
+          if (decision === "follow") {
+            return {
+              ...state,
+              project: expandToInclude(state.project, entry),
+              lastEvent: `Dental Chart expanded to keep ${entry.title}.`,
+            };
+          }
+          return {
+            ...state,
+            lastEvent: entry.member
+              ? `${entry.title} stayed in Dental Chart.`
+              : `${entry.title} stayed loose on the board.`,
+          };
+        };
+
+        const reducer = (state, action) => {
+          switch (action.type) {
+            case "SET_MODE":
+              return {
+                ...state,
+                mode: action.mode,
+                lastEvent: `Boundary rule changed to ${action.mode}.`,
+              };
+            case "MOVE_PROJECT":
+              return moveProject(state, action.dx, action.dy);
+            case "MOVE_ITEM":
+              return setItemPosition(state, action.id, action.x, action.y);
+            case "DROP_ITEM":
+              return dropItem(state, action.id, action.origin);
+            case "FIT":
+              return fitToMembers(state);
+            case "RESET":
+              return initialState();
+            default:
+              return state;
+          }
+        };
+
+        return {
+          initialState,
+          reducer,
+          decisionFor,
+          overlapRatio,
+          centerInside,
+          distanceOutside,
+        };
+      })();
+
+      const canvas = document.querySelector("#canvas");
+      const objectsLayer = document.querySelector("#objects-layer");
+      const territoryPath = document.querySelector("#territory-path");
+      const territoryTitle = document.querySelector("#territory-title");
+      const dragStatus = document.querySelector("#drag-status");
+      const modeControl = document.querySelector("#mode-control");
+      const guideCopy = document.querySelector("#guide-copy");
+      const playGuideButton = document.querySelector("#play-guide");
+
+      let state = FluidTerritoryModel.initialState();
+      let drag = null;
+      let activeGuide = "move";
+      let animationToken = 0;
+
+      const modeLabels = {
+        detach: "Detach after a clear crossing",
+        follow: "Boundary grows with the member",
+        snap: "Member returns on release",
+      };
+
+      const guides = {
+        move: {
+          copy: "The project is a normal board object. Drag its title seam or translucent field; every member travels with it.",
+          label: "Play: move the whole project",
+        },
+        out: {
+          copy: "Pull Notes past the lower-right edge. The shape stretches during the gesture, then the selected rule decides what commits.",
+          label: "Play: pull Notes out",
+        },
+        in: {
+          copy: "Research starts loose. Drag its center into the territory; the edge lights up before membership is committed on release.",
+          label: "Play: bring Research in",
+        },
+      };
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      function roundedFluidPath(bounds, activeEntry) {
+        const { x, y, w, h } = bounds;
+        let left = x;
+        let right = x + w;
+        let bottom = y + h;
+        const top = y;
+
+        if (activeEntry) {
+          const cx = activeEntry.x + activeEntry.w / 2;
+          const cy = activeEntry.y + activeEntry.h / 2;
+          const stretch = state.mode === "snap" ? 0.18 : state.mode === "detach" ? 0.52 : 0.88;
+          left = Math.min(left, x + (cx - x - activeEntry.w / 2 - 34) * stretch);
+          right = Math.max(right, x + w + (cx + activeEntry.w / 2 + 34 - (x + w)) * stretch);
+          bottom = Math.max(bottom, y + h + (cy + activeEntry.h / 2 + 34 - (y + h)) * stretch);
+        }
+
+        left = Math.max(24, left);
+        right = Math.min(canvas.clientWidth - 18, right);
+        bottom = Math.min(canvas.clientHeight - 20, bottom);
+
+        const topLeft = x + 56;
+        const topRight = x + w - 130;
+        const sideTop = top + 57;
+        const sideBottom = bottom - 105;
+        const wave = clamp(w * 0.16, 72, 140);
+
+        return [
+          `M ${topLeft} ${top}`,
+          `L ${topRight} ${top}`,
+          `C ${x + w - 42} ${top}, ${right - 5} ${top + 24}, ${right} ${sideTop}`,
+          `C ${right + 1} ${top + h * 0.34}, ${right - 8} ${top + h * 0.52}, ${right} ${sideBottom}`,
+          `C ${right + 6} ${bottom - 38}, ${right - 31} ${bottom}, ${right - 89} ${bottom}`,
+          `C ${right - wave} ${bottom + 3}, ${x + w * 0.72} ${bottom - 20}, ${x + w * 0.55} ${bottom - 8}`,
+          `C ${x + w * 0.39} ${bottom + 3}, ${left + wave} ${bottom + 12}, ${left + 76} ${bottom - 2}`,
+          `C ${left + 24} ${bottom - 13}, ${left} ${bottom - 44}, ${left} ${bottom - 98}`,
+          `L ${left} ${top + 85}`,
+          `C ${left} ${top + 42}, ${left + 18} ${top + 12}, ${topLeft} ${top}`,
+          "Z",
+        ].join(" ");
+      }
+
+      function previewForDrag() {
+        if (!drag || drag.kind !== "item") return { entry: null, status: "idle", message: "" };
+        const entry = state.items.find((candidate) => candidate.id === drag.id);
+        const decision = FluidTerritoryModel.decisionFor(state, entry);
+        if (!entry.member && decision === "attach") {
+          return { entry, status: "receiving", message: "Release to add to Dental Chart" };
+        }
+        if (entry.member && decision === "detach") {
+          return { entry, status: "detaching", message: "Release to detach" };
+        }
+        if (entry.member && decision === "snap") {
+          return { entry, status: "detaching", message: "Release to snap back" };
+        }
+        if (entry.member && decision === "follow") {
+          return { entry, status: "receiving", message: "Boundary will keep following" };
+        }
+        return {
+          entry,
+          status: "idle",
+          message: entry.member ? "Still part of Dental Chart" : "Loose on the board",
+        };
+      }
+
+      function renderObject(entry) {
+        const existing = document.querySelector(`[data-object-id="${entry.id}"]`);
+        const element = existing || document.createElement("article");
+        element.className = "board-object";
+        element.dataset.objectId = entry.id;
+        element.dataset.member = String(entry.member);
+        element.dataset.dragging = String(drag?.kind === "item" && drag.id === entry.id);
+        element.style.left = `${entry.x}px`;
+        element.style.top = `${entry.y}px`;
+        element.style.width = `${entry.w}px`;
+        element.style.height = `${entry.h}px`;
+        if (!existing) {
+          element.innerHTML = `
+            <div class="membership"></div>
+            <h3 class="object-title"></h3>
+            <div class="object-content"></div>
+          `;
+          element.addEventListener("pointerdown", (event) => startItemDrag(event, entry.id));
+          objectsLayer.append(element);
+        }
+        element.querySelector(".object-title").textContent = entry.title;
+        element.querySelector(".membership").textContent = entry.member ? "Inside" : "Loose";
+        const content = element.querySelector(".object-content");
+        content.className = entry.kind === "surface" ? "object-content surface-illustration" : "object-content lines";
+        if (entry.kind !== "surface" && !content.children.length) {
+          content.innerHTML = "<i></i><i></i><i></i><i></i>";
+        }
+      }
+
+      function render() {
+        const preview = previewForDrag();
+        territoryPath.setAttribute("d", roundedFluidPath(state.project, preview.entry));
+        territoryPath.dataset.state = preview.status;
+
+        territoryTitle.style.left = `${state.project.x + 44}px`;
+        territoryTitle.style.top = `${state.project.y - 15}px`;
+
+        state.items.forEach(renderObject);
+        document.querySelector("#member-count").textContent = state.items.filter((entry) => entry.member).length;
+        document.querySelector("#state-mode").textContent = modeLabels[state.mode];
+        document.querySelector("#state-members").textContent = state.items
+          .filter((entry) => entry.member)
+          .map((entry) => entry.title)
+          .join(", ");
+        document.querySelector("#state-event").textContent = state.lastEvent;
+
+        modeControl.querySelectorAll("button").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
+        });
+
+        if (preview.entry && preview.message) {
+          dragStatus.dataset.visible = "true";
+          dragStatus.textContent = preview.message;
+          dragStatus.style.left = `${clamp(preview.entry.x + preview.entry.w / 2 - 65, 12, canvas.clientWidth - 180)}px`;
+          dragStatus.style.top = `${clamp(preview.entry.y - 36, 12, canvas.clientHeight - 42)}px`;
+        } else {
+          dragStatus.dataset.visible = "false";
+        }
+      }
+
+      function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+
+      function startItemDrag(event, id) {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        animationToken += 1;
+        const point = canvasPoint(event);
+        const entry = state.items.find((candidate) => candidate.id === id);
+        drag = {
+          kind: "item",
+          id,
+          pointerId: event.pointerId,
+          offsetX: point.x - entry.x,
+          offsetY: point.y - entry.y,
+          origin: { x: entry.x, y: entry.y },
+        };
+        canvas.setPointerCapture(event.pointerId);
+        render();
+      }
+
+      function startProjectDrag(event) {
+        if (event.button !== 0 || event.target.closest?.(".board-object")) return;
+        event.preventDefault();
+        animationToken += 1;
+        const point = canvasPoint(event);
+        drag = {
+          kind: "project",
+          pointerId: event.pointerId,
+          previous: point,
+        };
+        canvas.setPointerCapture(event.pointerId);
+      }
+
+      canvas.addEventListener("pointermove", (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const point = canvasPoint(event);
+        if (drag.kind === "item") {
+          const entry = state.items.find((candidate) => candidate.id === drag.id);
+          const x = clamp(point.x - drag.offsetX, 10, canvas.clientWidth - entry.w - 10);
+          const y = clamp(point.y - drag.offsetY, 20, canvas.clientHeight - entry.h - 82);
+          state = FluidTerritoryModel.reducer(state, { type: "MOVE_ITEM", id: drag.id, x, y });
+        } else {
+          const dx = point.x - drag.previous.x;
+          const dy = point.y - drag.previous.y;
+          drag.previous = point;
+          state = FluidTerritoryModel.reducer(state, { type: "MOVE_PROJECT", dx, dy });
+        }
+        render();
+      });
+
+      canvas.addEventListener("pointerup", (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        if (drag.kind === "item") {
+          state = FluidTerritoryModel.reducer(state, {
+            type: "DROP_ITEM",
+            id: drag.id,
+            origin: drag.origin,
+          });
+        }
+        drag = null;
+        render();
+      });
+
+      canvas.addEventListener("pointercancel", () => {
+        drag = null;
+        render();
+      });
+
+      territoryPath.addEventListener("pointerdown", startProjectDrag);
+      territoryTitle.addEventListener("pointerdown", startProjectDrag);
+
+      modeControl.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-mode]");
+        if (!button) return;
+        state = FluidTerritoryModel.reducer(state, { type: "SET_MODE", mode: button.dataset.mode });
+        render();
+      });
+
+      document.querySelector("#reset-button").addEventListener("click", () => {
+        animationToken += 1;
+        state = FluidTerritoryModel.reducer(state, { type: "RESET" });
+        render();
+      });
+
+      document.querySelector("#fit-button").addEventListener("click", () => {
+        state = FluidTerritoryModel.reducer(state, { type: "FIT" });
+        render();
+      });
+
+      document.querySelectorAll("[data-guide]").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeGuide = button.dataset.guide;
+          document.querySelectorAll("[data-guide]").forEach((candidate) => {
+            candidate.setAttribute("aria-selected", String(candidate === button));
+          });
+          updateGuide();
+        });
+      });
+
+      function updateGuide() {
+        guideCopy.textContent = guides[activeGuide].copy;
+        playGuideButton.textContent = guides[activeGuide].label;
+      }
+
+      function animate(duration, update, complete) {
+        const token = ++animationToken;
+        const started = performance.now();
+        function tick(now) {
+          if (token !== animationToken) return;
+          const raw = clamp((now - started) / duration, 0, 1);
+          const eased = 1 - Math.pow(1 - raw, 3);
+          update(eased);
+          render();
+          if (raw < 1) requestAnimationFrame(tick);
+          else complete?.();
+        }
+        requestAnimationFrame(tick);
+      }
+
+      function playGuide() {
+        const selectedMode = state.mode;
+        state = FluidTerritoryModel.initialState();
+        state = { ...state, mode: selectedMode };
+        render();
+        if (activeGuide === "move") {
+          const start = { ...state.project };
+          animate(850, (t) => {
+            const nextX = start.x + 95 * t;
+            const nextY = start.y + 42 * t;
+            const dx = nextX - state.project.x;
+            const dy = nextY - state.project.y;
+            state = FluidTerritoryModel.reducer(state, { type: "MOVE_PROJECT", dx, dy });
+          });
+          return;
+        }
+
+        const id = activeGuide === "out" ? "notes" : "research";
+        const entry = state.items.find((candidate) => candidate.id === id);
+        const origin = { x: entry.x, y: entry.y };
+        const target =
+          activeGuide === "out"
+            ? { x: state.project.x + state.project.w + 58, y: state.project.y + state.project.h - entry.h + 18 }
+            : { x: state.project.x + state.project.w - entry.w - 88, y: state.project.y + state.project.h - entry.h - 74 };
+        drag = { kind: "item", id, pointerId: -1, origin, offsetX: 0, offsetY: 0 };
+        animate(
+          980,
+          (t) => {
+            state = FluidTerritoryModel.reducer(state, {
+              type: "MOVE_ITEM",
+              id,
+              x: origin.x + (target.x - origin.x) * t,
+              y: origin.y + (target.y - origin.y) * t,
+            });
+          },
+          () => {
+            state = FluidTerritoryModel.reducer(state, { type: "DROP_ITEM", id, origin });
+            drag = null;
+            render();
+          },
+        );
+      }
+
+      playGuideButton.addEventListener("click", playGuide);
+      window.addEventListener("resize", render);
+      updateGuide();
+      render();
+    </script>
+  </body>
+</html>

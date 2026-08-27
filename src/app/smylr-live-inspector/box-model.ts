@@ -235,15 +235,17 @@ export function getGapMeasurements(
     .map((child) => ({
       height: child.rect.height,
       width: child.rect.width,
-      x: child.rect.x,
-      y: child.rect.y
+      x: child.rect.x - node.rect.x,
+      y: child.rect.y - node.rect.y
     }))
   const measurements = new Map<string, GapMeasurement>()
 
   for (let index = 0; index < children.length; index += 1) {
-    const first = children[index] as SmylrLiveContainerRect
+    const first = children.at(index)
+    if (!first) continue
     for (let siblingIndex = index + 1; siblingIndex < children.length; siblingIndex += 1) {
-      const second = children[siblingIndex] as SmylrLiveContainerRect
+      const second = children.at(siblingIndex)
+      if (!second) continue
       if (horizontalGap) {
         addMeasurement(measurements, horizontalGapMeasurement(first, second, horizontalGap))
       }

@@ -62,7 +62,7 @@ function nearestNodeInDirection(
       first.name.localeCompare(second.name) ||
       first.id.localeCompare(second.id)
   )
-  const target = directional[0]
+  const target = directional.at(0)
   return target ? (editor.graph.getNode(target.id) ?? null) : null
 }
 

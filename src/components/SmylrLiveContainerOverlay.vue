@@ -291,6 +291,9 @@ function onPointerMove(event: PointerEvent) {
 
   if (update.kind === 'move') previewPosition.value = update.position
   if (update.kind === 'resize') previewSize.value = update.size
+  let actionLabel = 'Rotate'
+  if (update.kind === 'move') actionLabel = 'Move'
+  else if (update.kind === 'resize') actionLabel = 'Resize'
   previewLiveInspectorDraft(
     {
       add: liveInspectorPatchDraft.value?.add ?? [],
@@ -301,7 +304,7 @@ function onPointerMove(event: PointerEvent) {
     },
     {
       coalesceKey: `${node.id}:${update.kind}`,
-      label: `${update.kind === 'move' ? 'Move' : update.kind === 'resize' ? 'Resize' : 'Rotate'} ${node.label}`
+      label: `${actionLabel} ${node.label}`
     }
   )
 }

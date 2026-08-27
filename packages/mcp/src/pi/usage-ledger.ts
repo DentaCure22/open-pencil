@@ -93,13 +93,11 @@ const MAX_SERIES_POINTS = 80
 
 function downsampleTurns(turns: UsageTurnRecord[]): UsageTurnRecord[] {
   if (turns.length <= MAX_SERIES_POINTS) return turns
-  const fallback = turns.at(-1)
-  if (!fallback) return turns
   const step = (turns.length - 1) / (MAX_SERIES_POINTS - 1)
-  return Array.from({ length: MAX_SERIES_POINTS }, (_, index) => {
-    const turn = turns[Math.round(index * step)]
-    return turn ?? fallback
-  })
+  return Array.from(
+    { length: MAX_SERIES_POINTS },
+    (_, index) => turns[Math.round(index * step)]
+  )
 }
 
 function seriesFromTurns(turns: UsageTurnRecord[]): UsageRollupPoint[] {

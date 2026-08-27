@@ -38,6 +38,12 @@ export type AgentPromptAnnotation = {
   startOffset: number
 }
 
+export type AgentPromptReply = {
+  messageId: string
+  role: 'assistant' | 'user'
+  text: string
+}
+
 const REASONING_EFFORTS = new Set<AgentReasoningEffort>([
   'low',
   'medium',
@@ -274,6 +280,7 @@ function sanitizeConversationModels(models: readonly AgentModelDefinition[]) {
 export type AgentPromptSubmission = AgentModelSelection & {
   annotations: AgentPromptAnnotation[]
   attachments: File[]
+  replyTo?: AgentPromptReply
 }
 
 export function effortLabel(effort: AgentReasoningEffort) {

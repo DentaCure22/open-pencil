@@ -1,11 +1,14 @@
 import { useLocalStorage } from '@vueuse/core'
 import { ref } from 'vue'
 
+import { expandAgentWorkMapProjectDirectory } from './work-map-persistence'
+
 export const agentChatsPanelOpenEpoch = ref(0)
 export const agentChatsPanelView = useLocalStorage<'conversation' | 'list'>(
   'open-pencil:agent-chats-panel-view-v1',
   'list'
 )
+if ((agentChatsPanelView.value as string) === 'plan') agentChatsPanelView.value = 'list'
 export const agentChatsPanelSelectedId = useLocalStorage<string | null>(
   'open-pencil:agent-chats-panel-selected-v1',
   null
@@ -13,9 +16,23 @@ export const agentChatsPanelSelectedId = useLocalStorage<string | null>(
 export const agentChatsPanelCreating = ref(false)
 export const agentChatsPanelPendingThreadId = ref<string | null>(null)
 export const agentChatsPanelDraftId = ref<string | null>(null)
+export const agentChatsPanelRevealProjectId = ref<string | null>(null)
+export const agentChatsPanelRevealProjectEpoch = ref(0)
+
+export function activeAgentChatsPanelSelectedId(): string | null {
+  return agentChatsPanelCreating.value ? null : agentChatsPanelSelectedId.value
+}
 
 export function showAgentChatsPanel() {
   agentChatsPanelOpenEpoch.value += 1
+}
+
+export function showAgentWorkMapProjectDirectory(projectId: string) {
+  expandAgentWorkMapProjectDirectory(projectId)
+  agentChatsPanelView.value = 'list'
+  agentChatsPanelRevealProjectId.value = projectId
+  agentChatsPanelRevealProjectEpoch.value += 1
+  showAgentChatsPanel()
 }
 
 export function isAgentChatsNewTaskDraftId(id: string | null | undefined): boolean {

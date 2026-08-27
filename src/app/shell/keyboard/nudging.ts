@@ -52,8 +52,8 @@ function restoreTextControlSpace(snapshot: TextControlSpaceSnapshot | null): voi
     snapshot.target instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype
-  const valueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set
-  if (valueSetter) valueSetter.call(snapshot.target, snapshot.value)
+  const valueDescriptor = Object.getOwnPropertyDescriptor(prototype, 'value')
+  if (valueDescriptor?.set) valueDescriptor.set.call(snapshot.target, snapshot.value)
   else snapshot.target.value = snapshot.value
   snapshot.target.dispatchEvent(new Event('input', { bubbles: true }))
   snapshot.target.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)

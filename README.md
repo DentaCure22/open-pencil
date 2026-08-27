@@ -26,12 +26,12 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 - **Trace context that reads like a file** — keep Ink and Focus active across gestures, persist Board, Inspect Chrome, and voice episodes as rotated append-only JSONL, and give each session an editable short tag that agents can resolve exactly from any chat. Only the latest exact Board targets, region, speech, expiry, and PNG path are published to a bounded `trace-context.json` for routine agent follow-ups
 - **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
 - **Board-native agent chats** — place worker conversations as persistent, transformable cards that move and zoom with the Board. Sidebar and Board chats share streaming Markdown, safe tool/activity timelines, code, attachments, sources, errors, and prompt controls adapted from AI Elements Vue
-- **Agent Work Map** — organize live chats and linked todos into projects and one-level subprojects. Board workers place their own chats from current Board context, manual placement wins, and linked work moves cleanly from Todo through In motion to Finished
+- **Agent Work Map** — organize live chats and linked todos into projects and one-level subprojects. Board workers place their own chats from current Board context, manual placement wins, and active work moves from Todo to In motion until the user archives the settled conversation out of the directory
 - **Spatial workspace** — compose native objects, Code Objects, workflows, documents, media, and evidence directly across persistent Boards without parallel projection systems
 - **Flexible Pages and Boards** — group unlimited canvas Boards inside nested Pages, search and rename them inline, and reorganize the workspace with drag and drop
 - **Mermaid diagrams** — paste source to place Mermaid 11.16 diagrams as one theme-aware SVG-backed Board frame; move or resize the frame normally, then update its retained source to redraw it in place without generated child layers
 - **Workflow boards** — map product areas, journeys, tasks, screen states, recovery paths, and technical systems on ordinary Boards; Mermaid supplies compact diagram-as-code visuals, while app-like experiences use Code Objects
-- **Board Experiences** — optionally coordinate many ordinary objects without creating a new Board type or embedded app; one page-owned runtime can create and connect native objects or Code Object components while identity, selection, transforms, persistence, permissions, and Undo remain under OpenPencil authority
+- **Board Experiences** — optionally coordinate many ordinary objects without creating a new Board type or embedded app; one page-owned runtime can create and connect native objects or Code Objects while identity, selection, transforms, persistence, permissions, and Undo remain under OpenPencil authority
 - **Code Objects** — author trusted TypeScript/TSX through ReactDOM, or host a first-party full
   program such as Smylr through the trusted-web-app iframe renderer, inside the same ordinary
   persisted `FRAME`; select, resize with shared Desktop/Laptop/iPad/Phone controls,
@@ -41,7 +41,7 @@ Or download from the [releases page](https://github.com/open-pencil/open-pencil/
 - **Media and evidence** — basic text, shapes, vectors, frames, images, audio, video, and connectors remain ordinary native board content; PDFs use the Code Object lifecycle with retained bytes, persistent page state, and page extraction
 - **Intent-to-experience tools** — let people or agents preflight an exact blueprint, then turn captured intent into bounded briefs, maps, presentations, comparisons, decisions, or user-authored formula models with inspectable evidence, proposal provenance, capability limits, undo, and durable decision receipts
 - **Lint, convert, and extract tokens** — inspect documents, lint naming/layout/accessibility, convert between supported formats, analyze colors/typography/spacing/clusters, and extract design tokens
-- **Components, variants, and libraries** — create reusable components, group variants into component sets, insert assets as instances, and publish or review portable component libraries with DTCG design tokens
+- **Code Object modalities** — organize authored objects as custom surfaces, documents, data interfaces, Board tools, and visual experiences; design systems will join this model as a Code Object modality rather than a second native object hierarchy
 - **Design-to-code export** — export selections as JSX/Tailwind, generate token outputs, and map designs into component-oriented code workflows
 - **Vue SDK for custom editors** — headless components and composables for embedding OpenPencil into other apps or building workflow-specific editing surfaces. [Read the SDK docs →](https://openpencil.dev/programmable/sdk/)
 - **One persistent workspace** — Keep every Project and Board inside one durable OpenPencil document; active local editors share smooth in-progress movement while final released transforms and connectors remain durable, undoable Board state, and optional Cloud collaboration plus agent automation resolve the same stable workspace identity
@@ -123,8 +123,16 @@ OpenPencil keeps the selected frame plus recent comparison frames resident, whil
 owns each frame's session-local last view. Runtime routes and scroll positions never become Board
 JSON or Undo entries. External or untrusted websites use a sandboxed embed.
 
+Code Objects follow the current system appearance by default and may opt into Light or Dark. The
+runtime exposes the resolved theme and a semantic token set to authored TSX, mirrors those values as
+`--code-*` CSS variables, and preserves per-theme token overrides with the object.
+
 Plain generated raster images stay native Board media. Board workers can import a completed local
 PNG, JPEG, WebP, or GIF path directly instead of embedding base64 in an authored Code Object.
+
+Static topology stays a first-class Mermaid diagram rather than a Code Object. Board workers use
+typed `create_mermaid` and `update_mermaid` operations so validation, retained source, SVG
+rendering, identity, and atomic persistence stay under OpenPencil authority.
 
 The same plan can place a `canonical_object` artifact from an exact `source_object_id`, or run
 `canonical_object.fork` before a Board-specific semantic edit. This is the sole reuse and divergence
@@ -251,7 +259,7 @@ user asks to reveal the saved result in a connected editor.
 
 ### Built-in chat
 
-Press <kbd>⌘</kbd><kbd>J</kbd> to open the AI assistant. It has 100+ tools that can create shapes, set fills and strokes, manage auto-layout, work with components and variables, run boolean operations, analyze design tokens, and export assets. Bring your own API key for OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints. No backend, no account.
+Press <kbd>⌘</kbd><kbd>J</kbd> to open the AI assistant. It can create shapes, set fills and strokes, manage auto-layout and variables, operate Code Objects, run boolean operations, analyze design tokens, and export assets. Bring your own API key for OpenRouter, Anthropic, OpenAI, Google AI, Z.ai, MiniMax, or compatible endpoints. No backend, no account.
 
 ### Coding agents (desktop)
 

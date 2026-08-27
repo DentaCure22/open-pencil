@@ -47,7 +47,7 @@ describe('Smylr live-inspector draft history', () => {
     let clock = 1_000
     const history = createLiveInspectorDraftHistory({
       now: () => clock,
-      onReplay: () => {},
+      onReplay: () => undefined,
       selectedNodeId: () => 'patient'
     })
 
@@ -80,7 +80,7 @@ describe('Smylr live-inspector draft history', () => {
 
   test('replacing restored state does not create history and reset clears route-local stacks', () => {
     const history = createLiveInspectorDraftHistory({
-      onReplay: () => {},
+      onReplay: () => undefined,
       selectedNodeId: () => null
     })
     history.replace(new Map([['patient', draft('patient', 'red')]]))

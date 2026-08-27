@@ -6,13 +6,14 @@ import path from 'node:path'
 import { Hono } from 'hono'
 
 import { AgentAttachmentStore } from '#mcp/agent-attachments/store'
+import { botCharterPath } from '#mcp/agent-router/bot-charter'
 import type {
   AgentConversationRouter,
   AgentConversationThread,
   AgentDispatchRequest
 } from '#mcp/agent-router/contracts'
 import { registerAgentRoutes } from '#mcp/agent-router/routes'
-import { WorkMapStore } from '#mcp/agent-router/work-map'
+import { WorkMapStore, type WorkMapInboxItem } from '#mcp/agent-router/work-map'
 import { localWorkspaceTraceEvidencePath } from '#mcp/local-workspace-authority/agent-context'
 import type { LocalWorkspaceTraceEvidencePinResult } from '#mcp/local-workspace-authority/trace-file-store'
 
@@ -34,6 +35,7 @@ function agentRouter(overrides: Partial<AgentConversationRouter> = {}): AgentCon
     createTodoDraft: () => {
       throw new Error('Unexpected Todo draft creation')
     },
+    updateTodoDraft: () => null,
     delete: () => true,
     dispatch: async () => receipt,
     ensureTitle: () => false,
@@ -82,6 +84,14 @@ function appWithRoutes(
   options: {
     attachmentStore?: AgentAttachmentStore
     authorityRoot?: string
+    boardSpace?: {
+      assertBoardSpaceParent(input: {
+        frameId: string
+        pageId: string
+        parentFrameId: string | null
+      }): Promise<void>
+    }
+    routineScheduler?: { runNow(routineId: string): WorkMapInboxItem }
     workMap?: WorkMapStore
   } = {}
 ): Hono {
@@ -89,8 +99,10 @@ function appWithRoutes(
   registerAgentRoutes(app, {
     ...(options.attachmentStore ? { attachmentStore: options.attachmentStore } : {}),
     authorityRoot: options.authorityRoot ?? '/tmp/openpencil-trace-retention-test',
+    ...(options.boardSpace ? { boardSpace: options.boardSpace } : {}),
     getAuthToken: () => AUTH_TOKEN,
     router,
+    ...(options.routineScheduler ? { routineScheduler: options.routineScheduler } : {}),
     traceEvidence,
     ...(options.workMap ? { workMap: options.workMap } : {})
   })
@@ -98,14 +110,190 @@ function appWithRoutes(
 }
 
 describe('agent Trace evidence retention', () => {
+  test('lets an explicitly asked agent promote its active chat to a scheduled Bot', async () => {
+    const thread: AgentConversationThread = {
+      canFollowUp: true,
+      createdAt: '2026-08-26T12:00:00.000Z',
+      effort: 'high',
+      id: 'thread:bot',
+      messages: [],
+      model: 'xai-auth/grok-4.6',
+      recentUpdate: 'Ready.',
+      sessionId: 'session:bot',
+      state: 'completed',
+      task: 'Review the Dental Chart every morning',
+      updatedAt: '2026-08-26T12:00:00.000Z',
+      workerId: 'worker:bot'
+    }
+    const app = appWithRoutes(
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null)
+      }),
+      new TraceEvidencePins(),
+      { workMap: new WorkMapStore() }
+    )
+
+    const response = await app.request('/agent-router/v1/pi/work-map/agent', {
+      body: JSON.stringify({
+        currentThreadId: thread.id,
+        expectedRevision: 0,
+        operations: [
+          {
+            bot_id: 'bot:dental-review',
+            op: 'create_bot',
+            project_id: null,
+            thread_id: thread.id
+          },
+          {
+            bot_id: 'bot:dental-review',
+            every_minutes: 1_440,
+            next_run_at: '2026-08-27T12:00:00.000Z',
+            op: 'create_routine',
+            prompt: 'Review the Dental Chart',
+            routine_id: 'routine:dental-review'
+          }
+        ]
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      bots: [{ id: 'bot:dental-review', threadId: thread.id }],
+      receipt: { previousRevision: 0, revision: 1 },
+      routines: [{ botId: 'bot:dental-review', id: 'routine:dental-review' }]
+    })
+  })
+
+  test('starts a Bot routine and returns its running Inbox receipt', async () => {
+    const workMap = new WorkMapStore()
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [
+        {
+          name: 'Daily review',
+          op: 'create_project',
+          project_id: 'project:daily'
+        },
+        {
+          bot_id: 'bot:daily',
+          op: 'create_bot',
+          project_id: 'project:daily',
+          thread_id: 'thread:daily'
+        },
+        {
+          bot_id: 'bot:daily',
+          next_run_at: '2026-08-27T12:00:00.000Z',
+          op: 'create_routine',
+          prompt: 'Review open work',
+          routine_id: 'routine:daily'
+        }
+      ]
+    })
+    const app = appWithRoutes(agentRouter(), new TraceEvidencePins(), {
+      routineScheduler: {
+        runNow: (routineId) => workMap.beginRoutineRun(routineId, { force: true })
+      },
+      workMap
+    })
+
+    const response = await app.request(
+      '/agent-router/v1/pi/work-map/routines/routine%3Adaily/run',
+      { headers: AUTHORIZATION, method: 'POST' }
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toMatchObject({
+      inboxItem: {
+        routineId: 'routine:daily',
+        status: 'running',
+        threadId: 'thread:daily'
+      },
+      revision: 2
+    })
+  })
+
+  test('updates an existing Bot routine through the user Work Map route', async () => {
+    const workMap = new WorkMapStore()
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [
+        {
+          name: 'Daily review',
+          op: 'create_project',
+          project_id: 'project:daily'
+        },
+        {
+          bot_id: 'bot:daily',
+          op: 'create_bot',
+          project_id: 'project:daily',
+          thread_id: 'thread:daily'
+        },
+        {
+          bot_id: 'bot:daily',
+          every_minutes: 1_440,
+          next_run_at: '2026-08-27T12:00:00.000Z',
+          op: 'create_routine',
+          prompt: 'Review open work',
+          routine_id: 'routine:daily'
+        }
+      ]
+    })
+    const original = workMap.snapshot().routines[0]
+    const app = appWithRoutes(agentRouter(), new TraceEvidencePins(), {
+      workMap
+    })
+
+    const response = await app.request('/agent-router/v1/pi/work-map/apply', {
+      body: JSON.stringify({
+        expectedRevision: 1,
+        operations: [
+          {
+            create_briefing_object: true,
+            op: 'update_routine',
+            routine_id: 'routine:daily'
+          }
+        ]
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      revision: 2,
+      routines: [
+        {
+          botId: original?.botId,
+          briefingObject: true,
+          createdAt: original?.createdAt,
+          everyMinutes: original?.everyMinutes,
+          id: original?.id,
+          nextRunAt: original?.nextRunAt,
+          prompt: original?.prompt
+        }
+      ]
+    })
+  })
+
   test('creates a prepared Todo chat without dispatching a worker', async () => {
     const workMap = new WorkMapStore()
     workMap.apply({
       actor: { kind: 'user' },
       expectedRevision: 0,
-      operations: [{ name: 'Dental Chart', op: 'create_project', project_id: 'project:dental' }]
+      operations: [
+        {
+          name: 'Dental Chart',
+          op: 'create_project',
+          project_id: 'project:dental'
+        }
+      ]
     })
     let draft: AgentConversationThread | null = null
+    const titleRequests: string[] = []
     const app = appWithRoutes(
       agentRouter({
         conversation: (threadId) => (draft?.id === threadId ? draft : null),
@@ -132,6 +320,17 @@ describe('agent Trace evidence retention', () => {
             workerId: 'worker:todo'
           }
           return draft
+        },
+        updateTodoDraft: (threadId, brief) => {
+          if (!draft || threadId !== draft.id || !draft.todoDraft) return null
+          draft.todoDraft.brief = brief
+          draft.task = brief.goal
+          draft.updatedAt = '2026-08-25T12:05:00.000Z'
+          return structuredClone(draft)
+        },
+        ensureTitle: (threadId) => {
+          titleRequests.push(threadId)
+          return true
         }
       }),
       new TraceEvidencePins(),
@@ -148,8 +347,7 @@ describe('agent Trace evidence retention', () => {
         expectedRevision: 1,
         model: 'xai-auth/grok-4.6',
         projectId: 'project:dental',
-        requestId: 'request:patient-history',
-        title: 'Add patient history shortcuts'
+        requestId: 'request:patient-history'
       }),
       headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
       method: 'POST'
@@ -163,10 +361,60 @@ describe('agent Trace evidence retention', () => {
     expect(payload.thread).toMatchObject({
       messages: [],
       sessionId: null,
-      title: 'Add patient history shortcuts',
+      title: '',
       todoDraft: { brief: { goal: 'Shape patient history shortcuts' } }
     })
-    expect(payload.todo).toMatchObject({ status: 'todo', threadId: payload.thread.id })
+    expect(payload.thread.todoDraft?.brief.documentHtml).toContain(
+      '<h1 data-todo-title>Shape patient history shortcuts</h1>'
+    )
+    expect(payload.thread.todoDraft?.brief).toMatchObject({
+      title: 'Shape patient history shortcuts'
+    })
+    expect(payload.thread.todoDraft?.brief.documentHtml).toContain(
+      'data-openpencil-code-object="todo-document"'
+    )
+    expect(payload.thread.todoDraft?.brief.documentHtml).toContain('container-type: inline-size')
+    expect(payload.todo).toMatchObject({
+      status: 'todo',
+      threadId: payload.thread.id,
+      title: 'Shape patient history shortcuts'
+    })
+    expect(titleRequests).toEqual([payload.thread.id])
+
+    const updateResponse = await app.request(
+      `/agent-router/v1/pi/conversations/${encodeURIComponent(payload.thread.id)}/todo-draft`,
+      {
+        body: JSON.stringify({
+          brief: {
+            context: 'Keep the chart visible while the panel is open.',
+            goal: 'Shape patient history shortcuts',
+            references: [
+              {
+                id: '/tmp/history-panel.png',
+                kind: 'image',
+                label: 'History panel'
+              }
+            ]
+          }
+        }),
+        headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+        method: 'PATCH'
+      }
+    )
+    expect(updateResponse.status).toBe(200)
+    expect(await updateResponse.json()).toMatchObject({
+      thread: {
+        messages: [],
+        sessionId: null,
+        todoDraft: {
+          brief: {
+            context: 'Keep the chart visible while the panel is open.',
+            references: [{ kind: 'image', label: 'History panel' }]
+          }
+        }
+      }
+    })
+    expect(workMap.snapshot().todos[0]).toMatchObject({ status: 'todo' })
 
     const startResponse = await app.request(
       `/agent-router/v1/pi/conversations/${encodeURIComponent(payload.thread.id)}/follow-up`,
@@ -177,7 +425,7 @@ describe('agent Trace evidence retention', () => {
       }
     )
     expect(startResponse.status).toBe(202)
-    expect(workMap.snapshot().todos[0]).toMatchObject({ status: 'in_motion' })
+    expect(workMap.snapshot().todos[0]).toMatchObject({ status: 'todo' })
   })
 
   test('persists agent self-placement and user Work Map edits through one authority', async () => {
@@ -197,7 +445,9 @@ describe('agent Trace evidence retention', () => {
       workerId: 'worker:work-map'
     }
     const app = appWithRoutes(
-      agentRouter({ conversation: (threadId) => (threadId === thread.id ? thread : null) }),
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null)
+      }),
       new TraceEvidencePins(),
       { workMap }
     )
@@ -207,8 +457,28 @@ describe('agent Trace evidence retention', () => {
         currentThreadId: thread.id,
         expectedRevision: 0,
         operations: [
-          { name: 'Treatment plan', op: 'create_project', project_id: 'project:treatment' },
-          { op: 'place_chat', project_id: 'project:treatment', thread_id: thread.id }
+          {
+            name: 'Treatment plan',
+            op: 'create_project',
+            project_id: 'project:treatment'
+          },
+          {
+            op: 'place_chat',
+            project_id: 'project:treatment',
+            thread_id: thread.id
+          },
+          {
+            op: 'create_todo',
+            project_id: 'project:treatment',
+            thread_id: thread.id,
+            title: 'Organize this chat',
+            todo_id: 'todo:work-map'
+          },
+          {
+            op: 'update_todo',
+            status: 'in_motion',
+            todo_id: 'todo:work-map'
+          }
         ]
       }),
       headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
@@ -223,7 +493,14 @@ describe('agent Trace evidence retention', () => {
     const userResponse = await app.request('/agent-router/v1/pi/work-map/apply', {
       body: JSON.stringify({
         expectedRevision: 1,
-        operations: [{ op: 'place_chat', project_id: 'project:treatment', thread_id: thread.id }]
+        operations: [
+          {
+            op: 'place_chat',
+            project_id: 'project:treatment',
+            thread_id: thread.id
+          },
+          { op: 'archive_todo', todo_id: 'todo:work-map' }
+        ]
       }),
       headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
       method: 'POST'
@@ -235,7 +512,14 @@ describe('agent Trace evidence retention', () => {
     })
     expect(await snapshotResponse.json()).toMatchObject({
       placements: [{ manual: true, projectId: 'project:treatment', threadId: thread.id }],
-      revision: 2
+      revision: 2,
+      todos: [
+        {
+          archivedAt: expect.any(String),
+          id: 'todo:work-map',
+          status: 'in_motion'
+        }
+      ]
     })
   })
 
@@ -307,7 +591,9 @@ describe('agent Trace evidence retention', () => {
       workerId: 'worker:preview'
     }
     const app = appWithRoutes(
-      agentRouter({ conversation: (threadId) => (threadId === thread.id ? thread : null) }),
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null)
+      }),
       traceEvidence
     )
 
@@ -383,7 +669,9 @@ describe('agent Trace evidence retention', () => {
         headers: AUTHORIZATION
       })
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ files: [{ path: 'src/ChatComposer.vue' }] })
+      expect(await response.json()).toEqual({
+        files: [{ path: 'src/ChatComposer.vue' }]
+      })
     } finally {
       await rm(workspaceRoot, { force: true, recursive: true })
     }
@@ -437,7 +725,9 @@ describe('agent Trace evidence retention', () => {
       workerId: 'worker:page'
     }
     const app = appWithRoutes(
-      agentRouter({ conversation: (threadId) => (threadId === thread.id ? thread : null) }),
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null)
+      }),
       traceEvidence
     )
 
@@ -474,7 +764,10 @@ describe('agent Trace evidence retention', () => {
 
   test('forks a resumable chat into a new native Pi thread', async () => {
     const traceEvidence = new TraceEvidencePins()
-    let observed: { request: AgentDispatchRequest; sourceThreadId: string } | null = null
+    let observed: {
+      request: AgentDispatchRequest
+      sourceThreadId: string
+    } | null = null
     const app = appWithRoutes(
       agentRouter({
         fork: async (sourceThreadId, request) => {
@@ -502,7 +795,10 @@ describe('agent Trace evidence retention', () => {
     })
 
     expect(response.status).toBe(202)
-    expect(await response.json()).toMatchObject({ jobId: 'job:forked', threadId: 'thread:forked' })
+    expect(await response.json()).toMatchObject({
+      jobId: 'job:forked',
+      threadId: 'thread:forked'
+    })
     expect(observed).toEqual({
       request: {
         displayPrompt: 'Try the alternate layout.',
@@ -516,7 +812,10 @@ describe('agent Trace evidence retention', () => {
   })
 
   test('forwards an explicit full history scope on fork', async () => {
-    let observed: { request: AgentDispatchRequest; sourceThreadId: string } | null = null
+    let observed: {
+      request: AgentDispatchRequest
+      sourceThreadId: string
+    } | null = null
     const app = appWithRoutes(
       agentRouter({
         fork: async (sourceThreadId, request) => {
@@ -546,6 +845,131 @@ describe('agent Trace evidence retention', () => {
       request: { historyScope: 'full', prompt: 'Keep the whole parent.' },
       sourceThreadId: 'thread:source'
     })
+  })
+
+  test('routes a directory launch into its bound Work Map project before returning', async () => {
+    const workMap = new WorkMapStore()
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [
+        {
+          name: 'Dental Chart',
+          op: 'create_project',
+          project_id: 'project:dental'
+        },
+        {
+          op: 'set_project_workspace',
+          project_id: 'project:dental',
+          workspace_root: '/tmp/smylr-elite'
+        }
+      ]
+    })
+    let observed: AgentDispatchRequest | null = null
+    const app = appWithRoutes(
+      agentRouter({
+        dispatch: async (request) => {
+          observed = request
+          return {
+            dispatchedAt: '2026-08-26T12:00:00.000Z',
+            jobId: 'job:dental',
+            state: 'running',
+            threadId: 'thread:dental'
+          }
+        }
+      }),
+      new TraceEvidencePins(),
+      { workMap }
+    )
+
+    const response = await app.request('/agent-router/v1/pi/dispatch', {
+      body: JSON.stringify({
+        prompt: 'Update the chart.',
+        workspaceRoot: '/tmp/smylr-elite/src/dental-chart'
+      }),
+      headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(202)
+    expect(observed).toMatchObject({
+      projectId: 'project:dental',
+      workspaceRoot: '/tmp/smylr-elite'
+    })
+    expect(workMap.snapshot().placements).toContainEqual(
+      expect.objectContaining({
+        manual: false,
+        projectId: 'project:dental',
+        threadId: 'thread:dental'
+      })
+    )
+  })
+
+  test('prepares a new Bot charter before dispatch and then inserts the Bot into Work Map', async () => {
+    const authorityRoot = await mkdtemp(path.join(tmpdir(), 'openpencil-new-bot-charter-'))
+    const workMap = new WorkMapStore()
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [
+        {
+          name: 'Dental Chart',
+          op: 'create_project',
+          project_id: 'project:dental'
+        }
+      ]
+    })
+    let botIdAtDispatch = ''
+    let botsAtDispatch = workMap.snapshot().bots
+    let charterAtDispatch = ''
+    const app = appWithRoutes(
+      agentRouter({
+        dispatch: async (request) => {
+          botIdAtDispatch = request.botId ?? ''
+          botsAtDispatch = workMap.snapshot().bots
+          charterAtDispatch = await readFile(botCharterPath(authorityRoot, botIdAtDispatch), 'utf8')
+          return {
+            dispatchedAt: '2026-08-26T12:00:00.000Z',
+            jobId: 'job:dental-bot',
+            state: 'running',
+            threadId: 'thread:dental-bot'
+          }
+        }
+      }),
+      new TraceEvidencePins(),
+      { authorityRoot, workMap }
+    )
+
+    try {
+      const response = await app.request('/agent-router/v1/pi/dispatch', {
+        body: JSON.stringify({
+          createBot: true,
+          projectId: 'project:dental',
+          prompt: 'Start the Dental Chart Bot.'
+        }),
+        headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+        method: 'POST'
+      })
+
+      expect(response.status).toBe(202)
+      expect(botIdAtDispatch).toMatch(/^bot:/)
+      expect(botsAtDispatch).toEqual([])
+      expect(charterAtDispatch).toContain(`Bot ${JSON.stringify(botIdAtDispatch)}`)
+      expect(charterAtDispatch).toContain('Its directory is "Dental Chart".')
+      expect(workMap.snapshot()).toMatchObject({
+        bots: [
+          {
+            id: botIdAtDispatch,
+            projectId: 'project:dental',
+            threadId: 'thread:dental-bot'
+          }
+        ],
+        placements: [{ projectId: 'project:dental', threadId: 'thread:dental-bot' }],
+        projects: [{ botId: botIdAtDispatch, id: 'project:dental' }]
+      })
+    } finally {
+      await rm(authorityRoot, { force: true, recursive: true })
+    }
   })
 
   test('keeps an annotation evidence image on the visible conversation turn', async () => {
@@ -604,7 +1028,10 @@ describe('agent Trace evidence retention', () => {
     const app = appWithRoutes(agentRouter(), traceEvidence)
 
     const dispatch = await app.request('/agent-router/v1/pi/dispatch', {
-      body: JSON.stringify({ evidenceId: 'evidence:dispatch', prompt: 'Inspect this image' }),
+      body: JSON.stringify({
+        evidenceId: 'evidence:dispatch',
+        prompt: 'Inspect this image'
+      }),
       headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
       method: 'POST'
     })
@@ -640,7 +1067,10 @@ describe('agent Trace evidence retention', () => {
     )
 
     const response = await app.request('/agent-router/v1/pi/dispatch', {
-      body: JSON.stringify({ evidenceId: 'evidence:failed', prompt: 'Inspect this image' }),
+      body: JSON.stringify({
+        evidenceId: 'evidence:failed',
+        prompt: 'Inspect this image'
+      }),
       headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
       method: 'POST'
     })
@@ -670,7 +1100,12 @@ describe('agent Trace evidence retention', () => {
       const response = await app.request('/agent-router/v1/pi/dispatch', {
         body: JSON.stringify({
           attachments: [
-            { name: 'reference.txt', path: attachmentPath, size: 9, type: 'text/plain' }
+            {
+              name: 'reference.txt',
+              path: attachmentPath,
+              size: 9,
+              type: 'text/plain'
+            }
           ],
           prompt: 'Inspect this file'
         }),
@@ -737,5 +1172,100 @@ describe('agent Trace evidence retention', () => {
       else process.env.OPENPENCIL_MODEL_METER_LOG = previous
       await rm(root, { force: true, recursive: true })
     }
+  })
+
+  test('rejects a sub-bot space that is not saved inside its parent Bot frame', async () => {
+    const workMap = new WorkMapStore()
+    const thread: AgentConversationThread = {
+      canFollowUp: true,
+      createdAt: '2026-08-26T12:00:00.000Z',
+      effort: 'high',
+      id: 'thread:history',
+      messages: [],
+      model: 'xai-auth/grok-4.6',
+      recentUpdate: 'Working.',
+      sessionId: 'session:history',
+      state: 'running',
+      task: 'Build patient history',
+      updatedAt: '2026-08-26T12:00:00.000Z',
+      workerId: 'worker:history'
+    }
+    workMap.apply({
+      actor: { kind: 'user' },
+      expectedRevision: 0,
+      operations: [
+        { name: 'Dental Chart', op: 'create_project', project_id: 'project:dental' },
+        {
+          name: 'Patient history',
+          op: 'create_project',
+          parent_id: 'project:dental',
+          project_id: 'project:history'
+        },
+        {
+          frame_id: 'frame:dental-space',
+          op: 'set_project_space',
+          page_id: 'page:dental',
+          project_id: 'project:dental'
+        },
+        { op: 'place_chat', project_id: 'project:history', thread_id: thread.id }
+      ]
+    })
+    const checks: Array<{ frameId: string; pageId: string; parentFrameId: string | null }> = []
+    const app = appWithRoutes(
+      agentRouter({
+        conversation: (threadId) => (threadId === thread.id ? thread : null)
+      }),
+      new TraceEvidencePins(),
+      {
+        boardSpace: {
+          async assertBoardSpaceParent(input) {
+            checks.push(input)
+            if (input.frameId === 'frame:history-at-page-root') {
+              throw new TypeError(
+                'Sub-bot Board frame "frame:history-at-page-root" must be a direct child of parent Bot frame "frame:dental-space".'
+              )
+            }
+          }
+        },
+        workMap
+      }
+    )
+
+    const request = (frameId: string) =>
+      app.request('/agent-router/v1/pi/work-map/agent', {
+        body: JSON.stringify({
+          currentThreadId: thread.id,
+          expectedRevision: 1,
+          operations: [
+            {
+              frame_id: frameId,
+              op: 'set_project_space',
+              page_id: 'page:dental',
+              project_id: 'project:history'
+            }
+          ]
+        }),
+        headers: { ...AUTHORIZATION, 'Content-Type': 'application/json' },
+        method: 'POST'
+      })
+
+    const rejected = await request('frame:history-at-page-root')
+    expect(rejected.status).toBe(422)
+    expect(await rejected.json()).toMatchObject({
+      error: expect.stringContaining('must be a direct child of parent Bot frame')
+    })
+    expect(workMap.snapshot().revision).toBe(1)
+    expect(checks[0]).toEqual({
+      frameId: 'frame:history-at-page-root',
+      pageId: 'page:dental',
+      parentFrameId: 'frame:dental-space'
+    })
+
+    const accepted = await request('frame:history-space')
+    expect(accepted.status).toBe(200)
+    expect(workMap.snapshot().projects[1]).toMatchObject({
+      spaceFrameId: 'frame:history-space',
+      spacePageId: 'page:dental'
+    })
   })
 })

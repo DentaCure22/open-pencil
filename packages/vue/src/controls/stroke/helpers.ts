@@ -97,7 +97,7 @@ export function createStrokeSideActions(editor: Editor, sideMenuOpen: Ref<boolea
           borderRightWeight: 0,
           borderBottomWeight: 0,
           borderLeftWeight: 0
-        } as Partial<SceneNode>,
+        },
         'Stroke all sides'
       )
     } else if (side === 'CUSTOM') {
@@ -117,7 +117,7 @@ export function createStrokeSideActions(editor: Editor, sideMenuOpen: Ref<boolea
           borderRightWeight: w.right,
           borderBottomWeight: w.bottom,
           borderLeftWeight: w.left
-        } as Partial<SceneNode>,
+        },
         'Custom stroke sides'
       )
     } else {
@@ -129,7 +129,7 @@ export function createStrokeSideActions(editor: Editor, sideMenuOpen: Ref<boolea
           borderRightWeight: side === 'RIGHT' ? weight : 0,
           borderBottomWeight: side === 'BOTTOM' ? weight : 0,
           borderLeftWeight: side === 'LEFT' ? weight : 0
-        } as Partial<SceneNode>,
+        },
         `Stroke ${side.toLowerCase()} only`
       )
     }
@@ -143,11 +143,7 @@ export function createStrokeSideActions(editor: Editor, sideMenuOpen: Ref<boolea
   ) {
     if (!activeNode) return
     const key = `border${side[0].toUpperCase()}${side.slice(1)}Weight` as keyof SceneNode
-    editor.updateNodeWithUndo(
-      activeNode.id,
-      { [key]: value } as Partial<SceneNode>,
-      'Change stroke weight'
-    )
+    editor.updateNodeWithUndo(activeNode.id, { [key]: value }, 'Change stroke weight')
   }
 
   return { selectSide, updateBorderWeight }

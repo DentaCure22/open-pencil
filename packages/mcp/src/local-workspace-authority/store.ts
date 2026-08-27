@@ -579,6 +579,43 @@ export class LocalWorkspaceAuthorityStore {
     return jsonFileMarker(this.documentPath)
   }
 
+  async assertBoardSpaceParent(input: {
+    frameId: string
+    pageId: string
+    parentFrameId: string | null
+  }): Promise<void> {
+    const metadata = await this.ensureMetadata()
+    const state = await this.readState(metadata)
+    if (!state) {
+      throw new LocalWorkspaceAuthorityStoreError(
+        'invalid_document',
+        'Local workspace authority has no saved Board document'
+      )
+    }
+    const document = readAuthorityBoardDocument(state.document)
+    const page = document.graph.getNode(input.pageId)
+    if (!page) throw new TypeError(`Board page "${input.pageId}" does not exist.`)
+    const frame = document.graph.getNode(input.frameId)
+    if (!frame || frame.type !== 'FRAME') {
+      throw new TypeError(`Board space frame "${input.frameId}" does not exist.`)
+    }
+    const expectedParentId = input.parentFrameId ?? input.pageId
+    if (input.parentFrameId) {
+      const parent = document.graph.getNode(input.parentFrameId)
+      if (!parent || parent.type !== 'FRAME') {
+        throw new TypeError(`Parent Bot frame "${input.parentFrameId}" does not exist.`)
+      }
+    }
+    if (frame.parentId !== expectedParentId) {
+      const expected = input.parentFrameId
+        ? `parent Bot frame "${input.parentFrameId}"`
+        : `Board page "${input.pageId}"`
+      throw new TypeError(
+        `Board space frame "${input.frameId}" must be a direct child of ${expected}.`
+      )
+    }
+  }
+
   queueNavigationIntent(
     request: QueueLocalWorkspaceNavigationRequest
   ): Promise<LocalWorkspaceNavigationIntent> {
@@ -985,8 +1022,8 @@ export class LocalWorkspaceAuthorityStore {
       const snapshot = await this.readTraceSnapshot(false)
       return [...snapshot.summaries.values()]
         .sort((first, second) => {
-          const firstUpdated = jsonRecord(first)?.updatedAt
-          const secondUpdated = jsonRecord(second)?.updatedAt
+          const firstUpdated = first.updatedAt
+          const secondUpdated = second.updatedAt
           const firstTime = Date.parse(
             typeof firstUpdated === 'string' ? firstUpdated : first.startedAt
           )
@@ -1993,6 +2030,7 @@ export class LocalWorkspaceAuthorityStore {
         if (rootDeferredWriteTails.get(writeLockKey)?.tail === tail) {
           rootDeferredWriteTails.delete(writeLockKey)
         }
+        return undefined
       },
       () => undefined
     )

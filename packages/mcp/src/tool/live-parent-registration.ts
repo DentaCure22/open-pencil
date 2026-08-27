@@ -9,6 +9,16 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 import { fail, ok } from '#mcp/result'
 import { authorityJson } from '#mcp/tool/authority-client'
 
+import {
+  boardApplySchema,
+  boardQuerySchema,
+  traceQuerySchema,
+  type BoardApplyArgs,
+  type BoardIndexArgs,
+  type BoardQueryArgs,
+  type TraceQueryArgs
+} from './live-parent-schemas'
+
 type RegionArgs = Rect
 const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024
 type AuthorityClient = typeof authorityJson
@@ -31,190 +41,11 @@ export const PARENT_LIVE_TOOL_NAMES = [
 ] as const
 type LiveToolName = (typeof ALL_LIVE_TOOL_NAMES)[number]
 
-const boardQueryFilterSchema = z.object({
-  name: z.string().trim().min(1).max(240).optional(),
-  parent_id: z.string().trim().min(1).max(240).optional(),
-  region: z
-    .object({
-      height: z.number().positive(),
-      width: z.number().positive(),
-      x: z.number(),
-      y: z.number()
-    })
-    .optional(),
-  text: z.string().trim().min(1).max(240).optional(),
-  types: z.array(z.string().trim().min(1)).min(1).max(16).optional()
-})
-
-const boardQuerySchema = z
-  .object({
-    detail: z
-      .enum(['summary', 'full', 'code_object', 'geometry', 'id_only'])
-      .describe(
-        'Response shape. summary is the compact default; full and code_object require object_ids; geometry and id_only apply to discovery.'
-      )
-      .optional(),
-    limit: z.number().int().min(1).max(100).optional(),
-    object_ids: z
-      .array(z.string().trim().min(1))
-      .min(1)
-      .max(25)
-      .describe('Optional exact Board object IDs to read together')
-      .optional(),
-    page_id: z.string().trim().min(1).describe('Exact Board page ID'),
-    query: boardQueryFilterSchema.describe('Optional bounded current-page discovery').optional(),
-    sort: z.enum(['document', 'name', 'x', 'y']).optional(),
-    token_budget: z.number().int().min(256).max(6000).optional()
-  })
-  .strict()
-
-const traceQuerySchema = z
-  .object({
-    latest_spoken_turn: z.boolean().optional(),
-    limit: z.number().int().min(1).max(5).optional(),
-    query: z.string().trim().min(1).max(500).optional(),
-    session_tag: z.string().trim().min(1).max(80).optional(),
-    since: z.string().trim().min(1).max(80).optional(),
-    spoken_text: z.string().trim().min(1).max(500).optional(),
-    spoken_turn_id: z.string().trim().min(1).max(240).optional(),
-    task_cursor: z.string().trim().min(1).max(4_000).optional(),
-    turn_context: z.boolean().optional(),
-    until: z.string().trim().min(1).max(80).optional()
-  })
-  .strict()
-
-const codeObjectBoundsSchema = z
-  .object({
-    height: z.number().positive(),
-    width: z.number().positive(),
-    x: z.number(),
-    y: z.number()
-  })
-  .describe('Page-space bounds by default for typed creates; parent-local for typed updates')
-  .strict()
-
-const typedCreateCoordinateSpaceSchema = z
-  .enum(['page', 'parent'])
-  .describe(
-    'Coordinate space for bounds. Defaults to page; use parent only when bounds are already parent-local.'
-  )
-
-const codeObjectSurfaceSchema = z
-  .object({
-    background: z.enum(['surface', 'transparent']),
-    overflow: z.enum(['clip', 'scroll'])
-  })
-  .strict()
-
-const boardApplyOperationSchema = z.discriminatedUnion('op', [
-  z
-    .object({
-      bounds: codeObjectBoundsSchema,
-      coordinate_space: typedCreateCoordinateSpaceSchema.optional(),
-      image_scale_mode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
-      index: z.number().int().min(0).optional(),
-      name: z.string().trim().min(1).max(240),
-      object_id: z.string().trim().min(1),
-      op: z
-        .literal('create_image')
-        .describe('Import one completed local raster image as a native Board image'),
-      parent_id: z.string().trim().min(1),
-      source_path: z.string().trim().min(1).max(4_096)
-    })
-    .strict(),
-  z
-    .object({
-      board_permissions: z.array(z.unknown()).max(64).optional(),
-      bounds: codeObjectBoundsSchema,
-      coordinate_space: typedCreateCoordinateSpaceSchema.optional(),
-      definition_id: z.string().trim().min(1).max(240).optional(),
-      index: z.number().int().min(0).optional(),
-      name: z.string().trim().min(1).max(240),
-      object_id: z.string().trim().min(1),
-      op: z
-        .literal('create_code_object')
-        .describe('Operation inside board_apply.operations; not a standalone tool'),
-      parent_id: z.string().trim().min(1),
-      props: z.record(z.string(), z.unknown()).optional(),
-      source: z.string().min(1).max(100_000),
-      state: z.record(z.string(), z.unknown()).optional(),
-      surface: codeObjectSurfaceSchema.optional()
-    })
-    .strict(),
-  z
-    .object({
-      board_permissions: z.array(z.unknown()).max(64).optional(),
-      bounds: codeObjectBoundsSchema.partial().optional(),
-      name: z.string().trim().min(1).max(240).optional(),
-      object_id: z.string().trim().min(1),
-      op: z
-        .literal('update_code_object')
-        .describe('Operation inside board_apply.operations; not a standalone tool'),
-      props: z.record(z.string(), z.unknown()).optional(),
-      source: z.string().min(1).max(100_000).optional(),
-      state: z.record(z.string(), z.unknown()).optional(),
-      surface: codeObjectSurfaceSchema.optional()
-    })
-    .strict(),
-  z
-    .object({
-      index: z.number().int().min(0).optional(),
-      node: z.record(z.string(), z.unknown()),
-      op: z.literal('create'),
-      parent_id: z.string().trim().min(1)
-    })
-    .strict(),
-  z
-    .object({
-      changes: z.record(z.string(), z.unknown()),
-      object_id: z.string().trim().min(1),
-      op: z.literal('update'),
-      unset: z.array(z.string().trim().min(1)).max(64).optional()
-    })
-    .strict(),
-  z
-    .object({
-      index: z.number().int().min(0).optional(),
-      object_id: z.string().trim().min(1),
-      op: z.literal('reparent'),
-      parent_id: z.string().trim().min(1)
-    })
-    .strict(),
-  z
-    .object({
-      object_id: z.string().trim().min(1),
-      op: z.literal('delete'),
-      recursive: z.boolean().optional()
-    })
-    .strict()
-])
-
-const boardApplySchema = z
-  .object({
-    operations: z.array(boardApplyOperationSchema).min(1).max(100),
-    page_id: z.string().trim().min(1).describe('Exact Board page ID'),
-    request_id: z
-      .string()
-      .trim()
-      .min(1)
-      .max(240)
-      .describe('Optional stable idempotency key for an intentional retry')
-      .optional()
-  })
-  .strict()
-
-type BoardQueryArgs = z.infer<typeof boardQuerySchema>
-type BoardIndexArgs = Omit<BoardQueryArgs, 'detail' | 'object_ids'> & {
-  projection?: 'geometry' | 'id_only' | 'summary'
-}
 type BoardReadArgs = {
-  detail?: 'code_object' | 'full' | 'summary'
+  detail?: 'code_object' | 'full' | 'mermaid' | 'summary'
   object_ids: string[]
   page_id: string
 }
-type BoardApplyArgs = z.infer<typeof boardApplySchema>
-type TraceQueryArgs = z.infer<typeof traceQuerySchema>
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
@@ -313,8 +144,8 @@ async function contextBoundBoardQuery(authority: AuthorityClient, args: BoardQue
       page_id: args.page_id
     })
   }
-  if (args.detail === 'full' || args.detail === 'code_object') {
-    throw new Error('board_query full and code_object detail require object_ids.')
+  if (args.detail === 'full' || args.detail === 'code_object' || args.detail === 'mermaid') {
+    throw new Error('board_query full, code_object, and mermaid detail require object_ids.')
   }
   return contextBoundBoardIndex(authority, {
     limit: args.limit,
@@ -472,7 +303,7 @@ export function registerLiveParentTools(
     'board_query',
     {
       description:
-        'Discover and read saved content on one exact Board page. With only page_id, return the compact top-level map. Add query to filter by name, text, type, parent, or region. Add 1-25 object_ids to read exact objects together. detail defaults to summary; request full or code_object only for exact IDs that need those fields. Read-only.',
+        'Discover and read saved content on one exact Board page. With only page_id, return the compact top-level map. Add query to filter by name, text, type, parent, or region. Add 1-25 object_ids to read exact objects together. detail defaults to summary; request full, code_object, or mermaid only for exact IDs that need those fields. Read-only.',
       inputSchema: boardQuerySchema
     },
     async (args: BoardQueryArgs) => {
@@ -522,7 +353,7 @@ export function registerLiveParentTools(
     'board_apply',
     {
       description:
-        'Apply 1-100 ordered operations to one exact Board page in a single guarded atomic save. create_image imports a completed local PNG, JPEG, WebP, or GIF directly as source-backed native Board media; never base64-encode it or wrap it in a Code Object. Bounds for create_image and create_code_object default to page coordinates and are converted when parent_id is nested; pass coordinate_space: "parent" only for already parent-local bounds. create_code_object and update_code_object are op values inside operations, not standalone tools. Generic create, update, reparent, and delete remain available for native Board nodes. The authority converts typed fields into persisted records, validates hierarchy and TSX, rejects concurrent races, and returns a compact receipt whose nodes[].bounds are absolute page bounds.',
+        'Apply 1-100 ordered operations to one exact Board page in a single guarded atomic save. create_mermaid stores validated Mermaid source in one selectable SVG-rendered Board frame; update_mermaid preserves its identity and geometry. create_image imports a completed local PNG, JPEG, WebP, or GIF directly as source-backed native Board media; never base64-encode it or wrap it in a Code Object. Bounds for create_image and create_code_object default to page coordinates and are converted when parent_id is nested; pass coordinate_space: "parent" only for already parent-local bounds. For a Code Object, prefer a built-in preset_id with JSON props/state; omit source because the preset owns its renderer. Supply name plus source only for genuinely custom behavior. Code Object appearance can follow system or request light/dark and can carry semantic token overrides. Typed create and update names are op values inside operations, not standalone tools. Generic create, update, reparent, and delete remain available for native Board nodes. The authority converts typed fields into persisted records, validates Mermaid and TSX before saving, rejects concurrent races, and returns a compact receipt whose nodes[].bounds are absolute page bounds.',
       inputSchema: boardApplySchema
     },
     async (args: BoardApplyArgs) => {

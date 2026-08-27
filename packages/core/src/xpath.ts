@@ -288,7 +288,7 @@ function buildSegment(graph: SceneGraph, node: SceneNode, parent: SceneNode | un
 
   const siblings = parent.childIds
     .map((id) => graph.getNode(id))
-    .filter((n): n is SceneNode => n !== undefined && n.type === tag)
+    .filter((n): n is SceneNode => n?.type === tag)
 
   const sameNameCount = siblings.filter((s) => s.name === node.name).length
   if (sameNameCount <= 1) return `${tag}[@name=${escaped}]`

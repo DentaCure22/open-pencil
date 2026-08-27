@@ -1,4 +1,4 @@
-export const DEFAULT_IDLE_UNLOAD_MS = 21 * 60 * 1000
+export const DEFAULT_IDLE_UNLOAD_MS = 5 * 60 * 1000
 export const DEFAULT_IDLE_UNLOAD_GRACE_MS = 30_000
 
 export function resolveIdleUnloadMs(env: NodeJS.ProcessEnv = process.env): number {

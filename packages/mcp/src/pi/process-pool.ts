@@ -54,6 +54,10 @@ export class PiProcessPool {
     return this.ready.length
   }
 
+  private isClosed(): boolean {
+    return this.closed
+  }
+
   ensure(): void {
     if (this.closed) return
     const needed = this.options.size - this.ready.length - this.filling.size
@@ -130,12 +134,12 @@ export class PiProcessPool {
         onEvent: (event) => this.handleIdleEvent(rpc, event),
         onExit: () => this.handleIdleExit(rpc)
       })
-      if (this.closed) {
+      if (this.isClosed()) {
         rpc.close()
         return
       }
       const state = await rpc.command({ type: 'get_state' })
-      if (this.closed || !state.success || !rpc.isAlive) {
+      if (this.isClosed() || !state.success || !rpc.isAlive) {
         rpc.close()
         return
       }

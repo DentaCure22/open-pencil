@@ -9,8 +9,6 @@ import {
 } from './analyze'
 import { designToComponentMap, designToTokens } from './codegen'
 import {
-  createComponent,
-  createInstance,
   createPage,
   createShape,
   createSlice,
@@ -37,7 +35,6 @@ import {
 } from './modify'
 import {
   diffJsx,
-  getComponents,
   getCurrentPage,
   getPageTree,
   listAvailableFonts,
@@ -60,7 +57,6 @@ import {
   nodeChildren,
   nodeMove,
   nodeReplaceWith,
-  nodeToComponent,
   nodeTree,
   renameNode,
   ungroupNode
@@ -107,7 +103,6 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   listPages,
   selectNodes,
   queryNodes,
-  getComponents,
   switchPage,
   pageBounds,
   listFonts,
@@ -118,8 +113,6 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   searchIconsTool,
   insertIcon,
   fetchIconsTool,
-  createComponent,
-  createInstance,
   createPage,
   createVector,
   createSlice,
@@ -145,7 +138,6 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   groupNodes,
   ungroupNode,
   flattenNodes,
-  nodeToComponent,
   nodeBounds,
   nodeAncestors,
   nodeChildren,

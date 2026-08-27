@@ -1,0 +1,66 @@
+{
+  "source": "src/assets/work-map-bots/unit-v5/source/unit-v5-01-calm-open-source.png",
+  "source_pixels": [
+    443,
+    443
+  ],
+  "source_has_alpha": true,
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "alpha_threshold": 1,
+  "content_bbox": [
+    68,
+    96,
+    408,
+    344
+  ],
+  "trimmed_pixels": [
+    340,
+    248
+  ],
+  "prepared_pixels": [
+    408,
+    408
+  ],
+  "padding_fraction": 0.1,
+  "exports": [
+    {
+      "kind": "master",
+      "path": "src/assets/work-map-bots/unit-v5/frames/unit-v5-01-calm-open-master.png",
+      "pixels": [
+        408,
+        408
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 1,
+      "path": "src/assets/work-map-bots/unit-v5/frames/unit-v5-01-calm-open.png",
+      "pixels": [
+        16,
+        16
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 2,
+      "path": "src/assets/work-map-bots/unit-v5/frames/unit-v5-01-calm-open@2x.png",
+      "pixels": [
+        32,
+        32
+      ]
+    },
+    {
+      "kind": "screen",
+      "scale": 3,
+      "path": "src/assets/work-map-bots/unit-v5/frames/unit-v5-01-calm-open@3x.png",
+      "pixels": [
+        48,
+        48
+      ]
+    }
+  ],
+  "warnings": []
+}

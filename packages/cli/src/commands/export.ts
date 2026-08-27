@@ -214,7 +214,7 @@ async function exportFromFile(format: string, args: ExportArgs) {
         format === 'PNG' || format === 'JPG' || format === 'WEBP' ? Number(args.scale) : undefined
       )
   )
-  await writeAndLog(output, result.data as string | Uint8Array)
+  await writeAndLog(output, result.data)
   console.log(ok(`Target: ${targetLabel(args.page, args.node)}`))
 }
 

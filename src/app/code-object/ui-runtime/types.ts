@@ -1,5 +1,20 @@
 export type CodeObjectUiTone = 'accent' | 'danger' | 'neutral' | 'success' | 'warning'
 
+export type DataChartKind = 'area' | 'bar' | 'line'
+
+export type DataChartSeries = {
+  color?: string
+  id: string
+  label: string
+  values: number[]
+}
+
+export type DataChartModel = {
+  kind: DataChartKind
+  labels: string[]
+  series: DataChartSeries[]
+}
+
 export type CodeObjectUiAction = {
   label: string
   prompt: string
