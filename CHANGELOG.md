@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replace the Work Map's combined creation menu with separate Add chat and Add
+  Bot header controls, remove the per-Bot hover creation buttons, and let both
+  controls be dragged to the Board or into an allowed Work Map destination.
 - Keep the frequently used isolated Board worker warm for fast Pi startup, stop
   prewarming the unused general worker, and unload settled Pi sessions after
   five minutes instead of twenty-one.

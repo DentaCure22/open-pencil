@@ -1,3 +1,31 @@
+# Work Map creation controls and drag destinations — design QA
+
+## Evidence
+
+- Source visual truth: the three annotated 772 × 822 browser captures attached to this task, covering the per-Bot hover controls, the former combined creation control, and the requested separate Add chat/Add Bot icons.
+- Rendered implementation: `/Users/omar/Developer/Open Pencil Local 2026-08-26/artifacts/design-qa/work-map-create-after.png`.
+- Viewport: 771 × 822 CSS px in the same live OpenPencil browser surface.
+- State: Work Map list open, Dental Chart expanded, quiet Bot rows, and both header creation controls at rest.
+
+## Findings
+
+No actionable P0, P1, or P2 issue remains.
+
+- Hierarchy and spacing: Search, Add chat, and Add Bot are three separate 28 px header controls; no dropdown or extra row chrome was introduced.
+- Icons and copy: the existing Lucide message-plus and Bot icons provide distinct targets with explicit `Add chat` and `Add Bot` accessible names.
+- Bot-row restraint: the former per-row Add sub-bot and New chat controls are absent at rest and on hover.
+- Interaction: clicking Add chat opens a New chat draft; clicking Add Bot opens the top-level Bot naming dialog. Both controls are native draggable buttons.
+- Drag destinations: focused browser coverage passed for chat-to-Bot, Bot-to-Bot, and Bot-to-Board drops. The Board drop opens the naming dialog with the exact Board placement attached to the draft.
+- Console: after a clean reload, the live browser produced no new errors.
+
+## Validation
+
+- Focused Work Map drag tests: 3 passed, 0 failed.
+- Focused browser interaction tests: 3 passed, 0 failed.
+- The broader Work Map contract had 8 relevant passes and one unrelated existing expectation failure in Bot idle-motion scheduling.
+
+final result: passed
+
 # Work Map sub-bot folder shelf — design QA
 
 ## Evidence
